@@ -70,10 +70,10 @@ MiniTalk.Realtime=(()=>{
   function normalizeProfiles(source={}){
     const result={};
     Object.entries(source||{}).forEach(([key,raw])=>{
-      const value=raw&&typeof raw==="object"?raw:{};
+      const rawAvatar=typeof raw==="string"?raw:"",value=raw&&typeof raw==="object"?raw:{};
       const userId=String(value.user_id||value.userId||value.uid||key);
       const nickname=String(value.nickname||value.name||value.username||key);
-      const avatar=String(value.avatar||value.profileImage||value.profile_image||value.profileImageUrl||value.avatarUrl||value.photoURL||value.photoUrl||value.imageUrl||value.image||"");
+      const avatar=String(value.avatar||value.profileImage||value.profile_image||value.profileImageUrl||value.profile_image_url||value.avatarUrl||value.photoURL||value.photoUrl||value.imageUrl||value.image_url||value.picture||value.image||rawAvatar||"");
       const statusMsg=String(value.statusMsg||value.statusMessage||value.status_message||value.status||"");
       const profile={...value,user_id:userId,nickname,avatar,statusMsg};
       result[key]=profile;result[userId]=profile;if(nickname)result[nickname]=profile;
@@ -169,11 +169,12 @@ MiniTalk.Realtime=(()=>{
   }
   async function sendMessage(roomId,payload){
     payload=payload||{};
+    const senderProfile=MiniTalk.Store.get("profiles")?.[user.user_id]||MiniTalk.Store.get("profiles")?.[user.nickname]||{};
     const message={
       roomId,user_id:user.user_id,nickname:user.nickname,
       type:payload.type||(payload.fileUrl?"file":(payload.image||payload.imageUrl?"image":"text")),
       text:payload.text||"",image:payload.image||null,imageUrl:payload.imageUrl||null,
-      fileUrl:payload.fileUrl||null,fileName:payload.fileName||null,ts:Date.now()
+      fileUrl:payload.fileUrl||null,fileName:payload.fileName||null,avatar:senderProfile.avatar||null,ts:Date.now()
     };
     const preview=message.type==="file"?`[파일] ${message.fileName||"파일"}`:message.type==="image"?"[사진]":message.text;
     if(mode==="firebase"){
@@ -238,7 +239,7 @@ MiniTalk.Realtime=(()=>{
     const avatar=String(profile?.avatar||"");
     if(avatar&&(!avatar.startsWith("data:image/")||avatar.length>450000))throw new Error("프로필 이미지가 너무 크거나 올바르지 않습니다.");
     const value={user_id:user.user_id,nickname:user.nickname,statusMsg,avatar,updatedAt:Date.now()};
-    if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.profiles}/${user.user_id}`).set({...value,updatedAt:firebase.database.ServerValue.TIMESTAMP});
+    if(mode==="firebase"){const saved={...value,updatedAt:firebase.database.ServerValue.TIMESTAMP},legacyKey=String(user.nickname||user.user_id).replace(/[.#$\[\]\/]/g,"_").slice(0,30),updates={};updates[`${MiniTalkConfig.paths.profiles}/${user.user_id}`]=saved;updates[`${MiniTalkConfig.paths.legacyProfiles}/${legacyKey}`]=saved;await db.ref().update(updates)}
     else{const profiles=localGet("profiles",{});profiles[user.user_id]=value;localSet("profiles",profiles);broadcast("profiles",profiles)}
     return value;
   }

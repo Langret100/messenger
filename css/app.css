@@ -187,6 +187,9 @@ button,input,textarea,select{font:inherit}button{touch-action:manipulation}.hidd
 :root[data-theme="light"] .utility-view{background:#f8f9fc}
 :root[data-theme="light"] .section-card,:root[data-theme="light"] .profile-summary,:root[data-theme="light"] .settings-group,:root[data-theme="light"] .tool-card,:root[data-theme="light"] .task-card,:root[data-theme="light"] .settings-card{border-color:#e9edf3;background:#fff;box-shadow:0 3px 12px rgba(43,54,76,.045)}
 :root[data-theme="light"] .modern-tool{border-color:#e6eaf1;background:#fff;box-shadow:none}
+
+/* 좁은 팝업에서도 '무음', '공유' 같은 단어가 글자 중간에서 끊기지 않게 합니다. */
+.tool-label small{line-height:1.35;word-break:keep-all;overflow-wrap:normal}
 :root[data-theme="light"] .tool-glyph,:root[data-theme="light"] .shortcut-icon,:root[data-theme="light"] .settings-row-icon{background:#edf3ff;color:var(--accent);box-shadow:none}
 :root[data-theme="light"] .modal{background:#fff;border-color:#e8ebf1;box-shadow:0 20px 55px rgba(37,47,67,.2)}
 @media(max-width:700px),(pointer:coarse) and (max-width:900px){:root[data-theme="light"] .workspace{grid-template-rows:1fr 54px}:root[data-theme="light"] .bottom-nav{padding:0 2px env(safe-area-inset-bottom,0px)}:root[data-theme="light"] .bottom-nav .nav-button{padding:4px 1px 3px}}

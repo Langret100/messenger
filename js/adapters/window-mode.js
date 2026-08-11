@@ -15,8 +15,8 @@
    ============================================================ */
 MiniTalk.WindowMode=(()=>{
   const POPUP_NAME="MiniTalkCornerWindow";
-  const BOUNDS_VERSION=2;
-  const DEFAULT_BOUNDS={width:460,height:760};
+  const BOUNDS_VERSION=3;
+  const DEFAULT_BOUNDS={width:380,height:760};
   const POPUP_PARAM="window";
   let installEvent=null,pipWindow=null,movedNodes=[],popupHandle=null,popupWatchTimer=0,boundsTimer=0;
 
@@ -45,7 +45,7 @@ MiniTalk.WindowMode=(()=>{
     const availH=Math.max(420,screen.availHeight||DEFAULT_BOUNDS.height);
     const originX=Number(screen.availLeft)||0,originY=Number(screen.availTop)||0;
     const useSaved=saved.version===BOUNDS_VERSION;
-    const width=Math.round(clampNumber(useSaved?saved.width:undefined,360,Math.min(900,availW),Math.min(DEFAULT_BOUNDS.width,availW)));
+    const width=Math.round(clampNumber(useSaved?saved.width:undefined,340,Math.min(900,availW),Math.min(DEFAULT_BOUNDS.width,availW)));
     const height=Math.round(clampNumber(useSaved?saved.height:undefined,520,Math.min(1000,availH),Math.min(DEFAULT_BOUNDS.height,availH)));
     const centeredLeft=originX+Math.max(0,Math.round((availW-width)/2));
     const centeredTop=originY+Math.max(0,Math.round((availH-height)/2));

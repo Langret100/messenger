@@ -10,15 +10,13 @@ MiniTalk.Features.Admin=(()=>{
   let noticeTimer=0;
 
   function users(){
-    const map=new Map(),current=MiniTalk.Store.get("user")||{};
-    const add=value=>{if(!value||typeof value!=="object")return;const id=String(value.user_id||value.userId||value.uid||"").trim(),nickname=String(value.nickname||value.name||value.username||id).trim();if(!id||id===current.user_id||/^(guest-|게스트)/i.test(id))return;const previous=map.get(id)||{};map.set(id,{...previous,...value,user_id:id,nickname:nickname||previous.nickname||id,avatar:value.avatar||previous.avatar||""})};
-    Object.values(MiniTalk.Store.get("profiles")||{}).forEach(add);Object.values(MiniTalk.Store.get("presence")||{}).forEach(add);
-    return[...map.values()].sort((a,b)=>a.nickname.localeCompare(b.nickname,"ko"))
+    return MiniTalk.UserDirectory?.all?.()||[]
   }
 
   function render(host){
     MiniTalk.UI.Shell.setHeader("관리자",[],{back:()=>MiniTalk.Router.go("chats")});const D=MiniTalk.UI.Dom,view=D.el("section",{class:"view"}),list=D.el("div",{class:"card-list"});
     if(!visible()){list.append(D.el("p",{class:"muted",text:"설정에서 관리자 인증을 완료해야 합니다."}));view.append(list);host.replaceChildren(view);return}
+    if(!MiniTalk.UserDirectory?.loaded?.()){const loading=D.el("section",{class:"tool-card"},[D.el("strong",{text:"가입자 명단을 불러오는 중입니다."}),D.el("small",{class:"muted",text:"로그인 시트의 닉네임을 확인하고 있어요."})]);list.append(loading);view.append(list);host.replaceChildren(view);MiniTalk.UserDirectory.refresh().then(()=>{if(MiniTalk.Store.get("route")==="admin")render(host)}).catch(error=>{loading.replaceChildren(D.el("strong",{text:"가입자 명단을 불러오지 못했습니다."}),D.el("small",{class:"muted",text:error.message||"Apps Script 배포 상태를 확인하세요."}))});return}
     const card=D.el("section",{class:"tool-card admin-command-card"}),selected=new Set(),people=users();
     card.append(D.el("h3",{text:"대상 사용자"}));
     const controls=D.el("div",{class:"admin-target-controls"}),selectAll=D.el("button",{class:"mini-action",type:"button",text:"전체 선택"}),clearAll=D.el("button",{class:"mini-action",type:"button",text:"선택 해제"}),count=D.el("span",{class:"muted admin-selected-count",text:"0명 선택"});controls.append(selectAll,clearAll,count);

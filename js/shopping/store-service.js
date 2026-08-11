@@ -85,15 +85,7 @@ MiniTalk.Shopping.StoreService = (() => {
   }
 
   function recipients() {
-    const current = user(), rows = new Map();
-    const add = entry => {
-      const id = String(entry?.user_id || "");
-      if (!id || id === current.user_id || id.startsWith("guest-")) return;
-      rows.set(id, { user_id: id, nickname: String(entry.nickname || id) });
-    };
-    Object.values(objectValue(MiniTalk.Store.get("profiles"))).forEach(add);
-    Object.values(objectValue(MiniTalk.Store.get("presence"))).forEach(add);
-    return [...rows.values()].sort((a, b) => a.nickname.localeCompare(b.nickname, "ko"));
+    return MiniTalk.UserDirectory?.all?.() || [];
   }
 
   async function purchase(product) {

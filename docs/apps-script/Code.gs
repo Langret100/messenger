@@ -115,6 +115,9 @@ function doGet(e) {
       case "coin_status":
         return handleCoinStatus(e);
 
+      case "user_directory":
+        return handleUserDirectory(data);
+
       // 🔹 게임 랭킹 / 개인 최고 상태 조회 (GET)
       case "game_ranking":
         return gameRanking_(data);
@@ -284,6 +287,10 @@ function doPost(e) {
       // 🔹 서버 상품 카탈로그 조회
       case "shop_catalog":
         return handleShopCatalog(e);
+
+      // 로그인 시트의 가입자 닉네임 명단(비밀번호·아이디 제외)
+      case "user_directory":
+        return handleUserDirectory(e);
 
       // 🔹 관리자 상품 등록·수정
       case "shop_product_save":

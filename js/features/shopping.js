@@ -116,16 +116,16 @@ MiniTalk.Features.Shopping = (() => {
     catch (error) { MiniTalk.UI.Shell.toast(error.message); }
   }
 
-  function openGift(item) {
-    const D = MiniTalk.UI.Dom, users = Service.recipients(), body = D.el("div", { class: "modal-stack" });
-    if (!users.length) { body.append(empty("선물할 사용자가 없어요", "로그인한 사용자 닉네임이 확인되면 선택할 수 있습니다.")); return MiniTalk.UI.Shell.modal("선물하기", body); }
-    const select = D.el("select", { id: "giftTarget" });
-    select.append(D.el("option", { value: "", text: "사용자를 선택하세요" }));
-    users.forEach(row => select.append(D.el("option", { value: row.user_id, text: row.nickname })));
-    const send = D.el("button", { class: "button primary", type: "button", text: "선물 보내기" });
-    send.onclick = async () => { if (!select.value) return MiniTalk.UI.Shell.toast("사용자를 선택하세요."); send.disabled = true; try { const result = await Service.gift(item.id, select.value); MiniTalk.UI.Shell.closeModal(); MiniTalk.UI.Shell.toast(`${result.targetNickname}님에게 선물했습니다.`); } catch (error) { MiniTalk.UI.Shell.toast(error.message); send.disabled = false; } };
-    body.append(D.el("p", { text: `${item.name}을(를) 누구에게 선물할까요?` }), D.el("label", { class: "field" }, [D.el("span", { text: "받는 사용자" }), select]), send);
+  async function openGift(item) {
+    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "modal-stack" }, [D.el("p", { class: "muted modal-note", text: "가입자 닉네임 명단을 불러오는 중입니다." })]);
     MiniTalk.UI.Shell.modal("선물하기", body);
+    try { await MiniTalk.UserDirectory.refresh(); } catch (error) { body.replaceChildren(empty("가입자 명단을 불러오지 못했어요", error.message || "Apps Script 배포 상태를 확인하세요."));return; }
+    const users = Service.recipients(), search = D.el("input", { class: "search", placeholder: "닉네임 검색", "aria-label": "선물할 사용자 검색" }), list = D.el("div", { class: "gift-user-list" });
+    let selected = "";
+    const draw = () => { const q = search.value.trim().toLowerCase(), shown = users.filter(row => row.nickname.toLowerCase().includes(q));list.replaceChildren(...shown.map(row => { const radio = D.el("input", { type: "radio", name: "giftTarget", value: row.user_id, "aria-label": `${row.nickname} 선택` });radio.checked = selected === row.user_id;radio.onchange = () => { selected = row.user_id;draw(); };return D.el("label", { class: `gift-user-option${selected === row.user_id ? " selected" : ""}` }, [D.el("span", { class: "gift-user-avatar", text: row.nickname.slice(0, 1) }), D.el("strong", { text: row.nickname }), radio]); }));if (!shown.length) list.append(empty("검색 결과가 없어요", "다른 닉네임으로 검색해보세요.")); };
+    const send = D.el("button", { class: "button primary", type: "button", text: "선물 보내기" });
+    send.onclick = async () => { if (!selected) return MiniTalk.UI.Shell.toast("사용자를 선택하세요.");send.disabled = true;try { const result = await Service.gift(item.id, selected);MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast(`${result.targetNickname}님에게 선물했습니다.`); } catch (error) { MiniTalk.UI.Shell.toast(error.message);send.disabled = false; } };
+    search.oninput = draw;body.replaceChildren(D.el("p", { text: `${item.name}을(를) 누구에게 선물할까요?` }), search, list, send);draw();setTimeout(() => search.focus(), 30);
   }
 
   function adminPanel(onChanged) {

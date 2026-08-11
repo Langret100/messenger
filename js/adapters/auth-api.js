@@ -48,6 +48,10 @@ MiniTalk.AuthApi = (() => {
       const data = await post({ mode: "shop_catalog" });
       return Array.isArray(data.products) ? data.products : [];
     },
+    async userDirectory(userId) {
+      const data = await post({ mode: "user_directory", user_id: userId });
+      return Array.isArray(data.users) ? data.users : [];
+    },
     async shopSaveProduct(userId, adminToken, product) {
       return post({
         mode: "shop_product_save",

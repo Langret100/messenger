@@ -17,6 +17,7 @@ ctx.MiniTalk.AuthApi={
   shopDeleteProduct:async(userId,token,id)=>{calls.push(['delete-product',userId,token,id]);return{ok:true}}
 };
 ctx.MiniTalk.AdminSession={requireToken:()=> 'admin-token'};
+ctx.MiniTalk.UserDirectory={all:()=>Object.values(ctx.MiniTalk.Store.get('profiles')||{}).filter(row=>row.user_id!=='user-a'&&!row.user_id.startsWith('guest-'))};
 ctx.MiniTalk.Realtime={
   addShopInventory:async(owner,item)=>calls.push(['add',owner,item]),
   useShopInventory:async id=>calls.push(['use',id]),

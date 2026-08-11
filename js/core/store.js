@@ -11,6 +11,7 @@ MiniTalk.Store = (() => {
     tasks: {},
     dailyQuest: null,
     profiles: {},
+    userDirectory: {},
     shopCatalog: {},
     shopInventory: {},
     presence: {},

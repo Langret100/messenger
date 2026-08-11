@@ -143,6 +143,28 @@ function handleShopCatalog() {
   return shopJson_({ ok: true, products: products });
 }
 
+/** POST/GET mode=user_directory: 비밀번호·아이디를 제외한 가입자 닉네임 명단 */
+function handleUserDirectory(e) {
+  const p = (e && e.parameter) || e || {};
+  const requester = String(p.user_id || "").trim();
+  if (!requester || requester.indexOf("guest-") === 0) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  const cache = CacheService.getScriptCache(), cacheKey = "moaru-user-directory-v1";
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { const users = JSON.parse(cached);return users.some(function (item) { return item.user_id === requester; }) ? shopJson_({ ok: true, users: users }) : shopJson_({ ok: false, error: "LOGIN_REQUIRED" }); } catch (error) {}
+  }
+  const sheet = getSheet_(LOGIN_SHEET), lastRow = sheet.getLastRow(), users = [];
+  if (lastRow >= 2) {
+    sheet.getRange(2, 1, lastRow - 1, 4).getValues().forEach(function (row) {
+      const userId = String(row[0] || "").trim(), nickname = String(row[3] || row[1] || "").trim();
+      if (userId && nickname) users.push({ user_id: userId, nickname: nickname.slice(0, 30) });
+    });
+  }
+  if (!users.some(function (item) { return item.user_id === requester; })) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  cache.put(cacheKey, JSON.stringify(users), 60);
+  return shopJson_({ ok: true, users: users });
+}
+
 /** POST mode=shop_product_save (관리자 전용) */
 function handleShopProductSave(e) {
   const p = (e && e.parameter) || {};
@@ -359,6 +381,7 @@ function handleShopPurchase(e) {
  * Code.gs mode 분기에 추가:
  * if (mode === "admin_unlock") return handleAdminUnlock(e);
  * if (mode === "shop_catalog") return handleShopCatalog(e);
+ * if (mode === "user_directory") return handleUserDirectory(e);
  * if (mode === "shop_product_save") return handleShopProductSave(e);
  * if (mode === "shop_product_delete") return handleShopProductDelete(e);
  * if (mode === "shop_purchase") return handleShopPurchase(e);

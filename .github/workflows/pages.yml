@@ -1,0 +1,43 @@
+name: Deploy MiniTalk to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run package-free tests
+        run: bash tests/run-tests.sh
+
+      - name: Inject Firebase API key
+        env:
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        run: |
+          if [ -z "$FIREBASE_API_KEY" ]; then
+            echo "FIREBASE_API_KEY secret is required for cross-device messaging."
+            exit 1
+          fi
+          find . -type f \
+            -not -path "./.git/*" \
+            -not -path "./.github/*" \
+            -print0 | xargs -0 sed -i "s/__FIREBASE_API_KEY__/${FIREBASE_API_KEY}/g"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - uses: actions/deploy-pages@v4

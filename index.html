@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#ffffff">
-  <title>미니톡</title>
+  <title>모아루</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icons/icon-192.png">
   <link rel="stylesheet" href="css/tokens.css?v=7">
-  <link rel="stylesheet" href="css/app.css?v=41">
+  <link rel="stylesheet" href="css/app.css?v=46">
   <link rel="stylesheet" href="css/features/tools.css?v=18">
   <link rel="stylesheet" href="css/features/tarot.css?v=21">
   <link rel="stylesheet" href="css/features/chat-background.css?v=18">
@@ -24,8 +24,8 @@
   <main id="launchView" class="launch-view">
     <section class="launch-card">
       <div class="app-mark">M</div>
-      <h1>미니톡</h1>
-      <p>링크로 바로 사용하는 작은 통합 메신저</p>
+      <h1>모아루</h1>
+      <p>대화와 일상을 한곳에 모아주는 작은 공간</p>
       <button id="openPopupBtn" class="button primary">별도 창으로 열기</button>
       <button id="openPiPBtn" class="button secondary">항상 위로 열기</button>
       <div class="launch-inline">
@@ -40,14 +40,14 @@
     </section>
   </main>
 
-  <section id="appShell" class="app-shell hidden" aria-label="미니톡">
+  <section id="appShell" class="app-shell hidden" aria-label="모아루">
     <header class="app-header">
       <button id="backBtn" class="icon-button hidden" aria-label="뒤로">‹</button>
       <div class="header-title">
         <button id="headerProfileButton" class="header-profile-button hidden" type="button" aria-label="내 프로필 설정" title="내 프로필 설정">
           <img class="header-profile-avatar" src="assets/mascot-avatar.png" alt="내 프로필">
         </button>
-        <strong id="headerTitle">미니톡</strong><span id="connectionBadge" class="connection-badge">준비</span>
+        <strong id="headerTitle">모아루</strong><span id="connectionBadge" class="connection-badge">준비</span>
       </div>
       <div id="headerActions" class="header-actions"></div>
     </header>
@@ -66,7 +66,7 @@
   <div id="modalHost" class="modal-host hidden"></div>
 
   <!-- CORE: 앱 뼈대와 공통 기반 -->
-  <script src="js/config.js?v=41"></script>
+  <script src="js/config.js?v=44"></script>
   <script src="js/core/namespace.js"></script>
   <script src="js/core/events.js"></script>
   <script src="js/core/store.js?v=24"></script>
@@ -76,8 +76,8 @@
   <!-- ADAPTERS: 외부 서비스/브라우저 기능과의 경계 -->
   <script src="js/adapters/persistence.js"></script>
   <script src="js/adapters/auth-api.js?v=32"></script>
-  <script src="js/adapters/realtime.js?v=41"></script>
-  <script src="js/adapters/window-mode.js?v=21"></script>
+  <script src="js/adapters/realtime.js?v=43"></script>
+  <script src="js/adapters/window-mode.js?v=45"></script>
   <script src="js/adapters/mobile-immersive.js"></script>
   <script src="js/admin/session.js?v=26"></script>
 
@@ -113,12 +113,12 @@
   <script src="js/tasks/daily-korean-quest.js?v=23"></script>
 
   <!-- FEATURES: 삭제/교체 가능한 독립 기능 -->
-  <script src="js/features/auth.js?v=26"></script>
-  <script src="js/features/chats.js?v=26"></script>
+  <script src="js/features/auth.js?v=47"></script>
+  <script src="js/features/chats.js?v=44"></script>
   <script src="js/features/games.js?v=18"></script>
   <script src="js/tarot.js?v=17"></script>
   <!-- TOOL MODULES: 각 도구의 상태와 UI를 독립적으로 관리 -->
-  <script src="js/tools/notifications.js?v=17"></script>
+  <script src="js/tools/notifications.js?v=44"></script>
   <script src="js/tools/timer-alarm.js?v=17"></script>
   <script src="js/tools/tarot-view.js?v=17"></script>
   <script src="js/tools/profile-editor.js?v=24"></script>
@@ -128,11 +128,11 @@
   <script src="js/features/links.js"></script>
   <script src="js/features/shopping.js?v=35"></script>
   <script src="js/features/layout.js?v=19"></script>
-  <script src="js/features/settings.js?v=26"></script>
-  <script src="js/features/admin.js?v=24"></script>
+  <script src="js/features/settings.js?v=44"></script>
+  <script src="js/features/admin.js?v=44"></script>
 
 
   <!-- BOOTSTRAP: 초기화 순서만 담당 -->
-  <script src="js/app.js?v=41"></script>
+  <script src="js/app.js?v=47"></script>
 </body>
 </html>

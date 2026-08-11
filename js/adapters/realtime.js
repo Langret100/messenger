@@ -5,7 +5,7 @@
    - 재로그인·재진입 시 기존 구독과 타이머를 반드시 정리합니다.
    ============================================================ */
 MiniTalk.Realtime=(()=>{
-  let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,connectionError="";
+  let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,connectionError="",firebaseAuthenticated=false;
   let messageUnsub=null;
   const unsubs=[];
   const handledCommands=new Set();
@@ -19,6 +19,26 @@ MiniTalk.Realtime=(()=>{
   const memberValue=(role="member")=>({user_id:user.user_id,nickname:user.nickname,role,joinedAt:Date.now()});
   const roomMembers=room=>room?.members&&typeof room.members==="object"&&!Array.isArray(room.members)?room.members:{};
   const isRoomMember=room=>room?.id==="global"||Boolean(roomMembers(room)[user?.user_id]);
+  const messagesPath=roomId=>roomId==="global"?MiniTalkConfig.paths.globalMessages:`${MiniTalkConfig.paths.roomMessages}/${roomId}`;
+  function normalizeRoom(id,value={}){
+    const participants=Array.isArray(value.participants)?value.participants:(Array.isArray(value.members)?value.members:[]);
+    const members={};
+    Object.entries(roomMembers(value)).forEach(([key,entry])=>{
+      const member=entry&&typeof entry==="object"?entry:{nickname:String(entry||key)};
+      const nickname=String(member.nickname||key);
+      const memberId=nickname===user?.nickname?user.user_id:String(member.user_id||key);
+      members[memberId]={...member,user_id:memberId,nickname}
+    });
+    participants.forEach((entry,index)=>{
+      const nickname=String(typeof entry==="string"?entry:(entry?.nickname||"")).trim();if(!nickname)return;
+      const memberId=String(entry?.user_id||(nickname===user?.nickname?user.user_id:`legacy-${index}-${nickname.replace(/[.#$\[\]/]/g,"-")}`));
+      members[memberId]={user_id:memberId,nickname,role:index===0?"owner":"member",joinedAt:Number(entry?.joinedAt||0)}
+    });
+    const creatorRaw=String(value.creator||"");
+    const creator=creatorRaw===user?.nickname?user.user_id:creatorRaw;
+    return{...value,id:String(value.id||id),title:String(value.title||value.name||(id==="global"?"전체 대화":"대화방")),creator,members,hasPassword:Boolean(value.hasPassword||value.password)}
+  }
+  const firebaseRoomValue=room=>({...room,name:String(room?.title||room?.name||"대화방")});
   async function passwordHash(password,salt){
     if(!crypto?.subtle||typeof TextEncoder==="undefined")throw new Error("이 브라우저에서는 대화방 비밀번호를 사용할 수 없습니다.");
     const bytes=new TextEncoder().encode(`${salt}:${password}`),digest=await crypto.subtle.digest("SHA-256",bytes);
@@ -36,8 +56,8 @@ MiniTalk.Realtime=(()=>{
   async function ensureFirebaseAuth(){
     const auth=firebase.auth();
     if(auth.currentUser)return auth.currentUser;
-    const credential=await auth.signInAnonymously();
-    return credential.user
+    try{const credential=await auth.signInAnonymously();return credential.user}
+    catch(error){console.warn("Firebase 익명 인증 없이 기존 토리 공개 경로로 연결합니다.",error);return null}
   }
   function waitForConnected(database,timeout=7000){return new Promise((resolve,reject)=>{const ref=database.ref(".info/connected");const timer=setTimeout(()=>{ref.off("value",onValue);reject(new Error("Firebase 연결 시간 초과"))},timeout);function onValue(s){if(s.val()===true){clearTimeout(timer);ref.off("value",onValue);resolve()}}ref.on("value",onValue)})}
 
@@ -69,10 +89,10 @@ MiniTalk.Realtime=(()=>{
   }
 
   async function init(nextUser){
-    cleanup();user=nextUser;db=null;mode="local";connectionError="";
+    cleanup();user=nextUser;db=null;mode="local";connectionError="";firebaseAuthenticated=false;
     // 사용자 인증의 기준은 Apps Script/시트 로그인입니다. 게스트는 Firebase에 연결하지 않습니다.
     if(validKey()&&!nextUser?.isGuest){
-      try{await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);await ensureFirebaseAuth();db=firebase.database();await waitForConnected(db);mode="firebase"}
+      try{await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);firebaseAuthenticated=Boolean(await ensureFirebaseAuth());db=firebase.database();await waitForConnected(db);mode="firebase"}
       catch(error){connectionError=String(error?.code||error?.message||error);console.warn("Firebase 연결 실패, 로컬 모드로 전환",error);db=null;mode="local"}
     }
     MiniTalk.Store.set("transport",mode);
@@ -81,19 +101,23 @@ MiniTalk.Realtime=(()=>{
   }
 
   async function startFirebase(){
-    presenceRef=db.ref(`${MiniTalkConfig.paths.presence}/${user.user_id}`);
-    await presenceRef.set({user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
-    presenceRef.onDisconnect().update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});
-    bind(db.ref(MiniTalkConfig.paths.rooms),"value",s=>emit("rooms",s.val()||{}));
-    bind(db.ref(MiniTalkConfig.paths.presence),"value",s=>emit("presence",s.val()||{}));
-    bind(db.ref(MiniTalkConfig.paths.profiles),"value",s=>emit("profiles",s.val()||{}));
-    bind(db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}`),"value",s=>emit("shop-inventory",s.val()||{}));
-    bind(db.ref(`${MiniTalkConfig.paths.tasks}/${user.user_id}`),"value",s=>emit("tasks",s.val()||{}));
-    bind(db.ref(`${MiniTalkConfig.paths.commands}/${user.user_id}`).limitToLast(30),"child_added",async s=>{
-      const value=s.val()||{};if(value.status==="done"||handledCommands.has(s.key))return;
-      handledCommands.add(s.key);emit("command",{id:s.key,...value});
-      try{await s.ref.update({status:"done",handledAt:firebase.database.ServerValue.TIMESTAMP})}catch(error){console.warn("명령 처리 표시 실패",error)}
-    });
+    bind(db.ref(MiniTalkConfig.paths.rooms),"value",s=>{const source=s.val()||{},rooms={};Object.entries(source).forEach(([id,value])=>{rooms[id]=normalizeRoom(id,value||{})});emit("rooms",rooms)});
+    if(firebaseAuthenticated){
+      presenceRef=db.ref(`${MiniTalkConfig.paths.presence}/${user.user_id}`);
+      await presenceRef.set({user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
+      presenceRef.onDisconnect().update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});
+      bind(db.ref(MiniTalkConfig.paths.presence),"value",s=>emit("presence",s.val()||{}));
+      bind(db.ref(MiniTalkConfig.paths.profiles),"value",s=>emit("profiles",s.val()||{}));
+      bind(db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}`),"value",s=>emit("shop-inventory",s.val()||{}));
+      bind(db.ref(`${MiniTalkConfig.paths.tasks}/${user.user_id}`),"value",s=>emit("tasks",s.val()||{}));
+      bind(db.ref(`${MiniTalkConfig.paths.commands}/${user.user_id}`).limitToLast(30),"child_added",async s=>{
+        const value=s.val()||{};if(value.status==="done"||handledCommands.has(s.key))return;
+        handledCommands.add(s.key);emit("command",{id:s.key,...value});
+        try{await s.ref.update({status:"done",handledAt:firebase.database.ServerValue.TIMESTAMP})}catch(error){console.warn("명령 처리 표시 실패",error)}
+      });
+    }else{
+      emit("presence",{});emit("profiles",{});emit("shop-inventory",{});emit("tasks",{});
+    }
     await ensureDefaultRoom();
   }
 
@@ -105,7 +129,7 @@ MiniTalk.Realtime=(()=>{
   }
 
   async function ensureDefaultRoom(){
-    const room={id:"global",title:"전체 대화",type:"group",updatedAt:Date.now(),lastMessage:""};
+    const room={id:"global",name:"전체 대화",title:"전체 대화",type:"group",updatedAt:Date.now(),lastMessage:""};
     if(mode==="firebase"){const ref=db.ref(`${MiniTalkConfig.paths.rooms}/global`);const snap=await ref.once("value");if(!snap.exists()){await ref.set(room);MiniTalk.Chat.ServerBackup?.room("CREATE",room)}}
     else{const rooms=localGet("rooms",{});if(!rooms.global){rooms.global=room;localSet("rooms",rooms)}}
   }
@@ -115,7 +139,7 @@ MiniTalk.Realtime=(()=>{
   async function subscribeMessages(roomId){
     unsubscribeMessages();emit("message-reset",roomId);
     if(mode==="firebase"){
-      const ref=db.ref(`${MiniTalkConfig.paths.messages}/${roomId}`).orderByChild("ts").limitToLast(100);
+      const ref=db.ref(messagesPath(roomId)).orderByChild("ts").limitToLast(100);
       const fn=s=>{const value=s.val()||{};emit("message",{...value,id:s.key,roomId:value.roomId||roomId})};
       ref.on("child_added",fn);messageUnsub=()=>ref.off("child_added",fn);
     }else localGet(`messages.${roomId}`,[]).slice(-100).forEach(message=>emit("message",message));
@@ -130,7 +154,7 @@ MiniTalk.Realtime=(()=>{
     };
     const preview=message.type==="file"?`[파일] ${message.fileName||"파일"}`:message.type==="image"?"[사진]":message.text;
     if(mode==="firebase"){
-      const ref=db.ref(`${MiniTalkConfig.paths.messages}/${roomId}`).push();await ref.set(message);
+      const ref=db.ref(messagesPath(roomId)).push();await ref.set(message);
       await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).update({lastMessage:preview,updatedAt:firebase.database.ServerValue.TIMESTAMP});
       const saved={id:ref.key,...message};MiniTalk.Chat.ServerBackup?.message(saved);return saved;
     }
@@ -138,11 +162,11 @@ MiniTalk.Realtime=(()=>{
     const rooms=localGet("rooms",{});rooms[roomId]={...(rooms[roomId]||{id:roomId,title:roomId}),lastMessage:preview,updatedAt:Date.now()};localSet("rooms",rooms);broadcast("message",value);broadcast("rooms",rooms);return value;
   }
   async function getRoom(roomId){
-    if(mode==="firebase"){const snap=await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).once("value");return snap.val()||null}
+    if(mode==="firebase"){const snap=await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).once("value");return snap.exists()?normalizeRoom(roomId,snap.val()||{}):null}
     return localGet("rooms",{})[roomId]||null
   }
   async function saveRoom(room){
-    if(mode==="firebase"){await db.ref(`${MiniTalkConfig.paths.rooms}/${room.id}`).set(room);MiniTalk.Chat.ServerBackup?.room("UPSERT",room)}
+    if(mode==="firebase"){await db.ref(`${MiniTalkConfig.paths.rooms}/${room.id}`).set(firebaseRoomValue(room));MiniTalk.Chat.ServerBackup?.room("UPSERT",room)}
     else{const rooms=localGet("rooms",{});rooms[room.id]=room;localSet("rooms",rooms);broadcast("rooms",rooms)}
     return room
   }
@@ -156,14 +180,14 @@ MiniTalk.Realtime=(()=>{
   }
   async function joinRoom(roomId,password=""){
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global"||isRoomMember(room))return room;
-    if(room.hasPassword){const attempt=await passwordHash(String(password||""),room.passwordSalt||"");if(attempt!==room.passwordHash)throw new Error("대화방 비밀번호가 올바르지 않습니다.")}
+    if(room.hasPassword){const secret=String(password||"");if(room.password){if(secret!==String(room.password))throw new Error("대화방 비밀번호가 올바르지 않습니다.")}else{const attempt=await passwordHash(secret,room.passwordSalt||"");if(attempt!==room.passwordHash)throw new Error("대화방 비밀번호가 올바르지 않습니다.")}}
     const members={...roomMembers(room)};if(room.creator&&!members[room.creator])members[room.creator]={user_id:room.creator,nickname:room.creator,role:"owner",joinedAt:room.createdAt||Date.now()};
     room.members={...members,[user.user_id]:memberValue(room.creator===user.user_id?"owner":"member")};room.updatedAt=Date.now();return saveRoom(room)
   }
   async function updateRoomPassword(roomId,password=""){
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global")throw new Error("전체 대화에는 비밀번호를 설정할 수 없습니다.");if(room.creator!==user.user_id)throw new Error("방장만 비밀번호를 변경할 수 있습니다.");
     const secret=String(password||"").trim();if(secret&&secret.length<4)throw new Error("비밀번호는 4자 이상 입력하세요.");if(secret.length>32)throw new Error("비밀번호는 32자 이하로 입력하세요.");
-    room.hasPassword=Boolean(secret);if(secret){room.passwordSalt=passwordSalt();room.passwordHash=await passwordHash(secret,room.passwordSalt)}else{delete room.passwordSalt;delete room.passwordHash}room.updatedAt=Date.now();return saveRoom(room)
+    room.hasPassword=Boolean(secret);delete room.password;if(secret){room.passwordSalt=passwordSalt();room.passwordHash=await passwordHash(secret,room.passwordSalt)}else{delete room.passwordSalt;delete room.passwordHash}room.updatedAt=Date.now();return saveRoom(room)
   }
   async function removeRoomMember(roomId,memberId){
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.creator!==user.user_id)throw new Error("방장만 멤버를 내보낼 수 있습니다.");if(memberId===user.user_id)throw new Error("방장은 방 나가기를 이용하세요.");
@@ -173,7 +197,7 @@ MiniTalk.Realtime=(()=>{
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global")throw new Error("전체 대화에서는 나갈 수 없습니다.");
     const members={...roomMembers(room)};delete members[user.user_id];const remaining=Object.values(members).filter(Boolean);let deleted=false,newCreator=null;
     if(room.creator===user.user_id){if(remaining.length){remaining.sort((a,b)=>(a.joinedAt||0)-(b.joinedAt||0));newCreator=remaining[0].user_id;members[newCreator]={...members[newCreator],role:"owner"};room.creator=newCreator}else deleted=true}
-    if(deleted){if(mode==="firebase"){await db.ref().update({[`${MiniTalkConfig.paths.rooms}/${roomId}`]:null,[`${MiniTalkConfig.paths.messages}/${roomId}`]:null});MiniTalk.Chat.ServerBackup?.room("DELETE",room)}else{const rooms=localGet("rooms",{});delete rooms[roomId];localSet("rooms",rooms);localRemove(`messages.${roomId}`);broadcast("rooms",rooms)}}
+    if(deleted){if(mode==="firebase"){await db.ref().update({[`${MiniTalkConfig.paths.rooms}/${roomId}`]:null,[messagesPath(roomId)]:null});MiniTalk.Chat.ServerBackup?.room("DELETE",room)}else{const rooms=localGet("rooms",{});delete rooms[roomId];localSet("rooms",rooms);localRemove(`messages.${roomId}`);broadcast("rooms",rooms)}}
     else{room.members=members;room.updatedAt=Date.now();await saveRoom(room)}
     return{deleted,newCreator}
   }
@@ -221,5 +245,5 @@ MiniTalk.Realtime=(()=>{
     }
     return{targetId,targetNickname};
   }
-  return{init,cleanup,getMode:()=>mode,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,leaveRoom,saveProfile,sendCommand,assignTask,submitTask,addShopInventory,useShopInventory,giftShopInventory};
+  return{init,cleanup,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,leaveRoom,saveProfile,sendCommand,assignTask,submitTask,addShopInventory,useShopInventory,giftShopInventory};
 })();

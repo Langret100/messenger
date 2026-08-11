@@ -7,7 +7,7 @@ const css=fs.readFileSync('css/app.css','utf8');
 function ok(v,m){if(!v)throw new Error(m)}
 ok(idx.includes('js/adapters/mobile-immersive.js'),'mobile adapter script missing');
 ok(app.includes('MobileImmersive?.start'),'mobile adapter not started');
-ok(app.includes('MobileImmersive?.isMobile?.()'),'mobile auto-open missing');
+ok(app.includes('MiniTalk.UI.Shell.showApp()'),'all-device login auto-open missing');
 ok(win.includes('MiniTalk.MobileImmersive?.isMobile?.()'),'mobile routing missing');
 ok(win.includes('openHere({immersive:true})'),'mobile immersive open missing');
 ok(mob.includes('requestFullscreen'),'fullscreen attempt missing');

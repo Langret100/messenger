@@ -73,7 +73,7 @@ MiniTalk.Tools.Notifications = (() => {
       if (currentMode === "sound") playSound();
       vibrate(currentMode === "sound" ? [70, 40, 70] : [90]);
       showSystem(
-        message.nickname || "미니톡",
+        message.nickname || "모아루",
         String(message.text || "새 메시지").slice(0, 100),
         true
       );

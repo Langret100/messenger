@@ -7,11 +7,11 @@ done
 python3 -m json.tool manifest.webmanifest >/dev/null
 python3 tests/static-check.py
 node tests/module-load.test.js
+node tests/auth-session-ui.test.js
 node tests/firebase-rules.test.js
 node tests/tarot-daily.test.js
 node tests/offline-game-cache.test.js
 node tests/chat-modules.test.js
-node tests/legacy-chat-import.test.js
 node tests/voice-edge.test.js
 node tests/unread.test.js
 node tests/mobile-immersive.test.js

@@ -115,7 +115,7 @@ MiniTalk.WindowMode=(()=>{
       return true;
     }
     try{
-      if(popupHandle&&!popupHandle.closed){popupHandle.focus();setLaunchMessage("열려 있는 미니톡 창을 앞으로 가져왔습니다.");return true}
+      if(popupHandle&&!popupHandle.closed){popupHandle.focus();setLaunchMessage("열려 있는 모아루 창을 앞으로 가져왔습니다.");return true}
     }catch{popupHandle=null}
     const bounds=readPopupBounds();
     const handle=window.open(popupUrl(),POPUP_NAME,popupFeatures(bounds));
@@ -125,7 +125,7 @@ MiniTalk.WindowMode=(()=>{
     }
     popupHandle=handle;
     try{popupHandle.focus()}catch{}
-    setLaunchMessage("화면 중앙에 미니톡 창을 열었습니다. 조정한 크기와 위치는 기억됩니다.");
+    setLaunchMessage("화면 중앙에 모아루 창을 열었습니다. 조정한 크기와 위치는 기억됩니다.");
     watchPopup();
     return true;
   }
@@ -182,6 +182,11 @@ MiniTalk.WindowMode=(()=>{
     try{if(await openPiP())return true}catch(error){MiniTalk.UI.Shell.toast(`항상 위 창 실패: ${error.message}`)}
     return false;
   }
+  async function openForLogin(){
+    if(MiniTalk.MobileImmersive?.isMobile?.()||standalone()||isPopup())return false;
+    if(!window.documentPictureInPicture)return false;
+    return openPiP();
+  }
   async function openBest(){
     /* 모바일은 별도 팝업보다 현재 탭 + immersive 처리가 안정적입니다. */
     if(MiniTalk.MobileImmersive?.isMobile?.()){
@@ -220,7 +225,7 @@ MiniTalk.WindowMode=(()=>{
   }
   initWindowInstance();
   return{
-    openBest,openPopup,openPiP:openPiPWithFallback,openHere,
+    openBest,openPopup,openPiP:openPiPWithFallback,openForLogin,openHere,
     focusPopup,closePopup,install,standalone,canInstall,isPopup,initWindowInstance
   };
 })();

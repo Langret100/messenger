@@ -70,7 +70,7 @@ MiniTalk.Tools.TarotView = (() => {
     const mascot = D.el("img", {
       class: "tarot-mascot",
       src: "assets/mascot-mini-talk.png",
-      alt: "미니톡 마스코트"
+      alt: "모아루 마스코트"
     });
     const intro = D.el("div", { class: "tarot-intro" }, [
       D.el("span", { class: "tarot-kicker", text: "DAILY CARD" }),

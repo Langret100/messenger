@@ -1,5 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const code=fs.readFileSync('js/adapters/window-mode.js','utf8');
+assert(code.includes('setTransferredState(true)'),'opener page must show the transferred-state guidance');
+assert(code.includes('launchTransferred'),'transferred-state panel hook is missing');
 let opened=null,shown=0;
 const saved={};
 const context={

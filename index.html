@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icons/icon-192.png">
   <link rel="stylesheet" href="css/tokens.css?v=7">
-  <link rel="stylesheet" href="css/app.css?v=46">
+  <link rel="stylesheet" href="css/app.css?v=49">
   <link rel="stylesheet" href="css/features/tools.css?v=18">
   <link rel="stylesheet" href="css/features/tarot.css?v=21">
   <link rel="stylesheet" href="css/features/chat-background.css?v=18">
@@ -23,14 +23,21 @@
   <!-- 앱의 고정 뼈대. 기능 화면은 각 feature 모듈이 #viewHost에 렌더링합니다. -->
   <main id="launchView" class="launch-view">
     <section class="launch-card">
-      <div class="app-mark">M</div>
-      <h1>모아루</h1>
-      <p>대화와 일상을 한곳에 모아주는 작은 공간</p>
-      <button id="openPopupBtn" class="button primary">별도 창으로 열기</button>
-      <button id="openPiPBtn" class="button secondary">항상 위로 열기</button>
-      <div class="launch-inline">
-        <button id="openHereBtn" class="button text">현재 창</button>
-        <button id="installBtn" class="button text hidden">앱 설치(선택)</button>
+      <div id="launchDefault">
+        <div class="app-mark">M</div>
+        <h1>모아루</h1>
+        <p>대화와 일상을 한곳에 모아주는 작은 공간</p>
+        <button id="openPopupBtn" class="button primary">별도 창으로 열기</button>
+        <button id="openPiPBtn" class="button secondary">항상 위로 열기</button>
+        <div class="launch-inline">
+          <button id="openHereBtn" class="button text">현재 창</button>
+          <button id="installBtn" class="button text hidden">앱 설치(선택)</button>
+        </div>
+      </div>
+      <div id="launchTransferred" class="launch-transferred hidden" role="status">
+        <div class="transfer-mark" aria-hidden="true">↗</div>
+        <h1>모아루가 새 창에서 실행 중이에요</h1>
+        <p>이 페이지는 그대로 두세요. 다른 탭이나 창에서 인터넷을 이용하면서 새 창의 메신저를 계속 사용할 수 있습니다.</p>
       </div>
       <div id="popupControls" class="popup-controls hidden">
         <button id="focusPopupBtn" class="mini-action">창 앞으로</button>
@@ -66,7 +73,7 @@
   <div id="modalHost" class="modal-host hidden"></div>
 
   <!-- CORE: 앱 뼈대와 공통 기반 -->
-  <script src="js/config.js?v=44"></script>
+  <script src="js/config.js?v=50"></script>
   <script src="js/core/namespace.js"></script>
   <script src="js/core/events.js"></script>
   <script src="js/core/store.js?v=24"></script>
@@ -76,8 +83,8 @@
   <!-- ADAPTERS: 외부 서비스/브라우저 기능과의 경계 -->
   <script src="js/adapters/persistence.js"></script>
   <script src="js/adapters/auth-api.js?v=32"></script>
-  <script src="js/adapters/realtime.js?v=48"></script>
-  <script src="js/adapters/window-mode.js?v=45"></script>
+  <script src="js/adapters/realtime.js?v=50"></script>
+  <script src="js/adapters/window-mode.js?v=49"></script>
   <script src="js/adapters/mobile-immersive.js"></script>
   <script src="js/admin/session.js?v=26"></script>
 
@@ -133,6 +140,6 @@
 
 
   <!-- BOOTSTRAP: 초기화 순서만 담당 -->
-  <script src="js/app.js?v=48"></script>
+  <script src="js/app.js?v=50"></script>
 </body>
 </html>

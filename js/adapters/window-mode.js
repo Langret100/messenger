@@ -95,6 +95,11 @@ MiniTalk.WindowMode=(()=>{
   function updatePopupControls(open){
     document.getElementById("popupControls")?.classList.toggle("hidden",!open);
   }
+  function setTransferredState(active){
+    document.getElementById("launchDefault")?.classList.toggle("hidden",active);
+    document.getElementById("launchTransferred")?.classList.toggle("hidden",!active);
+    if(active)document.getElementById("launchView")?.classList.remove("hidden");
+  }
   function watchPopup(){
     clearInterval(popupWatchTimer);
     popupWatchTimer=0;
@@ -105,7 +110,7 @@ MiniTalk.WindowMode=(()=>{
       try{closed=popupHandle.closed}catch{}
       if(closed){
         clearInterval(popupWatchTimer);popupWatchTimer=0;popupHandle=null;
-        updatePopupControls(false);setLaunchMessage("구석창이 닫혔습니다.");
+        updatePopupControls(false);setTransferredState(false);setLaunchMessage("모아루 창이 닫혔습니다.");
       }
     },900);
   }
@@ -125,7 +130,7 @@ MiniTalk.WindowMode=(()=>{
     }
     popupHandle=handle;
     try{popupHandle.focus()}catch{}
-    setLaunchMessage("화면 중앙에 모아루 창을 열었습니다. 조정한 크기와 위치는 기억됩니다.");
+    setTransferredState(true);setLaunchMessage("필요할 때 ‘창 앞으로’를 누르면 메신저를 다시 찾을 수 있어요.");
     watchPopup();
     return true;
   }
@@ -137,7 +142,7 @@ MiniTalk.WindowMode=(()=>{
   }
   function closePopup(){
     try{if(popupHandle&&!popupHandle.closed)popupHandle.close()}catch{}
-    popupHandle=null;updatePopupControls(false);setLaunchMessage("구석창을 닫았습니다.");
+    popupHandle=null;updatePopupControls(false);setTransferredState(false);setLaunchMessage("모아루 창을 닫았습니다.");
   }
 
   function copyStyles(doc){
@@ -155,6 +160,7 @@ MiniTalk.WindowMode=(()=>{
     try{pipWindow?.document?.getElementById("hardLock")?.remove()}catch{}
     for(const node of movedNodes)document.body.append(node);
     movedNodes=[];
+    setTransferredState(false);document.getElementById("launchView")?.classList.add("hidden");
     MiniTalk.Store.set("rootDocument",document);
     MiniTalk.Features.Layout?.apply?.();
     MiniTalk.Features.Admin?.applyStoredLock?.();
@@ -174,7 +180,7 @@ MiniTalk.WindowMode=(()=>{
     MiniTalk.Store.set("rootDocument",doc);MiniTalk.Features.Layout?.apply?.();MiniTalk.Features.Admin?.applyStoredLock?.();
     pipWindow.addEventListener("pagehide",()=>{restoreNodes();pipWindow=null},{once:true});
     await MiniTalk.UI.Shell.showApp();
-    setLaunchMessage("항상 위(PiP) 창에서 실행 중입니다.");
+    setTransferredState(true);updatePopupControls(false);setLaunchMessage("메신저는 항상 위 창에서 계속 실행됩니다.");
     return true;
   }
   async function openPiPWithFallback(){

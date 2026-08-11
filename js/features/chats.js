@@ -26,7 +26,7 @@ MiniTalk.Features.Chats=(()=>{
     MiniTalk.UI.Dom.el("button",{class:"icon-button subtle",type:"button",text:"＋","aria-label":"대화방 만들기",onclick:createRoomDialog}),
     MiniTalk.UI.Dom.el("button",{class:"icon-button subtle",type:"button",text:"⌕","aria-label":"검색",onclick:()=>MiniTalk.UI.Dom.one(".search")?.focus()})
   ]}
-  function profileHeaderOptions(){const D=MiniTalk.UI.Dom,user=MiniTalk.Store.get("user")||{},profile=MiniTalk.Store.get("profiles")?.[user.user_id]||{},node=D.el("img",{class:"header-profile-avatar",src:profile.avatar||"assets/mascot-avatar.png",alt:user.isGuest?"기본 프로필":"내 프로필"});return{profile:true,profileEditable:!user.isGuest,profileNode:node,onProfile:user.isGuest?null:()=>MiniTalk.Tools.ProfileEditor.open(()=>{const active=MiniTalk.Store.get("activeRoom");if(active){const room=MiniTalk.Store.get("rooms")?.[active];applyChatHeader(room?.title||"대화",[D.el("button",{class:"icon-button subtle",type:"button",text:"⋯","aria-label":"대화방 메뉴",onclick:()=>openRoomMenu(active)})],{back:()=>backToList()})}else{applyChatHeader("모아루",headerListActions());renderList()}})}}
+  function profileHeaderOptions(){const D=MiniTalk.UI.Dom,user=MiniTalk.Store.get("user")||{},profile=MiniTalk.Store.get("profiles")?.[user.user_id]||{},node=D.el("img",{class:"header-profile-avatar",src:profile.avatar||"assets/mascot-avatar.png",alt:user.isGuest?"기본 프로필":"내 프로필",onerror:event=>{event.currentTarget.onerror=null;event.currentTarget.src="assets/mascot-avatar.png"}});return{profile:true,profileEditable:!user.isGuest,profileNode:node,onProfile:user.isGuest?null:()=>MiniTalk.Tools.ProfileEditor.open(()=>{const active=MiniTalk.Store.get("activeRoom");if(active){const room=MiniTalk.Store.get("rooms")?.[active];applyChatHeader(room?.title||"대화",[D.el("button",{class:"icon-button subtle",type:"button",text:"⋯","aria-label":"대화방 메뉴",onclick:()=>openRoomMenu(active)})],{back:()=>backToList()})}else{applyChatHeader("모아루",headerListActions());renderList()}})}}
   function applyChatHeader(title,actions=[],options={}){MiniTalk.UI.Shell.setHeader(title,actions,{...options,...profileHeaderOptions()})}
   function isAdmin(){return MiniTalk.AdminSession?.authorized?.()===true}
   function canViewRoom(room){return isAdmin()||MiniTalk.Realtime.isRoomMember(room)}
@@ -34,6 +34,19 @@ MiniTalk.Features.Chats=(()=>{
   /* 방 목록의 최신 메시지 시각을 비교해, 현재 소속된 방의 새 글만 알립니다. 최초 로드와 탈퇴한 방은 제외됩니다. */
   function notifyMemberRoomUpdates(rooms,activeRoom){const now=Date.now(),next={};Object.values(rooms||{}).forEach(room=>{if(!room?.id)return;const ts=roomMessageTime(room),previous=Number(roomAlertTimes[room.id]||0);next[room.id]=ts;if(previous>0&&ts>previous&&room.id!==activeRoom&&ts>now-7000)MiniTalk.Features.Tools?.notifyIncoming?.({roomId:room.id,user_id:room.lastMessageUserId||"",nickname:room.lastMessageNickname||room.title||"모아루",text:room.lastMessage||"새 메시지",ts})});roomAlertTimes=next}
   function profileForMessage(message){const profiles=MiniTalk.Store.get("profiles")||{},stored=profiles[message.user_id]||profiles[message.nickname]||{},avatar=stored.avatar||message.avatar||message.profileImage||message.profile_image||message.profileImageUrl||message.avatarUrl||message.photoURL||message.photoUrl||"";return{...stored,avatar}}
+  /* 방 이미지가 없으면 1:1 상대, 방 제목과 같은 사용자, 마지막 발신자 순으로 프로필을 찾습니다. */
+  function roomAvatar(room){
+    const direct=room?.avatar||room?.profileImage||room?.profile_image||room?.imageUrl||room?.image_url||room?.icon||"";
+    if(direct)return direct;
+    const profiles=MiniTalk.Store.get("profiles")||{},userId=MiniTalk.Store.get("user")?.user_id||"";
+    const memberEntries=Object.entries(room?.members||{}).filter(([id])=>id!==userId);
+    const memberIds=memberEntries.map(([id])=>id),memberNames=memberEntries.map(([,member])=>member?.nickname).filter(Boolean);
+    const candidates=[room?.otherUserId,room?.target_user_id,room?.lastMessageUserId,room?.lastMessageNickname,...memberIds,...memberNames].filter(Boolean);
+    for(const id of candidates){if(profiles[id]?.avatar)return profiles[id].avatar}
+    const title=String(room?.title||room?.name||"").trim();
+    const matched=Object.values(profiles).find(profile=>String(profile?.nickname||"").trim()===title&&profile?.avatar);
+    return matched?.avatar||"assets/mascot-avatar.png";
+  }
   function favoriteKey(){return`chat.favorites.${MiniTalk.Store.get("user")?.user_id||"guest"}`}
   function favoriteMap(){return MiniTalk.Persistence.get(favoriteKey(),{})||{}}
   function isFavorite(roomId){return favoriteMap()[roomId]===true}
@@ -51,7 +64,7 @@ MiniTalk.Features.Chats=(()=>{
     view.append(top,list);host.replaceChildren(view);filter("",list,"all",view)
   }
   function roomItem(room){const D=MiniTalk.UI.Dom,unread=MiniTalk.Chat.Unread.count(room.id),messageAt=roomMessageTime(room),time=messageAt?new Date(messageAt).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}):"",tone=[...(room.id||"")].reduce((sum,char)=>sum+char.charCodeAt(0),0)%4,node=D.el("button",{class:"conversation-item conversation-enter",type:"button","data-room-id":room.id,"data-tone":String(tone),"data-unread":unread?"1":"0","data-favorite":isFavorite(room.id)?"1":"0","data-member":canViewRoom(room)?"1":"0","data-room-type":room.type||"group"},[
-    D.el("div",{class:"avatar-wrap"},[D.el("div",{class:"avatar",text:(room.title||"?").slice(0,1)}),room.hasPassword?D.el("span",{class:"room-lock-badge",text:"🔒","aria-label":"비밀번호방"}):null]),
+    D.el("div",{class:"avatar-wrap"},[D.el("img",{class:"avatar profile-image",src:roomAvatar(room),alt:`${room.title||"대화방"} 이미지`,onerror:event=>{event.currentTarget.onerror=null;event.currentTarget.src="assets/mascot-avatar.png"}}),room.hasPassword?D.el("span",{class:"room-lock-badge",text:"🔒","aria-label":"비밀번호방"}):null]),
     D.el("div",{class:"conversation-main"},[D.el("strong",{class:"conversation-title"},[D.el("span",{text:`${isFavorite(room.id)?"★ ":""}${room.title||room.id}`})]),D.el("p",{text:room.lastMessage||"대화를 시작하세요"})]),
     D.el("div",{class:"conversation-meta"},[D.el("time",{text:time}),unread?D.el("b",{class:"unread",text:String(Math.min(99,unread))}):null])
   ]);let holdTimer=0,holdTriggered=false,startX=0,startY=0;const cancelHold=()=>{clearTimeout(holdTimer);holdTimer=0};node.onpointerdown=event=>{if(event.button!==0)return;holdTriggered=false;startX=event.clientX;startY=event.clientY;holdTimer=setTimeout(()=>{holdTriggered=true;quickRoomActions(room)},620)};node.onpointermove=event=>{if(Math.abs(event.clientX-startX)>10||Math.abs(event.clientY-startY)>10)cancelHold()};node.onpointerup=cancelHold;node.onpointercancel=cancelHold;node.onpointerleave=cancelHold;node.oncontextmenu=event=>{event.preventDefault();cancelHold();quickRoomActions(room)};node.onclick=event=>{if(holdTriggered){event.preventDefault();holdTriggered=false;return}openRoom(room.id)};return node}
@@ -105,7 +118,7 @@ MiniTalk.Features.Chats=(()=>{
     const voiceStatus=D.el("div",{class:"voice-status","aria-live":"polite"});
     const tray=D.el("div",{class:"attach-tray hidden"});
     const emojiPanel=D.el("div",{class:"emoji-panel hidden"});
-    MiniTalk.Chat.Emoji.list().forEach(info=>{const b=D.el("button",{type:"button",class:"emoji-item","aria-label":info.code});b.append(D.el("img",{src:info.src,alt:info.code,loading:"lazy"}));b.onclick=async()=>{await sendPayload(roomId,{text:info.token,type:"text"});emojiPanel.classList.add("hidden");emojiOpen=false};emojiPanel.append(b)});
+    MiniTalk.Chat.Emoji.list().forEach(info=>{const b=D.el("button",{type:"button",class:"emoji-item","aria-label":info.fallback||info.code});b.append(D.el("img",{src:info.src,alt:info.fallback||info.code,loading:"lazy"}));b.onclick=async()=>{await sendPayload(roomId,{text:info.fallback||info.token,type:"text",emoticon:info.fallback?info.code:null});emojiPanel.classList.add("hidden");emojiOpen=false};emojiPanel.append(b)});
     const form=D.el("form",{class:"composer"}),plus=D.el("button",{class:"composer-icon",type:"button",text:"＋","aria-label":"첨부 메뉴"}),input=D.el("input",{id:"msgInput",placeholder:"메시지 입력",maxlength:"500","aria-label":"메시지 입력",autocomplete:"off"}),emoji=D.el("button",{class:"composer-icon emoji-toggle",type:"button",text:"☺","aria-label":"이모티콘"}),send=D.el("button",{id:"msgSendBtn",class:"send",type:"submit",text:"➤","aria-label":"전송 - 길게 누르면 음성 입력"});
     const addAction=(icon,label,fn)=>{const b=D.el("button",{type:"button",class:"attach-action"},[D.el("span",{text:icon}),D.el("small",{text:label})]);b.onclick=async()=>{tray.classList.add("hidden");menuOpen=false;try{await fn()}catch(e){if(e?.message&&!/취소/.test(e.message))MiniTalk.UI.Shell.toast(e.message)}};tray.append(b)};
     addAction("▧","사진",async()=>{const payload=await MiniTalk.Chat.Attachments.image({camera:false});if(payload)await sendPayload(roomId,payload)});
@@ -130,7 +143,7 @@ MiniTalk.Features.Chats=(()=>{
     }else if(type==="file"){
       bubble.classList.add("file-bubble");const a=D.el("a",{href:message.fileUrl||"#",target:"_blank",rel:"noopener noreferrer",class:"file-card"},[D.el("span",{text:"⌁"}),D.el("span",{},[D.el("strong",{text:message.fileName||"첨부 파일"}),D.el("small",{text:"파일 열기"})])]);bubble.append(a)
     }else{
-      if(MiniTalk.Chat.Emoji.isOnlyCustom(message.text)||MiniTalk.Chat.Emoji.isOnlyUnicode(message.text))bubble.classList.add("emoji-only");MiniTalk.Chat.Emoji.appendText(message.text||"",bubble);MiniTalk.Chat.Linkify.enhance(bubble);const preview=MiniTalk.Chat.Linkify.preview(message.text||"",D.doc());if(preview)bubble.append(preview)
+      if(MiniTalk.Chat.Emoji.isOnlyCustom(message.text,message.emoticon)||MiniTalk.Chat.Emoji.isOnlyUnicode(message.text))bubble.classList.add("emoji-only");MiniTalk.Chat.Emoji.appendText(message.text||"",bubble,message.emoticon);MiniTalk.Chat.Linkify.enhance(bubble);const preview=MiniTalk.Chat.Linkify.preview(message.text||"",D.doc());if(preview&&!message.emoticon)bubble.append(preview)
     }
     const meta=D.el("time",{class:"message-time",text:message.ts?new Date(message.ts).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}):""});content.append(D.el("div",{class:"bubble-line"},mine?[meta,bubble]:[bubble,meta]));row.append(content);return row
   }

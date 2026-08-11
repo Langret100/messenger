@@ -11,6 +11,8 @@ if(!realtime.includes('typeof raw==="string"'))throw new Error("direct-string le
 if(!realtime.includes("senderProfile"))throw new Error("new messages must include the sender profile image");
 if(!realtime.includes("MiniTalkConfig.paths.legacyProfiles"))throw new Error("profile updates must also update the legacy nickname profile path");
 if(!chats.includes("assets/mascot-avatar.png"))throw new Error("messages without a custom image must use the mascot avatar");
+if(!chats.includes("function roomAvatar(room)"))throw new Error("room list profile image resolver is missing");
+if(!realtime.includes("if(firebaseAuthenticated)"))throw new Error("sheet-login profile saves must not require Firebase auth");
 if(!chats.includes('mode==="group"&&item.dataset.roomType==="group"'))throw new Error("group discovery filter is missing");
 if(!chats.includes("quickRoomActions")||!chats.includes("onpointerdown"))throw new Error("long-press room actions are missing");
 if(chats.includes("avatar-presence"))throw new Error("decorative green room-presence dot must not remain");

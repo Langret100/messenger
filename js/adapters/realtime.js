@@ -174,7 +174,7 @@ MiniTalk.Realtime=(()=>{
       roomId,user_id:user.user_id,nickname:user.nickname,
       type:payload.type||(payload.fileUrl?"file":(payload.image||payload.imageUrl?"image":"text")),
       text:payload.text||"",image:payload.image||null,imageUrl:payload.imageUrl||null,
-      fileUrl:payload.fileUrl||null,fileName:payload.fileName||null,avatar:senderProfile.avatar||null,ts:Date.now()
+      fileUrl:payload.fileUrl||null,fileName:payload.fileName||null,emoticon:payload.emoticon||null,avatar:senderProfile.avatar||null,ts:Date.now()
     };
     const preview=message.type==="file"?`[파일] ${message.fileName||"파일"}`:message.type==="image"?"[사진]":message.text;
     if(mode==="firebase"){
@@ -239,7 +239,18 @@ MiniTalk.Realtime=(()=>{
     const avatar=String(profile?.avatar||"");
     if(avatar&&(!avatar.startsWith("data:image/")||avatar.length>450000))throw new Error("프로필 이미지가 너무 크거나 올바르지 않습니다.");
     const value={user_id:user.user_id,nickname:user.nickname,statusMsg,avatar,updatedAt:Date.now()};
-    if(mode==="firebase"){const saved={...value,updatedAt:firebase.database.ServerValue.TIMESTAMP},legacyKey=String(user.nickname||user.user_id).replace(/[.#$\[\]\/]/g,"_").slice(0,30),updates={};updates[`${MiniTalkConfig.paths.profiles}/${user.user_id}`]=saved;updates[`${MiniTalkConfig.paths.legacyProfiles}/${legacyKey}`]=saved;await db.ref().update(updates)}
+    if(mode==="firebase"){
+      const saved={...value,updatedAt:firebase.database.ServerValue.TIMESTAMP};
+      const legacyKey=String(user.nickname||user.user_id).replace(/[.#$\[\]\/]/g,"_").slice(0,30);
+      /* 시트 로그인은 Firebase auth가 없을 수 있으므로 공개 호환 경로를 먼저 저장합니다.
+         인증된 세션에서만 moaru/v3 프로필에도 복제해 전체 저장 취소를 막습니다. */
+      await db.ref(`${MiniTalkConfig.paths.legacyProfiles}/${legacyKey}`).set(saved);
+      legacyProfiles={...legacyProfiles,[legacyKey]:saved};publishProfiles();
+      if(firebaseAuthenticated){
+        try{await db.ref(`${MiniTalkConfig.paths.profiles}/${user.user_id}`).set(saved)}
+        catch(error){console.warn("새 프로필 경로 동기화 실패",error)}
+      }
+    }
     else{const profiles=localGet("profiles",{});profiles[user.user_id]=value;localSet("profiles",profiles);broadcast("profiles",profiles)}
     return value;
   }

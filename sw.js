@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v57-user-directory-profile-popup-20260811";
+const CACHE = "moaru-v58-emoticons-profile-fix-20260811";
 const CORE = [
   "./",
   "./index.html",
@@ -79,6 +79,11 @@ const CORE = [
   "./assets/icons/icon-512.png",
   "./assets/mascot-mini-talk.png",
   "./assets/mascot-avatar.png",
+  "./assets/emoticons/e13.png",
+  "./assets/emoticons/e14.png",
+  "./assets/emoticons/e15.png",
+  "./assets/emoticons/e16.png",
+  "./assets/emoticons/e17.png",
   "./assets/ui/notebook-coin.svg",
   "./assets/ui/quest-stamp.png",
   "./assets/tarot/sun.png",

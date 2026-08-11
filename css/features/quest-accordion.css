@@ -1,0 +1,42 @@
+/* 과목별 일일 퀘스트 아코디언과 작은 창용 문제 모달 */
+.quest-accordion { min-height: min-content; height: max-content; overflow: hidden; align-self: start; }
+.quest-accordion-toggle { width: 100%; min-height: 72px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 20px; align-items: center; gap: 10px; padding: 12px 13px; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.quest-accordion-toggle:hover { background: var(--surface-hover); }
+.quest-subject-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 15px; background: var(--accent-soft); color: var(--accent); font-size: 18px; font-weight: 800; }
+.quest-accordion[data-subject="korean"] .quest-subject-icon { background: rgba(113, 92, 223, .12); color: #7460d9; }
+.quest-subject-copy { min-width: 0; display: grid; gap: 4px; }
+.quest-subject-copy strong { font-size: 14px; font-weight: 700; }
+.quest-subject-copy small { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.quest-subject-progress { min-width: 42px; padding: 6px 8px; border-radius: 999px; background: var(--surface-3); color: var(--accent); font-size: 11px; font-weight: 700; text-align: center; }
+.quest-accordion-arrow { color: var(--muted); font-size: 20px; transition: transform .18s var(--ease); }
+.quest-accordion.expanded .quest-accordion-arrow { transform: rotate(180deg); }
+.quest-accordion-panel { padding: 0 12px 13px; border-top: 1px solid var(--line); }
+.quest-accordion-panel .daily-quest-grid { padding-top: 12px; }
+.quest-accordion[data-subject="korean"] .quest-operation { background: rgba(113, 92, 223, .12); color: #7460d9; }
+.quest-accordion[data-subject="korean"] .quest-card-progress i { background: linear-gradient(90deg, #7460d9, #aa98ff); }
+.korean-choice { min-height: 52px; padding: 8px; font-size: 13px; line-height: 1.35; }
+.korean-question { font-size: 16px; }
+
+.modal:has(.quest-solver) { max-height: calc(100dvh - 20px); padding-bottom: max(18px, env(safe-area-inset-bottom, 0px)); overscroll-behavior: contain; }
+.modal:has(.quest-solver) header { position: sticky; top: -14px; z-index: 2; padding-top: 2px; background: var(--surface); }
+.quest-solver { position: relative; padding-bottom: 4px; }
+.quest-solver .quest-feedback { margin-bottom: 2px; }
+.quest-instruction { display: block; color: var(--muted); font-size: 11px; line-height: 1.4; text-align: left; }
+.quest-correct-celebration { position: absolute; inset: 0; z-index: 6; display: grid; place-content: center; justify-items: center; gap: 5px; min-height: 100%; border-radius: 16px; background: color-mix(in srgb, var(--surface) 91%, transparent); backdrop-filter: blur(5px); animation: quest-celebration-in .18s ease both; }
+.quest-correct-celebration img { width: 118px; height: 118px; object-fit: contain; animation: quest-stamp-hit .48s cubic-bezier(.2,.9,.25,1.2) both; }
+.quest-correct-celebration strong { color: #c94c36; font-size: 32px; font-weight: 800; letter-spacing: -.04em; }
+.quest-correct-celebration span { color: var(--muted); font-size: 13px; font-weight: 600; }
+.quest-correct-celebration.leaving { opacity: 0; transform: scale(.97); transition: .18s ease; }
+
+@keyframes quest-celebration-in { from { opacity: 0; } }
+@keyframes quest-stamp-hit { 0% { opacity: 0; transform: translateY(-34px) scale(1.8) rotate(13deg); } 68% { opacity: 1; transform: translateY(4px) scale(.88) rotate(-7deg); } 100% { transform: none; } }
+
+@media (max-height: 560px) {
+  .modal-host:has(.quest-solver) { align-items: end; padding: 8px; }
+  .modal:has(.quest-solver) { max-height: calc(100dvh - 16px); }
+  .modal:has(.quest-solver) header { margin-bottom: 7px; }
+  .quest-solver { gap: 7px; }
+  .quest-question { min-height: 60px; padding: 10px; font-size: 16px; }
+  .quest-choice { min-height: 40px; }
+  .korean-choice { min-height: 44px; font-size: 12px; }
+}

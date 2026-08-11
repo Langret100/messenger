@@ -1,0 +1,31 @@
+/* 쇼핑 화면의 공용 코인 표시기 */
+.shopping-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.coin-wallet-badge {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, #e9aa2f 45%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, #ffd45a 10%, var(--surface-3));
+  color: var(--text);
+  cursor: pointer;
+}
+
+.coin-wallet-badge img { width: 17px; height: 17px; }
+.coin-wallet-badge span { color: var(--muted); font-size: 7px; }
+.coin-wallet-badge strong { color: #d18b13; font-size: 9px; white-space: nowrap; }
+.coin-wallet-badge:disabled { opacity: .65; cursor: default; }
+
+@media (max-width: 520px) {
+  .shopping-hero { grid-template-columns: 40px minmax(0, 1fr); }
+  .shopping-hero-actions { grid-column: 1 / -1; justify-content: stretch; }
+  .coin-wallet-badge { flex: 1; justify-content: center; }
+}

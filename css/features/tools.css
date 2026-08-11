@@ -1,0 +1,42 @@
+/* 도구 공통 모달: 타이머·알람·화면 꾸미기가 같은 규격을 공유합니다. */
+.modal header strong {
+  font-size: 14px;
+  letter-spacing: -.025em;
+}
+
+.modal header .icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  font-size: 18px;
+}
+
+.tool-modal-body {
+  gap: 12px;
+}
+
+.tool-modal-body .modal-note {
+  padding: 10px 11px;
+  border-radius: 13px;
+  background: var(--surface-3);
+}
+
+.tool-modal-body .inline-fields {
+  margin: 1px 0;
+}
+
+.tool-modal-state {
+  min-height: 36px;
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.tool-modal-body .button-row {
+  margin-top: 1px;
+}

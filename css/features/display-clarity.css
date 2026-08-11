@@ -1,0 +1,212 @@
+/*
+ * 표시 선명도와 접근성
+ * - 10px 미만의 장식용 글자를 없애 고해상도 화면에서도 읽기 쉽게 합니다.
+ * - 하단 메뉴는 남는 공간에 맞춰 실제 터치 버튼 크기로 사용합니다.
+ * - 사진/일러스트는 브라우저의 부드러운 보간을 사용합니다.
+ */
+:root {
+  --font-size: 16px;
+}
+
+html,
+body {
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: auto;
+  font-synthesis: none;
+  text-rendering: auto;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+img,
+canvas,
+.tarot-card-image,
+.quest-stamp,
+.quest-complete-stamp {
+  image-rendering: auto;
+}
+
+/* 앱 전체를 합성 레이어로 만드는 규칙은 Windows에서 글자를 흐리게 만들 수 있습니다. */
+.app-shell { transform: none; }
+
+/* 앱의 주요 정보 계층: 본문 13px, 보조/최소 정보 11px */
+:root[data-theme="light"] .header-title strong { font-size: 15px; font-weight: 700; }
+:root[data-theme="light"] .connection-badge { font-size: max(10px, calc(var(--font-size) * .625)); }
+:root[data-theme="light"] .chat-search { font-size: calc(var(--font-size) * .75); }
+:root[data-theme="light"] .search-hint,
+.chat-filter,
+.conversation-meta,
+:root[data-theme="light"] .conversation-meta time,
+.sender-name,
+.message-time,
+.link-preview small,
+.file-card small,
+.attach-action small,
+.game-card-line small,
+.game-card-desc,
+.game-badge,
+.shopping-hero small,
+.shopping-item-main small,
+.community-status,
+.ranking-player small,
+.board-post > small,
+.local-badge,
+.board-page-label,
+.daily-quest-head small,
+.daily-quest-count,
+.quest-card-copy small,
+.quest-card-progress b,
+.quest-solver-progress,
+.quest-feedback,
+.coin-wallet-badge span {
+  font-size: max(11px, calc(var(--font-size) * .6875));
+}
+
+.section-label small,
+.tool-label small,
+.shortcut-copy small,
+.settings-row-copy small,
+.tool-detail-head small,
+.room-member-copy small,
+.settings-copy small,
+.mini-pill,
+.conversation-count,
+.chat-bg-preview span,
+.tarot-game-head small,
+.tarot-intro p,
+.tarot-kicker,
+.tarot-direction,
+.tarot-card-back b,
+.tarot-disclaimer,
+.tarot-message strong,
+.tarot-advice strong,
+.tarot-lucky span,
+.coin-wallet-badge strong {
+  font-size: max(11px, calc(var(--font-size) * .6875));
+}
+
+/* 쇼핑 화면은 한글 획이 뭉개지지 않도록 보조 문구도 11px 이상으로 유지합니다. */
+.shop-market-copy small,
+.shop-product-copy small,
+.shop-market-empty p,
+.shop-inventory-fab small,
+.shop-inventory-panel > header small,
+.shop-inventory-copy small {
+  font-size: max(11px, calc(var(--font-size) * .6875));
+}
+
+.shop-market-count,
+.shop-inventory-fab b {
+  font-size: max(10px, calc(var(--font-size) * .625));
+}
+
+:root[data-theme="light"] .conversation-main strong,
+.game-card-line strong,
+.shopping-item-main strong,
+.ranking-player strong,
+.ranking-score,
+.board-post-title strong,
+.quest-card-copy strong {
+  font-size: calc(var(--font-size) * .8125);
+  font-weight: 700;
+}
+
+:root[data-theme="light"] .conversation-main p,
+.board-post-content {
+  font-size: calc(var(--font-size) * .75);
+}
+
+:root[data-theme="light"] .unread {
+  min-width: 18px;
+  height: 18px;
+  font-size: 10px;
+}
+
+/* 하단 탭은 화면 폭을 동일하게 나누고 아이콘과 글자를 함께 키웁니다. */
+@media (max-width: 700px), (pointer: coarse) and (max-width: 900px) {
+  .workspace,
+  :root[data-theme="light"] .workspace {
+    grid-template-rows: minmax(0, 1fr) 72px;
+  }
+
+  .bottom-nav,
+  :root[data-theme="light"] .bottom-nav {
+    min-height: 72px;
+    overflow: hidden;
+    padding: 4px 4px max(4px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .bottom-nav .nav-button,
+  :root[data-theme="light"] .bottom-nav .nav-button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 60px;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 3px;
+    padding: 5px 2px;
+  }
+
+  .bottom-nav .nav-button span,
+  :root[data-theme="light"] .bottom-nav .nav-button span {
+    width: 34px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    border-radius: 10px;
+    font-size: 19px !important;
+    line-height: 1;
+  }
+
+  .bottom-nav .nav-button small,
+  :root[data-theme="light"] .bottom-nav .nav-button small {
+    font-size: 11px !important;
+    line-height: 1.15;
+  }
+
+  :root[data-nav-size="large"] .workspace {
+    grid-template-rows: minmax(0, 1fr) 82px;
+  }
+
+  :root[data-nav-size="large"] .bottom-nav { min-height: 82px; }
+  :root[data-nav-size="large"] .bottom-nav .nav-button { min-height: 70px; }
+  :root[data-nav-size="large"] .bottom-nav .nav-button span { width: 38px; height: 34px; font-size: 22px !important; }
+  :root[data-nav-size="large"] .bottom-nav .nav-button small { font-size: 11px !important; }
+}
+
+/* 코인 잔액은 쇼핑 화면의 상단 오른쪽에서 항상 확인합니다. */
+.header-coin-badge {
+  min-height: 30px;
+  gap: 5px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.header-coin-badge img { width: 19px; height: 19px; }
+.header-coin-badge strong { color: var(--text); font-size: 12px; }
+.header-coin-badge:hover { background: transparent; }
+
+/* 내 프로필은 대화 목록을 차지하지 않고 상단 사진을 눌러 편집합니다. */
+.header-title::before { display: none !important; }
+.header-profile-button { flex: 0 0 auto; width: 30px; height: 30px; overflow: hidden; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--text); cursor: pointer; }
+.header-profile-button:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.header-profile-avatar { width: 100%; height: 100%; display: block; object-fit: cover; background: #fff8dc; }
+
+/* '애니메이션 줄이기'를 선택하면 이동/점멸 효과만 제거합니다. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: .01ms !important;
+}

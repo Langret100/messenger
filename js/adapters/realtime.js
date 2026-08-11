@@ -61,7 +61,10 @@ MiniTalk.Realtime=(()=>{
   }
   function waitForConnected(database,timeout=7000){return new Promise((resolve,reject)=>{const ref=database.ref(".info/connected");const timer=setTimeout(()=>{ref.off("value",onValue);reject(new Error("Firebase 연결 시간 초과"))},timeout);function onValue(s){if(s.val()===true){clearTimeout(timer);ref.off("value",onValue);resolve()}}ref.on("value",onValue)})}
 
-  function bind(ref,event,fn){ref.on(event,fn);const off=()=>ref.off(event,fn);unsubs.push(off);return off}
+  function bind(ref,event,fn,errorMessage="실시간 데이터를 읽지 못했습니다."){
+    const fail=error=>{console.error(errorMessage,error);emit("error",{message:errorMessage,code:String(error?.code||"")})};
+    ref.on(event,fn,fail);const off=()=>ref.off(event,fn);unsubs.push(off);return off
+  }
   function cleanup(){
     const previousUser=user;
     messageUnsub?.();messageUnsub=null;
@@ -101,7 +104,7 @@ MiniTalk.Realtime=(()=>{
   }
 
   async function startFirebase(){
-    bind(db.ref(MiniTalkConfig.paths.rooms),"value",s=>{const source=s.val()||{},rooms={};Object.entries(source).forEach(([id,value])=>{rooms[id]=normalizeRoom(id,value||{})});emit("rooms",rooms)});
+    bind(db.ref(MiniTalkConfig.paths.rooms),"value",s=>{const source=s.val()||{},rooms={};Object.entries(source).forEach(([id,value])=>{rooms[id]=normalizeRoom(id,value||{})});emit("rooms",rooms)},"대화방 목록을 읽을 권한이 없습니다.");
     if(firebaseAuthenticated){
       presenceRef=db.ref(`${MiniTalkConfig.paths.presence}/${user.user_id}`);
       await presenceRef.set({user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
@@ -141,7 +144,8 @@ MiniTalk.Realtime=(()=>{
     if(mode==="firebase"){
       const ref=db.ref(messagesPath(roomId)).orderByChild("ts").limitToLast(100);
       const fn=s=>{const value=s.val()||{};emit("message",{...value,id:s.key,roomId:value.roomId||roomId})};
-      ref.on("child_added",fn);messageUnsub=()=>ref.off("child_added",fn);
+      const fail=error=>{console.error("대화내역 구독 실패",error);emit("error",{message:"대화내역을 읽을 권한이 없습니다.",code:String(error?.code||"")})};
+      ref.on("child_added",fn,fail);messageUnsub=()=>ref.off("child_added",fn);
     }else localGet(`messages.${roomId}`,[]).slice(-100).forEach(message=>emit("message",message));
   }
   async function sendMessage(roomId,payload){

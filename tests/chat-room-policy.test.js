@@ -1,0 +1,20 @@
+const fs=require("fs"),path=require("path");
+const root=path.resolve(__dirname,"..");
+const chats=fs.readFileSync(path.join(root,"js/features/chats.js"),"utf8");
+const realtime=fs.readFileSync(path.join(root,"js/adapters/realtime.js"),"utf8");
+
+if(!chats.includes(".sort((a,b)=>roomMessageTime(b)-roomMessageTime(a))"))throw new Error("room list must be sorted by latest message");
+if(!chats.includes("isAdmin()||MiniTalk.Realtime.isRoomMember(room)"))throw new Error("administrator room-list exception is missing");
+if(!chats.includes('text:"친구 초대"')||!realtime.includes("inviteRoomMembers"))throw new Error("room invitation flow is missing");
+if(!realtime.includes("profileImage")||!realtime.includes("profile_image")||!chats.includes("profileForMessage"))throw new Error("legacy Tori profile image compatibility is missing");
+if(!chats.includes('mode==="group"&&item.dataset.roomType==="group"'))throw new Error("group discovery filter is missing");
+if(!chats.includes("quickRoomActions")||!chats.includes("onpointerdown"))throw new Error("long-press room actions are missing");
+if(chats.includes("avatar-presence"))throw new Error("decorative green room-presence dot must not remain");
+if(!chats.includes("room-lock-badge"))throw new Error("password room lock badge is missing");
+if(chats.includes("room-password-label"))throw new Error("password room must use only the lock badge, without a text label");
+if(!chats.includes("openRoom(room.id,joined)"))throw new Error("verified password room must open without asking for the password again");
+if(!chats.includes("stillMember=Boolean(room&&MiniTalk.Realtime.isRoomMember(room))"))throw new Error("message alerts must be restricted to rooms the user still belongs to");
+if(!chats.includes("syncRooms(memberRooms,active)"))throw new Error("unread alerts must be restricted to member rooms");
+if(!chats.includes("notifyMemberRoomUpdates(memberRooms,active)"))throw new Error("inactive member rooms must produce scoped message alerts");
+if(!chats.includes("roomAlertTimes=next"))throw new Error("left rooms must be removed from the alert tracker");
+console.log("CHAT_ROOM_POLICY_OK");

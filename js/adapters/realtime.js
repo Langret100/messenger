@@ -6,7 +6,8 @@
    ============================================================ */
 MiniTalk.Realtime=(()=>{
   let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,connectionError="",firebaseAuthenticated=false;
-  let messageUnsub=null;
+  let currentProfiles={},legacyProfiles={};
+  let messageUnsub=null,shopInventoryUnsub=null,shopInventoryFallback=false;
   const unsubs=[];
   const handledCommands=new Set();
   const localPrefix="miniTalk.v3.data.";
@@ -36,7 +37,8 @@ MiniTalk.Realtime=(()=>{
     });
     const creatorRaw=String(value.creator||"");
     const creator=creatorRaw===user?.nickname?user.user_id:creatorRaw;
-    return{...value,id:String(value.id||id),title:String(value.title||value.name||(id==="global"?"전체 대화":"대화방")),creator,members,hasPassword:Boolean(value.hasPassword||value.password)}
+    const lastMessageAt=Number(value.lastMessageAt||value.last_message_at||(value.lastMessage?value.updatedAt:0)||0);
+    return{...value,id:String(value.id||id),title:String(value.title||value.name||(id==="global"?"전체 대화":"대화방")),creator,members,hasPassword:Boolean(value.hasPassword||value.password),lastMessageAt}
   }
   const firebaseRoomValue=room=>({...room,name:String(room?.title||room?.name||"대화방")});
   async function passwordHash(password,salt){
@@ -65,9 +67,24 @@ MiniTalk.Realtime=(()=>{
     const fail=error=>{console.error(errorMessage,error);emit("error",{message:errorMessage,code:String(error?.code||"")})};
     ref.on(event,fn,fail);const off=()=>ref.off(event,fn);unsubs.push(off);return off
   }
+  function normalizeProfiles(source={}){
+    const result={};
+    Object.entries(source||{}).forEach(([key,raw])=>{
+      const value=raw&&typeof raw==="object"?raw:{};
+      const userId=String(value.user_id||value.userId||value.uid||key);
+      const nickname=String(value.nickname||value.name||value.username||key);
+      const avatar=String(value.avatar||value.profileImage||value.profile_image||value.profileImageUrl||value.avatarUrl||value.photoURL||value.photoUrl||value.imageUrl||value.image||"");
+      const statusMsg=String(value.statusMsg||value.statusMessage||value.status_message||value.status||"");
+      const profile={...value,user_id:userId,nickname,avatar,statusMsg};
+      result[key]=profile;result[userId]=profile;if(nickname)result[nickname]=profile;
+    });
+    return result
+  }
+  function publishProfiles(){emit("profiles",{...normalizeProfiles(legacyProfiles),...normalizeProfiles(currentProfiles)})}
   function cleanup(){
     const previousUser=user;
     messageUnsub?.();messageUnsub=null;
+    shopInventoryUnsub?.();shopInventoryUnsub=null;shopInventoryFallback=false;
     while(unsubs.length){try{unsubs.pop()()}catch{}}
     if(heartbeat){clearInterval(heartbeat);heartbeat=null}
     if(storageHandler){removeEventListener("storage",storageHandler);storageHandler=null}
@@ -92,7 +109,7 @@ MiniTalk.Realtime=(()=>{
   }
 
   async function init(nextUser){
-    cleanup();user=nextUser;db=null;mode="local";connectionError="";firebaseAuthenticated=false;
+    cleanup();user=nextUser;db=null;mode="local";connectionError="";firebaseAuthenticated=false;shopInventoryFallback=false;currentProfiles={};legacyProfiles={};
     // 사용자 인증의 기준은 Apps Script/시트 로그인입니다. 게스트는 Firebase에 연결하지 않습니다.
     if(validKey()&&!nextUser?.isGuest){
       try{await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);firebaseAuthenticated=Boolean(await ensureFirebaseAuth());db=firebase.database();await waitForConnected(db);mode="firebase"}
@@ -110,8 +127,10 @@ MiniTalk.Realtime=(()=>{
       await presenceRef.set({user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
       presenceRef.onDisconnect().update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});
       bind(db.ref(MiniTalkConfig.paths.presence),"value",s=>emit("presence",s.val()||{}));
-      bind(db.ref(MiniTalkConfig.paths.profiles),"value",s=>emit("profiles",s.val()||{}));
-      bind(db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}`),"value",s=>emit("shop-inventory",s.val()||{}));
+      bind(db.ref(MiniTalkConfig.paths.legacyProfiles),"value",s=>{legacyProfiles=s.val()||{};publishProfiles()},"기존 프로필 목록을 읽을 권한이 없습니다.");
+      bind(db.ref(MiniTalkConfig.paths.profiles),"value",s=>{currentProfiles=s.val()||{};publishProfiles()});
+      shopInventoryUnsub=bind(db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}`),"value",s=>emit("shop-inventory",s.val()||{}));
+      syncPendingShopInventory().catch(error=>console.warn("보관함 대기 항목 동기화 실패",error));
       bind(db.ref(`${MiniTalkConfig.paths.tasks}/${user.user_id}`),"value",s=>emit("tasks",s.val()||{}));
       bind(db.ref(`${MiniTalkConfig.paths.commands}/${user.user_id}`).limitToLast(30),"child_added",async s=>{
         const value=s.val()||{};if(value.status==="done"||handledCommands.has(s.key))return;
@@ -119,7 +138,7 @@ MiniTalk.Realtime=(()=>{
         try{await s.ref.update({status:"done",handledAt:firebase.database.ServerValue.TIMESTAMP})}catch(error){console.warn("명령 처리 표시 실패",error)}
       });
     }else{
-      emit("presence",{});emit("profiles",{});emit("shop-inventory",{});emit("tasks",{});
+      shopInventoryFallback=true;emit("presence",{});emit("profiles",{});emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));emit("tasks",{});
     }
     await ensureDefaultRoom();
   }
@@ -159,11 +178,11 @@ MiniTalk.Realtime=(()=>{
     const preview=message.type==="file"?`[파일] ${message.fileName||"파일"}`:message.type==="image"?"[사진]":message.text;
     if(mode==="firebase"){
       const ref=db.ref(messagesPath(roomId)).push();await ref.set(message);
-      await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).update({lastMessage:preview,updatedAt:firebase.database.ServerValue.TIMESTAMP});
+      await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).update({lastMessage:preview,lastMessageAt:firebase.database.ServerValue.TIMESTAMP,lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:firebase.database.ServerValue.TIMESTAMP});
       const saved={id:ref.key,...message};MiniTalk.Chat.ServerBackup?.message(saved);return saved;
     }
     const value={id:crypto.randomUUID(),...message},list=localGet(`messages.${roomId}`,[]);list.push(value);localSet(`messages.${roomId}`,list.slice(-200));
-    const rooms=localGet("rooms",{});rooms[roomId]={...(rooms[roomId]||{id:roomId,title:roomId}),lastMessage:preview,updatedAt:Date.now()};localSet("rooms",rooms);broadcast("message",value);broadcast("rooms",rooms);return value;
+    const rooms=localGet("rooms",{});rooms[roomId]={...(rooms[roomId]||{id:roomId,title:roomId}),lastMessage:preview,lastMessageAt:Date.now(),lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:Date.now()};localSet("rooms",rooms);broadcast("message",value);broadcast("rooms",rooms);return value;
   }
   async function getRoom(roomId){
     if(mode==="firebase"){const snap=await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).once("value");return snap.exists()?normalizeRoom(roomId,snap.val()||{}):null}
@@ -197,6 +216,13 @@ MiniTalk.Realtime=(()=>{
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.creator!==user.user_id)throw new Error("방장만 멤버를 내보낼 수 있습니다.");if(memberId===user.user_id)throw new Error("방장은 방 나가기를 이용하세요.");
     const members={...roomMembers(room)};if(!members[memberId])return room;delete members[memberId];room.members=members;room.updatedAt=Date.now();return saveRoom(room)
   }
+  async function inviteRoomMembers(roomId,targets=[]){
+    const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global")throw new Error("전체 대화에는 초대가 필요하지 않습니다.");
+    if(!isRoomMember(room)&&!MiniTalk.AdminSession?.authorized?.())throw new Error("대화방 멤버만 초대할 수 있습니다.");
+    const members={...roomMembers(room)};let added=0;
+    targets.forEach(target=>{const userId=String(target?.user_id||"").trim(),nickname=String(target?.nickname||userId).trim();if(!userId||members[userId]||userId===user.user_id)return;members[userId]={user_id:userId,nickname,role:"member",joinedAt:Date.now()};added++});
+    if(!added)throw new Error("초대할 사용자를 선택하세요.");room.members=members;room.metadataUpdatedAt=Date.now();await saveRoom(room);return added
+  }
   async function leaveRoom(roomId){
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global")throw new Error("전체 대화에서는 나갈 수 없습니다.");
     const members={...roomMembers(room)};delete members[user.user_id];const remaining=Object.values(members).filter(Boolean);let deleted=false,newCreator=null;
@@ -218,36 +244,46 @@ MiniTalk.Realtime=(()=>{
   }
   async function sendCommand(target,type,payload){MiniTalk.AdminSession.requireToken();const command={type,payload,createdAt:Date.now(),issuedBy:user.user_id,status:"pending"};if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.commands}/${target}`).push(command);else{const value={id:crypto.randomUUID(),...command};broadcast("command",{target,command:value})}}
   async function assignTask(target,task){MiniTalk.AdminSession.requireToken();const id=crypto.randomUUID(),value={...task,id,status:"open",createdAt:Date.now(),issuedBy:user.user_id};if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.tasks}/${target}/${id}`).set(value);else{const all=localGet(`tasks.${target}`,{});all[id]=value;localSet(`tasks.${target}`,all);broadcast("task",{target})}return id}
+  async function sendCommands(targets,type,payload){
+    MiniTalk.AdminSession.requireToken();const ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
+    if(mode==="firebase"){const updates={};ids.forEach(target=>{const id=db.ref(`${MiniTalkConfig.paths.commands}/${target}`).push().key;updates[`${MiniTalkConfig.paths.commands}/${target}/${id}`]={type,payload,createdAt,issuedBy:user.user_id,status:"pending"}});await db.ref().update(updates)}
+    else ids.forEach(target=>broadcast("command",{target,command:{id:crypto.randomUUID(),type,payload,createdAt,issuedBy:user.user_id,status:"pending"}}));return ids.length
+  }
+  async function assignTasks(targets,task){
+    MiniTalk.AdminSession.requireToken();const ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
+    if(mode==="firebase"){const updates={};ids.forEach(target=>{const id=crypto.randomUUID();updates[`${MiniTalkConfig.paths.tasks}/${target}/${id}`]={...task,id,status:"open",createdAt,issuedBy:user.user_id}});await db.ref().update(updates)}
+    else ids.forEach(target=>{const id=crypto.randomUUID(),all=localGet(`tasks.${target}`,{});all[id]={...task,id,status:"open",createdAt,issuedBy:user.user_id};localSet(`tasks.${target}`,all);broadcast("task",{target})});return ids.length
+  }
   async function submitTask(id,answer){if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.tasks}/${user.user_id}/${id}`).update({answer,status:"submitted",submittedAt:firebase.database.ServerValue.TIMESTAMP});else{const all=localGet(`tasks.${user.user_id}`,{});all[id]={...all[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`tasks.${user.user_id}`,all);broadcast("task",{target:user.user_id})}}
+  function localShopInventory(ownerId){const stored=localGet(`shop.inventory.${ownerId}`,{}),visible=ownerId===user?.user_id?(MiniTalk.Store.get("shopInventory")||{}):{};return{...visible,...stored}}
+  function saveLocalShopInventory(ownerId,value){const inventory=localShopInventory(ownerId);inventory[value.id]={...value,pendingSync:true};localSet(`shop.inventory.${ownerId}`,inventory);emit("shop-inventory",inventory);return inventory[value.id]}
+  function enableShopInventoryFallback(){if(shopInventoryFallback)return;shopInventoryFallback=true;shopInventoryUnsub?.();shopInventoryUnsub=null;const inventory=localShopInventory(user.user_id);localSet(`shop.inventory.${user.user_id}`,inventory);emit("shop-inventory",inventory)}
+  async function syncPendingShopInventory(){if(mode!=="firebase"||!firebaseAuthenticated)return;const inventory=localGet(`shop.inventory.${user.user_id}`,{}),pending=Object.values(inventory).filter(item=>item?.id&&item.pendingSync);for(const item of pending){const value={...item};delete value.pendingSync;await db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}/${item.id}`).set(value);delete inventory[item.id]}if(pending.length)localSet(`shop.inventory.${user.user_id}`,inventory)}
   async function addShopInventory(ownerId,item){
     const id=String(item.id||crypto.randomUUID()),value={...item,id,ownerId,createdAt:Number(item.createdAt)||Date.now()};
-    if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.shopInventory}/${ownerId}/${id}`).set(value);
-    else{const inventory=localGet(`shop.inventory.${ownerId}`,{});inventory[id]=value;localSet(`shop.inventory.${ownerId}`,inventory);broadcast("shop-inventory",{target:ownerId})}
+    if(mode==="firebase"&&firebaseAuthenticated&&!shopInventoryFallback){try{await db.ref(`${MiniTalkConfig.paths.shopInventory}/${ownerId}/${id}`).set(value);return value}catch(error){console.warn("보관함 서버 저장 실패, 동기화 대기열에 보존",error);enableShopInventoryFallback()}}
+    saveLocalShopInventory(ownerId,value);
     return value;
   }
   async function useShopInventory(id){
     if(user?.isGuest)throw new Error("로그인이 필요합니다.");
     const usedAt=Date.now();
-    if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}/${id}`).update({usedAt});
-    else{const inventory=localGet(`shop.inventory.${user.user_id}`,{});if(!inventory[id])throw new Error("보관함 상품을 찾을 수 없습니다.");inventory[id]={...inventory[id],usedAt};localSet(`shop.inventory.${user.user_id}`,inventory);broadcast("shop-inventory",{target:user.user_id})}
+    if(mode==="firebase"&&firebaseAuthenticated&&!shopInventoryFallback){try{await db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}/${id}`).update({usedAt});return usedAt}catch(error){console.warn("보관함 사용 처리 실패, 로컬로 전환",error);enableShopInventoryFallback()}}
+    const inventory=localShopInventory(user.user_id);if(!inventory[id])throw new Error("보관함 상품을 찾을 수 없습니다.");inventory[id]={...inventory[id],usedAt,pendingSync:true};localSet(`shop.inventory.${user.user_id}`,inventory);emit("shop-inventory",inventory);
     return usedAt;
   }
   async function giftShopInventory(id,targetId,targetNickname){
     if(user?.isGuest)throw new Error("로그인이 필요합니다.");
     if(!targetId||targetId===user.user_id)throw new Error("선물할 사용자를 선택하세요.");
-    if(mode==="firebase"){
+    if(mode==="firebase"&&firebaseAuthenticated&&!shopInventoryFallback){
       const sourceRef=db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}/${id}`),snap=await sourceRef.once("value"),item=snap.val();
       if(!item||item.usedAt)throw new Error("선물할 수 없는 상품입니다.");
       const giftId=crypto.randomUUID(),updates={};
       updates[`${MiniTalkConfig.paths.shopInventory}/${user.user_id}/${id}`]=null;
       updates[`${MiniTalkConfig.paths.shopInventory}/${targetId}/${giftId}`]={...item,id:giftId,ownerId:targetId,giftedBy:user.user_id,giftedByNickname:user.nickname,giftedAt:firebase.database.ServerValue.TIMESTAMP};
       await db.ref().update(updates);
-    }else{
-      const source=localGet(`shop.inventory.${user.user_id}`,{}),item=source[id];if(!item||item.usedAt)throw new Error("선물할 수 없는 상품입니다.");delete source[id];localSet(`shop.inventory.${user.user_id}`,source);
-      const target=localGet(`shop.inventory.${targetId}`,{}),giftId=crypto.randomUUID();target[giftId]={...item,id:giftId,ownerId:targetId,giftedBy:user.user_id,giftedByNickname:user.nickname,giftedAt:Date.now()};localSet(`shop.inventory.${targetId}`,target);
-      broadcast("shop-inventory",{target:user.user_id});broadcast("shop-inventory",{target:targetId});
-    }
+    }else throw new Error("실시간 서버 연결 후 선물할 수 있습니다.");
     return{targetId,targetNickname};
   }
-  return{init,cleanup,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,leaveRoom,saveProfile,sendCommand,assignTask,submitTask,addShopInventory,useShopInventory,giftShopInventory};
+  return{init,cleanup,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,giftShopInventory};
 })();

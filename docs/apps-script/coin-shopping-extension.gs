@@ -15,7 +15,7 @@ const MINI_TALK_ROOM_BACKUP_SHEET = "미니톡_대화방백업";
 const MINI_TALK_MESSAGE_BACKUP_SHEET = "미니톡_메시지백업";
 const SHOP_ADMIN_TOKEN_SECONDS = 21600; // 6시간
 const SHOP_PRODUCT_MAX_BYTES = 8500;
-const SHOP_IMAGE_MAX_CHARS = 6500;
+const SHOP_IMAGE_MAX_CHARS = 7200;
 
 /**
  * 최초 1회만 Apps Script 편집기에서 직접 실행합니다.
@@ -165,9 +165,9 @@ function handleShopProductSave(e) {
   }
 
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
-    if (product.imageUrl && !/^data:image\/(?:jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(product.imageUrl)) {
+    if (product.imageUrl && !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(product.imageUrl)) {
       return shopJson_({ ok: false, error: "INVALID_PRODUCT_IMAGE" });
     }
     writeShopProduct_(product);
@@ -186,7 +186,7 @@ function handleShopProductDelete(e) {
   if (!productId) return shopJson_({ ok: false, error: "MISSING_PRODUCT_ID" });
 
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     PropertiesService.getScriptProperties().deleteProperty(shopProductPropertyKey_(productId));
     removeLegacyShopProduct_(productId);
@@ -264,17 +264,10 @@ function getOrCreateShopPurchaseLogSheet_() {
 function findShopPurchase_(sheet, purchaseKey) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
-  for (let i = 0; i < rows.length; i++) {
-    if (String(rows[i][0]) === purchaseKey) {
-      return {
-        userId: String(rows[i][1]),
-        productId: String(rows[i][2]),
-        newCoin: parseInt(rows[i][6], 10) || 0
-      };
-    }
-  }
-  return null;
+  const match = sheet.getRange(2, 1, lastRow - 1, 1).createTextFinder(String(purchaseKey)).matchEntireCell(true).findNext();
+  if (!match) return null;
+  const row = sheet.getRange(match.getRow(), 1, 1, 8).getValues()[0];
+  return { userId: String(row[1]), productId: String(row[2]), newCoin: parseInt(row[6], 10) || 0 };
 }
 
 /** POST mode=shop_purchase */
@@ -292,7 +285,7 @@ function handleShopPurchase(e) {
   if (purchaseKey.length > 180) return shopJson_({ ok: false, error: "INVALID_PURCHASE_KEY" });
 
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) {
+  if (!lock.tryLock(4000)) {
     return shopJson_({ ok: false, error: "SHOP_BUSY", message: "잠시 후 다시 시도해주세요." });
   }
 
@@ -334,7 +327,6 @@ function handleShopPurchase(e) {
         purchaseKey, userId, product.id, product.name, product.price,
         beforeCoin, result.newCoin, new Date()
       ]);
-      SpreadsheetApp.flush();
     } catch (logError) {
       try { processCoinChange(userId, "add", product.price); }
       catch (rollbackError) { console.error("SHOP_ROLLBACK_FAILED", rollbackError); }

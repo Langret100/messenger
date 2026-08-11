@@ -23,6 +23,12 @@ function makeCtx(){
   await B.MiniTalk.Realtime.joinRoom(room.id,"1234");
   let updated=await A.MiniTalk.Realtime.getRoom(room.id);
   if(!updated.members?.b)throw new Error("member join was not stored");
+  const reentered=await B.MiniTalk.Realtime.joinRoom(room.id,"");
+  if(!reentered.members?.b)throw new Error("existing member was asked to verify the room password again");
+  const invited=await A.MiniTalk.Realtime.inviteRoomMembers(room.id,[{user_id:"c",nickname:"C"}]);
+  updated=await A.MiniTalk.Realtime.getRoom(room.id);
+  if(invited!==1||!updated.members?.c)throw new Error("room invitation was not stored");
+  await A.MiniTalk.Realtime.removeRoomMember(room.id,"c");
   await A.MiniTalk.Realtime.removeRoomMember(room.id,"b");
   updated=await A.MiniTalk.Realtime.getRoom(room.id);
   if(updated.members?.b)throw new Error("member removal failed");

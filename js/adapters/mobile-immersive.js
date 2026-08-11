@@ -32,6 +32,8 @@ MiniTalk.MobileImmersive=(()=>{
     return isMobile()&&!standalone()&&!MiniTalk.WindowMode?.isPopup?.();
   }
 
+  const isFullscreen=()=>Boolean(document.fullscreenElement||document.webkitFullscreenElement);
+
   function updateViewport(){
     if(!isMobile())return;
     const vv=window.visualViewport;
@@ -54,7 +56,7 @@ MiniTalk.MobileImmersive=(()=>{
   }
 
   function nudgeBrowserChrome(){
-    if(!isBrowserMode()||document.fullscreenElement)return false;
+    if(!isBrowserMode()||isFullscreen())return false;
     /* root가 1~2px 움직일 수 있을 때만 시도. 앱 내부 스크롤에는 손대지 않습니다. */
     try{
       if(window.scrollY<1){window.scrollTo({top:1,left:0,behavior:"instant"})}
@@ -65,7 +67,7 @@ MiniTalk.MobileImmersive=(()=>{
   }
 
   async function requestFullscreenFromGesture(){
-    if(!isBrowserMode()||document.fullscreenElement)return document.fullscreenElement!=null;
+    if(!isBrowserMode()||isFullscreen())return isFullscreen();
     const root=document.documentElement;
     const fn=root.requestFullscreen||root.webkitRequestFullscreen;
     if(typeof fn!=="function")return false;
@@ -73,7 +75,7 @@ MiniTalk.MobileImmersive=(()=>{
       /* navigationUI:'hide'는 지원 브라우저에서만 힌트로 사용됩니다. */
       const result=fn.call(root,{navigationUI:"hide"});
       if(result&&typeof result.then==="function")await result;
-      return Boolean(document.fullscreenElement||document.webkitFullscreenElement);
+      return isFullscreen();
     }catch(error){
       console.info("모바일 전체화면 요청 미지원/거부",error?.name||error?.message||error);
       return false;
@@ -92,11 +94,21 @@ MiniTalk.MobileImmersive=(()=>{
     return full;
   }
 
+  async function exitFullscreenFromGesture(){
+    if(!isFullscreen())return true;
+    const fn=document.exitFullscreen||document.webkitExitFullscreen;
+    if(typeof fn!=="function")return false;
+    try{const result=fn.call(document);if(result&&typeof result.then==="function")await result;updateViewport();return !isFullscreen()}
+    catch(error){console.info("전체 화면 종료 실패",error?.name||error?.message||error);return false}
+  }
+
+  async function toggleFullscreenFromGesture(){return isFullscreen()?exitFullscreenFromGesture():enterFromGesture()}
+
   function afterAppShown(){
     if(!isMobile())return;
     document.documentElement.dataset.mobileImmersive="1";
     updateViewport();
-    if(!document.fullscreenElement){
+    if(!isFullscreen()){
       setTimeout(nudgeBrowserChrome,100);
       setTimeout(nudgeBrowserChrome,600);
     }
@@ -113,9 +125,10 @@ MiniTalk.MobileImmersive=(()=>{
     addEventListener("resize",scheduleViewportUpdate,{passive:true});
     addEventListener("orientationchange",()=>setTimeout(()=>{updateViewport();nudgeBrowserChrome()},180),{passive:true});
     addEventListener("focus",()=>setTimeout(nudgeBrowserChrome,120),{passive:true});
-    document.addEventListener("fullscreenchange",updateViewport,{passive:true});
-    document.addEventListener("webkitfullscreenchange",updateViewport,{passive:true});
+    const onFullscreenChange=()=>{updateViewport();MiniTalk.Events.emit("fullscreen:change",isFullscreen())};
+    document.addEventListener("fullscreenchange",onFullscreenChange,{passive:true});
+    document.addEventListener("webkitfullscreenchange",onFullscreenChange,{passive:true});
   }
 
-  return{start,isMobile,isBrowserMode,enterFromGesture,afterAppShown,nudgeBrowserChrome,updateViewport,getViewportHeight:()=>lastViewportHeight};
+  return{start,isMobile,isBrowserMode,isFullscreen,enterFromGesture,exitFullscreenFromGesture,toggleFullscreenFromGesture,afterAppShown,nudgeBrowserChrome,updateViewport,getViewportHeight:()=>lastViewportHeight};
 })();

@@ -179,9 +179,9 @@ MiniTalk.Features.Shopping = (() => {
           let quality = .62, data = canvas.toDataURL("image/webp", quality);
           const type = data.startsWith("data:image/webp") ? "image/webp" : "image/jpeg";
           if (type === "image/jpeg") data = canvas.toDataURL(type, quality);
-          while (data.length > 6200 && quality > .24) { quality -= .08; data = canvas.toDataURL(type, quality); }
+          while (data.length > 6900 && quality > .20) { quality -= .08; data = canvas.toDataURL(type, quality); }
           URL.revokeObjectURL(objectUrl);
-          if (data.length > 6500) return reject(new Error("서버 저장 크기에 맞게 사진을 압축하지 못했습니다."));
+          if (data.length > 7200) return reject(new Error("서버 저장 크기에 맞게 사진을 압축하지 못했습니다."));
           resolve(data);
         } catch (error) { URL.revokeObjectURL(objectUrl); reject(error); }
       };

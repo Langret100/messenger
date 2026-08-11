@@ -9,7 +9,7 @@ vm.createContext(ctx);
 for(const file of ['js/config.js','js/core/namespace.js','js/core/events.js','js/core/store.js']){
   vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),ctx,{filename:file});
 }
-ctx.MiniTalk.Economy={CoinWallet:{refresh:async()=>100,setLocal:(value,source)=>calls.push(['coin',value,source])}};
+ctx.MiniTalk.Economy={CoinWallet:{refresh:async()=>{calls.push(['coin-refresh']);return 100},setLocal:(value,source)=>calls.push(['coin',value,source])}};
 ctx.MiniTalk.AuthApi={
   shopPurchase:async payload=>{calls.push(['purchase',payload]);if(rejectPurchase)throw new Error('server rejected');return{ok:true,newCoin:75}},
   shopCatalog:async()=>[{id:'server-product',name:'서버 상품',price:40,description:'서버 저장',image_url:'https://example.com/product.webp'}],
@@ -58,6 +58,7 @@ vm.runInContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'
 
   await service.purchase({id:'cheap',name:'연필',description:'연필 한 자루',price:25});
   if(!calls.some(x=>x[0]==='purchase')||!calls.some(x=>x[0]==='add'&&x[1]==='user-a'))throw new Error('approved purchase must add inventory');
+  if(calls.some(x=>x[0]==='coin-refresh'))throw new Error('purchase must not make a redundant balance request before the authoritative server purchase');
   if(!calls.some(x=>x[0]==='coin'&&x[1]===75))throw new Error('newCoin response must update the wallet');
   const addCount=calls.filter(x=>x[0]==='add').length;
   rejectPurchase=true;
@@ -73,6 +74,7 @@ vm.runInContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'
   if(service.products().map(x=>x.id).join(',')!=='server-product')throw new Error('catalog must load from the server API');
   if(service.products()[0].imageUrl!=='https://example.com/product.webp')throw new Error('server product image URL was not normalized');
   await service.saveProduct({name:'새 상품',price:10,description:'관리자 등록',imageUrl:'data:image/webp;base64,AAAA'});
+  if(!service.products().some(item=>item.name==='새 상품'&&item.imageUrl==='data:image/webp;base64,AAAA'))throw new Error('saved product image must be applied to the catalog immediately');
   await service.deleteProduct('server-product');
   if(!calls.some(x=>x[0]==='save-product'&&x[2]==='admin-token'))throw new Error('server product save requires admin token');
   if(!calls.some(x=>x[0]==='save-product'&&x[3].imageUrl==='data:image/webp;base64,AAAA'))throw new Error('compressed product image must be saved with the server product');

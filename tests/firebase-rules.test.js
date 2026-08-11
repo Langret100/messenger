@@ -5,6 +5,7 @@ const rootRules=rules?.rules;
 if(rootRules?.socialChat?.['.read']!==true)throw new Error('socialChat collection read permission is missing');
 if(rootRules?.socialChatRooms?.$roomId?.['.read']!==true)throw new Error('socialChatRooms room-listener read permission is missing');
 if(rootRules?.rooms?.['.read']!==true)throw new Error('rooms collection read permission is missing');
+if(rootRules?.profiles?.['.read']!==true)throw new Error('legacy profile collection read permission is missing');
 const v3=rules?.rules?.moaru?.v3;
 if(v3?.['.read']!=='auth != null'||v3?.['.write']!=='auth != null')throw new Error('Firebase v3 rules must require authentication');
 if(!v3?.messages?.$roomId?.['.indexOn']?.includes('ts'))throw new Error('message timestamp index is missing');

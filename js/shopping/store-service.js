@@ -24,7 +24,7 @@ MiniTalk.Shopping.StoreService = (() => {
       name: String(product.name || "").trim().slice(0, 60),
       description: String(product.description || "").trim().slice(0, 160),
       // 상품 이미지는 160×120 data URL로 서버에 저장되므로 서버와 같은 크기 제한을 사용합니다.
-      imageUrl: String(product.imageUrl || product.image_url || "").trim().slice(0, 6500),
+      imageUrl: String(product.imageUrl || product.image_url || "").trim().slice(0, 7200),
       price: Math.max(1, Math.floor(Number(product.price) || 0)),
       updatedAt: Number(product.updatedAt) || 0
     };
@@ -56,14 +56,21 @@ MiniTalk.Shopping.StoreService = (() => {
     const value = normalizeProduct({ ...product, id: product?.id || crypto.randomUUID(), updatedAt: Date.now() });
     if (!value.name || value.price <= 0) throw new Error("상품 이름과 가격을 입력하세요.");
     const result = await MiniTalk.AuthApi.shopSaveProduct(current.user_id, MiniTalk.AdminSession.requireToken(), value);
-    await refreshCatalog(true);
-    return result.product || value;
+    // 저장 직후 다시 서버를 조회하지 않고 응답을 현재 카탈로그에 즉시 반영합니다.
+    const saved = normalizeProduct({ ...value, ...(result.product || {}), imageUrl: result.product?.imageUrl || result.product?.image_url || value.imageUrl });
+    const catalog = { ...objectValue(MiniTalk.Store.get("shopCatalog")), [saved.id]: saved };
+    catalogLoadedAt = Date.now();
+    MiniTalk.Store.set("shopCatalog", catalog);
+    return saved;
   }
 
   async function deleteProduct(id) {
     const current = requireLogin();
     await MiniTalk.AuthApi.shopDeleteProduct(current.user_id, MiniTalk.AdminSession.requireToken(), id);
-    await refreshCatalog(true);
+    const catalog = { ...objectValue(MiniTalk.Store.get("shopCatalog")) };
+    delete catalog[id];
+    catalogLoadedAt = Date.now();
+    MiniTalk.Store.set("shopCatalog", catalog);
   }
 
   function inventory(now = Date.now()) {
@@ -92,8 +99,7 @@ MiniTalk.Shopping.StoreService = (() => {
   async function purchase(product) {
     const current = requireLogin(), item = normalizeProduct(product);
     if (!item.id || !item.name || !item.price) throw new Error("구매할 상품 정보가 올바르지 않습니다.");
-    const balance = await MiniTalk.Economy.CoinWallet.refresh(true);
-    if (balance < item.price) throw new Error("코인이 부족합니다.");
+    // 서버가 실제 잔액과 가격을 원자적으로 검증하므로 구매 전에 잔액을 다시 조회하지 않습니다.
     const purchaseKey = `${current.user_id}:${item.id}:${crypto.randomUUID()}`;
     let result;
     try {

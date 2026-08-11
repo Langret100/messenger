@@ -1,0 +1,10 @@
+const fs=require("fs"),path=require("path");
+const root=path.resolve(__dirname,"..");
+const admin=fs.readFileSync(path.join(root,"js/features/admin.js"),"utf8");
+const realtime=fs.readFileSync(path.join(root,"js/adapters/realtime.js"),"utf8");
+if(!admin.includes("전체 선택")||!admin.includes("선택 해제")||!admin.includes("data-admin-user"))throw new Error("admin user checklist controls are missing");
+if(!admin.includes("assignTasks")||!admin.includes("sendCommands"))throw new Error("admin bulk dispatch is missing");
+if(!realtime.includes("async function sendCommands")||!realtime.includes("async function assignTasks"))throw new Error("realtime bulk write methods are missing");
+if(!admin.includes('id:"adminNotice"')||!admin.includes('aria-label":"공지 닫기"'))throw new Error("dismissible top announcement is missing");
+if(!admin.includes("setTimeout(dismiss,10000)"))throw new Error("announcement must close automatically after 10 seconds");
+console.log("ADMIN_BULK_COMMAND_OK");

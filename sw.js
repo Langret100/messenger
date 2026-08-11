@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "mini-talk-v37-sheet-login-20260811";
+const CACHE = "mini-talk-v38-legacy-chat-import-20260811";
 const CORE = [
   "./",
   "./index.html",
@@ -40,6 +40,7 @@ const CORE = [
   "./js/chat/qr.js",
   "./js/chat/voice.js",
   "./js/chat/unread.js",
+  "./js/chat/legacy-import.js",
   "./js/chat/server-backup.js",
   "./js/ui/dom.js",
   "./js/ui/shell.js",

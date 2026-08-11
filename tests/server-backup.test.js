@@ -42,7 +42,13 @@ const roomBody = requests[0].options.body;
 if (roomBody.get('mode') !== 'mini_talk_room_backup') throw new Error('room backup mode mismatch');
 if (roomBody.get('members_json').includes('secret')) throw new Error('room password metadata leaked into backup');
 const messageBody = requests[1].options.body;
-if (messageBody.get('mode') !== 'mini_talk_message_backup') throw new Error('message backup mode mismatch');
-if (messageBody.get('image_url') !== '') throw new Error('base64 message image must not be copied to Sheets');
+if (messageBody.get('mode') !== 'social_chat_room') throw new Error('room message backup mode mismatch');
+if (messageBody.get('message') !== '[사진]') throw new Error('base64 message image must not be copied to Sheets');
+
+ctx.MiniTalk.Chat.ServerBackup.message({
+  id: 'global-message', roomId: 'global', user_id: 'user-1', nickname: '토리',
+  type: 'text', text: '전체 대화', ts: 789
+});
+if (requests[2].options.body.get('mode') !== 'social_chat') throw new Error('global messages must back up to the 소통 sheet');
 
 console.log('SERVER_BACKUP_OK');

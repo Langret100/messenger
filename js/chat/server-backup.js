@@ -24,17 +24,28 @@ MiniTalk.Chat.ServerBackup = (() => {
   }
 
   function message(message) {
-    return post("mini_talk_message_backup", {
+    const roomId = String(message?.roomId || "global");
+    const imageUrl = /^https?:/.test(String(message?.imageUrl || "")) ? message.imageUrl : "";
+    const fileUrl = /^https?:/.test(String(message?.fileUrl || "")) ? message.fileUrl : "";
+    const backupText = imageUrl
+      ? `[[IMG]]${imageUrl}`
+      : fileUrl
+        ? `[[FILE]]${fileUrl} ${String(message?.fileName || "첨부 파일")}`
+        : message?.type === "image"
+          ? "[사진]"
+          : message?.type === "file"
+            ? `[파일] ${String(message?.fileName || "첨부 파일")}`
+            : String(message?.text || "").slice(0, 2000);
+
+    // 전체 대화는 기존 '소통' 시트, 개별 방은 '대화방' 시트에 백업합니다.
+    return post(roomId === "global" ? "social_chat" : "social_chat_room", {
       message_id: message?.id,
-      room_id: message?.roomId,
+      room_id: roomId,
       user_id: message?.user_id,
       nickname: message?.nickname,
-      message_type: message?.type,
-      text: String(message?.text || "").slice(0, 2000),
-      image_url: /^https?:/.test(String(message?.imageUrl || "")) ? message.imageUrl : "",
-      file_url: /^https?:/.test(String(message?.fileUrl || "")) ? message.fileUrl : "",
-      file_name: message?.fileName,
-      sent_at: message?.ts || Date.now()
+      message: backupText,
+      text: backupText,
+      ts: message?.ts || Date.now()
     });
   }
 

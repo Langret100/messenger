@@ -5,7 +5,7 @@
    - 재로그인·재진입 시 기존 구독과 타이머를 반드시 정리합니다.
    ============================================================ */
 MiniTalk.Realtime=(()=>{
-  let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null;
+  let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,connectionError="";
   let messageUnsub=null;
   const unsubs=[];
   const handledCommands=new Set();
@@ -69,11 +69,11 @@ MiniTalk.Realtime=(()=>{
   }
 
   async function init(nextUser){
-    cleanup();user=nextUser;db=null;mode="local";
+    cleanup();user=nextUser;db=null;mode="local";connectionError="";
     // 사용자 인증의 기준은 Apps Script/시트 로그인입니다. 게스트는 Firebase에 연결하지 않습니다.
     if(validKey()&&!nextUser?.isGuest){
       try{await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);await ensureFirebaseAuth();db=firebase.database();await waitForConnected(db);mode="firebase"}
-      catch(error){console.warn("Firebase 연결 실패, 로컬 모드로 전환",error);db=null;mode="local"}
+      catch(error){connectionError=String(error?.code||error?.message||error);console.warn("Firebase 연결 실패, 로컬 모드로 전환",error);db=null;mode="local"}
     }
     MiniTalk.Store.set("transport",mode);
     if(mode==="firebase")await startFirebase();else await startLocal();
@@ -95,41 +95,6 @@ MiniTalk.Realtime=(()=>{
       try{await s.ref.update({status:"done",handledAt:firebase.database.ServerValue.TIMESTAMP})}catch(error){console.warn("명령 처리 표시 실패",error)}
     });
     await ensureDefaultRoom();
-    await importLegacyRooms();
-  }
-
-  // 기존 토리 API는 이전 데이터의 입구로만 사용합니다. 병합 이후 화면은 Firebase를 구독합니다.
-  async function importLegacyRooms(){
-    const importer=MiniTalk.Chat?.LegacyImport;
-    if(!importer||!user||user.isGuest)return;
-    try{
-      const rooms=await importer.rooms(user);
-      await Promise.all(rooms.map(room=>db.ref(`${MiniTalkConfig.paths.rooms}/${room.id}`).transaction(current=>{
-        if(!current)return room;
-        if(!current.legacySource)return current;
-        return{...room,...current,members:{...(room.members||{}),...(current.members||{})},legacySource:true}
-      })));
-    }catch(error){console.warn("기존 토리 대화방 가져오기 실패",error)}
-  }
-
-  async function importLegacyMessages(roomId){
-    const importer=MiniTalk.Chat?.LegacyImport;
-    if(!importer||!user||user.isGuest)return;
-    try{
-      const messages=await importer.messages(roomId,user,100);
-      if(!messages.length)return;
-      const updates={};
-      messages.forEach(message=>{updates[`${MiniTalkConfig.paths.messages}/${roomId}/${message.id}`]=message});
-      const latest=messages[messages.length-1];
-      const preview=latest.type==="file"?`[파일] ${latest.fileName||"첨부 파일"}`:latest.type==="image"?"[사진]":latest.text;
-      const roomSnap=await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).once("value");
-      const room=roomSnap.val()||{};
-      if(Number(latest.ts||0)>Number(room.updatedAt||0)){
-        updates[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessage`]=preview;
-        updates[`${MiniTalkConfig.paths.rooms}/${roomId}/updatedAt`]=latest.ts;
-      }
-      await db.ref().update(updates);
-    }catch(error){console.warn(`기존 토리 메시지 가져오기 실패 (${roomId})`,error)}
   }
 
   async function startLocal(){
@@ -153,7 +118,6 @@ MiniTalk.Realtime=(()=>{
       const ref=db.ref(`${MiniTalkConfig.paths.messages}/${roomId}`).orderByChild("ts").limitToLast(100);
       const fn=s=>{const value=s.val()||{};emit("message",{...value,id:s.key,roomId:value.roomId||roomId})};
       ref.on("child_added",fn);messageUnsub=()=>ref.off("child_added",fn);
-      await importLegacyMessages(roomId);
     }else localGet(`messages.${roomId}`,[]).slice(-100).forEach(message=>emit("message",message));
   }
   async function sendMessage(roomId,payload){
@@ -192,10 +156,7 @@ MiniTalk.Realtime=(()=>{
   }
   async function joinRoom(roomId,password=""){
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global"||isRoomMember(room))return room;
-    if(room.hasPassword){
-      if(room.legacySource)await MiniTalk.Chat.LegacyImport.enter(roomId,user,password);
-      else{const attempt=await passwordHash(String(password||""),room.passwordSalt||"");if(attempt!==room.passwordHash)throw new Error("대화방 비밀번호가 올바르지 않습니다.")}
-    }
+    if(room.hasPassword){const attempt=await passwordHash(String(password||""),room.passwordSalt||"");if(attempt!==room.passwordHash)throw new Error("대화방 비밀번호가 올바르지 않습니다.")}
     const members={...roomMembers(room)};if(room.creator&&!members[room.creator])members[room.creator]={user_id:room.creator,nickname:room.creator,role:"owner",joinedAt:room.createdAt||Date.now()};
     room.members={...members,[user.user_id]:memberValue(room.creator===user.user_id?"owner":"member")};room.updatedAt=Date.now();return saveRoom(room)
   }
@@ -260,5 +221,5 @@ MiniTalk.Realtime=(()=>{
     }
     return{targetId,targetNickname};
   }
-  return{init,cleanup,getMode:()=>mode,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,leaveRoom,saveProfile,sendCommand,assignTask,submitTask,addShopInventory,useShopInventory,giftShopInventory};
+  return{init,cleanup,getMode:()=>mode,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,leaveRoom,saveProfile,sendCommand,assignTask,submitTask,addShopInventory,useShopInventory,giftShopInventory};
 })();

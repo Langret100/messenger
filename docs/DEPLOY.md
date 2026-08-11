@@ -25,8 +25,8 @@
 
 - 대화방 명단은 Firebase의 `mini_talk/v3/rooms`에서 직접 불러옵니다.
 - 대화 내용은 Firebase의 `mini_talk/v3/messages/{roomId}`에서 최근 100개를 직접 구독합니다.
-- 로그인 직후 기존 토리 Apps Script의 `social_rooms`를 한 번 조회해 누락된 방을 Firebase에 병합합니다.
-- 기존 토리 방을 열면 `social_recent_room`의 최근 내역을 고정 ID로 병합하므로 중복 없이 기존 대화를 볼 수 있습니다.
-- 병합 이후 화면 조회와 실시간 갱신은 Firebase가 담당하며, Google Sheets에는 `mini_talk_*_backup` 모드로 쓰기 전용 백업만 보냅니다.
+- 최초 대화방 목록과 대화내역을 포함한 모든 화면 조회·실시간 갱신은 Firebase가 담당합니다.
+- Google Sheets에는 `mini_talk_*_backup` 모드로 쓰기 전용 백업만 보내며 앱에서 다시 읽지 않습니다.
+- 전체 대화 메시지는 `social_chat` 모드로 기존 `소통` 시트에 백업하고, 개별 방 메시지는 `social_chat_room` 모드로 `대화방` 시트에 백업합니다.
 - Google Sheets의 `미니톡_대화방백업`, `미니톡_메시지백업`은 추가 백업 전용입니다. 앱은 이 시트를 읽지 않습니다.
 - 시트 백업은 `no-cors`/`keepalive`로 전송하여 채팅 저장과 화면 반응이 Apps Script 응답을 기다리지 않습니다.

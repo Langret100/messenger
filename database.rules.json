@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "mini_talk": {
+      "v3": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "messages": {
+          "$roomId": {
+            ".indexOn": ["ts"]
+          }
+        }
+      }
+    }
+  }
+}

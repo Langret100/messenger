@@ -5,6 +5,15 @@
 3. main 브랜치에 push하면 테스트 통과 후 Pages에 배포됩니다.
 4. 저장소 Settings → Pages의 Source는 **GitHub Actions**로 설정합니다.
 
+## Firebase 인증·Database 규칙
+
+1. Firebase Console → **Authentication → Sign-in method**에서 **Anonymous(익명)** 로그인을 활성화합니다.
+2. Firebase Console → **Realtime Database → Rules**에서 루트의 `database.rules.json` 내용을 붙여넣고 **Publish**합니다.
+3. Firebase CLI를 사용하면 프로젝트 루트에서 `firebase deploy --only database` 명령으로 `firebase.json`/`database.rules.json`을 배포할 수 있습니다.
+4. 사용자 로그인·회원가입은 기존 Apps Script/Google Sheet로만 처리합니다. 시트 로그인이 완료된 사용자에 한해 Firebase 연결 전 보이지 않는 익명 세션을 자동 생성합니다. 게스트는 Firebase에 연결하지 않습니다.
+
+주의: 현재 규칙은 `mini_talk/v3` 범위에서 Firebase 인증을 받은 클라이언트에게 읽기/쓰기를 허용하는 호환 규칙입니다. 공개 서비스로 확장할 때는 Apps Script 사용자와 Firebase UID를 서버에서 결합하는 커스텀 토큰 방식으로 강화해야 합니다.
+
 ## 중요한 실제 조건
 
 - Firebase 키만 넣는다고 항상 통신되는 것은 아닙니다. Realtime Database 규칙이 `mini_talk/v3/*` 경로의 읽기/쓰기를 허용해야 합니다.

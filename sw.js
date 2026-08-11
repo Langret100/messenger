@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "mini-talk-v35-font-clarity-20260811";
+const CACHE = "mini-talk-v37-sheet-login-20260811";
 const CORE = [
   "./",
   "./index.html",

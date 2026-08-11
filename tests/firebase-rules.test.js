@@ -1,0 +1,10 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const rules=JSON.parse(fs.readFileSync(path.join(root,'database.rules.json'),'utf8'));
+const v3=rules?.rules?.mini_talk?.v3;
+if(v3?.['.read']!=='auth != null'||v3?.['.write']!=='auth != null')throw new Error('Firebase v3 rules must require authentication');
+if(!v3?.messages?.$roomId?.['.indexOn']?.includes('ts'))throw new Error('message timestamp index is missing');
+const realtime=fs.readFileSync(path.join(root,'js/adapters/realtime.js'),'utf8');
+if(!realtime.includes('firebase-auth-compat.js')||!realtime.includes('signInAnonymously'))throw new Error('Firebase anonymous authentication bootstrap is missing');
+if(!realtime.includes('validKey()&&!nextUser?.isGuest'))throw new Error('guest users must not connect to Firebase');
+console.log('FIREBASE_RULES_OK');

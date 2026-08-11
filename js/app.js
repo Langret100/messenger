@@ -10,7 +10,7 @@ addEventListener("DOMContentLoaded",()=>{
   document.getElementById("focusPopupBtn")?.addEventListener("click",MiniTalk.WindowMode.focusPopup);
   document.getElementById("closePopupBtn")?.addEventListener("click",MiniTalk.WindowMode.closePopup);
   document.getElementById("installBtn")?.addEventListener("click",()=>MiniTalk.WindowMode.install().then(outcome=>MiniTalk.UI.Shell.toast(outcome==="accepted"?"설치를 승인했습니다.":"설치를 취소했습니다.")).catch(e=>MiniTalk.UI.Shell.toast(e.message)));
-  if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js?v=35").catch(e=>console.warn("서비스 워커 등록 실패",e));
+  if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js?v=37").catch(e=>console.warn("서비스 워커 등록 실패",e));
 
   /* 모바일은 런처 오버레이 없이 링크에서 바로 메신저로 진입합니다. */
   if(MiniTalk.MobileImmersive?.isMobile?.()||MiniTalk.WindowMode.isPopup()||MiniTalk.WindowMode.standalone())MiniTalk.UI.Shell.showApp();

@@ -7,6 +7,7 @@ done
 python3 -m json.tool manifest.webmanifest >/dev/null
 python3 tests/static-check.py
 node tests/module-load.test.js
+node tests/firebase-rules.test.js
 node tests/tarot-daily.test.js
 node tests/offline-game-cache.test.js
 node tests/chat-modules.test.js

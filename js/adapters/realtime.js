@@ -27,7 +27,18 @@ MiniTalk.Realtime=(()=>{
   function passwordSalt(){const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);return[...bytes].map(v=>v.toString(16).padStart(2,"0")).join("")}
 
   function addScript(src){return new Promise((resolve,reject)=>{const existing=[...document.scripts].find(s=>s.src===src);if(existing){if(window.firebase)return resolve();existing.addEventListener("load",resolve,{once:true});existing.addEventListener("error",reject,{once:true});return}const script=document.createElement("script");script.src=src;script.onload=resolve;script.onerror=()=>reject(new Error(`SDK 로드 실패: ${src}`));document.head.append(script)})}
-  async function loadFirebase(){if(window.firebase?.database)return;await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js")}
+  async function loadFirebase(){
+    if(!window.firebase?.app)await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
+    if(!window.firebase?.auth)await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js");
+    if(!window.firebase?.database)await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js")
+  }
+  // Apps Script 로그인과 Firebase 인증은 별개입니다. DB 규칙에서 auth != null을 사용할 수 있도록 익명 세션을 유지합니다.
+  async function ensureFirebaseAuth(){
+    const auth=firebase.auth();
+    if(auth.currentUser)return auth.currentUser;
+    const credential=await auth.signInAnonymously();
+    return credential.user
+  }
   function waitForConnected(database,timeout=7000){return new Promise((resolve,reject)=>{const ref=database.ref(".info/connected");const timer=setTimeout(()=>{ref.off("value",onValue);reject(new Error("Firebase 연결 시간 초과"))},timeout);function onValue(s){if(s.val()===true){clearTimeout(timer);ref.off("value",onValue);resolve()}}ref.on("value",onValue)})}
 
   function bind(ref,event,fn){ref.on(event,fn);const off=()=>ref.off(event,fn);unsubs.push(off);return off}
@@ -59,8 +70,9 @@ MiniTalk.Realtime=(()=>{
 
   async function init(nextUser){
     cleanup();user=nextUser;db=null;mode="local";
-    if(validKey()){
-      try{await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);db=firebase.database();await waitForConnected(db);mode="firebase"}
+    // 사용자 인증의 기준은 Apps Script/시트 로그인입니다. 게스트는 Firebase에 연결하지 않습니다.
+    if(validKey()&&!nextUser?.isGuest){
+      try{await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);await ensureFirebaseAuth();db=firebase.database();await waitForConnected(db);mode="firebase"}
       catch(error){console.warn("Firebase 연결 실패, 로컬 모드로 전환",error);db=null;mode="local"}
     }
     MiniTalk.Store.set("transport",mode);

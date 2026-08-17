@@ -20,6 +20,7 @@ MiniTalk.Realtime=(()=>{
   const memberValue=(role="member")=>({user_id:user.user_id,nickname:user.nickname,role,joinedAt:Date.now()});
   const roomMembers=room=>room?.members&&typeof room.members==="object"&&!Array.isArray(room.members)?room.members:{};
   const isRoomMember=room=>room?.id==="global"||Boolean(roomMembers(room)[user?.user_id]);
+  const requireWritableUser=()=>{if(!user?.user_id||user.isGuest)throw new Error("게스트는 내용을 볼 수만 있습니다.");return user};
   const messagesPath=roomId=>roomId==="global"?MiniTalkConfig.paths.globalMessages:`${MiniTalkConfig.paths.roomMessages}/${roomId}`;
   function normalizeRoom(id,value={}){
     const participants=Array.isArray(value.participants)?value.participants:(Array.isArray(value.members)?value.members:[]);
@@ -185,6 +186,7 @@ MiniTalk.Realtime=(()=>{
     }else localGet(`messages.${roomId}`,[]).slice(-100).forEach(message=>emit("message",message));
   }
   async function sendMessage(roomId,payload){
+    requireWritableUser();
     payload=payload||{};
     const senderProfile=MiniTalk.Store.get("profiles")?.[user.user_id]||MiniTalk.Store.get("profiles")?.[user.nickname]||{};
     const message={
@@ -212,6 +214,7 @@ MiniTalk.Realtime=(()=>{
     return room
   }
   async function createRoom(title,password=""){
+    requireWritableUser();
     const clean=String(title||"").trim().slice(0,40);if(!clean)throw new Error("대화방 이름을 입력하세요.");
     const secret=String(password||"").trim();if(secret&&secret.length<4)throw new Error("비밀번호는 4자 이상 입력하세요.");if(secret.length>32)throw new Error("비밀번호는 32자 이하로 입력하세요.");
     const id=`room-${crypto.randomUUID().slice(0,8)}`,now=Date.now();
@@ -220,21 +223,25 @@ MiniTalk.Realtime=(()=>{
     return saveRoom(room);
   }
   async function joinRoom(roomId,password=""){
+    requireWritableUser();
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global"||isRoomMember(room))return room;
     if(room.hasPassword){const secret=String(password||"");if(room.password){if(secret!==String(room.password))throw new Error("대화방 비밀번호가 올바르지 않습니다.")}else{const attempt=await passwordHash(secret,room.passwordSalt||"");if(attempt!==room.passwordHash)throw new Error("대화방 비밀번호가 올바르지 않습니다.")}}
     const members={...roomMembers(room)};if(room.creator&&!members[room.creator])members[room.creator]={user_id:room.creator,nickname:room.creator,role:"owner",joinedAt:room.createdAt||Date.now()};
     room.members={...members,[user.user_id]:memberValue(room.creator===user.user_id?"owner":"member")};room.updatedAt=Date.now();return saveRoom(room)
   }
   async function updateRoomPassword(roomId,password=""){
+    requireWritableUser();
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global")throw new Error("전체 대화에는 비밀번호를 설정할 수 없습니다.");if(room.creator!==user.user_id)throw new Error("방장만 비밀번호를 변경할 수 있습니다.");
     const secret=String(password||"").trim();if(secret&&secret.length<4)throw new Error("비밀번호는 4자 이상 입력하세요.");if(secret.length>32)throw new Error("비밀번호는 32자 이하로 입력하세요.");
     room.hasPassword=Boolean(secret);delete room.password;if(secret){room.passwordSalt=passwordSalt();room.passwordHash=await passwordHash(secret,room.passwordSalt)}else{delete room.passwordSalt;delete room.passwordHash}room.updatedAt=Date.now();return saveRoom(room)
   }
   async function removeRoomMember(roomId,memberId){
+    requireWritableUser();
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.creator!==user.user_id)throw new Error("방장만 멤버를 내보낼 수 있습니다.");if(memberId===user.user_id)throw new Error("방장은 방 나가기를 이용하세요.");
     const members={...roomMembers(room)};if(!members[memberId])return room;delete members[memberId];room.members=members;room.updatedAt=Date.now();return saveRoom(room)
   }
   async function inviteRoomMembers(roomId,targets=[]){
+    requireWritableUser();
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global")throw new Error("전체 대화에는 초대가 필요하지 않습니다.");
     if(!isRoomMember(room)&&!MiniTalk.AdminSession?.authorized?.())throw new Error("대화방 멤버만 초대할 수 있습니다.");
     const members={...roomMembers(room)};let added=0;
@@ -242,6 +249,7 @@ MiniTalk.Realtime=(()=>{
     if(!added)throw new Error("초대할 사용자를 선택하세요.");room.members=members;room.metadataUpdatedAt=Date.now();await saveRoom(room);return added
   }
   async function leaveRoom(roomId){
+    requireWritableUser();
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global")throw new Error("전체 대화에서는 나갈 수 없습니다.");
     const members={...roomMembers(room)};delete members[user.user_id];const remaining=Object.values(members).filter(Boolean);let deleted=false,newCreator=null;
     if(room.creator===user.user_id){if(remaining.length){remaining.sort((a,b)=>(a.joinedAt||0)-(b.joinedAt||0));newCreator=remaining[0].user_id;members[newCreator]={...members[newCreator],role:"owner"};room.creator=newCreator}else deleted=true}
@@ -283,12 +291,13 @@ MiniTalk.Realtime=(()=>{
     if(MiniTalk.AuthApi?.adminDispatch){const result=await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:ids,type:"TASK",payload:{task:{...task,status:"open",createdAt,issuedBy:user.user_id}}});return Number(result.count)||ids.length}
     ids.forEach(target=>{const id=crypto.randomUUID(),all=localGet(`tasks.${target}`,{});all[id]={...task,id,status:"open",createdAt,issuedBy:user.user_id};localSet(`tasks.${target}`,all);broadcast("task",{target})});return ids.length
   }
-  async function submitTask(id,answer){const server=localGet(`server.tasks.${user.user_id}`,{});if(server[id]){server[id]={...server[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`server.tasks.${user.user_id}`,server);emit("tasks",server);return}const all=localGet(`tasks.${user.user_id}`,{});all[id]={...all[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`tasks.${user.user_id}`,all);broadcast("task",{target:user.user_id})}
+  async function submitTask(id,answer){requireWritableUser();const server=localGet(`server.tasks.${user.user_id}`,{});if(server[id]){server[id]={...server[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`server.tasks.${user.user_id}`,server);emit("tasks",server);return}const all=localGet(`tasks.${user.user_id}`,{});all[id]={...all[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`tasks.${user.user_id}`,all);broadcast("task",{target:user.user_id})}
   function localShopInventory(ownerId){const stored=localGet(`shop.inventory.${ownerId}`,{}),visible=ownerId===user?.user_id?(MiniTalk.Store.get("shopInventory")||{}):{};return{...visible,...stored}}
   function saveLocalShopInventory(ownerId,value){const inventory=localShopInventory(ownerId);inventory[value.id]={...value,pendingSync:true};localSet(`shop.inventory.${ownerId}`,inventory);emit("shop-inventory",inventory);return inventory[value.id]}
   function enableShopInventoryFallback(){if(shopInventoryFallback)return;shopInventoryFallback=true;shopInventoryUnsub?.();shopInventoryUnsub=null;const inventory=localShopInventory(user.user_id);localSet(`shop.inventory.${user.user_id}`,inventory);emit("shop-inventory",inventory)}
   async function syncPendingShopInventory(){if(mode!=="firebase"||!firebaseAuthenticated)return;const inventory=localGet(`shop.inventory.${user.user_id}`,{}),pending=Object.values(inventory).filter(item=>item?.id&&item.pendingSync);for(const item of pending){const value={...item};delete value.pendingSync;await db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}/${item.id}`).set(value);delete inventory[item.id]}if(pending.length)localSet(`shop.inventory.${user.user_id}`,inventory)}
   async function addShopInventory(ownerId,item){
+    requireWritableUser();
     const id=String(item.id||crypto.randomUUID()),value={...item,id,ownerId,createdAt:Number(item.createdAt)||Date.now()};
     if(mode==="firebase"&&firebaseAuthenticated&&!shopInventoryFallback){try{await db.ref(`${MiniTalkConfig.paths.shopInventory}/${ownerId}/${id}`).set(value);return value}catch(error){console.warn("보관함 서버 저장 실패, 동기화 대기열에 보존",error);enableShopInventoryFallback()}}
     saveLocalShopInventory(ownerId,value);

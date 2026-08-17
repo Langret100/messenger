@@ -1,6 +1,6 @@
 /*
  * 게임 게시판
- * 토리의 board_list/board_write 규격을 사용하며, 게스트 또는 연결 실패 시 글을 기기에 보관합니다.
+ * 토리의 board_list/board_write 규격을 사용하며, 연결 실패 시 로그인 사용자의 글을 기기에 보관합니다.
  */
 MiniTalk.Games = MiniTalk.Games || {};
 MiniTalk.Games.Board = (() => {
@@ -48,11 +48,12 @@ MiniTalk.Games.Board = (() => {
   }
 
   async function write(title, content) {
+    const user = MiniTalk.Store.get("user") || {};
+    if (!user.user_id || user.isGuest) throw new Error("게스트는 게시글을 볼 수만 있습니다.");
     const cleanTitle = String(title || "").trim();
     const cleanContent = String(content || "").trim();
     if (!cleanTitle) throw new Error("제목을 입력하세요.");
     if (!cleanContent) throw new Error("내용을 입력하세요.");
-    const user = MiniTalk.Store.get("user") || {};
     const post = {
       id: crypto.randomUUID(),
       title: cleanTitle.slice(0, 80),
@@ -60,11 +61,6 @@ MiniTalk.Games.Board = (() => {
       content: cleanContent.slice(0, 1200),
       createdAt: new Date().toLocaleString("ko-KR")
     };
-
-    if (user.isGuest) {
-      saveLocal(post);
-      return { online: false };
-    }
 
     try {
       const body = new URLSearchParams({
@@ -133,7 +129,10 @@ MiniTalk.Games.Board = (() => {
     previous.onclick = () => { page -= 1; renderPage(); };
     next.onclick = () => { page += 1; renderPage(); };
     reload.onclick = load;
-    writeButton.onclick = openWriter;
+    const guest = Boolean(MiniTalk.Store.get("user")?.isGuest);
+    writeButton.disabled = guest;
+    writeButton.textContent = guest ? "게스트는 보기만 가능" : "글쓰기";
+    writeButton.onclick = guest ? null : openWriter;
     body.append(
       D.el("div", { class: "community-toolbar" }, [writeButton, reload]),
       status,

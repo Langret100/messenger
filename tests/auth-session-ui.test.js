@@ -8,7 +8,12 @@ ok(source.includes('placeholder="${hasSession?"••••••••":"비밀
 ok(source.includes('MiniTalk.Persistence.set(LAST_ID_KEY,user.username)'),'last username is not remembered');
 ok(!/Persistence\.set\([^\n]*(?:password|authPw)/.test(source),'plaintext password must not be persisted');
 ok(source.includes('MiniTalk.WindowMode.openForLogin()'),'login click must request always-on-top mode');
+ok(source.includes('id="authInstallAction"'),'login screen install button is missing');
+ok(source.includes('MiniTalk.WindowMode.canInstall?.()'),'native PWA install path is missing');
+ok(source.includes('showInstallGuide()'),'manual install guide fallback is missing');
 ok(css.includes('.auth-host{min-height:0;overflow:auto;display:grid;align-content:center'),'login screen must be centered in the available window');
+ok(css.includes('body{min-height:100dvh}'),'desktop app shell must fill the viewport for vertical centering');
+ok(css.includes('.auth-host{align-content:safe center}'),'login card safe vertical centering is missing');
 ok(css.includes('.auth-brand .app-mark{width:42px;height:42px;margin:0'),'login brand icon alignment is missing');
 ok(html.includes('rel="icon" type="image/png" href="assets/mascot-avatar.png?v=52"'),'browser tab must use the Moaru mascot favicon');
 console.log('AUTH_SESSION_UI_OK');

@@ -145,11 +145,12 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
 
   function render(onProgress) {
     const D = MiniTalk.UI.Dom;
+    const guest = Boolean(MiniTalk.Store.get("user")?.isGuest);
     const progress = loadProgress();
     const completedCount = MISSIONS.filter(mission => progress.completed[mission.id]).length;
     const grid = D.el("div", { class: "daily-quest-grid" });
 
-    if (completedCount === MISSIONS.length) {
+    if (!guest && completedCount === MISSIONS.length) {
       MiniTalk.Economy.QuestReward?.ensure("math", progress.date);
     }
 
@@ -159,14 +160,14 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
       const card = D.el("button", {
         class: `daily-quest-card ${done ? "completed" : ""}`,
         type: "button",
-        "aria-disabled": done ? "true" : "false",
-        ...(done ? { disabled: true } : {}),
-        onclick: done ? null : () => openMission(mission.id, onProgress)
+        "aria-disabled": done || guest ? "true" : "false",
+        ...(done || guest ? { disabled: true } : {}),
+        onclick: done || guest ? null : () => openMission(mission.id, onProgress)
       }, [
         D.el("span", { class: "quest-operation", text: mission.icon }),
         D.el("span", { class: "quest-card-copy" }, [
           D.el("strong", { text: mission.title }),
-          D.el("small", { class: "muted", text: done ? "완료됨" : mission.description }),
+          D.el("small", { class: "muted", text: done ? "완료됨" : guest ? "로그인 후 참여할 수 있어요" : mission.description }),
           D.el("span", { class: "quest-card-progress" }, [
             D.el("i", { style: `--quest-progress:${count / QUESTIONS_PER_MISSION * 100}%` }),
             D.el("b", { text: `${count}/${QUESTIONS_PER_MISSION}` })
@@ -189,6 +190,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
   }
 
   function openMission(missionId, onProgress) {
+    if (MiniTalk.Store.get("user")?.isGuest) { MiniTalk.UI.Shell.toast("게스트는 과제를 볼 수만 있어요.");return; }
     const mission = MISSIONS.find(item => item.id === missionId);
     if (!mission) return;
     const D = MiniTalk.UI.Dom;

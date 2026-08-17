@@ -10,10 +10,10 @@ MiniTalk.Features.Tasks = (() => {
 
   function render(host) {
     if (!host) return;
-    const D = MiniTalk.UI.Dom, view = D.el("section", { class: "view task-center-view" }), list = D.el("div", { class: "card-list" }), assigned = D.el("section", { class: "assigned-tasks" }), assignedList = D.el("div", { class: "assigned-task-list" });
+    const D = MiniTalk.UI.Dom, guest = Boolean(MiniTalk.Store.get("user")?.isGuest), view = D.el("section", { class: "view task-center-view" }), list = D.el("div", { class: "card-list" }), assigned = D.el("section", { class: "assigned-tasks" }), assignedList = D.el("div", { class: "assigned-task-list" });
     const rows = Object.values(tasks).filter(task => MiniTalk.Tasks.TaskService?.visible?.(task) !== false).sort((a, b) => statusOrder(a.status) - statusOrder(b.status) || Number(b.updatedAt || b.createdAt) - Number(a.updatedAt || a.createdAt));
     rows.forEach(task => assignedList.append(taskCard(task, host)));
-    if (!rows.length) assignedList.append(D.el("div", { class: "empty-state compact-empty" }, [D.el("span", { text: "✓" }), D.el("strong", { text: "받은 과제가 없어요" }), D.el("small", { class: "muted", text: "오늘의 수학·국어 퀘스트부터 도전해 보세요." })]));
+    if (!rows.length) assignedList.append(D.el("div", { class: "empty-state compact-empty" }, [D.el("span", { text: "✓" }), D.el("strong", { text: guest ? "게스트는 과제를 볼 수만 있어요" : "받은 과제가 없어요" }), D.el("small", { class: "muted", text: guest ? "로그인하면 일일 퀘스트와 지정 과제에 참여할 수 있습니다." : "오늘의 수학·국어 퀘스트부터 도전해 보세요." })]));
     assigned.append(D.el("div", { class: "section-label" }, [D.el("strong", { text: "관리자 지정 과제" }), D.el("small", { class: "muted", text: `${rows.length}개 · 직접 제출하는 과제` })]), assignedList);
     list.append(MiniTalk.Tasks.DailyMathQuest.render(() => render(host)), MiniTalk.Tasks.DailyKoreanQuest.render(() => render(host)), assigned);view.append(list);host.replaceChildren(view);
   }

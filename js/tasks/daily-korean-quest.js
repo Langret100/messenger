@@ -90,14 +90,14 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
   function generate(missionId) { const items = (BANK[missionId] || []).map(([raw, answer, choices]) => ({ ...formatQuestion(raw), answer, choices: choices.slice() })); const rng = random(hash(`${dateKey()}|${userId()}|${missionId}|korean`)); for (let i = items.length - 1; i > 0; i -= 1) { const j = Math.floor(rng() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; } return items.slice(0, QUESTIONS_PER_MISSION); }
 
   function render(onProgress) {
-    const D = MiniTalk.UI.Dom, progress = loadProgress(), grid = D.el("div", { class: "daily-quest-grid" });
+    const D = MiniTalk.UI.Dom, guest = Boolean(MiniTalk.Store.get("user")?.isGuest), progress = loadProgress(), grid = D.el("div", { class: "daily-quest-grid" });
     const completedCount = MISSIONS.filter(item => progress.completed[item.id]).length;
-    if (completedCount === MISSIONS.length) MiniTalk.Economy.QuestReward?.ensure("korean", progress.date);
+    if (!guest && completedCount === MISSIONS.length) MiniTalk.Economy.QuestReward?.ensure("korean", progress.date);
     MISSIONS.forEach(mission => {
       const count = progress.correct[mission.id] || 0, done = progress.completed[mission.id] === true;
-      const card = D.el("button", { class: `daily-quest-card ${done ? "completed" : ""}`, type: "button", "aria-disabled": done ? "true" : "false", ...(done ? { disabled: true } : {}), onclick: done ? null : () => openMission(mission.id, onProgress) }, [
+      const card = D.el("button", { class: `daily-quest-card ${done ? "completed" : ""}`, type: "button", "aria-disabled": done || guest ? "true" : "false", ...(done || guest ? { disabled: true } : {}), onclick: done || guest ? null : () => openMission(mission.id, onProgress) }, [
         D.el("span", { class: "quest-operation", text: mission.icon }),
-        D.el("span", { class: "quest-card-copy" }, [D.el("strong", { text: mission.title }), D.el("small", { class: "muted", text: done ? "완료됨" : mission.description }), D.el("span", { class: "quest-card-progress" }, [D.el("i", { style: `--quest-progress:${count / 5 * 100}%` }), D.el("b", { text: `${count}/5` })])])
+        D.el("span", { class: "quest-card-copy" }, [D.el("strong", { text: mission.title }), D.el("small", { class: "muted", text: done ? "완료됨" : guest ? "로그인 후 참여할 수 있어요" : mission.description }), D.el("span", { class: "quest-card-progress" }, [D.el("i", { style: `--quest-progress:${count / 5 * 100}%` }), D.el("b", { text: `${count}/5` })])])
       ]);
       if (done) card.append(D.el("img", { class: "quest-stamp", src: "assets/ui/quest-stamp.png", alt: "완료 도장" }));
       grid.append(card);
@@ -106,6 +106,7 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
   }
 
   function openMission(missionId, onProgress) {
+    if (MiniTalk.Store.get("user")?.isGuest) { MiniTalk.UI.Shell.toast("게스트는 과제를 볼 수만 있어요.");return; }
     const mission = MISSIONS.find(item => item.id === missionId); if (!mission) return;
     const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), questions = generate(missionId), progress = loadProgress();
     function renderQuestion() {

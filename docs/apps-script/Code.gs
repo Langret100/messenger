@@ -480,6 +480,7 @@ function signup_(data) {
     return jsonResponse_({ ok: false, error: "코인 계정을 만들지 못해 회원가입을 취소했습니다. 관리자에게 보상 시트 구조를 확인해달라고 알려주세요.", code: coinAccount && coinAccount.error || "REWARD_ACCOUNT_INIT_FAILED" });
   }
   try { CacheService.getScriptCache().remove("moaru-user-directory-v1"); } catch (cacheError) {}
+  try { CacheService.getScriptCache().remove("moaru-registered-users-v2"); } catch (cacheError) {}
 
   return jsonResponse_({
     ok: true,

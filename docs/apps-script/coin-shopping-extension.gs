@@ -40,14 +40,22 @@ function shopJson_(value) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+/** 신규 guest-* 계정과 로그인 시트에 남은 구형 "게스트####" 계정을 같은 게스트로 판정합니다. */
+function isMoaruGuestIdentity_(userId, username, nickname) {
+  const id = String(userId || "").trim();
+  const login = String(username || "").trim();
+  const name = String(nickname || "").trim();
+  return /^guest-/i.test(id) || /^guest$/i.test(login) || /^(?:게스트|guest)\s*\d*$/i.test(name);
+}
+
 /**
  * 회원가입 직후 보상 시트에 코인 계정을 0으로 생성합니다.
  * 기존 coin.gs의 getRewardUserData_가 새 행을 읽을 수 있는지까지 확인하며,
  * 인식하지 못하는 시트 구조라면 방금 추가한 행을 제거해 손상을 막습니다.
  */
 function ensureMoaruCoinAccount_(account) {
-  const userId = String(account && account.userId || "").trim(), username = String(account && account.username || "").trim();
-  if (!userId || userId.indexOf("guest-") === 0 || !username) return { ok: false, error: "INVALID_REWARD_USER" };
+  const userId = String(account && account.userId || "").trim(), username = String(account && account.username || "").trim(), nickname = String(account && account.nickname || "").trim();
+  if (!userId || isMoaruGuestIdentity_(userId, username, nickname) || !username) return { ok: false, error: "INVALID_REWARD_USER" };
   const existing = getRewardUserData_(userId);
   if (existing) return { ok: true, created: false, coin: Math.max(0, parseInt(existing.coin, 10) || 0) };
   const sheet = getSheet_(REWARD_SHEET), headers = sheet.getRange(1, 1, 1, 4).getValues()[0].map(String);
@@ -145,7 +153,7 @@ function handleAdminUnlock(e) {
   const p = (e && e.parameter) || {};
   const userId = String(p.user_id || "").trim();
   const code = String(p.admin_code || "");
-  if (!userId || userId.indexOf("guest-") === 0 || !getRewardUserData_(userId)) {
+  if (!requireRegisteredShopUser_(userId)) {
     return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   }
   const savedCode = PropertiesService.getScriptProperties().getProperty(SHOP_ADMIN_CODE_PROPERTY) || "";
@@ -177,17 +185,17 @@ function handleShopCatalog() {
 function handleUserDirectory(e) {
   const p = (e && e.parameter) || e || {};
   const requester = String(p.user_id || "").trim();
-  if (!requester || requester.indexOf("guest-") === 0) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  if (!requester) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   const cache = CacheService.getScriptCache(), cacheKey = "moaru-user-directory-v1";
   const cached = cache.get(cacheKey);
   if (cached) {
-    try { const users = JSON.parse(cached).filter(function (item) { return item && String(item.user_id || "").indexOf("guest-") !== 0; });return users.some(function (item) { return item.user_id === requester; }) ? shopJson_({ ok: true, users: users }) : shopJson_({ ok: false, error: "LOGIN_REQUIRED" }); } catch (error) {}
+    try { const users = JSON.parse(cached).filter(function (item) { return item && !isMoaruGuestIdentity_(item.user_id, item.username, item.nickname); });return users.some(function (item) { return item.user_id === requester; }) ? shopJson_({ ok: true, users: users }) : shopJson_({ ok: false, error: "LOGIN_REQUIRED" }); } catch (error) {}
   }
   const sheet = getSheet_(LOGIN_SHEET), lastRow = sheet.getLastRow(), users = [];
   if (lastRow >= 2) {
     sheet.getRange(2, 1, lastRow - 1, 4).getValues().forEach(function (row) {
-      const userId = String(row[0] || "").trim(), nickname = String(row[3] || row[1] || "").trim();
-      if (userId && userId.indexOf("guest-") !== 0 && nickname) users.push({ user_id: userId, nickname: nickname.slice(0, 30) });
+      const userId = String(row[0] || "").trim(), username = String(row[1] || "").trim(), nickname = String(row[3] || row[1] || "").trim();
+      if (userId && !isMoaruGuestIdentity_(userId, username, nickname) && nickname) users.push({ user_id: userId, nickname: nickname.slice(0, 30) });
     });
   }
   if (!users.some(function (item) { return item.user_id === requester; })) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
@@ -393,9 +401,10 @@ function createPurchasedInventory_(userId, product, purchaseKey) {
   return saved;
 }
 
-function requireRegisteredShopUser_(userId) {
+function requireRegisteredShopUser_(userId, registeredUsers) {
   const id = String(userId || "").trim();
-  return id && id.indexOf("guest-") !== 0 && getRewardUserData_(id) ? id : "";
+  const users = registeredUsers || moaruRegisteredUserMap_();
+  return id && users[id] && getRewardUserData_(id) ? id : "";
 }
 
 /** POST mode=shop_inventory */
@@ -407,7 +416,7 @@ function handleShopInventory(e) {
 
 /** POST mode=shop_gift: 서버 보관함에서 대상 사용자 보관함으로 원자적으로 이동 */
 function handleShopGift(e) {
-  const p = (e && e.parameter) || {}, userId = requireRegisteredShopUser_(p.user_id), targetId = requireRegisteredShopUser_(p.target_user_id);
+  const p = (e && e.parameter) || {}, registeredUsers = moaruRegisteredUserMap_(), userId = requireRegisteredShopUser_(p.user_id, registeredUsers), targetId = requireRegisteredShopUser_(p.target_user_id, registeredUsers);
   const inventoryId = String(p.inventory_id || "").trim();
   if (!userId || !targetId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   if (!inventoryId || userId === targetId) return shopJson_({ ok: false, error: "INVALID_GIFT_TARGET" });
@@ -460,7 +469,8 @@ function handleAdminDispatch(e) {
   if (!auth.ok) return shopJson_(auth);
   let targets = [], payload = {};
   try { targets = JSON.parse(p.targets_json || "[]");payload = JSON.parse(p.payload_json || "{}"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" }); }
-  targets = targets.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && requireRegisteredShopUser_(id); }).slice(0, 200);
+  const registeredUsers = moaruRegisteredUserMap_();
+  targets = targets.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && requireRegisteredShopUser_(id, registeredUsers); }).slice(0, 200);
   const type = String(p.command_type || "NOTICE").trim().slice(0, 20);if (!targets.length) return shopJson_({ ok: false, error: "NO_TARGETS" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
@@ -488,7 +498,8 @@ function handleAdminCoinReward(e) {
   if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 100000) return shopJson_({ ok: false, error: "INVALID_COIN_AMOUNT" });
   let targets = [];
   try { targets = JSON.parse(p.targets_json || "[]"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" }); }
-  targets = targets.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && requireRegisteredShopUser_(id); }).slice(0, 200);
+  const registeredUsers = moaruRegisteredUserMap_();
+  targets = targets.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && requireRegisteredShopUser_(id, registeredUsers); }).slice(0, 200);
   if (!targets.length) return shopJson_({ ok: false, error: "NO_TARGETS" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
@@ -577,12 +588,16 @@ function setupMoaruTaskCleanupTrigger() {
 }
 
 function moaruRegisteredUserMap_() {
+  const cache = CacheService.getScriptCache(), cacheKey = "moaru-registered-users-v2", cached = cache.get(cacheKey);
+  if (cached) { try { const parsed = JSON.parse(cached);if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed; } catch (error) {} }
   const sheet = getSheet_(LOGIN_SHEET), lastRow = sheet.getLastRow(), result = {};
   if (lastRow < 2) return result;
   sheet.getRange(2, 1, lastRow - 1, 4).getValues().forEach(function (row) {
-    const id = String(row[0] || "").trim();if (!id || id.indexOf("guest-") === 0) return;
-    result[id] = String(row[3] || row[1] || id).trim().slice(0, 30);
+    const id = String(row[0] || "").trim(), username = String(row[1] || "").trim(), nickname = String(row[3] || row[1] || id).trim();
+    if (!id || isMoaruGuestIdentity_(id, username, nickname)) return;
+    result[id] = nickname.slice(0, 30);
   });
+  try { cache.put(cacheKey, JSON.stringify(result), 60); } catch (error) {}
   return result;
 }
 
@@ -679,7 +694,7 @@ function handleAdminTaskReview(e) {
 /** POST mode=shop_purchase */
 function handleShopPurchase(e) {
   const p = (e && e.parameter) || {};
-  const userId = String(p.user_id || "").trim();
+  const userId = requireRegisteredShopUser_(p.user_id);
   const productId = String(p.product_id || "").trim();
   const purchaseKey = String(p.purchase_key || "").trim();
   const clientPrice = parseInt(p.price, 10);
@@ -690,7 +705,7 @@ function handleShopPurchase(e) {
   if (!userId || !productId || !purchaseKey || isNaN(clientPrice)) {
     return shopJson_({ ok: false, error: "MISSING_PARAM" });
   }
-  if (userId.indexOf("guest-") === 0) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   if (purchaseKey.length > 180) return shopJson_({ ok: false, error: "INVALID_PURCHASE_KEY" });
 
   const lock = LockService.getScriptLock();

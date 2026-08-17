@@ -33,6 +33,9 @@ function makeCtx(){
   if(!invitedEntry.members?.c)throw new Error("invited member was asked for the password");
   let guestRejected=false;try{await A.MiniTalk.Realtime.inviteRoomMembers(room.id,[{user_id:"guest-test",nickname:"게스트",isGuest:true}])}catch(error){guestRejected=/선택/.test(error.message)}
   if(!guestRejected)throw new Error("guest room invitation was accepted");
+  A.MiniTalk.UserDirectory={isGuest:value=>/^(?:게스트|guest)\s*\d*$/i.test(String(value?.nickname||""))};
+  let legacyGuestRejected=false;try{await A.MiniTalk.Realtime.inviteRoomMembers(room.id,[{user_id:"legacy-guest",nickname:"게스트1728"}])}catch(error){legacyGuestRejected=/선택/.test(error.message)}
+  if(!legacyGuestRejected)throw new Error("legacy nickname guest room invitation was accepted");
   await A.MiniTalk.Realtime.removeRoomMember(room.id,"c");
   await A.MiniTalk.Realtime.removeRoomMember(room.id,"b");
   updated=await A.MiniTalk.Realtime.getRoom(room.id);

@@ -51,6 +51,10 @@ MiniTalk.Tools.Notifications = (() => {
     });
   }
 
+  function showInApp(icon, title, body, route) {
+    MiniTalk.UI.Shell.notifyBanner?.({ icon, title, body: String(body || "").slice(0, 120), onClick: route ? () => MiniTalk.Router.go(route) : null });
+  }
+
   /* 타이머·알람용: 무음이어도 앱 내부 안내 문구는 표시합니다. */
   function notify(label) {
     const currentMode = mode();
@@ -68,15 +72,13 @@ MiniTalk.Tools.Notifications = (() => {
   function notifyIncoming(message) {
     const currentMode = mode();
     const user = MiniTalk.Store.get("user");
-    if (currentMode === "mute" || !message || message.user_id === user?.user_id) return;
+    if (!message || message.user_id === user?.user_id) return;
+    const room = MiniTalk.Store.get("rooms")?.[message.roomId], title = room?.title ? `${room.title} · ${message.nickname || "새 메시지"}` : message.nickname || "새 메시지", body = String(message.text || "새 메시지가 도착했어요.").slice(0, 100);
+    showInApp("✉", title, body, "chats");
     try {
       if (currentMode === "sound") playSound();
-      vibrate(currentMode === "sound" ? [70, 40, 70] : [90]);
-      showSystem(
-        message.nickname || "모아루",
-        String(message.text || "새 메시지").slice(0, 100),
-        true
-      );
+      if (currentMode !== "mute") vibrate(currentMode === "sound" ? [70, 40, 70] : [90]);
+      if (currentMode !== "mute") showSystem(title, body, true);
     } catch (error) {
       console.warn("메시지 알림 실패", error);
     }
@@ -86,16 +88,23 @@ MiniTalk.Tools.Notifications = (() => {
   function notifyGift(item) {
     const currentMode=mode(),sender=item?.giftedByNickname?`${item.giftedByNickname}님이 `:"";
     const body=`${sender}${item?.name||"상품"}을 선물했어요.`;
-    MiniTalk.UI.Shell.toast(`🎁 ${body}`);
+    showInApp("🎁", "선물이 도착했어요", body, "shopping");
     if(currentMode==="sound")playSound();
     if(currentMode!=="mute"){vibrate([90,50,90]);showSystem("모아루 선물이 도착했어요",body,false)}
   }
 
   function notifyTask(title, body) {
     const currentMode = mode();
-    MiniTalk.UI.Shell.toast(`✓ ${title}`);
+    showInApp("✓", title, body, "tasks");
     if (currentMode === "sound") playSound();
     if (currentMode !== "mute") { vibrate([80, 45, 80]);showSystem(title, String(body || "").slice(0, 100), false); }
+  }
+
+  function notifyRoomInvite(room) {
+    const currentMode = mode(), title = "대화방에 초대됐어요", body = `${room?.title || "새 대화방"}에 바로 참여할 수 있어요.`;
+    showInApp("✉", title, body, "chats");
+    if (currentMode === "sound") playSound();
+    if (currentMode !== "mute") { vibrate([90, 45, 90]);showSystem(title, body, false); }
   }
 
   function notifyCoinReward(amount, reason = "코인 보상", newCoin = 0) {
@@ -187,5 +196,5 @@ MiniTalk.Tools.Notifications = (() => {
     MiniTalk.UI.Shell.modal("알림 설정", body);
   }
 
-  return { mode, setMode, notify, notifyIncoming, notifyGift, notifyTask, notifyCoinReward, openSettings, permissionLabel };
+  return { mode, setMode, notify, notifyIncoming, notifyGift, notifyTask, notifyRoomInvite, notifyCoinReward, openSettings, permissionLabel };
 })();

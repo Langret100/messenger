@@ -176,7 +176,7 @@ MiniTalk.WindowMode=(()=>{
     meta.name="viewport";meta.content="width=device-width,initial-scale=1,viewport-fit=cover";base.href=document.baseURI;
     doc.head.append(meta,base);doc.title=MiniTalkConfig.appName;
     copyStyles(doc);
-    movedNodes=["appShell","toastHost","overlayHost","modalHost"].map(id=>document.getElementById(id)).filter(Boolean);
+    movedNodes=["appShell","toastHost","notificationHost","overlayHost","modalHost"].map(id=>document.getElementById(id)).filter(Boolean);
     /* 기존 문서의 잠금 레이어는 별도 body 자식이라 자동 이동되지 않습니다. */
     document.getElementById("hardLock")?.remove();
     for(const node of movedNodes)doc.body.append(node);

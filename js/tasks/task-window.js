@@ -9,7 +9,7 @@ MiniTalk.Tasks.TaskWindow = (() => {
     if (!desktop()) return null;
     const popup = window.open("", `MoaruTask_${Date.now()}`, "popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=yes,resizable=yes,width=920,height=780,left=80,top=60");
     if (!popup) return null;
-    const doc = popup.document;doc.open();doc.write("<!doctype html><html lang='ko'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><base href='" + document.baseURI.replace(/'/g, "%27") + "'></head><body class='task-window-body'></body></html>");doc.close();doc.title = title;
+    const doc = popup.document;doc.open();doc.write("<!doctype html><html lang='ko' data-theme='light'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><base href='" + document.baseURI.replace(/'/g, "%27") + "'></head><body class='task-window-body'></body></html>");doc.close();doc.title = title;
     for (const sheet of document.styleSheets) { if (!sheet.href) continue;const link = doc.createElement("link");link.rel = "stylesheet";link.href = sheet.href;doc.head.append(link); }
     return { doc, close: () => popup.close(), popup };
   }

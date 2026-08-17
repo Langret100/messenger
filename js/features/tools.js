@@ -123,6 +123,7 @@ MiniTalk.Features.Tools = (() => {
     leave,
     openTarot: MiniTalk.Tools.TarotView.open,
     notifyIncoming: MiniTalk.Tools.Notifications.notifyIncoming,
+    notifyRoomInvite: MiniTalk.Tools.Notifications.notifyRoomInvite,
     notificationMode: MiniTalk.Tools.Notifications.mode
   };
 })();

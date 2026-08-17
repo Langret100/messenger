@@ -5,9 +5,12 @@ const realtime=fs.readFileSync(path.join(root,'js/adapters/realtime.js'),'utf8')
 const ui=fs.readFileSync(path.join(root,'js/features/shopping.js'),'utf8');
 const server=fs.readFileSync(path.join(root,'docs/apps-script/coin-shopping-extension.gs'),'utf8');
 if(service.includes('const balance = await MiniTalk.Economy.CoinWallet.refresh(true)'))throw new Error('redundant pre-purchase balance request remains');
-if(!service.includes('result.product?.imageUrl')||!service.includes('MiniTalk.Store.set("shopCatalog", catalog)'))throw new Error('optimistic saved-image catalog update is missing');
+if(!service.includes('result.product?.imageUrl')||!service.includes('writeCatalog('))throw new Error('optimistic saved-image catalog update is missing');
 if(!realtime.includes('pendingSync:true')||!realtime.includes('syncPendingShopInventory'))throw new Error('purchased inventory fallback/sync queue is missing');
 if(!realtime.includes('firebaseAuthenticated&&!shopInventoryFallback'))throw new Error('protected shop inventory writes are not guarded by Firebase authentication');
 if(!ui.includes('data.length > 7200')||!server.includes('SHOP_IMAGE_MAX_CHARS = 7200'))throw new Error('client/server product image limits do not match');
 if(!server.includes('createTextFinder')||server.includes('SpreadsheetApp.flush();'))throw new Error('slow purchase-log scan or redundant spreadsheet flush remains');
+if(!service.includes('CATALOG_CACHE_KEY')||!service.includes('refreshCatalog(true)'))throw new Error('startup catalog cache/prefetch is missing');
+if(!service.includes('MiniTalk.AuthApi.shopGift')||!server.includes('function handleShopGift'))throw new Error('server-mediated gift flow is missing');
+if(!service.includes('notifyGift')||!server.includes('giftedAt'))throw new Error('gift receipt notification metadata is missing');
 console.log('SHOPPING_RELIABILITY_OK');

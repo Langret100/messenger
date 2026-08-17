@@ -6,7 +6,7 @@ let opened=null,shown=0;
 const saved={};
 const context={
   console,
-  setInterval:()=>1,clearInterval:()=>{},
+  setInterval:()=>1,clearInterval:()=>{},setTimeout:fn=>{fn();return 1},
   addEventListener:()=>{},
   location:{href:'https://example.test/index.html',search:''},
   screen:{availWidth:1920,availHeight:1080,availLeft:0,availTop:0},
@@ -38,9 +38,9 @@ vm.createContext(context);vm.runInContext(code,context);
   assert(opened.url.includes('window=popup'),'popup URL must carry popup mode');
   assert(opened.features.includes('popup=yes'),'must request popup UI');
   assert(opened.features.includes('location=no'),'must request minimal location UI');
-  assert(opened.features.includes('width=380'),'must request the compact desktop width');
+  assert(opened.features.includes('width=360'),'must request the compact desktop width');
   assert(opened.features.includes('height=760'),'must request the larger desktop height');
-  assert(opened.features.includes('left=770'),'new popup must be centered horizontally');
+  assert(opened.features.includes('left=780'),'new popup must be centered horizontally');
   assert(opened.features.includes('top=160'),'new popup must be centered vertically');
   console.log('WINDOW_MODE_POPUP_OK');
 })().catch(e=>{console.error(e);process.exit(1)});

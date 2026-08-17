@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v58-emoticons-profile-fix-20260811";
+const CACHE = "moaru-v60-shop-snapshot-guard-20260817";
 const CORE = [
   "./",
   "./index.html",

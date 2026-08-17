@@ -15,8 +15,9 @@
    ============================================================ */
 MiniTalk.WindowMode=(()=>{
   const POPUP_NAME="MiniTalkCornerWindow";
-  const BOUNDS_VERSION=3;
-  const DEFAULT_BOUNDS={width:380,height:760};
+  // 버전을 올려 이전 460px대 저장 폭을 폐기하고, PC/웨일북 기본 폭을 더 좁게 적용합니다.
+  const BOUNDS_VERSION=4;
+  const DEFAULT_BOUNDS={width:360,height:760};
   const POPUP_PARAM="window";
   let installEvent=null,pipWindow=null,movedNodes=[],popupHandle=null,popupWatchTimer=0,boundsTimer=0;
 
@@ -45,7 +46,7 @@ MiniTalk.WindowMode=(()=>{
     const availH=Math.max(420,screen.availHeight||DEFAULT_BOUNDS.height);
     const originX=Number(screen.availLeft)||0,originY=Number(screen.availTop)||0;
     const useSaved=saved.version===BOUNDS_VERSION;
-    const width=Math.round(clampNumber(useSaved?saved.width:undefined,340,Math.min(900,availW),Math.min(DEFAULT_BOUNDS.width,availW)));
+    const width=Math.round(clampNumber(useSaved?saved.width:undefined,330,Math.min(760,availW),Math.min(DEFAULT_BOUNDS.width,availW)));
     const height=Math.round(clampNumber(useSaved?saved.height:undefined,520,Math.min(1000,availH),Math.min(DEFAULT_BOUNDS.height,availH)));
     const centeredLeft=originX+Math.max(0,Math.round((availW-width)/2));
     const centeredTop=originY+Math.max(0,Math.round((availH-height)/2));
@@ -129,6 +130,8 @@ MiniTalk.WindowMode=(()=>{
       return false;
     }
     popupHandle=handle;
+    // window.open 옵션을 느슨하게 처리하는 브라우저에서도 새 기본 폭을 한 번 더 요청합니다.
+    if(!bounds.version)setTimeout(()=>{try{popupHandle?.resizeTo?.(bounds.width,bounds.height)}catch{}},80);
     try{popupHandle.focus()}catch{}
     setTransferredState(true);setLaunchMessage("필요할 때 ‘창 앞으로’를 누르면 메신저를 다시 찾을 수 있어요.");
     watchPopup();

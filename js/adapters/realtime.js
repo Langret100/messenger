@@ -7,7 +7,7 @@
 MiniTalk.Realtime=(()=>{
   let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,connectionError="",firebaseAuthenticated=false;
   let currentProfiles={},legacyProfiles={};
-  let messageUnsub=null,shopInventoryUnsub=null,shopInventoryFallback=false;
+  let messageUnsub=null,shopInventoryUnsub=null,shopInventoryFallback=false,serverCommandTimer=0,serverCommandPolling=false;
   const unsubs=[];
   const handledCommands=new Set();
   const localPrefix="miniTalk.v3.data.";
@@ -87,6 +87,7 @@ MiniTalk.Realtime=(()=>{
     shopInventoryUnsub?.();shopInventoryUnsub=null;shopInventoryFallback=false;
     while(unsubs.length){try{unsubs.pop()()}catch{}}
     if(heartbeat){clearInterval(heartbeat);heartbeat=null}
+    if(serverCommandTimer){clearInterval(serverCommandTimer);serverCommandTimer=0}serverCommandPolling=false;
     if(storageHandler){removeEventListener("storage",storageHandler);storageHandler=null}
     if(channel){channel.close();channel=null}
     if(mode==="firebase"&&presenceRef){presenceRef.update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP}).catch(()=>{});presenceRef=null}
@@ -117,17 +118,19 @@ MiniTalk.Realtime=(()=>{
     }
     MiniTalk.Store.set("transport",mode);
     if(mode==="firebase")await startFirebase();else await startLocal();
+    if(!nextUser?.isGuest)startServerCommandPolling();
     return mode;
   }
 
   async function startFirebase(){
     bind(db.ref(MiniTalkConfig.paths.rooms),"value",s=>{const source=s.val()||{},rooms={};Object.entries(source).forEach(([id,value])=>{rooms[id]=normalizeRoom(id,value||{})});emit("rooms",rooms)},"대화방 목록을 읽을 권한이 없습니다.");
+    // 프로필 호환 경로는 시트 로그인 사용자도 읽을 수 있으므로 Firebase 익명 인증과 무관하게 구독합니다.
+    bind(db.ref(MiniTalkConfig.paths.legacyProfiles),"value",s=>{legacyProfiles=s.val()||{};publishProfiles()},"기존 프로필 목록을 읽을 권한이 없습니다.");
     if(firebaseAuthenticated){
       presenceRef=db.ref(`${MiniTalkConfig.paths.presence}/${user.user_id}`);
       await presenceRef.set({user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
       presenceRef.onDisconnect().update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});
       bind(db.ref(MiniTalkConfig.paths.presence),"value",s=>emit("presence",s.val()||{}));
-      bind(db.ref(MiniTalkConfig.paths.legacyProfiles),"value",s=>{legacyProfiles=s.val()||{};publishProfiles()},"기존 프로필 목록을 읽을 권한이 없습니다.");
       bind(db.ref(MiniTalkConfig.paths.profiles),"value",s=>{currentProfiles=s.val()||{};publishProfiles()});
       shopInventoryUnsub=bind(db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}`),"value",s=>emit("shop-inventory",s.val()||{}));
       syncPendingShopInventory().catch(error=>console.warn("보관함 대기 항목 동기화 실패",error));
@@ -138,7 +141,7 @@ MiniTalk.Realtime=(()=>{
         try{await s.ref.update({status:"done",handledAt:firebase.database.ServerValue.TIMESTAMP})}catch(error){console.warn("명령 처리 표시 실패",error)}
       });
     }else{
-      shopInventoryFallback=true;emit("presence",{});emit("profiles",{});emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));emit("tasks",{});
+      shopInventoryFallback=true;emit("presence",{});publishProfiles();emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));emit("tasks",{});
     }
     await ensureDefaultRoom();
   }
@@ -148,6 +151,26 @@ MiniTalk.Realtime=(()=>{
     else{storageHandler=e=>{if(e.key===localPrefix+"pulse"&&e.newValue){try{handleLocal(JSON.parse(e.newValue))}catch{}}};addEventListener("storage",storageHandler)}
     await ensureDefaultRoom();updatePresence();heartbeat=setInterval(updatePresence,15000);
     emit("rooms",localGet("rooms",{}));emit("profiles",localGet("profiles",{}));emit("tasks",localGet(`tasks.${user.user_id}`,{}));emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));
+  }
+
+  async function pollServerCommands(){
+    if(serverCommandPolling||!user?.user_id||user.isGuest||!MiniTalk.AuthApi?.userCommands)return;serverCommandPolling=true;
+    try{
+      const commands=await MiniTalk.AuthApi.userCommands(user.user_id),ack=[];
+      for(const command of commands){
+        if(!command?.id||handledCommands.has(command.id)){if(command?.id)ack.push(command.id);continue}
+        handledCommands.add(command.id);ack.push(command.id);
+        if(command.type==="TASK"){
+          const task={...(command.payload?.task||command.payload||{}),id:command.id,status:"open",createdAt:command.createdAt||Date.now(),issuedBy:command.issuedBy||"admin"};
+          const current={...(MiniTalk.Store.get("tasks")||{}),[task.id]:task};localSet(`server.tasks.${user.user_id}`,current);emit("tasks",current);
+        }else emit("command",command);
+      }
+      if(ack.length)await MiniTalk.AuthApi.userCommands(user.user_id,ack);
+    }catch(error){console.warn("서버 명령 확인 실패",error)}finally{serverCommandPolling=false}
+  }
+  function startServerCommandPolling(){
+    const saved=localGet(`server.tasks.${user.user_id}`,{});if(Object.keys(saved).length)emit("tasks",{...(MiniTalk.Store.get("tasks")||{}),...saved});
+    pollServerCommands();if(!serverCommandTimer)serverCommandTimer=setInterval(pollServerCommands,10000);
   }
 
   async function ensureDefaultRoom(){
@@ -254,17 +277,19 @@ MiniTalk.Realtime=(()=>{
     else{const profiles=localGet("profiles",{});profiles[user.user_id]=value;localSet("profiles",profiles);broadcast("profiles",profiles)}
     return value;
   }
-  async function sendCommand(target,type,payload){MiniTalk.AdminSession.requireToken();const command={type,payload,createdAt:Date.now(),issuedBy:user.user_id,status:"pending"};if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.commands}/${target}`).push(command);else{const value={id:crypto.randomUUID(),...command};broadcast("command",{target,command:value})}}
-  async function assignTask(target,task){MiniTalk.AdminSession.requireToken();const id=crypto.randomUUID(),value={...task,id,status:"open",createdAt:Date.now(),issuedBy:user.user_id};if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.tasks}/${target}/${id}`).set(value);else{const all=localGet(`tasks.${target}`,{});all[id]=value;localSet(`tasks.${target}`,all);broadcast("task",{target})}return id}
+  async function sendCommand(target,type,payload){const token=MiniTalk.AdminSession.requireToken();const command={type,payload,createdAt:Date.now(),issuedBy:user.user_id,status:"pending"};if(mode==="firebase"&&firebaseAuthenticated)await db.ref(`${MiniTalkConfig.paths.commands}/${target}`).push(command);else if(MiniTalk.AuthApi?.adminDispatch)await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type,payload});else broadcast("command",{target,command:{id:crypto.randomUUID(),...command}})}
+  async function assignTask(target,task){const token=MiniTalk.AdminSession.requireToken();const id=crypto.randomUUID(),value={...task,id,status:"open",createdAt:Date.now(),issuedBy:user.user_id};if(mode==="firebase"&&firebaseAuthenticated)await db.ref(`${MiniTalkConfig.paths.tasks}/${target}/${id}`).set(value);else if(MiniTalk.AuthApi?.adminDispatch)await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type:"TASK",payload:{task:value}});else{const all=localGet(`tasks.${target}`,{});all[id]=value;localSet(`tasks.${target}`,all);broadcast("task",{target})}return id}
   async function sendCommands(targets,type,payload){
-    MiniTalk.AdminSession.requireToken();const ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
-    if(mode==="firebase"){const updates={};ids.forEach(target=>{const id=db.ref(`${MiniTalkConfig.paths.commands}/${target}`).push().key;updates[`${MiniTalkConfig.paths.commands}/${target}/${id}`]={type,payload,createdAt,issuedBy:user.user_id,status:"pending"}});await db.ref().update(updates)}
-    else ids.forEach(target=>broadcast("command",{target,command:{id:crypto.randomUUID(),type,payload,createdAt,issuedBy:user.user_id,status:"pending"}}));return ids.length
+    const token=MiniTalk.AdminSession.requireToken(),ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
+    if(mode==="firebase"&&firebaseAuthenticated){const updates={};ids.forEach(target=>{const id=db.ref(`${MiniTalkConfig.paths.commands}/${target}`).push().key;updates[`${MiniTalkConfig.paths.commands}/${target}/${id}`]={type,payload,createdAt,issuedBy:user.user_id,status:"pending"}});await db.ref().update(updates);return ids.length}
+    if(MiniTalk.AuthApi?.adminDispatch){const result=await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:ids,type,payload});return Number(result.count)||ids.length}
+    ids.forEach(target=>broadcast("command",{target,command:{id:crypto.randomUUID(),type,payload,createdAt,issuedBy:user.user_id,status:"pending"}}));return ids.length
   }
   async function assignTasks(targets,task){
-    MiniTalk.AdminSession.requireToken();const ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
-    if(mode==="firebase"){const updates={};ids.forEach(target=>{const id=crypto.randomUUID();updates[`${MiniTalkConfig.paths.tasks}/${target}/${id}`]={...task,id,status:"open",createdAt,issuedBy:user.user_id}});await db.ref().update(updates)}
-    else ids.forEach(target=>{const id=crypto.randomUUID(),all=localGet(`tasks.${target}`,{});all[id]={...task,id,status:"open",createdAt,issuedBy:user.user_id};localSet(`tasks.${target}`,all);broadcast("task",{target})});return ids.length
+    const token=MiniTalk.AdminSession.requireToken(),ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
+    if(mode==="firebase"&&firebaseAuthenticated){const updates={};ids.forEach(target=>{const id=crypto.randomUUID();updates[`${MiniTalkConfig.paths.tasks}/${target}/${id}`]={...task,id,status:"open",createdAt,issuedBy:user.user_id}});await db.ref().update(updates);return ids.length}
+    if(MiniTalk.AuthApi?.adminDispatch){const result=await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:ids,type:"TASK",payload:{task:{...task,status:"open",createdAt,issuedBy:user.user_id}}});return Number(result.count)||ids.length}
+    ids.forEach(target=>{const id=crypto.randomUUID(),all=localGet(`tasks.${target}`,{});all[id]={...task,id,status:"open",createdAt,issuedBy:user.user_id};localSet(`tasks.${target}`,all);broadcast("task",{target})});return ids.length
   }
   async function submitTask(id,answer){if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.tasks}/${user.user_id}/${id}`).update({answer,status:"submitted",submittedAt:firebase.database.ServerValue.TIMESTAMP});else{const all=localGet(`tasks.${user.user_id}`,{});all[id]={...all[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`tasks.${user.user_id}`,all);broadcast("task",{target:user.user_id})}}
   function localShopInventory(ownerId){const stored=localGet(`shop.inventory.${ownerId}`,{}),visible=ownerId===user?.user_id?(MiniTalk.Store.get("shopInventory")||{}):{};return{...visible,...stored}}

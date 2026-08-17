@@ -8,6 +8,7 @@ MiniTalk.AuthApi = (() => {
     LOGIN_REQUIRED: "로그인 후 이용할 수 있어요.",
     INSUFFICIENT_COIN: "코인이 부족합니다.",
     PRICE_CHANGED: "상품 가격이 변경되었습니다. 쇼핑 화면을 다시 열어주세요.",
+    PRODUCT_CHANGED: "상품 정보가 변경되었습니다. 최신 상품을 확인해주세요.",
     PRODUCT_NOT_AVAILABLE: "현재 구매할 수 없는 상품입니다.",
     SHOP_BUSY: "구매 요청이 많습니다. 잠시 후 다시 시도해주세요.",
     INVALID_PRODUCT_IMAGE: "상품 이미지 형식이 올바르지 않습니다.",
@@ -24,7 +25,12 @@ MiniTalk.AuthApi = (() => {
     });
     if (!response.ok) throw new Error(`서버 오류 ${response.status}`);
     const data = await response.json();
-    if (!data?.ok) throw new Error(data?.message || errorMessages[data?.error] || data?.error || "요청 실패");
+    if (!data?.ok) {
+      const error = new Error(data?.message || errorMessages[data?.error] || data?.error || "요청 실패");
+      error.code = data?.error || "REQUEST_FAILED";
+      error.data = data;
+      throw error;
+    }
     return data;
   }
 
@@ -76,14 +82,41 @@ MiniTalk.AuthApi = (() => {
      * 서버는 상품 ID·가격을 다시 검증하고 코인 차감과 구매 키 중복 검사를
      * 한 트랜잭션으로 처리해야 합니다. 미지원 서버에서는 명확한 오류를 반환합니다.
      */
-    async shopPurchase({ userId, productId, price, purchaseKey }) {
+    async shopPurchase({ userId, product, purchaseKey }) {
       return post({
         mode: "shop_purchase",
         user_id: userId,
-        product_id: productId,
-        price,
+        product_id: product.id,
+        price: product.price,
+        expected_name: product.name,
+        expected_description: product.description || "",
+        expected_updated_at: product.updatedAt || 0,
         purchase_key: purchaseKey
       });
+    },
+    async shopInventory(userId) {
+      const data = await post({ mode: "shop_inventory", user_id: userId });
+      return Array.isArray(data.items) ? data.items : [];
+    },
+    async shopGift({ userId, nickname, targetId, inventoryId, item }) {
+      return post({ mode: "shop_gift", user_id: userId, nickname, target_user_id: targetId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) });
+    },
+    async shopUse({ userId, inventoryId, item }) {
+      return post({ mode: "shop_use", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) });
+    },
+    async adminDispatch({ userId, adminToken, targets, type, payload }) {
+      return post({
+        mode: "admin_dispatch",
+        user_id: userId,
+        admin_token: adminToken,
+        targets_json: JSON.stringify(targets || []),
+        command_type: type,
+        payload_json: JSON.stringify(payload || {})
+      });
+    },
+    async userCommands(userId, ackIds = []) {
+      const data = await post({ mode: "user_commands", user_id: userId, ack_ids: (ackIds || []).join(",") });
+      return Array.isArray(data.commands) ? data.commands : [];
     }
   };
 })();

@@ -2,6 +2,7 @@ const fs=require('fs'),vm=require('vm'),path=require('path'),cryptoNode=require(
 const root=path.resolve(__dirname,'..');
 class CE extends Event{constructor(type,options={}){super(type);this.detail=options.detail}}
 const calls=[];
+const persisted=new Map();
 let rejectPurchase=false;
 const ctx={console,EventTarget,Event,CustomEvent:CE,window:null,document:{},crypto:{randomUUID:()=>cryptoNode.randomUUID()},setTimeout,clearTimeout};
 ctx.window=ctx;
@@ -10,18 +11,23 @@ for(const file of ['js/config.js','js/core/namespace.js','js/core/events.js','js
   vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),ctx,{filename:file});
 }
 ctx.MiniTalk.Economy={CoinWallet:{refresh:async()=>{calls.push(['coin-refresh']);return 100},setLocal:(value,source)=>calls.push(['coin',value,source])}};
+ctx.MiniTalk.Tools={Notifications:{notifyGift:item=>calls.push(['gift-notify',item.id])}};
+ctx.MiniTalk.Persistence={get:(key,fallback)=>persisted.has(key)?persisted.get(key):fallback,set:(key,value)=>persisted.set(key,value)};
 ctx.MiniTalk.AuthApi={
   shopPurchase:async payload=>{calls.push(['purchase',payload]);if(rejectPurchase)throw new Error('server rejected');return{ok:true,newCoin:75}},
   shopCatalog:async()=>[{id:'server-product',name:'서버 상품',price:40,description:'서버 저장',image_url:'https://example.com/product.webp'}],
   shopSaveProduct:async(userId,token,product)=>{calls.push(['save-product',userId,token,product]);return{ok:true,product}},
-  shopDeleteProduct:async(userId,token,id)=>{calls.push(['delete-product',userId,token,id]);return{ok:true}}
+  shopDeleteProduct:async(userId,token,id)=>{calls.push(['delete-product',userId,token,id]);return{ok:true}},
+  shopInventory:async()=>Object.values(ctx.MiniTalk.Store.get('shopInventory')||{}),
+  shopUse:async payload=>{calls.push(['use',payload]);return{ok:true,usedAt:Date.now()}},
+  shopGift:async payload=>{calls.push(['gift',payload]);return{ok:true}}
 };
 ctx.MiniTalk.AdminSession={requireToken:()=> 'admin-token'};
 ctx.MiniTalk.UserDirectory={all:()=>Object.values(ctx.MiniTalk.Store.get('profiles')||{}).filter(row=>row.user_id!=='user-a'&&!row.user_id.startsWith('guest-'))};
 ctx.MiniTalk.Realtime={
   addShopInventory:async(owner,item)=>calls.push(['add',owner,item]),
-  useShopInventory:async id=>calls.push(['use',id]),
-  giftShopInventory:async(id,target,nickname)=>calls.push(['gift',id,target,nickname])
+  useShopInventory:async id=>calls.push(['legacy-use',id]),
+  giftShopInventory:async(id,target,nickname)=>calls.push(['legacy-gift',id,target,nickname])
 };
 vm.runInContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'utf8'),ctx,{filename:'js/shopping/store-service.js'});
 
@@ -35,6 +41,9 @@ vm.runInContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'
   if(!guestBlocked)throw new Error('guest purchase must be blocked');
 
   ctx.MiniTalk.Store.set('user',{user_id:'user-a',nickname:'가람',isGuest:false});
+  ctx.MiniTalk.Store.set('shopInventory',{gifted:{id:'gifted',name:'선물',giftedAt:Date.now(),createdAt:Date.now()}});
+  await service.refreshInventory(true);
+  if(!calls.some(x=>x[0]==='gift-notify'&&x[1]==='gifted'))throw new Error('new gift must notify the recipient');
   ctx.MiniTalk.Store.set('shopCatalog',{
     expensive:{id:'expensive',name:'노트',description:'줄 노트',price:50},
     cheap:{id:'cheap',name:'연필',description:'연필 한 자루',price:25}
@@ -57,8 +66,10 @@ vm.runInContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'
   });
   if(service.recipients().map(x=>x.user_id).join(',')!=='user-b')throw new Error('gift recipients must exclude self and guests');
 
-  await service.purchase({id:'cheap',name:'연필',description:'연필 한 자루',price:25});
+  await service.purchase({id:'cheap',name:'연필',description:'연필 한 자루',price:25,updatedAt:12345});
   if(!calls.some(x=>x[0]==='purchase')||!calls.some(x=>x[0]==='add'&&x[1]==='user-a'))throw new Error('approved purchase must add inventory');
+  const purchaseCall=calls.find(x=>x[0]==='purchase');
+  if(purchaseCall[1].product?.updatedAt!==12345||purchaseCall[1].product?.description!=='연필 한 자루')throw new Error('purchase must send the visible product snapshot');
   if(calls.some(x=>x[0]==='coin-refresh'))throw new Error('purchase must not make a redundant balance request before the authoritative server purchase');
   if(!calls.some(x=>x[0]==='coin'&&x[1]===75))throw new Error('newCoin response must update the wallet');
   const addCount=calls.filter(x=>x[0]==='add').length;
@@ -68,8 +79,8 @@ vm.runInContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'
   rejectPurchase=false;
   await service.use('ready');
   await service.gift('ready','user-b');
-  if(!calls.some(x=>x[0]==='use'&&x[1]==='ready'))throw new Error('use action was not forwarded');
-  if(!calls.some(x=>x[0]==='gift'&&x[2]==='user-b'))throw new Error('gift action was not forwarded');
+  if(!calls.some(x=>x[0]==='use'&&x[1].inventoryId==='ready'))throw new Error('use action was not forwarded to Apps Script');
+  if(!calls.some(x=>x[0]==='gift'&&x[1].targetId==='user-b'))throw new Error('gift action was not forwarded to Apps Script');
 
   await service.refreshCatalog(true);
   if(service.products().map(x=>x.id).join(',')!=='server-product')throw new Error('catalog must load from the server API');

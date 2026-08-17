@@ -82,6 +82,15 @@ MiniTalk.Tools.Notifications = (() => {
     }
   }
 
+  /* 선물 수신용: 앱 안에서는 즉시 안내하고, 허용된 경우 시스템 알림도 표시합니다. */
+  function notifyGift(item) {
+    const currentMode=mode(),sender=item?.giftedByNickname?`${item.giftedByNickname}님이 `:"";
+    const body=`${sender}${item?.name||"상품"}을 선물했어요.`;
+    MiniTalk.UI.Shell.toast(`🎁 ${body}`);
+    if(currentMode==="sound")playSound();
+    if(currentMode!=="mute"){vibrate([90,50,90]);showSystem("모아루 선물이 도착했어요",body,false)}
+  }
+
   function openSettings() {
     const D = MiniTalk.UI.Dom;
     const body = D.el("div", { class: "notification-editor modal-stack" });
@@ -145,5 +154,5 @@ MiniTalk.Tools.Notifications = (() => {
     MiniTalk.UI.Shell.modal("알림 설정", body);
   }
 
-  return { mode, setMode, notify, notifyIncoming, openSettings, permissionLabel };
+  return { mode, setMode, notify, notifyIncoming, notifyGift, openSettings, permissionLabel };
 })();

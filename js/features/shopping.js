@@ -89,7 +89,13 @@ MiniTalk.Features.Shopping = (() => {
     confirm.onclick = async () => {
       confirm.disabled = true;
       try { await Service.purchase(product); MiniTalk.UI.Shell.closeModal(); MiniTalk.UI.Shell.toast(`${product.name}을(를) 구매했습니다.`); refreshVisible(); }
-      catch (error) { MiniTalk.UI.Shell.toast(error.message); confirm.disabled = false; }
+      catch (error) {
+        if (error.productChanged) {
+          MiniTalk.UI.Shell.closeModal();
+          refreshVisible();
+        } else confirm.disabled = false;
+        MiniTalk.UI.Shell.toast(error.message);
+      }
     };
     body.append(D.el("div", { class: "purchase-product" }, [product.imageUrl ? D.el("img", { class: "purchase-product-image", src: product.imageUrl, alt: product.name }) : null, D.el("strong", { text: product.name }), D.el("p", { class: "muted", text: product.description || "상품 설명이 없습니다." }), D.el("b", { text: `${product.price} 코인` })].filter(Boolean)), D.el("p", { text: "이 상품을 구매하시겠습니까?" }), confirm);
     MiniTalk.UI.Shell.modal("구매 확인", body);

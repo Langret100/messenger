@@ -13,7 +13,20 @@ MiniTalk.AuthApi = (() => {
     SHOP_BUSY: "구매 요청이 많습니다. 잠시 후 다시 시도해주세요.",
     INVALID_PRODUCT_IMAGE: "상품 이미지 형식이 올바르지 않습니다.",
     PRODUCT_IMAGE_TOO_LARGE: "압축된 상품 이미지가 너무 큽니다.",
-    PRODUCT_IMAGE_UPLOAD_FAILED: "상품 이미지를 서버에 저장하지 못했습니다."
+    PRODUCT_IMAGE_UPLOAD_FAILED: "상품 이미지를 서버에 저장하지 못했습니다.",
+    INVALID_COIN_AMOUNT: "코인 증감 수량이 올바르지 않습니다.",
+    COIN_REWARD_FAILED: "코인 보상 처리에 실패했습니다.",
+    NO_TARGETS: "대상 사용자를 선택하세요.",
+    INVALID_TASK_TITLE: "과제 제목을 입력하세요.",
+    TASK_DESCRIPTION_TOO_LONG: "과제 설명은 1,000자 이하로 입력하세요.",
+    TASK_ANSWER_TOO_LONG: "제출 내용은 1,000자 이하로 입력하세요.",
+    TASK_ANSWER_REQUIRED: "제출 내용이나 이미지를 입력하세요.",
+    INVALID_TASK_IMAGE: "과제 이미지를 다시 첨부해주세요.",
+    TASK_NOT_FOUND: "과제를 찾을 수 없습니다.",
+    TASK_ALREADY_COMPLETED: "이미 완료된 과제입니다.",
+    TASK_NOT_SUBMITTED: "제출된 과제만 검토할 수 있습니다.",
+    TASK_FEEDBACK_TOO_LONG: "피드백은 100자 이하로 입력하세요.",
+    TASK_FEEDBACK_REQUIRED: "다시 보내려면 피드백을 입력하세요."
   };
   async function post(payload) {
     const body = new URLSearchParams();
@@ -41,7 +54,7 @@ MiniTalk.AuthApi = (() => {
     },
     async signup(username, password, nickname) {
       const data = await post({ mode: "signup", username, password, nickname });
-      return { user_id: data.user_id, username, nickname: data.nickname || nickname || username };
+      return { user_id: data.user_id, username, nickname: data.nickname || nickname || username, coin: Number(data.coin) || 0, coinAccountCreated: data.coin_account_created === true };
     },
     async coinStatus(user_id) {
       const data = await post({ mode: "coin_status", user_id });
@@ -113,6 +126,37 @@ MiniTalk.AuthApi = (() => {
         command_type: type,
         payload_json: JSON.stringify(payload || {})
       });
+    },
+    async adminCoinReward({ userId, adminToken, targets, amount, reason }) {
+      return post({
+        mode: "admin_coin_reward",
+        user_id: userId,
+        admin_token: adminToken,
+        targets_json: JSON.stringify(targets || []),
+        amount,
+        reason: reason || "관리자 보상"
+      });
+    },
+    async adminUserBalances(userId, adminToken) {
+      const data = await post({ mode: "admin_user_balances", user_id: userId, admin_token: adminToken });
+      return Array.isArray(data.users) ? data.users : [];
+    },
+    async adminTaskAssign({ userId, adminToken, targets, title, description, rewardCoin }) {
+      return post({ mode: "admin_task_assign", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []), title, description, reward_coin: rewardCoin });
+    },
+    async adminTaskList(userId, adminToken) {
+      const data = await post({ mode: "admin_task_list", user_id: userId, admin_token: adminToken });
+      return Array.isArray(data.tasks) ? data.tasks : [];
+    },
+    async adminTaskReview({ userId, adminToken, taskId, action, feedback }) {
+      return post({ mode: "admin_task_review", user_id: userId, admin_token: adminToken, task_id: taskId, action, feedback });
+    },
+    async userTaskList(userId) {
+      const data = await post({ mode: "user_task_list", user_id: userId });
+      return Array.isArray(data.tasks) ? data.tasks : [];
+    },
+    async userTaskSubmit({ userId, taskId, answer, imageData }) {
+      return post({ mode: "user_task_submit", user_id: userId, task_id: taskId, answer, image_data: imageData || "" });
     },
     async userCommands(userId, ackIds = []) {
       const data = await post({ mode: "user_commands", user_id: userId, ack_ids: (ackIds || []).join(",") });

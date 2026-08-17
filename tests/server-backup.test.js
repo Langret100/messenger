@@ -39,10 +39,10 @@ for (const request of requests) {
   if (request.options.mode !== 'no-cors' || request.options.keepalive !== true) throw new Error('backup must be non-blocking and keepalive');
 }
 const roomBody = requests[0].options.body;
-if (roomBody.get('mode') !== 'mini_talk_room_backup') throw new Error('room backup mode mismatch');
+if (roomBody.get('mode') !== 'moaru_room_backup') throw new Error('room metadata must use the existing 대화방 backup route');
 if (roomBody.get('members_json').includes('secret')) throw new Error('room password metadata leaked into backup');
 const messageBody = requests[1].options.body;
-if (messageBody.get('mode') !== 'social_chat_room') throw new Error('room message backup mode mismatch');
+if (messageBody.get('mode') !== 'moaru_room_message_backup') throw new Error('room message backup mode mismatch');
 if (messageBody.get('message') !== '[사진]') throw new Error('base64 message image must not be copied to Sheets');
 
 ctx.MiniTalk.Chat.ServerBackup.message({

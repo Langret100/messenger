@@ -14,7 +14,7 @@ if (!server.includes('expectedDescription !== product.description')) throw new E
 if (!server.includes('expectedUpdatedAt !== product.updatedAt')) throw new Error('server must compare the product revision');
 
 const mismatchAt = server.indexOf('error: "PRODUCT_CHANGED"');
-const deductionAt = server.indexOf('processCoinChange(userId, "remove", product.price)');
+const deductionAt = server.indexOf('processCoinChangeUnlocked_(userId, "remove", product.price)');
 if (mismatchAt < 0 || deductionAt < 0 || mismatchAt > deductionAt) {
   throw new Error('product mismatch must be rejected before coin deduction');
 }

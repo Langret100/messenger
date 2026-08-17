@@ -6,17 +6,8 @@ for file in js/core/*.js js/adapters/*.js js/ui/*.js js/features/*.js js/*.js sw
 done
 python3 -m json.tool manifest.webmanifest >/dev/null
 python3 tests/static-check.py
-node tests/module-load.test.js
-node tests/auth-session-ui.test.js
-node tests/firebase-rules.test.js
-node tests/tarot-daily.test.js
-node tests/offline-game-cache.test.js
-node tests/chat-modules.test.js
-node tests/voice-edge.test.js
-node tests/unread.test.js
-node tests/mobile-immersive.test.js
-node tests/realtime-local.test.js
-node tests/room-management.test.js
-node tests/window-mode.test.js
-node tests/audit-stability.test.js
+for test_file in tests/*.test.js; do
+  node "$test_file"
+done
+node -e 'const fs=require("fs"),vm=require("vm");for(const f of ["docs/apps-script/Code.gs","docs/apps-script/coin-shopping-extension.gs"])new vm.Script(fs.readFileSync(f,"utf8"),{filename:f})'
 echo ALL_AVAILABLE_TESTS_OK

@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v60-shop-snapshot-guard-20260817";
+const CACHE = "moaru-v64-server-source-integration-20260817";
 const CORE = [
   "./",
   "./index.html",
@@ -16,6 +16,7 @@ const CORE = [
   "./css/features/game-community.css",
   "./css/features/math-quest.css",
   "./css/features/quest-accordion.css",
+  "./css/features/tasks-assignment.css",
   "./css/features/coin-wallet.css",
   "./css/features/shopping-store.css",
   "./css/features/display-clarity.css",
@@ -52,6 +53,8 @@ const CORE = [
   "./js/tasks/daily-quest-clock.js",
   "./js/tasks/daily-math-quest.js",
   "./js/tasks/daily-korean-quest.js",
+  "./js/tasks/task-service.js",
+  "./js/tasks/task-window.js",
   "./js/features/auth.js",
   "./js/features/chats.js",
   "./js/features/games.js",

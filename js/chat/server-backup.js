@@ -12,15 +12,7 @@ MiniTalk.Chat.ServerBackup = (() => {
   function room(event, room) {
     const user = MiniTalk.Store.get("user") || {};
     const members = Object.values(room?.members || {}).map(member => ({ user_id: member.user_id, nickname: member.nickname, role: member.role }));
-    return post("mini_talk_room_backup", {
-      event,
-      actor_user_id: user.user_id,
-      room_id: room?.id,
-      title: room?.title,
-      creator: room?.creator,
-      members_json: JSON.stringify(members),
-      updated_at: room?.updatedAt || Date.now()
-    });
+    return post("moaru_room_backup", { event, actor_user_id:user.user_id, room_id:room?.id, title:room?.title, members_json:JSON.stringify(members), updated_at:room?.updatedAt||Date.now() });
   }
 
   function message(message) {
@@ -38,7 +30,7 @@ MiniTalk.Chat.ServerBackup = (() => {
             : String(message?.text || "").slice(0, 2000);
 
     // 전체 대화는 기존 '소통' 시트, 개별 방은 '대화방' 시트에 백업합니다.
-    return post(roomId === "global" ? "social_chat" : "social_chat_room", {
+    return post(roomId === "global" ? "social_chat" : "moaru_room_message_backup", {
       message_id: message?.id,
       room_id: roomId,
       user_id: message?.user_id,

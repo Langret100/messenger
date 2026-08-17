@@ -12,7 +12,7 @@ function makeCtx(){
   return ctx
 }
 (async()=>{
-  const A=makeCtx(),B=makeCtx();
+  const A=makeCtx(),B=makeCtx(),C=makeCtx();
   await A.MiniTalk.Realtime.init({user_id:"a",nickname:"A"});
   await B.MiniTalk.Realtime.init({user_id:"b",nickname:"B"});
   const room=await A.MiniTalk.Realtime.createRoom("잠금방","1234");
@@ -28,6 +28,11 @@ function makeCtx(){
   const invited=await A.MiniTalk.Realtime.inviteRoomMembers(room.id,[{user_id:"c",nickname:"C"}]);
   updated=await A.MiniTalk.Realtime.getRoom(room.id);
   if(invited!==1||!updated.members?.c)throw new Error("room invitation was not stored");
+  await C.MiniTalk.Realtime.init({user_id:"c",nickname:"C"});
+  const invitedEntry=await C.MiniTalk.Realtime.joinRoom(room.id,"");
+  if(!invitedEntry.members?.c)throw new Error("invited member was asked for the password");
+  let guestRejected=false;try{await A.MiniTalk.Realtime.inviteRoomMembers(room.id,[{user_id:"guest-test",nickname:"게스트",isGuest:true}])}catch(error){guestRejected=/선택/.test(error.message)}
+  if(!guestRejected)throw new Error("guest room invitation was accepted");
   await A.MiniTalk.Realtime.removeRoomMember(room.id,"c");
   await A.MiniTalk.Realtime.removeRoomMember(room.id,"b");
   updated=await A.MiniTalk.Realtime.getRoom(room.id);
@@ -43,6 +48,6 @@ function makeCtx(){
   if(!removed.deleted||await B.MiniTalk.Realtime.getRoom(room.id))throw new Error("empty room deletion failed");
   let globalRejected=false;try{await A.MiniTalk.Realtime.leaveRoom("global")}catch(error){globalRejected=/전체 대화/.test(error.message)}
   if(!globalRejected)throw new Error("global room leave was accepted");
-  A.MiniTalk.Realtime.cleanup();B.MiniTalk.Realtime.cleanup();
+  A.MiniTalk.Realtime.cleanup();B.MiniTalk.Realtime.cleanup();C.MiniTalk.Realtime.cleanup();
   console.log("ROOM_MANAGEMENT_OK")
 })().catch(error=>{console.error(error);process.exit(1)});

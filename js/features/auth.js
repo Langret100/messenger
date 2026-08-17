@@ -54,6 +54,7 @@ MiniTalk.Features.Auth=(()=>{
       try{
         await prepareWindow();msg.textContent="처리 중...";
         const user=canReuse?rememberedUser:(signup?await MiniTalk.AuthApi.signup(id,password,host.querySelector("#authNick").value.trim()):await MiniTalk.AuthApi.login(id,password));
+        if(Number.isFinite(Number(user.coin)))MiniTalk.Economy.CoinWallet?.setLocal?.(Number(user.coin),signup?"signup":"login");
         save(user)
       }catch(error){msg.textContent=error.message||"인증에 실패했습니다.";setBusy(false)}
     });

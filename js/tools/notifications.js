@@ -91,6 +91,39 @@ MiniTalk.Tools.Notifications = (() => {
     if(currentMode!=="mute"){vibrate([90,50,90]);showSystem("모아루 선물이 도착했어요",body,false)}
   }
 
+  function notifyTask(title, body) {
+    const currentMode = mode();
+    MiniTalk.UI.Shell.toast(`✓ ${title}`);
+    if (currentMode === "sound") playSound();
+    if (currentMode !== "mute") { vibrate([80, 45, 80]);showSystem(title, String(body || "").slice(0, 100), false); }
+  }
+
+  function notifyCoinReward(amount, reason = "코인 보상", newCoin = 0) {
+    const coins = Math.trunc(Number(amount) || 0), sign = coins > 0 ? "+" : "−", magnitude = Math.abs(coins), debit = coins < 0;
+    if (Number.isFinite(Number(newCoin)) && Number(newCoin) >= 0) MiniTalk.Economy.CoinWallet?.setLocal?.(Number(newCoin), debit ? "admin-debit" : "reward");
+    else MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(() => {});
+    const currentMode = mode(), D = MiniTalk.UI.Dom, doc = D.doc(), host = D.byId("overlayHost") || doc.body;
+    D.byId("coinRewardCelebration")?.remove();
+    const layer = D.el("section", { id: "coinRewardCelebration", class: "coin-reward-celebration", role: "status", "aria-live": "assertive" }, [
+      D.el("div", { class: `coin-reward-burst ${debit ? "debit" : "credit"}` }, [
+        D.el("span", { class: "coin-reward-rays", text: debit ? "−  −  −" : "✦  ✦  ✦" }),
+        D.el("img", { src: "assets/ui/notebook-coin.svg", alt: "코인" }),
+        D.el("strong", { text: `${sign}${magnitude}` }),
+        D.el("small", { text: String(reason || "코인 보상").slice(0, 80) })
+      ])
+    ]);
+    host.append(layer);setTimeout(() => layer.classList.add("leaving"), 2200);setTimeout(() => layer.remove(), 2700);
+    MiniTalk.UI.Shell.toast(`🪙 ${sign}${magnitude}`);
+    if (currentMode === "sound") playSound();
+    if (currentMode !== "mute") { vibrate(debit ? [180, 70, 180] : [90, 45, 120, 45, 160]);showSystem("모아루 코인 변경", `${reason} · ${sign}${magnitude}`, false); }
+  }
+
+  MiniTalk.Events.on("rt:command", command => {
+    if (command?.type !== "COIN_REWARD") return;
+    const payload = command.payload || {};
+    notifyCoinReward(payload.amount, payload.reason || "관리자 코인 보상", payload.newCoin);
+  });
+
   function openSettings() {
     const D = MiniTalk.UI.Dom;
     const body = D.el("div", { class: "notification-editor modal-stack" });
@@ -154,5 +187,5 @@ MiniTalk.Tools.Notifications = (() => {
     MiniTalk.UI.Shell.modal("알림 설정", body);
   }
 
-  return { mode, setMode, notify, notifyIncoming, notifyGift, openSettings, permissionLabel };
+  return { mode, setMode, notify, notifyIncoming, notifyGift, notifyTask, notifyCoinReward, openSettings, permissionLabel };
 })();

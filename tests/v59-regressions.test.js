@@ -8,7 +8,7 @@ if(!realtime.includes("publishProfiles();emit(\"shop-inventory\""))throw new Err
 if(!auth.includes('mode: "shop_gift"')||!server.includes("function handleShopGift"))throw new Error("Apps Script gift endpoint is incomplete");
 if(!service.includes("notifyGift")||!service.includes("setInterval(()=>refreshInventory(true)"))throw new Error("gift recipient polling/notification is incomplete");
 if(!auth.includes('mode: "admin_dispatch"')||!realtime.includes("MiniTalk.AuthApi.adminDispatch")||!server.includes("function handleAdminDispatch"))throw new Error("admin server dispatch fallback is incomplete");
-for(const route of ["shop_inventory","shop_gift","shop_use","admin_dispatch","user_commands"]){if(!code.includes(`case "${route}"`))throw new Error(`Apps Script route missing: ${route}`)}
+for(const route of ["shop_inventory","shop_gift","shop_use","admin_dispatch","admin_coin_reward","admin_user_balances","admin_task_assign","admin_task_list","admin_task_review","user_task_list","user_task_submit","user_commands"]){if(!code.includes(`case "${route}"`))throw new Error(`Apps Script route missing: ${route}`)}
 if(!service.includes("shop.catalog.cache.v2")||!service.includes("hydrateCatalogCache"))throw new Error("catalog immediate cache is missing");
 if(!windowMode.includes("BOUNDS_VERSION=4")||!windowMode.includes("width:360"))throw new Error("narrow popup bounds reset is missing");
 if(!background.includes("background-attachment: scroll")||background.includes("background-attachment: local"))throw new Error("chat background must stay fixed inside the message viewport");

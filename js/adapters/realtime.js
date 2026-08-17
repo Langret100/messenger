@@ -134,12 +134,6 @@ MiniTalk.Realtime=(()=>{
       bind(db.ref(MiniTalkConfig.paths.profiles),"value",s=>{currentProfiles=s.val()||{};publishProfiles()});
       shopInventoryUnsub=bind(db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}`),"value",s=>emit("shop-inventory",s.val()||{}));
       syncPendingShopInventory().catch(error=>console.warn("보관함 대기 항목 동기화 실패",error));
-      bind(db.ref(`${MiniTalkConfig.paths.tasks}/${user.user_id}`),"value",s=>emit("tasks",s.val()||{}));
-      bind(db.ref(`${MiniTalkConfig.paths.commands}/${user.user_id}`).limitToLast(30),"child_added",async s=>{
-        const value=s.val()||{};if(value.status==="done"||handledCommands.has(s.key))return;
-        handledCommands.add(s.key);emit("command",{id:s.key,...value});
-        try{await s.ref.update({status:"done",handledAt:firebase.database.ServerValue.TIMESTAMP})}catch(error){console.warn("명령 처리 표시 실패",error)}
-      });
     }else{
       shopInventoryFallback=true;emit("presence",{});publishProfiles();emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));emit("tasks",{});
     }
@@ -244,7 +238,7 @@ MiniTalk.Realtime=(()=>{
     const room=await getRoom(roomId);if(!room)throw new Error("대화방을 찾을 수 없습니다.");if(room.id==="global")throw new Error("전체 대화에는 초대가 필요하지 않습니다.");
     if(!isRoomMember(room)&&!MiniTalk.AdminSession?.authorized?.())throw new Error("대화방 멤버만 초대할 수 있습니다.");
     const members={...roomMembers(room)};let added=0;
-    targets.forEach(target=>{const userId=String(target?.user_id||"").trim(),nickname=String(target?.nickname||userId).trim();if(!userId||members[userId]||userId===user.user_id)return;members[userId]={user_id:userId,nickname,role:"member",joinedAt:Date.now()};added++});
+    targets.forEach(target=>{const userId=String(target?.user_id||"").trim(),nickname=String(target?.nickname||userId).trim();if(!userId||target?.isGuest||/^guest-/i.test(userId)||members[userId]||userId===user.user_id)return;members[userId]={user_id:userId,nickname,role:"member",joinedAt:Date.now()};added++});
     if(!added)throw new Error("초대할 사용자를 선택하세요.");room.members=members;room.metadataUpdatedAt=Date.now();await saveRoom(room);return added
   }
   async function leaveRoom(roomId){
@@ -277,21 +271,19 @@ MiniTalk.Realtime=(()=>{
     else{const profiles=localGet("profiles",{});profiles[user.user_id]=value;localSet("profiles",profiles);broadcast("profiles",profiles)}
     return value;
   }
-  async function sendCommand(target,type,payload){const token=MiniTalk.AdminSession.requireToken();const command={type,payload,createdAt:Date.now(),issuedBy:user.user_id,status:"pending"};if(mode==="firebase"&&firebaseAuthenticated)await db.ref(`${MiniTalkConfig.paths.commands}/${target}`).push(command);else if(MiniTalk.AuthApi?.adminDispatch)await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type,payload});else broadcast("command",{target,command:{id:crypto.randomUUID(),...command}})}
-  async function assignTask(target,task){const token=MiniTalk.AdminSession.requireToken();const id=crypto.randomUUID(),value={...task,id,status:"open",createdAt:Date.now(),issuedBy:user.user_id};if(mode==="firebase"&&firebaseAuthenticated)await db.ref(`${MiniTalkConfig.paths.tasks}/${target}/${id}`).set(value);else if(MiniTalk.AuthApi?.adminDispatch)await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type:"TASK",payload:{task:value}});else{const all=localGet(`tasks.${target}`,{});all[id]=value;localSet(`tasks.${target}`,all);broadcast("task",{target})}return id}
+  async function sendCommand(target,type,payload){const token=MiniTalk.AdminSession.requireToken();const command={type,payload,createdAt:Date.now(),issuedBy:user.user_id,status:"pending"};if(MiniTalk.AuthApi?.adminDispatch)await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type,payload});else broadcast("command",{target,command:{id:crypto.randomUUID(),...command}})}
+  async function assignTask(target,task){const token=MiniTalk.AdminSession.requireToken();const id=crypto.randomUUID(),value={...task,id,status:"open",createdAt:Date.now(),issuedBy:user.user_id};if(MiniTalk.AuthApi?.adminDispatch)await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type:"TASK",payload:{task:value}});else{const all=localGet(`tasks.${target}`,{});all[id]=value;localSet(`tasks.${target}`,all);broadcast("task",{target})}return id}
   async function sendCommands(targets,type,payload){
     const token=MiniTalk.AdminSession.requireToken(),ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
-    if(mode==="firebase"&&firebaseAuthenticated){const updates={};ids.forEach(target=>{const id=db.ref(`${MiniTalkConfig.paths.commands}/${target}`).push().key;updates[`${MiniTalkConfig.paths.commands}/${target}/${id}`]={type,payload,createdAt,issuedBy:user.user_id,status:"pending"}});await db.ref().update(updates);return ids.length}
     if(MiniTalk.AuthApi?.adminDispatch){const result=await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:ids,type,payload});return Number(result.count)||ids.length}
     ids.forEach(target=>broadcast("command",{target,command:{id:crypto.randomUUID(),type,payload,createdAt,issuedBy:user.user_id,status:"pending"}}));return ids.length
   }
   async function assignTasks(targets,task){
     const token=MiniTalk.AdminSession.requireToken(),ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
-    if(mode==="firebase"&&firebaseAuthenticated){const updates={};ids.forEach(target=>{const id=crypto.randomUUID();updates[`${MiniTalkConfig.paths.tasks}/${target}/${id}`]={...task,id,status:"open",createdAt,issuedBy:user.user_id}});await db.ref().update(updates);return ids.length}
     if(MiniTalk.AuthApi?.adminDispatch){const result=await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:ids,type:"TASK",payload:{task:{...task,status:"open",createdAt,issuedBy:user.user_id}}});return Number(result.count)||ids.length}
     ids.forEach(target=>{const id=crypto.randomUUID(),all=localGet(`tasks.${target}`,{});all[id]={...task,id,status:"open",createdAt,issuedBy:user.user_id};localSet(`tasks.${target}`,all);broadcast("task",{target})});return ids.length
   }
-  async function submitTask(id,answer){if(mode==="firebase")await db.ref(`${MiniTalkConfig.paths.tasks}/${user.user_id}/${id}`).update({answer,status:"submitted",submittedAt:firebase.database.ServerValue.TIMESTAMP});else{const all=localGet(`tasks.${user.user_id}`,{});all[id]={...all[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`tasks.${user.user_id}`,all);broadcast("task",{target:user.user_id})}}
+  async function submitTask(id,answer){const server=localGet(`server.tasks.${user.user_id}`,{});if(server[id]){server[id]={...server[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`server.tasks.${user.user_id}`,server);emit("tasks",server);return}const all=localGet(`tasks.${user.user_id}`,{});all[id]={...all[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`tasks.${user.user_id}`,all);broadcast("task",{target:user.user_id})}
   function localShopInventory(ownerId){const stored=localGet(`shop.inventory.${ownerId}`,{}),visible=ownerId===user?.user_id?(MiniTalk.Store.get("shopInventory")||{}):{};return{...visible,...stored}}
   function saveLocalShopInventory(ownerId,value){const inventory=localShopInventory(ownerId);inventory[value.id]={...value,pendingSync:true};localSet(`shop.inventory.${ownerId}`,inventory);emit("shop-inventory",inventory);return inventory[value.id]}
   function enableShopInventoryFallback(){if(shopInventoryFallback)return;shopInventoryFallback=true;shopInventoryUnsub?.();shopInventoryUnsub=null;const inventory=localShopInventory(user.user_id);localSet(`shop.inventory.${user.user_id}`,inventory);emit("shop-inventory",inventory)}

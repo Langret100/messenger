@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.4-playground-capture-ui-20260817";
+const CACHE = "moaru-v64.5-pwa-icon-window-20260818";
 const CORE = [
   "./",
   "./index.html",
@@ -80,6 +80,9 @@ const CORE = [
   "./manifest.webmanifest",
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",
+  "./assets/icons/icon-maskable-192.png",
+  "./assets/icons/icon-maskable-512.png",
+  "./assets/icons/apple-touch-icon-180.png",
   "./assets/mascot-mini-talk.png",
   "./assets/mascot-avatar.png",
   "./assets/emoticons/e13.png",

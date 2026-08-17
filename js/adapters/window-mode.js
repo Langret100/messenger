@@ -18,6 +18,8 @@ MiniTalk.WindowMode=(()=>{
   // 버전을 올려 이전 460px대 저장 폭을 폐기하고, PC/웨일북 기본 폭을 더 좁게 적용합니다.
   const BOUNDS_VERSION=4;
   const DEFAULT_BOUNDS={width:360,height:760};
+  const STANDALONE_BOUNDS={width:360,height:760};
+  const STANDALONE_SIZE_KEY="window.standaloneSize.v1";
   const POPUP_PARAM="window";
   let installEvent=null,pipWindow=null,movedNodes=[],popupHandle=null,popupWatchTimer=0,boundsTimer=0;
 
@@ -34,7 +36,28 @@ MiniTalk.WindowMode=(()=>{
   const params=()=>new URLSearchParams(location.search);
   const isPopup=()=>params().get(POPUP_PARAM)==="popup";
   const standalone=()=>matchMedia("(display-mode: standalone)").matches||matchMedia("(display-mode: window-controls-overlay)").matches||navigator.standalone===true;
+  const mobileWindow=()=>matchMedia("(pointer: coarse)").matches&&Math.min(screen.width||innerWidth,screen.height||innerHeight)<=900;
   const canInstall=()=>Boolean(installEvent);
+
+  function fitStandaloneWindowOnce(){
+    if(!standalone()||mobileWindow())return;
+    try{
+      if(localStorage.getItem(STANDALONE_SIZE_KEY)==="done")return;
+      localStorage.setItem(STANDALONE_SIZE_KEY,"done");
+      const availW=Math.max(320,screen.availWidth||STANDALONE_BOUNDS.width);
+      const availH=Math.max(520,screen.availHeight||STANDALONE_BOUNDS.height);
+      const width=Math.min(STANDALONE_BOUNDS.width,availW);
+      const height=Math.min(STANDALONE_BOUNDS.height,availH);
+      requestAnimationFrame(()=>{
+        try{
+          window.resizeTo(width,height);
+          const left=(Number(screen.availLeft)||0)+Math.max(0,Math.round((availW-width)/2));
+          const top=(Number(screen.availTop)||0)+Math.max(0,Math.round((availH-height)/2));
+          window.moveTo(left,top);
+        }catch{}
+      });
+    }catch{}
+  }
 
   function clampNumber(value,min,max,fallback){
     const n=Number(value);
@@ -228,6 +251,7 @@ MiniTalk.WindowMode=(()=>{
       startPopupBoundsTracking();
     }else if(standalone()){
       document.documentElement.dataset.windowMode="standalone";
+      fitStandaloneWindowOnce();
     }else{
       document.documentElement.dataset.windowMode="browser";
     }

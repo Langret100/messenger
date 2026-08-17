@@ -12,8 +12,10 @@ ok(chats.includes('MiniTalk.Realtime.isRoomMember(room)?"🔓":"🔒"')&&chats.i
 ok(capture.includes('async function captureAndSend(roomId = "")')&&capture.includes('String(roomId || MiniTalk.Store.get("activeRoom") || "")'),'capture service does not prioritize the open room');
 ok(shell.includes('options.hostClass')&&shell.includes('options.modalClass'),'modal class options are missing');
 ok(profile.includes('hostClass: "profile-modal-host"')&&chats.includes('hostClass:"profile-modal-host"'),'profile edit or view modal is not centered');
-ok(css.includes('.modal-host{align-items:center;padding:14px}')&&css.includes('.header-create-button::before')&&css.includes('.header-search-button::before'),'mobile modal centering or header icon sizing is missing');
+ok(css.includes('.modal-host{align-items:center;padding:14px}')&&css.includes('.header-create-button{font-size:23px!important')&&css.includes('.header-search-button{font-size:30px!important'),'mobile modal centering or header icon sizing is missing');
+ok(chats.includes('text:"⌕","aria-label":"검색"')&&chats.includes('class:"search-glyph",text:"⌕"'),'original search glyph was not preserved');
 ok(css.includes('.room-lock-badge{right:-5px;bottom:-4px;min-width:0;width:auto;height:auto;border:0;border-radius:0;background:transparent;box-shadow:none'),'room lock badge still has a circular overlay');
-for(const asset of ['css/app.css','js/ui/shell.js','js/features/chats.js','js/tools/profile-editor.js','js/tools/capture.js','js/features/tools.js','js/app.js'])ok(html.includes(`${asset}?v=64.4`),`stale cache version for ${asset}`);
-ok(sw.includes('moaru-v64.4-playground-capture-ui-20260817')&&app.includes('sw.js?v=64.4'),'service worker v64.4 cache update is missing');
+for(const asset of ['js/features/chats.js','js/app.js'])ok(html.includes(`${asset}?v=64.5`),`stale cache version for ${asset}`);
+for(const asset of ['css/app.css','js/ui/shell.js','js/tools/profile-editor.js','js/tools/capture.js','js/features/tools.js'])ok(html.includes(`${asset}?v=64.4`),`stale cache version for ${asset}`);
+ok(sw.includes('moaru-v64.5-pwa-icon-window-20260818')&&app.includes('sw.js?v=64.5'),'service worker v64.5 cache update is missing');
 console.log('PLAYGROUND_CAPTURE_MODAL_UI_OK');

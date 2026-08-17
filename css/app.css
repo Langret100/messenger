@@ -209,11 +209,10 @@ body{min-height:100dvh}
 .icon-button,.composer-icon,.composer .send,.attach-action span,.tool-glyph,.shortcut-icon,.settings-row-icon,.shop-market-mark,.shop-empty-illustration,.conversation-count,.unread,.connection-badge,.bottom-nav .nav-button span{line-height:1}
 .attach-action span,.tool-glyph,.shortcut-icon,.settings-row-icon,.shop-market-mark,.shop-empty-illustration{display:flex;align-items:center;justify-content:center;padding:0}
 .attach-action span{font-size:19px;font-weight:750}
-.header-create-button,.header-search-button{position:relative;font-size:0!important}
-.header-create-button::before{content:"+";font:600 23px/1 Arial,sans-serif;transform:translateY(-1px)}
-.header-search-button::before,.chat-search-wrap .search-glyph::before{content:"";display:block;width:11px;height:11px;border:2px solid currentColor;border-radius:50%;box-sizing:border-box}
-.header-search-button::after,.chat-search-wrap .search-glyph::after{content:"";position:absolute;width:6px;height:2px;border-radius:2px;background:currentColor;transform:rotate(-45deg);transform-origin:left center}
-.header-search-button::after{left:20px;top:21px}.chat-search-wrap .search-glyph{width:18px;height:18px;display:grid;place-items:center;font-size:0}.chat-search-wrap .search-glyph::after{left:12px;top:13px}
+.header-create-button,.header-search-button{width:36px!important;height:36px!important;line-height:1!important}
+.header-create-button{font-size:23px!important;font-family:Arial,sans-serif;font-weight:600}
+.header-search-button{font-size:30px!important;font-family:inherit;font-weight:500;padding-bottom:2px}
+.chat-search-wrap .search-glyph{width:22px;height:22px;display:grid;place-items:center;font-size:23px!important;line-height:1;transform:translateY(-50%)}
 :root[data-theme="light"] .header-actions{gap:2px}:root[data-theme="light"] .header-actions .icon-button{width:36px;height:36px;border-radius:11px}
 .profile-modal-host{align-items:center!important;padding:14px!important}.profile-modal-host .profile-modal{width:min(420px,calc(100vw - 28px));max-height:min(82dvh,680px);border-radius:22px;animation:modal-in .2s var(--ease)}
 .room-lock-badge{right:-5px;bottom:-4px;min-width:0;width:auto;height:auto;border:0;border-radius:0;background:transparent;box-shadow:none;font-size:15px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.28))}

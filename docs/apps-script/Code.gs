@@ -316,15 +316,35 @@ function doPost(e) {
       case "admin_dispatch":
         return handleAdminDispatch(e);
 
+      case "admin_coin_reward":
+        return handleAdminCoinReward(e);
+
+      case "admin_user_balances":
+        return handleAdminUserBalances(e);
+
+      case "admin_task_assign":
+        return handleAdminTaskAssign(e);
+
+      case "admin_task_list":
+        return handleAdminTaskList(e);
+
+      case "admin_task_review":
+        return handleAdminTaskReview(e);
+
+      case "user_task_list":
+        return handleUserTaskList(e);
+
+      case "user_task_submit":
+        return handleUserTaskSubmit(e);
+
       case "user_commands":
         return handleUserCommands(e);
 
-      // 🔹 Firebase 원본 대화방·메시지의 쓰기 전용 시트 백업
-      case "mini_talk_room_backup":
-        return handleMiniTalkRoomBackup(e);
+      case "moaru_room_backup":
+        return handleMoaruChatRoomBackup(e);
 
-      case "mini_talk_message_backup":
-        return handleMiniTalkMessageBackup(e);
+      case "moaru_room_message_backup":
+        return handleMoaruChatMessageBackup(e);
 
             // 🔹 FCM 웹 푸시 알림 발송 (js/fcm-push.js, js/social-messenger.js 연동)
       case "fcm_push":
@@ -413,6 +433,9 @@ function signup_(data) {
     });
   }
 
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return jsonResponse_({ ok: false, error: "회원가입 요청이 많습니다. 잠시 후 다시 시도해주세요." });
+  try {
   const sheet = getSheet_(LOGIN_SHEET);
   const lastRow = sheet.getLastRow();
 
@@ -444,13 +467,29 @@ function signup_(data) {
   const lastLogin = "";
 
   sheet.appendRow([userId, username, password, nickname, createdAt, lastLogin]);
+  const insertedLoginRow = sheet.getLastRow();
+  let coinAccount;
+  try {
+    if (typeof ensureMoaruCoinAccount_ !== "function") throw new Error("COIN_ACCOUNT_INITIALIZER_MISSING");
+    coinAccount = ensureMoaruCoinAccount_({ userId: userId, username: username, nickname: nickname });
+  } catch (coinError) {
+    coinAccount = { ok: false, error: coinError && coinError.message || "REWARD_ACCOUNT_INIT_FAILED" };
+  }
+  if (!coinAccount || !coinAccount.ok) {
+    try { if (String(sheet.getRange(insertedLoginRow, 1).getValue() || "").trim() === userId) sheet.deleteRow(insertedLoginRow); } catch (rollbackError) { console.error("SIGNUP_ROLLBACK_FAILED", userId, rollbackError); }
+    return jsonResponse_({ ok: false, error: "코인 계정을 만들지 못해 회원가입을 취소했습니다. 관리자에게 보상 시트 구조를 확인해달라고 알려주세요.", code: coinAccount && coinAccount.error || "REWARD_ACCOUNT_INIT_FAILED" });
+  }
+  try { CacheService.getScriptCache().remove("moaru-user-directory-v1"); } catch (cacheError) {}
 
   return jsonResponse_({
     ok: true,
     user_id: userId,
     username: username,
-    nickname: nickname
+    nickname: nickname,
+    coin: Number(coinAccount.coin) || 0,
+    coin_account_created: coinAccount.created === true
   });
+  } finally { lock.releaseLock(); }
 }
 
 /**

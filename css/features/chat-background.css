@@ -5,7 +5,8 @@
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: local;
+  /* local은 메시지 스크롤과 배경을 함께 움직이므로 사용하지 않습니다. */
+  background-attachment: scroll;
 }
 
 :root.chat-custom-background[data-theme="light"] .message-list {

@@ -304,6 +304,21 @@ function doPost(e) {
       case "shop_purchase":
         return handleShopPurchase(e);
 
+      case "shop_inventory":
+        return handleShopInventory(e);
+
+      case "shop_gift":
+        return handleShopGift(e);
+
+      case "shop_use":
+        return handleShopUse(e);
+
+      case "admin_dispatch":
+        return handleAdminDispatch(e);
+
+      case "user_commands":
+        return handleUserCommands(e);
+
       // 🔹 Firebase 원본 대화방·메시지의 쓰기 전용 시트 백업
       case "mini_talk_room_backup":
         return handleMiniTalkRoomBackup(e);

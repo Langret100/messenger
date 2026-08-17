@@ -16,6 +16,10 @@ const MINI_TALK_MESSAGE_BACKUP_SHEET = "미니톡_메시지백업";
 const SHOP_ADMIN_TOKEN_SECONDS = 21600; // 6시간
 const SHOP_PRODUCT_MAX_BYTES = 8500;
 const SHOP_IMAGE_MAX_CHARS = 7200;
+const SHOP_INVENTORY_PROPERTY_PREFIX = "MOARU_SHOP_INV_";
+const MOARU_COMMAND_PROPERTY_PREFIX = "MOARU_COMMANDS_";
+const SHOP_PURCHASE_OWNER_PROPERTY_PREFIX = "MOARU_PURCHASE_OWNER_";
+const MOARU_COMMAND_LIMIT = 30;
 
 /**
  * 최초 1회만 Apps Script 편집기에서 직접 실행합니다.
@@ -93,7 +97,8 @@ function normalizeShopProduct_(value) {
     description: String(product.description || "").trim().slice(0, 160),
     imageUrl: String(product.imageUrl || product.imageData || "").trim().slice(0, SHOP_IMAGE_MAX_CHARS),
     active: product.active !== false,
-    updatedAt: Number(product.updatedAt) || Date.now()
+    // 기존 상품에 개정 시각이 없으면 0으로 고정해 읽을 때마다 값이 달라지지 않게 합니다.
+    updatedAt: Number(product.updatedAt) || 0
   };
 }
 
@@ -134,13 +139,17 @@ function handleAdminUnlock(e) {
 
 /** POST/GET mode=shop_catalog */
 function handleShopCatalog() {
+  const cache = CacheService.getScriptCache(), cached = cache.get("moaru-shop-catalog-v2");
+  if (cached) return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
   const catalog = readShopCatalog_();
   const products = Object.keys(catalog).map(function (id) {
     return normalizeShopProduct_(catalog[id]);
   }).filter(function (product) {
     return product.id && product.name && product.price > 0 && product.active;
   });
-  return shopJson_({ ok: true, products: products });
+  const response = JSON.stringify({ ok: true, products: products });
+  if (response.length < 95000) cache.put("moaru-shop-catalog-v2", response, 120);
+  return ContentService.createTextOutput(response).setMimeType(ContentService.MimeType.JSON);
 }
 
 /** POST/GET mode=user_directory: 비밀번호·아이디를 제외한 가입자 닉네임 명단 */
@@ -193,6 +202,7 @@ function handleShopProductSave(e) {
       return shopJson_({ ok: false, error: "INVALID_PRODUCT_IMAGE" });
     }
     writeShopProduct_(product);
+    CacheService.getScriptCache().remove("moaru-shop-catalog-v2");
     return shopJson_({ ok: true, product: product });
   } finally {
     lock.releaseLock();
@@ -212,6 +222,7 @@ function handleShopProductDelete(e) {
   try {
     PropertiesService.getScriptProperties().deleteProperty(shopProductPropertyKey_(productId));
     removeLegacyShopProduct_(productId);
+    CacheService.getScriptCache().remove("moaru-shop-catalog-v2");
     return shopJson_({ ok: true, deleted: productId });
   } finally {
     lock.releaseLock();
@@ -292,6 +303,154 @@ function findShopPurchase_(sheet, purchaseKey) {
   return { userId: String(row[1]), productId: String(row[2]), newCoin: parseInt(row[6], 10) || 0 };
 }
 
+function moaruSafeKey_(value) {
+  return String(value || "").replace(/[^0-9A-Za-z_-]/g, "_").slice(0, 100);
+}
+
+function shopInventoryPrefix_(userId) {
+  return SHOP_INVENTORY_PROPERTY_PREFIX + moaruSafeKey_(userId) + "_";
+}
+
+function shopInventoryKey_(userId, inventoryId) {
+  return shopInventoryPrefix_(userId) + moaruSafeKey_(inventoryId);
+}
+
+function purchaseOwnerKey_(purchaseKey) {
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(purchaseKey || ""));
+  return SHOP_PURCHASE_OWNER_PROPERTY_PREFIX + digest.slice(0, 12).map(function (value) { return (value & 255).toString(16).padStart(2, "0"); }).join("");
+}
+
+function setPurchaseOwner_(purchaseKey, ownerId, inventoryId) {
+  if (!purchaseKey) return;
+  PropertiesService.getScriptProperties().setProperty(purchaseOwnerKey_(purchaseKey), JSON.stringify({ ownerId: ownerId, inventoryId: inventoryId }));
+}
+
+function getPurchaseOwner_(purchaseKey) {
+  if (!purchaseKey) return null;
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(purchaseOwnerKey_(purchaseKey)) || "null"); } catch (error) { return null; }
+}
+
+function hydrateShopInventoryItem_(item, catalog) {
+  const value = item || {}, product = (catalog || {})[value.productId] || {};
+  return Object.assign({}, value, {
+    name: value.name || product.name || "상품",
+    description: value.description || product.description || "",
+    imageUrl: value.imageUrl || product.imageUrl || "",
+    price: Number(value.price || product.price) || 0
+  });
+}
+
+function readShopInventory_(userId) {
+  const properties = PropertiesService.getScriptProperties().getProperties();
+  const prefix = shopInventoryPrefix_(userId), catalog = readShopCatalog_(), items = [];
+  Object.keys(properties).forEach(function (key) {
+    if (key.indexOf(prefix) !== 0) return;
+    try { const item = JSON.parse(properties[key]);if (item && item.id) items.push(hydrateShopInventoryItem_(item, catalog)); }
+    catch (error) { console.error("INVALID_SHOP_INVENTORY", key, error); }
+  });
+  return items.sort(function (a, b) { return Number(b.createdAt || b.giftedAt || 0) - Number(a.createdAt || a.giftedAt || 0); });
+}
+
+function writeShopInventoryItem_(userId, item) {
+  const compact = Object.assign({}, item);
+  delete compact.imageUrl; // 이미지는 상품 카탈로그에서 결합해 속성 용량을 줄입니다.
+  PropertiesService.getScriptProperties().setProperty(shopInventoryKey_(userId, compact.id), JSON.stringify(compact));
+  return hydrateShopInventoryItem_(compact, readShopCatalog_());
+}
+
+function createPurchasedInventory_(userId, product, purchaseKey) {
+  const existing = readShopInventory_(userId).filter(function (item) { return item.purchaseKey === purchaseKey; })[0];
+  if (existing) return existing;
+  const now = Date.now(), item = {
+    id: "inv-" + Utilities.getUuid(), ownerId: userId, productId: product.id,
+    name: product.name, description: product.description || "", price: product.price,
+    purchaseKey: purchaseKey, purchasedAt: now, createdAt: now
+  };
+  const saved = writeShopInventoryItem_(userId, item);
+  setPurchaseOwner_(purchaseKey, userId, saved.id);
+  return saved;
+}
+
+function requireRegisteredShopUser_(userId) {
+  const id = String(userId || "").trim();
+  return id && id.indexOf("guest-") !== 0 && getRewardUserData_(id) ? id : "";
+}
+
+/** POST mode=shop_inventory */
+function handleShopInventory(e) {
+  const userId = requireRegisteredShopUser_(((e && e.parameter) || {}).user_id);
+  if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  return shopJson_({ ok: true, items: readShopInventory_(userId) });
+}
+
+/** POST mode=shop_gift: 서버 보관함에서 대상 사용자 보관함으로 원자적으로 이동 */
+function handleShopGift(e) {
+  const p = (e && e.parameter) || {}, userId = requireRegisteredShopUser_(p.user_id), targetId = requireRegisteredShopUser_(p.target_user_id);
+  const inventoryId = String(p.inventory_id || "").trim();
+  if (!userId || !targetId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  if (!inventoryId || userId === targetId) return shopJson_({ ok: false, error: "INVALID_GIFT_TARGET" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  try {
+    let source = readShopInventory_(userId).filter(function (item) { return item.id === inventoryId; })[0];
+    // v58까지 기기에만 남은 구매품은 구매로그로 소유권을 검증한 뒤 한 번만 서버 보관함으로 가져옵니다.
+    if (!source && p.item_json) {
+      try {
+        const legacy = JSON.parse(p.item_json), purchase = findShopPurchase_(getOrCreateShopPurchaseLogSheet_(), legacy.purchaseKey);
+        const owner = getPurchaseOwner_(legacy.purchaseKey);
+        if (purchase && purchase.userId === userId && purchase.productId === String(legacy.productId || "") && (!owner || owner.ownerId === userId)) {
+          source = writeShopInventoryItem_(userId, Object.assign({}, legacy, { id: inventoryId, ownerId: userId }));
+          setPurchaseOwner_(legacy.purchaseKey, userId, inventoryId);
+        }
+      } catch (error) { console.error("LEGACY_GIFT_IMPORT_FAILED", error); }
+    }
+    if (!source || source.usedAt) return shopJson_({ ok: false, error: "GIFT_ITEM_NOT_AVAILABLE" });
+    PropertiesService.getScriptProperties().deleteProperty(shopInventoryKey_(userId, inventoryId));
+    const giftId = "gift-" + Utilities.getUuid(), now = Date.now();
+    const gift = Object.assign({}, source, { id: giftId, ownerId: targetId, giftedBy: userId, giftedByNickname: String(p.nickname || "").trim().slice(0, 30), giftedAt: now, createdAt: now });
+    delete gift.usedAt;
+    const savedGift = writeShopInventoryItem_(targetId, gift);
+    setPurchaseOwner_(gift.purchaseKey, targetId, giftId);
+    return shopJson_({ ok: true, item: savedGift, target_user_id: targetId });
+  } finally { lock.releaseLock(); }
+}
+
+/** POST mode=shop_use */
+function handleShopUse(e) {
+  const p = (e && e.parameter) || {}, userId = requireRegisteredShopUser_(p.user_id), inventoryId = String(p.inventory_id || "").trim();
+  if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  const item = readShopInventory_(userId).filter(function (row) { return row.id === inventoryId; })[0];
+  if (!item || item.usedAt) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+  item.usedAt = Date.now();writeShopInventoryItem_(userId, item);return shopJson_({ ok: true, usedAt: item.usedAt });
+}
+
+function moaruCommandKey_(userId) { return MOARU_COMMAND_PROPERTY_PREFIX + moaruSafeKey_(userId); }
+function readMoaruCommands_(userId) { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(moaruCommandKey_(userId)) || "[]"); } catch (error) { return []; } }
+function writeMoaruCommands_(userId, commands) { PropertiesService.getScriptProperties().setProperty(moaruCommandKey_(userId), JSON.stringify((commands || []).slice(-MOARU_COMMAND_LIMIT))); }
+
+/** POST mode=admin_dispatch: 관리자 토큰을 서버에서 확인한 뒤 사용자 큐에 기록 */
+function handleAdminDispatch(e) {
+  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token);
+  if (!auth.ok) return shopJson_(auth);
+  let targets = [], payload = {};
+  try { targets = JSON.parse(p.targets_json || "[]");payload = JSON.parse(p.payload_json || "{}"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" }); }
+  targets = targets.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && requireRegisteredShopUser_(id); }).slice(0, 200);
+  const type = String(p.command_type || "NOTICE").trim().slice(0, 20);if (!targets.length) return shopJson_({ ok: false, error: "NO_TARGETS" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  try {
+    targets.forEach(function (target) { const queue = readMoaruCommands_(target);queue.push({ id: Utilities.getUuid(), type: type, payload: payload, createdAt: Date.now(), issuedBy: String(p.user_id) });writeMoaruCommands_(target, queue); });
+    return shopJson_({ ok: true, count: targets.length });
+  } finally { lock.releaseLock(); }
+}
+
+/** POST mode=user_commands: 본인 큐 조회 및 처리 완료 항목 삭제 */
+function handleUserCommands(e) {
+  const p = (e && e.parameter) || {}, userId = requireRegisteredShopUser_(p.user_id);if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  const ack = String(p.ack_ids || "").split(",").filter(Boolean), queue = readMoaruCommands_(userId);
+  const remaining = queue.filter(function (command) { return ack.indexOf(String(command.id)) < 0; });
+  if (remaining.length !== queue.length) writeMoaruCommands_(userId, remaining);
+  return shopJson_({ ok: true, commands: remaining });
+}
+
 /** POST mode=shop_purchase */
 function handleShopPurchase(e) {
   const p = (e && e.parameter) || {};
@@ -299,6 +458,9 @@ function handleShopPurchase(e) {
   const productId = String(p.product_id || "").trim();
   const purchaseKey = String(p.purchase_key || "").trim();
   const clientPrice = parseInt(p.price, 10);
+  const expectedName = String(p.expected_name || "").trim().slice(0, 60);
+  const expectedDescription = String(p.expected_description || "").trim().slice(0, 160);
+  const expectedUpdatedAt = Number(p.expected_updated_at) || 0;
 
   if (!userId || !productId || !purchaseKey || isNaN(clientPrice)) {
     return shopJson_({ ok: false, error: "MISSING_PARAM" });
@@ -318,19 +480,27 @@ function handleShopPurchase(e) {
       if (duplicate.userId !== userId || duplicate.productId !== productId) {
         return shopJson_({ ok: false, error: "PURCHASE_KEY_CONFLICT" });
       }
-      return shopJson_({ ok: true, applied: false, reason: "ALREADY_PURCHASED", newCoin: duplicate.newCoin });
+      const duplicateProduct = normalizeShopProduct_(readShopCatalog_()[productId]);
+      const duplicateItem = createPurchasedInventory_(userId, duplicateProduct, purchaseKey);
+      return shopJson_({ ok: true, applied: false, reason: "ALREADY_PURCHASED", newCoin: duplicate.newCoin, item: duplicateItem });
     }
 
     const product = normalizeShopProduct_(readShopCatalog_()[productId]);
     if (!product.id || !product.active || product.price <= 0) {
       return shopJson_({ ok: false, error: "PRODUCT_NOT_AVAILABLE" });
     }
-    if (clientPrice !== product.price) {
+    // 구매 요청 자체에 포함된 화면 스냅샷을 비교하므로 별도 서버 조회가 필요 없습니다.
+    // 이름·설명·가격·개정 시각 중 하나라도 다르면 코인 차감 전에 구매를 중단합니다.
+    if (clientPrice !== product.price ||
+        expectedName !== product.name ||
+        expectedDescription !== product.description ||
+        expectedUpdatedAt !== product.updatedAt) {
       return shopJson_({
         ok: false,
-        error: "PRICE_CHANGED",
+        error: "PRODUCT_CHANGED",
         currentPrice: product.price,
-        message: "상품 가격이 변경되었습니다. 쇼핑 화면을 다시 열어주세요."
+        currentUpdatedAt: product.updatedAt,
+        message: "상품 정보가 변경되었습니다. 최신 상품을 확인해주세요."
       });
     }
 
@@ -355,13 +525,15 @@ function handleShopPurchase(e) {
       return shopJson_({ ok: false, error: "PURCHASE_LOG_FAILED" });
     }
 
+    const inventoryItem = createPurchasedInventory_(userId, product, purchaseKey);
     return shopJson_({
       ok: true,
       applied: true,
       product_id: product.id,
       product_name: product.name,
       price: product.price,
-      newCoin: result.newCoin
+      newCoin: result.newCoin,
+      item: inventoryItem
     });
   } catch (error) {
     return shopJson_({

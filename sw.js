@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.3-install-login-center-20260817";
+const CACHE = "moaru-v64.4-playground-capture-ui-20260817";
 const CORE = [
   "./",
   "./index.html",

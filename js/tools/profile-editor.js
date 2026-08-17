@@ -108,7 +108,7 @@ MiniTalk.Tools.ProfileEditor = (() => {
       D.el("label", { class: "field" }, [D.el("span", { text: "상태메시지" }), status]),
       save
     );
-    MiniTalk.UI.Shell.modal("프로필", body);
+    MiniTalk.UI.Shell.modal("프로필", body, { hostClass: "profile-modal-host", modalClass: "profile-modal" });
     return true;
   }
 

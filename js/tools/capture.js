@@ -31,14 +31,17 @@ MiniTalk.Tools.Capture = (() => {
     }
   }
 
-  async function captureAndSend() {
+  async function captureAndSend(roomId = "") {
     try {
       const data = await capture();
-      const room = MiniTalk.Store.get("activeRoom") || MiniTalk.Store.get("lastRoom") || "global";
+      const room = String(roomId || MiniTalk.Store.get("activeRoom") || "").trim();
+      if (!room) throw new Error("캡처를 보낼 대화방을 먼저 열어주세요.");
       await MiniTalk.Realtime.sendMessage(room, { text: "[화면 캡처]", image: data });
       MiniTalk.UI.Shell.toast("캡처를 채팅에 공유했습니다.");
+      return true;
     } catch (error) {
       MiniTalk.UI.Shell.toast(error.message);
+      return false;
     }
   }
 

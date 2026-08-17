@@ -9,7 +9,7 @@ MiniTalk.Features.Tools = (() => {
     { id: "notifications", icon: "♢", title: "알림", description: "소리 · 진동 · 무음" },
     { id: "timer", icon: "◷", title: "타이머", description: "간단한 시간 재기" },
     { id: "alarm", icon: "◉", title: "알람", description: "원하는 시간에 알림" },
-    { id: "capture", icon: "▧", title: "화면 캡처", description: "현재 대화에 공유" },
+    { id: "playground", icon: "◇", title: "놀이터", description: "온라인 놀이학습", url: "https://langret100.github.io/multiroom-playground/" },
     { id: "layout", icon: "✦", title: "화면 표시", description: "글자·메뉴 크기와 움직임" }
   ];
 
@@ -19,7 +19,6 @@ MiniTalk.Features.Tools = (() => {
     notifications: () => MiniTalk.Tools.Notifications.openSettings(),
     timer: () => MiniTalk.Tools.TimerAlarm.openTimer(),
     alarm: () => MiniTalk.Tools.TimerAlarm.openAlarm(),
-    capture: () => MiniTalk.Tools.Capture.captureAndSend(),
     layout: () => MiniTalk.Features.Layout.open(),
     profile: () => MiniTalk.Tools.ProfileEditor.open(refreshIfVisible)
   };
@@ -71,10 +70,10 @@ MiniTalk.Features.Tools = (() => {
 
   function toolButton(item) {
     const D = MiniTalk.UI.Dom;
-    return D.el("button", {
+    const linked = Boolean(item.url);
+    return D.el(linked ? "a" : "button", {
       class: "tool-button modern-tool",
-      type: "button",
-      onclick: () => open(item.id)
+      ...(linked ? { href: item.url, target: "_blank", rel: "noopener noreferrer", "aria-label": `${item.title} 새 창으로 열기` } : { type: "button", onclick: () => open(item.id) })
     }, [
       D.el("span", { class: "tool-glyph", text: item.icon }),
       D.el("span", { class: "tool-label" }, [

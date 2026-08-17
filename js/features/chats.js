@@ -5,7 +5,7 @@
    세부 기능은 js/chat/* 로 분리:
    - emoji.js       토리 이모티콘 12종
    - attachments.js 사진/카메라/파일
-   - qr.js          QR 링크 스캔
+   - capture.js     현재 화면 캡처 후 대화방 공유
    - linkify.js     URL/YouTube 미리보기
    - voice.js       보내기 길게 눌러 음성 입력
    - unread.js      방별 미확인 수
@@ -23,8 +23,8 @@ MiniTalk.Features.Chats=(()=>{
   function scheduleMessageRender(roomId){if(renderFrame)cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(()=>{renderFrame=0;if(MiniTalk.Store.get("activeRoom")===roomId)renderMessages(roomId)})}
   function render(host){MiniTalk.Store.set("activeRoom",null);MiniTalk.Realtime.unsubscribeMessages?.();applyChatHeader("모아루",headerListActions());renderList(host)}
   function headerListActions(){const guest=Boolean(MiniTalk.Store.get("user")?.isGuest);return[
-    guest?null:MiniTalk.UI.Dom.el("button",{class:"icon-button subtle",type:"button",text:"＋","aria-label":"대화방 만들기",onclick:createRoomDialog}),
-    MiniTalk.UI.Dom.el("button",{class:"icon-button subtle",type:"button",text:"⌕","aria-label":"검색",onclick:()=>MiniTalk.UI.Dom.one(".search")?.focus()})
+    guest?null:MiniTalk.UI.Dom.el("button",{class:"icon-button subtle header-create-button",type:"button","aria-label":"대화방 만들기",onclick:createRoomDialog}),
+    MiniTalk.UI.Dom.el("button",{class:"icon-button subtle header-search-button",type:"button","aria-label":"검색",onclick:()=>MiniTalk.UI.Dom.one(".search")?.focus()})
   ].filter(Boolean)}
   function roomHeaderActions(roomId){return MiniTalk.Store.get("user")?.isGuest?[]:[MiniTalk.UI.Dom.el("button",{class:"icon-button subtle",type:"button",text:"⋯","aria-label":"대화방 메뉴",onclick:()=>openRoomMenu(roomId)})]}
   function profileHeaderOptions(){const D=MiniTalk.UI.Dom,user=MiniTalk.Store.get("user")||{},profile=MiniTalk.Store.get("profiles")?.[user.user_id]||{},node=D.el("img",{class:"header-profile-avatar",src:profile.avatar||"assets/mascot-avatar.png",alt:user.isGuest?"기본 프로필":"내 프로필",onerror:event=>{event.currentTarget.onerror=null;event.currentTarget.src="assets/mascot-avatar.png"}});return{profile:true,profileEditable:!user.isGuest,profileNode:node,onProfile:user.isGuest?null:()=>MiniTalk.Tools.ProfileEditor.open(()=>{const active=MiniTalk.Store.get("activeRoom");if(active){const room=MiniTalk.Store.get("rooms")?.[active];applyChatHeader(room?.title||"대화",roomHeaderActions(active),{back:()=>backToList()})}else{applyChatHeader("모아루",headerListActions());renderList()}})}}
@@ -57,7 +57,7 @@ MiniTalk.Features.Chats=(()=>{
   function renderList(host=MiniTalk.UI.Dom.byId("viewHost")){
     if(!host)return;const D=MiniTalk.UI.Dom,allRooms=Object.values(MiniTalk.Store.get("rooms")||{}).sort((a,b)=>roomMessageTime(b)-roomMessageTime(a)),rooms=allRooms.filter(canViewRoom);
     const view=D.el("section",{class:"view chat-home view-enter","data-filter":"all"});
-    const top=D.el("div",{class:"chat-home-top"}),searchWrap=D.el("div",{class:"chat-search-wrap"}),search=D.el("input",{class:"search chat-search",placeholder:"대화방이나 메시지 검색","aria-label":"대화방 검색"});searchWrap.append(D.el("span",{class:"search-glyph",text:"⌕"}),search,D.el("span",{class:"search-hint",text:"검색"}));
+    const top=D.el("div",{class:"chat-home-top"}),searchWrap=D.el("div",{class:"chat-search-wrap"}),search=D.el("input",{class:"search chat-search",placeholder:"대화방이나 메시지 검색","aria-label":"대화방 검색"});searchWrap.append(D.el("span",{class:"search-glyph","aria-hidden":"true"}),search,D.el("span",{class:"search-hint",text:"검색"}));
     const filters=D.el("div",{class:"chat-filter-tabs","aria-label":"대화 필터"});[["all","전체"],["unread","안읽음"],["favorite","즐겨찾기"],["group","그룹"]].forEach(([mode,label])=>{const button=D.el("button",{class:`chat-filter ${mode==="all"?"active":""}`,type:"button",text:label});button.onclick=()=>{view.dataset.filter=mode;D.all(".chat-filter",filters).forEach(item=>item.classList.toggle("active",item===button));filter(search.value,list,mode,view)};filters.append(button)});
     const sectionHead=D.el("div",{class:"conversation-section-head"},[D.el("strong",{text:"최근 대화"}),D.el("span",{class:"conversation-count",text:`${rooms.length}`})]);top.append(searchWrap,filters,sectionHead);
     const list=D.el("div",{class:"conversation-list",id:"conversationList"});search.oninput=e=>filter(e.target.value,list,view.dataset.filter,view);
@@ -66,7 +66,7 @@ MiniTalk.Features.Chats=(()=>{
     view.append(top,list);host.replaceChildren(view);filter("",list,"all",view)
   }
   function roomItem(room){const D=MiniTalk.UI.Dom,unread=MiniTalk.Chat.Unread.count(room.id),messageAt=roomMessageTime(room),time=messageAt?new Date(messageAt).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}):"",tone=[...(room.id||"")].reduce((sum,char)=>sum+char.charCodeAt(0),0)%4,node=D.el("button",{class:"conversation-item conversation-enter",type:"button","data-room-id":room.id,"data-tone":String(tone),"data-unread":unread?"1":"0","data-favorite":isFavorite(room.id)?"1":"0","data-member":canViewRoom(room)?"1":"0","data-room-type":room.type||"group"},[
-    D.el("div",{class:"avatar-wrap"},[D.el("img",{class:"avatar profile-image",src:roomAvatar(room),alt:`${room.title||"대화방"} 이미지`,onerror:event=>{event.currentTarget.onerror=null;event.currentTarget.src="assets/mascot-avatar.png"}}),room.hasPassword?D.el("span",{class:"room-lock-badge",text:"🔒","aria-label":"비밀번호방"}):null]),
+    D.el("div",{class:"avatar-wrap"},[D.el("img",{class:"avatar profile-image",src:roomAvatar(room),alt:`${room.title||"대화방"} 이미지`,onerror:event=>{event.currentTarget.onerror=null;event.currentTarget.src="assets/mascot-avatar.png"}}),room.hasPassword?D.el("span",{class:"room-lock-badge",text:MiniTalk.Realtime.isRoomMember(room)?"🔓":"🔒","aria-label":MiniTalk.Realtime.isRoomMember(room)?"참여 중인 비밀번호방":"잠긴 비밀번호방"}):null]),
     D.el("div",{class:"conversation-main"},[D.el("strong",{class:"conversation-title"},[D.el("span",{text:`${isFavorite(room.id)?"★ ":""}${room.title||room.id}`})]),D.el("p",{text:room.lastMessage||"대화를 시작하세요"})]),
     D.el("div",{class:"conversation-meta"},[D.el("time",{text:time}),unread?D.el("b",{class:"unread",text:String(Math.min(99,unread))}):null])
   ]);let holdTimer=0,holdTriggered=false,startX=0,startY=0;const cancelHold=()=>{clearTimeout(holdTimer);holdTimer=0};node.onpointerdown=event=>{if(event.button!==0)return;holdTriggered=false;startX=event.clientX;startY=event.clientY;holdTimer=setTimeout(()=>{holdTriggered=true;quickRoomActions(room)},620)};node.onpointermove=event=>{if(Math.abs(event.clientX-startX)>10||Math.abs(event.clientY-startY)>10)cancelHold()};node.onpointerup=cancelHold;node.onpointercancel=cancelHold;node.onpointerleave=cancelHold;node.oncontextmenu=event=>{event.preventDefault();cancelHold();quickRoomActions(room)};node.onclick=event=>{if(holdTriggered){event.preventDefault();holdTriggered=false;return}openRoom(room.id)};return node}
@@ -127,7 +127,7 @@ MiniTalk.Features.Chats=(()=>{
     addAction("▧","사진",async()=>{const payload=await MiniTalk.Chat.Attachments.image({camera:false});if(payload)await sendPayload(roomId,payload)});
     addAction("◉","카메라",async()=>{const payload=await MiniTalk.Chat.Attachments.image({camera:true});if(payload)await sendPayload(roomId,payload)});
     addAction("⌁","파일",async()=>{const payload=await MiniTalk.Chat.Attachments.file();if(payload)await sendPayload(roomId,payload)});
-    addAction("▦","QR",async()=>{const text=await MiniTalk.Chat.QR.scan();if(text){input.value=text;input.focus()}});
+    addAction("▣","캡처",async()=>MiniTalk.Tools.Capture.captureAndSend(roomId));
     plus.onclick=()=>{menuOpen=!menuOpen;tray.classList.toggle("hidden",!menuOpen);emojiPanel.classList.add("hidden");emojiOpen=false;plus.classList.toggle("active",menuOpen)};
     emoji.onclick=()=>{emojiOpen=!emojiOpen;emojiPanel.classList.toggle("hidden",!emojiOpen);tray.classList.add("hidden");menuOpen=false;plus.classList.remove("active")};
     const submitText=async text=>{const clean=String(text||"").trim();if(!clean)return;await sendPayload(roomId,{text:clean,type:"text"})};
@@ -151,7 +151,7 @@ MiniTalk.Features.Chats=(()=>{
     const meta=D.el("time",{class:"message-time",text:message.ts?new Date(message.ts).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}):""});content.append(D.el("div",{class:"bubble-line"},mine?[meta,bubble]:[bubble,meta]));row.append(content);return row
   }
   function openImage(src){const D=MiniTalk.UI.Dom,wrap=D.el("div",{class:"image-viewer"}),img=D.el("img",{src,alt:"이미지 크게 보기"});wrap.append(img);wrap.onclick=()=>wrap.remove();D.doc().body.append(wrap)}
-  function openUserProfile(message,profile){const D=MiniTalk.UI.Dom,body=D.el("div",{class:"profile-viewer"}),avatar=D.el("img",{class:"profile-viewer-avatar",src:profile?.avatar||"assets/mascot-avatar.png",alt:"프로필"});avatar.onerror=()=>{avatar.onerror=null;avatar.src="assets/mascot-avatar.png"};body.append(avatar,D.el("strong",{class:"profile-viewer-name",text:message.nickname||"익명"}),D.el("p",{class:"muted profile-viewer-status",text:profile?.statusMsg||"상태메시지가 없습니다."}));MiniTalk.UI.Shell.modal("프로필",body)}
+  function openUserProfile(message,profile){const D=MiniTalk.UI.Dom,body=D.el("div",{class:"profile-viewer"}),avatar=D.el("img",{class:"profile-viewer-avatar",src:profile?.avatar||"assets/mascot-avatar.png",alt:"프로필"});avatar.onerror=()=>{avatar.onerror=null;avatar.src="assets/mascot-avatar.png"};body.append(avatar,D.el("strong",{class:"profile-viewer-name",text:message.nickname||"익명"}),D.el("p",{class:"muted profile-viewer-status",text:profile?.statusMsg||"상태메시지가 없습니다."}));MiniTalk.UI.Shell.modal("프로필",body,{hostClass:"profile-modal-host",modalClass:"profile-modal"})}
   function leave(){MiniTalk.Store.set("activeRoom",null);MiniTalk.Realtime.unsubscribeMessages?.();MiniTalk.Chat.QR.stop?.();if(renderFrame){cancelAnimationFrame(renderFrame);renderFrame=0}}
   bindEvents();return{id:"chats",title:"대화",icon:"◉",render,leave};
 })();

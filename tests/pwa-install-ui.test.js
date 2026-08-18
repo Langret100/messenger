@@ -16,7 +16,7 @@ if(!manifest.icons.some(icon=>icon.purpose==="any"))throw new Error("regular PWA
 if(!manifest.icons.some(icon=>icon.purpose==="maskable"))throw new Error("maskable PWA icon missing");
 if(!index.includes("moaru-apple-touch-v6451.png"))throw new Error("apple touch icon is not linked");
 if(!index.includes('manifest.webmanifest?v=64.5.3'))throw new Error("manifest cache version is stale");
-if(!index.includes("css/app.css?v=64.5.3")||!index.includes("js/adapters/window-mode.js?v=64.5.3"))throw new Error("PWA layout cache version is stale");
+if(!index.includes("css/app.css?v=64.5.4")||!index.includes("js/adapters/window-mode.js?v=64.5.3"))throw new Error("PWA layout cache version is stale");
 if(!index.includes("js/tools/notifications.js?v=64.5.3")||!notifications.includes('icon: "assets/icons/moaru-app-192-v6451.png"'))throw new Error("notification icon is stale");
 if(!windowMode.includes("STANDALONE_BOUNDS={width:400,height:740}"))throw new Error("standalone preferred bounds missing");
 if(!windowMode.includes("requestWindow({width:400,height:740"))throw new Error("PiP preferred bounds missing");

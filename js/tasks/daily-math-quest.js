@@ -180,7 +180,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
 
     return MiniTalk.Tasks.QuestAccordion.wrap({
       subject: "math",
-      icon: "∑",
+      icon: "123",
       title: "오늘의 수학 퀘스트",
       subtitle: "계산과 분수, 미션마다 5문제",
       completed: completedCount,

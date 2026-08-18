@@ -218,10 +218,10 @@ body{min-height:100dvh}
 
 /* 설치형 PWA는 Chrome이 최소 외곽 폭을 강제하거나 첫 resize 요청을 늦게 반영해도
    PiP와 동일한 하단 메뉴 구조를 유지합니다. */
-:root[data-window-mode="standalone"] .workspace{grid-template-columns:1fr;grid-template-rows:1fr 50px}
+:root[data-window-mode="standalone"] .workspace{grid-template-columns:1fr;grid-template-rows:1fr 34px}
 :root[data-window-mode="standalone"] .side-rail{display:none}
 :root[data-window-mode="standalone"] .bottom-nav{display:flex;overflow-x:auto;justify-content:space-around;padding:0 2px env(safe-area-inset-bottom,0px)}
-:root[data-window-mode="standalone"] .bottom-nav .nav-button{flex:1;min-width:0;padding:2px 1px 1px}
+:root[data-window-mode="standalone"] .bottom-nav .nav-button{flex:1;min-width:0;padding:0 1px}
 :root[data-window-mode="standalone"] .view-host{grid-row:1}
 :root[data-window-mode="standalone"] .bottom-nav{grid-row:2}
 
@@ -234,9 +234,9 @@ body{min-height:100dvh}
 .composer-attach-button::before{content:"+";position:absolute;inset:0;display:grid;place-items:center;font-family:Arial,sans-serif;font-size:25px;font-weight:300;line-height:1;transform:translateY(-1px)}
 
 @media(max-width:700px),(pointer:coarse) and (max-width:900px){
-  .workspace{grid-template-rows:1fr calc(50px + env(safe-area-inset-bottom,0px))}
+  .workspace{grid-template-rows:1fr calc(34px + env(safe-area-inset-bottom,0px))}
   .bottom-nav{padding:0 2px env(safe-area-inset-bottom,0px)}
-  .bottom-nav .nav-button{padding:2px 1px 1px}
+  .bottom-nav .nav-button{padding:0 1px}
 }
 :root[data-theme="light"] .header-actions{gap:2px}:root[data-theme="light"] .header-actions .icon-button{width:36px;height:36px;border-radius:11px}
 .profile-modal-host{align-items:center!important;padding:14px!important}.profile-modal-host .profile-modal{width:min(420px,calc(100vw - 28px));max-height:min(82dvh,680px);border-radius:22px;animation:modal-in .2s var(--ease)}

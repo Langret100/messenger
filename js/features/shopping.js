@@ -52,15 +52,14 @@ MiniTalk.Features.Shopping = (() => {
     const D = MiniTalk.UI.Dom;
     return D.el("section", { class: "shop-market-empty" }, [
       D.el("div", { class: "shop-empty-illustration", "aria-hidden": "true" }, [D.el("span", { text: "◇" }), D.el("i", { text: "+" })]),
-      D.el("strong", { text: "상점을 준비하고 있어요" }),
-      D.el("p", { text: "관리자가 상품을 등록하면\n이 곳에 깔끔한 카드로 보여줄게요." })
+      D.el("strong", { text: "상점을 준비하고 있어요" })
     ]);
   }
 
   function inventoryPanel(user, owned, close) {
     const D = MiniTalk.UI.Dom;
     const panel = D.el("aside", { class: "shop-inventory-panel", "aria-label": "보관함" });
-    const closeButton = D.el("button", { class: "icon-button subtle", type: "button", text: "×", "aria-label": "보관함 닫기", onclick: close });
+    const closeButton = D.el("button", { class: "icon-button subtle modal-close-button", type: "button", text: "×", "aria-label": "보관함 닫기", onclick: close });
     panel.append(D.el("header", {}, [D.el("div", {}, [D.el("strong", { text: "보관함" }), D.el("small", { class: "muted", text: user.isGuest ? "로그인 후 이용할 수 있어요" : `보관 상품 ${owned.length}개` })]), closeButton]));
     const inventory = D.el("div", { class: "shop-inventory-list" });
     if (!owned.length) inventory.append(empty(user.isGuest ? "로그인이 필요해요" : "보관함이 비어 있어요", user.isGuest ? "로그인하면 구매한 상품을 확인할 수 있어요." : "구매한 상품과 받은 선물이 여기에 모입니다."));

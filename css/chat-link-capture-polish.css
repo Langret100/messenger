@@ -1,0 +1,12 @@
+/* Chat link preview polish. Kept separate so the existing app.css cache contract stays intact. */
+.bubble.preview-only{padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible}
+.link-preview.youtube-preview{display:grid;grid-template-columns:92px minmax(0,1fr) 18px;align-items:center;gap:10px;width:min(286px,72vw);margin-top:8px;padding:7px;border:1px solid color-mix(in srgb,var(--line) 86%,transparent);border-radius:14px;background:color-mix(in srgb,var(--surface-raised) 94%,var(--accent) 6%);color:var(--text);text-decoration:none;overflow:hidden;box-shadow:0 3px 12px rgba(0,0,0,.08);transition:transform .16s var(--ease),border-color .16s var(--ease),background .16s var(--ease)}
+.preview-only .link-preview.youtube-preview{margin-top:0}
+.link-preview.youtube-preview:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 34%,var(--line));background:color-mix(in srgb,var(--surface-raised) 90%,var(--accent) 10%)}
+.link-preview.youtube-preview img{width:92px;height:56px;object-fit:cover;border-radius:10px;background:var(--surface-3)}
+.link-preview.youtube-preview .link-preview-meta{min-width:0;display:grid;align-content:center;gap:3px}
+.link-preview.youtube-preview strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;text-overflow:ellipsis;font-size:11px;line-height:1.25;letter-spacing:-.01em}
+.link-preview.youtube-preview small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);opacity:1;font-size:9px}
+.link-preview.youtube-preview .link-preview-arrow{display:grid;place-items:center;width:18px;height:26px;color:var(--muted);font-size:20px;font-weight:500;line-height:1}
+.mine .link-preview.youtube-preview{background:color-mix(in srgb,var(--surface) 92%,var(--accent) 8%);color:var(--text);border-color:color-mix(in srgb,var(--accent) 22%,var(--line))}
+@media(max-width:520px){.link-preview.youtube-preview{grid-template-columns:84px minmax(0,1fr) 16px;width:min(270px,74vw);gap:8px}.link-preview.youtube-preview img{width:84px;height:52px}.link-preview.youtube-preview strong{font-size:10px}}

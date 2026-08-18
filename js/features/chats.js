@@ -147,7 +147,11 @@ MiniTalk.Features.Chats=(()=>{
     }else if(type==="file"){
       bubble.classList.add("file-bubble");const a=D.el("a",{href:message.fileUrl||"#",target:"_blank",rel:"noopener noreferrer",class:"file-card"},[D.el("span",{text:"⌁"}),D.el("span",{},[D.el("strong",{text:message.fileName||"첨부 파일"}),D.el("small",{text:"파일 열기"})])]);bubble.append(a)
     }else{
-      if(MiniTalk.Chat.Emoji.isOnlyCustom(message.text,message.emoticon)||MiniTalk.Chat.Emoji.isOnlyUnicode(message.text))bubble.classList.add("emoji-only");MiniTalk.Chat.Emoji.appendText(message.text||"",bubble,message.emoticon);MiniTalk.Chat.Linkify.enhance(bubble);const preview=MiniTalk.Chat.Linkify.preview(message.text||"",D.doc());if(preview&&!message.emoticon)bubble.append(preview)
+      const rawText=message.text||"",preview=!message.emoticon?MiniTalk.Chat.Linkify.preview(rawText,D.doc()):null,shownText=preview?MiniTalk.Chat.Linkify.displayText(rawText):rawText;
+      if(MiniTalk.Chat.Emoji.isOnlyCustom(shownText,message.emoticon)||MiniTalk.Chat.Emoji.isOnlyUnicode(shownText))bubble.classList.add("emoji-only");
+      if(shownText)MiniTalk.Chat.Emoji.appendText(shownText,bubble,message.emoticon);
+      if(shownText)MiniTalk.Chat.Linkify.enhance(bubble);
+      if(preview){if(!shownText)bubble.classList.add("preview-only");bubble.append(preview)}
     }
     const meta=D.el("time",{class:"message-time",text:message.ts?new Date(message.ts).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}):""});content.append(D.el("div",{class:"bubble-line"},mine?[meta,bubble]:[bubble,meta]));row.append(content);return row
   }

@@ -3,7 +3,15 @@ MiniTalk.Tools = MiniTalk.Tools || {};
 MiniTalk.Tools.Capture = (() => {
   async function capture() {
     if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("화면 캡처를 지원하지 않습니다.");
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    MiniTalk.UI.Shell.toast("캡처할 화면에서 현재 모아루 탭을 선택하세요.");
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: "browser" },
+      audio: false,
+      preferCurrentTab: true,
+      selfBrowserSurface: "include",
+      surfaceSwitching: "exclude",
+      monitorTypeSurfaces: "exclude"
+    });
     try {
       const video = document.createElement("video");
       video.srcObject = stream;

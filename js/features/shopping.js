@@ -1,14 +1,38 @@
 /* 쇼핑 탭: 관리자 상품 카탈로그와 사용자 보관함을 표시합니다. */
 MiniTalk.Features.Shopping = (() => {
   const Service = MiniTalk.Shopping.StoreService;
-  let inventoryOpen = false;
+  let inventoryOpen = false, refreshTimer = 0;
 
   MiniTalk.Events.on("state:shopCatalog", refreshVisible);
   MiniTalk.Events.on("state:shopInventory", refreshVisible);
 
   function refreshVisible() {
-    const route = MiniTalk.Store.get("route"), host = MiniTalk.UI.Dom.byId("viewHost");
-    if (route === "shopping" && host) render(host, { animate: false, preserveScroll: true, refreshCatalog: false });
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      refreshTimer = 0;
+      const route = MiniTalk.Store.get("route"), host = MiniTalk.UI.Dom.byId("viewHost");
+      if (route === "shopping" && host) patchVisible(host);
+    }, 140);
+  }
+
+  function patchVisible(host) {
+    const D = MiniTalk.UI.Dom, screen = host.querySelector(".shopping-screen"), view = host.querySelector(".shopping-view");
+    if (!screen || !view) return render(host, { animate: false, preserveScroll: true, refreshCatalog: false });
+    const user = MiniTalk.Store.get("user") || {}, products = Service.products(), owned = user.isGuest ? [] : Service.inventory(), scrollTop = screen.scrollTop;
+    screen.querySelector(".shop-market-hero")?.replaceWith(shopHero(products.length, user.isGuest));
+    const catalog = screen.querySelector(".shop-product-grid");
+    if (catalog) {
+      catalog.classList.toggle("is-empty", !products.length);
+      catalog.replaceChildren(...(products.length ? products.map(product => productCard(product, user.isGuest)) : [marketEmpty()]));
+    }
+    const oldPanel = view.querySelector(".shop-inventory-panel");
+    if (inventoryOpen) {
+      const panel = inventoryPanel(user, owned, () => { inventoryOpen = false;render(host); });
+      oldPanel ? oldPanel.replaceWith(panel) : view.insertBefore(panel, view.querySelector(".shop-inventory-fab"));
+    } else oldPanel?.remove();
+    const button = D.el("button", { class: `shop-inventory-fab${inventoryOpen ? " active" : ""}`, type: "button", "aria-expanded": String(inventoryOpen), "aria-label": inventoryOpen ? "보관함 닫기" : "보관함 열기", onclick: () => { inventoryOpen = !inventoryOpen;render(host); } }, [D.el("small", { text: "보관함" }), owned.length ? D.el("b", { text: String(owned.length) }) : null].filter(Boolean));
+    const oldButton = view.querySelector(".shop-inventory-fab");oldButton ? oldButton.replaceWith(button) : view.append(button);
+    screen.scrollTop = scrollTop;
   }
 
   function render(host, options = {}) {
@@ -89,7 +113,7 @@ MiniTalk.Features.Shopping = (() => {
     const confirm = D.el("button", { class: "button primary", type: "button", text: `${product.price} 코인으로 구매` });
     confirm.onclick = async () => {
       confirm.disabled = true;
-      try { await Service.purchase(product); MiniTalk.UI.Shell.closeModal(); MiniTalk.UI.Shell.toast(`${product.name}을(를) 구매했습니다.`); refreshVisible(); }
+      try { await Service.purchase(product); MiniTalk.UI.Shell.closeModal(); MiniTalk.UI.Shell.toast(`${product.name}을(를) 구매했습니다.`); }
       catch (error) {
         if (error.productChanged) {
           MiniTalk.UI.Shell.closeModal();

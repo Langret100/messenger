@@ -5,6 +5,7 @@ const calls=[];
 let inventoryStateChanges=0;
 const persisted=new Map();
 let rejectPurchase=false;
+let rejectGift=false;
 const ctx={console,EventTarget,Event,CustomEvent:CE,window:null,document:{},crypto:{randomUUID:()=>cryptoNode.randomUUID()},setTimeout,clearTimeout};
 ctx.window=ctx;
 vm.createContext(ctx);
@@ -21,7 +22,7 @@ ctx.MiniTalk.AuthApi={
   shopDeleteProduct:async(userId,token,id)=>{calls.push(['delete-product',userId,token,id]);return{ok:true}},
   shopInventory:async()=>Object.values(ctx.MiniTalk.Store.get('shopInventory')||{}),
   shopUse:async payload=>{calls.push(['use',payload]);return{ok:true,usedAt:Date.now()}},
-  shopGift:async payload=>{calls.push(['gift',payload]);return{ok:true}}
+  shopGift:async payload=>{calls.push(['gift',payload]);if(rejectGift)throw new Error('gift timeout');return{ok:true}}
 };
 ctx.MiniTalk.AdminSession={requireToken:()=> 'admin-token'};
 ctx.MiniTalk.UserDirectory={all:()=>Object.values(ctx.MiniTalk.Store.get('profiles')||{}).filter(row=>row.user_id!=='user-a'&&!row.user_id.startsWith('guest-'))};
@@ -82,12 +83,15 @@ ctx.MiniTalk.Events.on('state:shopInventory',()=>{inventoryStateChanges++});
   rejectPurchase=true;
   try{await service.purchase({id:'expensive',name:'노트',price:50})}catch{}
   if(calls.filter(x=>x[0]==='add').length!==addCount)throw new Error('rejected purchase must not add inventory');
-  rejectPurchase=false;
+  const failedPurchaseKey=calls.filter(x=>x[0]==='purchase'&&x[1].product.id==='expensive').at(-1)[1].purchaseKey;rejectPurchase=false;
+  await service.purchase({id:'expensive',name:'노트',price:50});
+  const retriedPurchaseKey=calls.filter(x=>x[0]==='purchase'&&x[1].product.id==='expensive').at(-1)[1].purchaseKey;if(retriedPurchaseKey!==failedPurchaseKey)throw new Error('purchase retry changed its idempotency key and can charge twice after a timeout');
   await service.use('ready');
-  await service.gift('ready','user-b');
+  rejectGift=true;try{await service.gift('ready','user-b')}catch{}rejectGift=false;await service.gift('ready','user-b');
   if(!calls.some(x=>x[0]==='use'&&x[1].inventoryId==='ready'))throw new Error('use action was not forwarded to Apps Script');
   if(!calls.some(x=>x[0]==='legacy-use'&&x[1]==='ready'))throw new Error('used state was not synchronized to Firebase inventory');
   if(!calls.some(x=>x[0]==='gift'&&x[1].targetId==='user-b'))throw new Error('gift action was not forwarded to Apps Script');
+  const giftCalls=calls.filter(x=>x[0]==='gift'&&x[1].targetId==='user-b');if(giftCalls.length!==2||!giftCalls[0][1].requestId||giftCalls[0][1].requestId!==giftCalls[1][1].requestId)throw new Error('gift retry changed its idempotency key');
 
   await service.refreshCatalog(true);
   if(service.products().map(x=>x.id).join(',')!=='server-product')throw new Error('catalog must load from the server API');

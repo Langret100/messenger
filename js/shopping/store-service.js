@@ -5,7 +5,9 @@ MiniTalk.Shopping.StoreService = (() => {
   const CATALOG_CACHE_KEY = "shop.catalog.cache.v2";
   const objectValue = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-  let catalogPromise = null, catalogLoadedAt = 0, inventoryPromise = null, pollTimer = 0, activeUserId = "";
+  let catalogPromise = null, catalogLoadedAt = 0, inventoryPromise = null, pollTimer = 0, activeUserId = "", inventoryVersion = 0;
+  const pendingPurchaseKeys = new Map();
+  const pendingGiftKeys = new Map();
 
   function user() { return MiniTalk.Store.get("user") || {}; }
   function requireLogin() { const current=user();if(!current.user_id||current.isGuest)throw new Error("로그인 후 이용할 수 있어요.");return current; }
@@ -15,6 +17,8 @@ MiniTalk.Shopping.StoreService = (() => {
   function writeCatalog(catalog) { const current=objectValue(MiniTalk.Store.get("shopCatalog"));if(sameValue(current,catalog))return false;MiniTalk.Store.set("shopCatalog",catalog);MiniTalk.Persistence.set(CATALOG_CACHE_KEY,catalog);return true; }
   function hydrateCatalogCache() { const cached=objectValue(MiniTalk.Persistence.get(CATALOG_CACHE_KEY,{}));if(Object.keys(cached).length&&!Object.keys(objectValue(MiniTalk.Store.get("shopCatalog"))).length)MiniTalk.Store.set("shopCatalog",cached); }
   hydrateCatalogCache();
+
+  MiniTalk.Events.on("rt:command",command=>{if(command?.type!=="SHOP_GIFT")return;refreshInventory(true).catch(error=>console.warn("선물 보관함 즉시 갱신 실패",error))});
 
   // Firebase 호환 보관함과 Apps Script 보관함을 합쳐 기존 구매품을 잃지 않습니다.
   MiniTalk.Events.on("rt:shop-inventory", value=>{const current=objectValue(MiniTalk.Store.get("shopInventory")),merged={...current,...objectValue(value)};if(!sameValue(current,merged))MiniTalk.Store.set("shopInventory",merged)});
@@ -42,14 +46,20 @@ MiniTalk.Shopping.StoreService = (() => {
   }
   async function refreshInventory(force=false) {
     const current=user();if(!current.user_id||current.isGuest)return[];
+    const currentUserId=String(current.user_id);
+    // 로그인 직후 start()보다 보관함 갱신이 먼저 호출되어도 첫 응답을 버리지 않습니다.
+    // 다른 계정으로 바뀐 경우에는 이전 계정의 진행 중 응답을 무효화하고 새 캐시로 교체합니다.
+    if(activeUserId!==currentUserId){const hadActiveUser=!!activeUserId;inventoryVersion++;inventoryPromise=null;activeUserId=currentUserId;if(hadActiveUser)MiniTalk.Store.set("shopInventory",objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{})))}
     if(!force&&inventoryPromise)return inventoryPromise;
-    inventoryPromise=MiniTalk.AuthApi.shopInventory(current.user_id).then(rows=>publishInventory(rows,current)).finally(()=>{inventoryPromise=null});
+    const version=inventoryVersion,request=MiniTalk.AuthApi.shopInventory(currentUserId).then(rows=>version===inventoryVersion&&activeUserId===currentUserId?publishInventory(rows,current):[]);
+    inventoryPromise=request.finally(()=>{if(version===inventoryVersion)inventoryPromise=null});
     return inventoryPromise;
   }
   function start(current=user()) {
     hydrateCatalogCache();refreshCatalog(true).catch(error=>console.warn("상품 목록 미리 불러오기 실패",error));
-    if(!current.user_id||current.isGuest)return;
-    if(activeUserId!==current.user_id){clearInterval(pollTimer);pollTimer=0;activeUserId=current.user_id;const cached=objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{}));if(Object.keys(cached).length)MiniTalk.Store.set("shopInventory",cached)}
+    const nextUserId=!current.user_id||current.isGuest?"":String(current.user_id);
+    if(activeUserId!==nextUserId){inventoryVersion++;clearInterval(pollTimer);pollTimer=0;inventoryPromise=null;activeUserId=nextUserId;const cached=activeUserId?objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{})):{};MiniTalk.Store.set("shopInventory",cached)}
+    if(!activeUserId)return;
     refreshInventory(true).catch(error=>console.warn("보관함 미리 불러오기 실패",error));
     if(!pollTimer)pollTimer=setInterval(()=>refreshInventory(true).catch(()=>{}),15000);
   }
@@ -62,7 +72,7 @@ MiniTalk.Shopping.StoreService = (() => {
 
   async function purchase(product) {
     const current=requireLogin(),item=normalizeProduct(product);if(!item.id||!item.name||!item.price)throw new Error("구매할 상품 정보가 올바르지 않습니다.");
-    const purchaseKey=`${current.user_id}:${item.id}:${crypto.randomUUID()}`;
+    const pendingKey=`${current.user_id}:${item.id}`,purchaseKey=pendingPurchaseKeys.get(pendingKey)||`${pendingKey}:${crypto.randomUUID()}`;pendingPurchaseKeys.set(pendingKey,purchaseKey);
     let result;
     try {
       // 별도 사전 조회 없이 기존 구매 요청에 화면의 상품 개정 정보를 함께 보냅니다.
@@ -70,16 +80,17 @@ MiniTalk.Shopping.StoreService = (() => {
     } catch(error) {
       if(["PRODUCT_CHANGED","PRICE_CHANGED","PRODUCT_NOT_AVAILABLE"].includes(error?.code)) {
         await refreshCatalog(true).catch(()=>{});
+        pendingPurchaseKeys.delete(pendingKey);
         error.productChanged=true;
       }
       throw error;
     }
     const stored=result.item||{productId:item.id,name:item.name,description:item.description,imageUrl:item.imageUrl,price:item.price,purchaseKey,purchasedAt:Date.now(),createdAt:Date.now()};
     await MiniTalk.Realtime.addShopInventory(current.user_id,stored);await refreshInventory(true).catch(()=>{});
-    const balance=result.newCoin??result.coin??result.balance;if(balance!=null)MiniTalk.Economy.CoinWallet.setLocal(balance,"purchase");else await MiniTalk.Economy.CoinWallet.refresh(true);return result;
+    const balance=result.newCoin??result.coin??result.balance;if(balance!=null)MiniTalk.Economy.CoinWallet.setLocal(balance,"purchase");else await MiniTalk.Economy.CoinWallet.refresh(true);pendingPurchaseKeys.delete(pendingKey);return result;
   }
-  async function use(id) { const current=requireLogin(),item=inventory().find(row=>row.id===id);if(!item||item.usedAt)throw new Error("사용할 수 없는 상품입니다.");const result=await MiniTalk.AuthApi.shopUse({userId:current.user_id,inventoryId:id,item});try{await MiniTalk.Realtime.useShopInventory(id)}catch(error){console.warn("Firebase 보관함 사용 상태 동기화 실패",error)}await refreshInventory(true);return result.usedAt; }
-  async function gift(id,targetId) { const current=requireLogin(),item=inventory().find(row=>row.id===id);if(!item||item.usedAt)throw new Error("선물할 수 없는 상품입니다.");const target=recipients().find(row=>row.user_id===targetId);if(!target)throw new Error("선물할 사용자를 찾을 수 없습니다.");await MiniTalk.AuthApi.shopGift({userId:current.user_id,nickname:current.nickname,targetId:target.user_id,inventoryId:id,item});const currentItems={...objectValue(MiniTalk.Store.get("shopInventory"))};delete currentItems[id];MiniTalk.Store.set("shopInventory",currentItems);MiniTalk.Persistence.set(inventoryCacheKey(current.user_id),currentItems);await refreshInventory(true);return{targetId:target.user_id,targetNickname:target.nickname}; }
+  async function use(id) { const current=requireLogin(),item=inventory().find(row=>row.id===id);if(!item||item.usedAt)throw new Error("사용할 수 없는 상품입니다.");const result=await MiniTalk.AuthApi.shopUse({userId:current.user_id,inventoryId:id,item}),usedAt=Number(result.usedAt)||Date.now();try{await MiniTalk.Realtime.useShopInventory(id,usedAt)}catch(error){console.warn("Firebase 보관함 사용 상태 동기화 실패",error)}await refreshInventory(true);return usedAt; }
+  async function gift(id,targetId) { const current=requireLogin(),item=inventory().find(row=>row.id===id);if(!item||item.usedAt)throw new Error("선물할 수 없는 상품입니다.");const target=recipients().find(row=>row.user_id===targetId);if(!target)throw new Error("선물할 사용자를 찾을 수 없습니다.");const pendingKey=`${current.user_id}:${id}:${target.user_id}`,requestId=pendingGiftKeys.get(pendingKey)||crypto.randomUUID();pendingGiftKeys.set(pendingKey,requestId);await MiniTalk.AuthApi.shopGift({userId:current.user_id,nickname:current.nickname,targetId:target.user_id,inventoryId:id,item,requestId});pendingGiftKeys.delete(pendingKey);try{await MiniTalk.Realtime.removeShopInventory?.(id)}catch(error){console.warn("Firebase 보관함 선물 항목 제거 실패",error)}const currentItems={...objectValue(MiniTalk.Store.get("shopInventory"))};delete currentItems[id];MiniTalk.Store.set("shopInventory",currentItems);MiniTalk.Persistence.set(inventoryCacheKey(current.user_id),currentItems);MiniTalk.Realtime.notifyCommandTargets?.([target.user_id]);await refreshInventory(true);return{targetId:target.user_id,targetNickname:target.nickname}; }
 
   return{products,refreshCatalog,refreshInventory,start,saveProduct,deleteProduct,inventory,recipients,purchase,use,gift,normalizeProduct,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
 })();

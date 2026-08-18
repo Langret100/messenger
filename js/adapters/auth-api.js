@@ -12,12 +12,17 @@ MiniTalk.AuthApi = (() => {
     PRODUCT_NOT_AVAILABLE: "현재 구매할 수 없는 상품입니다.",
     ITEM_NOT_AVAILABLE: "이 상품의 서버 보관함 정보를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.",
     GIFT_ITEM_NOT_AVAILABLE: "이 상품은 현재 선물할 수 없습니다. 보관함을 다시 확인해주세요.",
+    GIFT_REQUEST_CONFLICT: "이전 선물 요청 정보와 현재 대상이 다릅니다. 보관함을 다시 열어주세요.",
     SHOP_BUSY: "구매 요청이 많습니다. 잠시 후 다시 시도해주세요.",
     INVALID_PRODUCT_IMAGE: "상품 이미지 형식이 올바르지 않습니다.",
     PRODUCT_IMAGE_TOO_LARGE: "압축된 상품 이미지가 너무 큽니다.",
     PRODUCT_IMAGE_UPLOAD_FAILED: "상품 이미지를 서버에 저장하지 못했습니다.",
     INVALID_COIN_AMOUNT: "코인 증감 수량이 올바르지 않습니다.",
     COIN_REWARD_FAILED: "코인 보상 처리에 실패했습니다.",
+    COIN_REWARD_PENDING: "코인 지급 상태를 확인하고 있습니다. 잠시 후 완료를 다시 눌러주세요.",
+    COIN_REWARD_STATE_CONFLICT: "코인 잔액이 다른 작업으로 변경되어 자동 완료하지 못했습니다. 잔액을 확인해주세요.",
+    COIN_REQUEST_CONFLICT: "이전 코인 요청과 현재 입력이 다릅니다. 관리자 화면을 다시 열어주세요.",
+    COIN_SHEET_TEMPORARY_ERROR: "코인 시트 연결이 일시적으로 불안정합니다. 잠시 후 다시 시도해주세요.",
     NO_TARGETS: "대상 사용자를 선택하세요.",
     INVALID_TASK_TITLE: "과제 제목을 입력하세요.",
     TASK_DESCRIPTION_TOO_LONG: "과제 설명은 1,000자 이하로 입력하세요.",
@@ -33,13 +38,25 @@ MiniTalk.AuthApi = (() => {
   async function post(payload) {
     const body = new URLSearchParams();
     Object.entries(payload).forEach(([key, value]) => body.set(key, String(value ?? "")));
-    const response = await fetch(MiniTalkConfig.sheetUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-      body
-    });
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
+    let response;
+    try {
+      response = await fetch(MiniTalkConfig.sheetUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body,
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") throw new Error("서버 응답이 지연되고 있습니다. 잠시 후 다시 시도하세요.");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!response.ok) throw new Error(`서버 오류 ${response.status}`);
-    const data = await response.json();
+    let data;
+    try { data = await response.json(); }
+    catch (error) { throw new Error("서버 응답을 읽지 못했습니다. 잠시 후 다시 시도해주세요."); }
     if (!data?.ok) {
       const error = new Error(data?.message || errorMessages[data?.error] || data?.error || "요청 실패");
       error.code = data?.error || "REQUEST_FAILED";
@@ -113,38 +130,40 @@ MiniTalk.AuthApi = (() => {
       const data = await post({ mode: "shop_inventory", user_id: userId });
       return Array.isArray(data.items) ? data.items : [];
     },
-    async shopGift({ userId, nickname, targetId, inventoryId, item }) {
-      return post({ mode: "shop_gift", user_id: userId, nickname, target_user_id: targetId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) });
+    async shopGift({ userId, nickname, targetId, inventoryId, item, requestId }) {
+      return post({ mode: "shop_gift", user_id: userId, nickname, target_user_id: targetId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" });
     },
     async shopUse({ userId, inventoryId, item }) {
       return post({ mode: "shop_use", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) });
     },
-    async adminDispatch({ userId, adminToken, targets, type, payload }) {
+    async adminDispatch({ userId, adminToken, targets, type, payload, requestId }) {
       return post({
         mode: "admin_dispatch",
         user_id: userId,
         admin_token: adminToken,
         targets_json: JSON.stringify(targets || []),
         command_type: type,
-        payload_json: JSON.stringify(payload || {})
+        payload_json: JSON.stringify(payload || {}),
+        request_id: requestId || ""
       });
     },
-    async adminCoinReward({ userId, adminToken, targets, amount, reason }) {
+    async adminCoinReward({ userId, adminToken, targets, amount, reason, requestId }) {
       return post({
         mode: "admin_coin_reward",
         user_id: userId,
         admin_token: adminToken,
         targets_json: JSON.stringify(targets || []),
         amount,
-        reason: reason || "관리자 보상"
+        reason: reason || "관리자 보상",
+        request_id: requestId || ""
       });
     },
     async adminUserBalances(userId, adminToken) {
       const data = await post({ mode: "admin_user_balances", user_id: userId, admin_token: adminToken });
       return Array.isArray(data.users) ? data.users : [];
     },
-    async adminTaskAssign({ userId, adminToken, targets, title, description, rewardCoin }) {
-      return post({ mode: "admin_task_assign", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []), title, description, reward_coin: rewardCoin });
+    async adminTaskAssign({ userId, adminToken, targets, title, description, rewardCoin, requestId }) {
+      return post({ mode: "admin_task_assign", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []), title, description, reward_coin: rewardCoin, request_id: requestId || "" });
     },
     async adminTaskList(userId, adminToken) {
       const data = await post({ mode: "admin_task_list", user_id: userId, admin_token: adminToken });

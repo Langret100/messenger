@@ -358,7 +358,9 @@ function doPost(e) {
     }
   } catch (err) {
     Logger.log("doPost error: " + err);
-    return jsonResponse_({ ok: false, error: String(err) });
+    const message = String(err && err.message ? err.message : err);
+    const errorCode = /^[A-Z][A-Z0-9_]{2,80}$/.test(message) ? message : String(err);
+    return jsonResponse_({ ok: false, error: errorCode });
   }
 }
 

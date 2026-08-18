@@ -28,7 +28,16 @@ MiniTalk.Economy.CoinWallet = (() => {
     const userId = MiniTalk.Store.get("user")?.user_id || "guest";
     MiniTalk.Store.set("coins", next);
     MiniTalk.Persistence.set(CACHE_KEY, { userId, value: next, source, fetchedAt: Date.now() });
+    syncConnectedBadges(next);
     return next;
+  }
+
+  function syncConnectedBadges(amount = value()) {
+    const doc = MiniTalk.UI.Dom.doc();
+    doc?.querySelectorAll?.(".coin-wallet-badge").forEach(button => {
+      const count = button.querySelector(".coin-count");
+      if (count) update(button, count, amount);
+    });
   }
 
   async function refresh(force = false) {
@@ -91,5 +100,5 @@ MiniTalk.Economy.CoinWallet = (() => {
     button.setAttribute("aria-label", `보유 코인 ${amount}개. 새로고침`);
   }
 
-  return { value, refresh, setLocal, badge, requiresLogin };
+  return { value, refresh, setLocal, badge, requiresLogin, syncConnectedBadges };
 })();

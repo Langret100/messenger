@@ -15,5 +15,6 @@ ok(css.includes('.auth-host{min-height:0;overflow:auto;display:grid;align-conten
 ok(css.includes('body{min-height:100dvh}'),'desktop app shell must fill the viewport for vertical centering');
 ok(css.includes('.auth-host{align-content:safe center}'),'login card safe vertical centering is missing');
 ok(css.includes('.auth-brand .app-mark{width:42px;height:42px;margin:0'),'login brand icon alignment is missing');
-ok(html.includes('rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png?v=64.5"'),'browser tab must use the Moaru mascot favicon');
+ok(html.includes('rel="icon" type="image/png" href="assets/mascot-avatar.png?v=64.5.1"'),'browser tab must keep the Moaru mascot favicon');
+ok(source.includes('app-mark app-mark-mascot')&&source.includes('assets/mascot-avatar.png?v=64.5.1'),'login brand must use the Moaru mascot');
 console.log('AUTH_SESSION_UI_OK');

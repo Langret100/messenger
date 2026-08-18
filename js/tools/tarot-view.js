@@ -128,7 +128,19 @@ MiniTalk.Tools.TarotView = (() => {
 
   function renderResult(stage, result, returning) {
     const D = MiniTalk.UI.Dom;
-    const wrap = D.el("div", { class: `tarot-result ${returning ? "returning" : "fresh"}` });
+    const wrap = D.el("div", {
+      class: `tarot-result ${returning ? "returning" : "fresh"}`,
+      role: "button",
+      tabindex: "0",
+      "aria-label": "타로 결과 닫기",
+      onclick: close,
+      onkeydown: event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          close();
+        }
+      }
+    });
     const inner = D.el("div", { class: `tarot-reveal-inner ${returning ? "settled" : ""}` }, [
       D.el("div", { class: "tarot-reveal-back", text: "✦" }),
       D.el("img", {

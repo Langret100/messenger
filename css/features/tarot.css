@@ -40,14 +40,15 @@
   width: 32px;
   height: 32px;
   border: 0;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, .08);
+  border-radius: 0;
+  background: transparent;
   color: #fff;
   font-size: 20px;
   cursor: pointer;
+  opacity: .78;
 }
 
-.tarot-close:hover { background: rgba(255, 255, 255, .14); }
+.tarot-close:hover { background: transparent; opacity: 1; }
 
 .tarot-stage {
   position: relative;
@@ -171,7 +172,8 @@
 }
 
 .tarot-disclaimer { display: block; margin: 16px 0 0; color: #8f9bc2; font-size: 8px; line-height: 1.5; text-align: center; }
-.tarot-result { width: min(680px, 100%); display: grid; grid-template-columns: minmax(170px, 240px) minmax(0, 1fr); align-items: center; gap: 26px; padding: 10px; }
+.tarot-result { width: min(680px, 100%); display: grid; grid-template-columns: minmax(170px, 240px) minmax(0, 1fr); align-items: center; gap: 26px; padding: 10px; cursor: pointer; }
+.tarot-result:focus-visible { outline: 2px solid #f6d477; outline-offset: 4px; border-radius: 16px; }
 
 /* 카드 비율은 최적화된 PNG 원본과 동일하게 유지합니다. */
 .tarot-reveal {

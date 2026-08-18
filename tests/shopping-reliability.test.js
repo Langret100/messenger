@@ -25,5 +25,5 @@ if(!clarity.includes('grid-template-rows: minmax(0, 1fr) 56px')||!clarity.includ
 if(!service.includes('sameValue')||!ui.includes('preserveScroll: true')||!ui.includes('animate: false'))throw new Error('unchanged shop polling can still redraw or jump the whole view');
 if(!service.includes('MiniTalk.Realtime.useShopInventory(id)'))throw new Error('used state is not synchronized to Firebase inventory');
 if(!ui.includes('button?.disabled')||!ui.includes('button.textContent = "처리 중"'))throw new Error('duplicate inventory use clicks are not blocked');
-if(!html.includes('css/features/shopping-store.css?v=64.5.5')||!html.includes('css/features/display-clarity.css?v=64.5.5')||!html.includes('js/features/shopping.js?v=64.5.5')||!html.includes('js/shopping/store-service.js?v=64.5.5')||!html.includes('js/tasks/daily-math-quest.js?v=64.5.4'))throw new Error('shopping or math cache versions are stale');
+if(!html.includes('css/features/shopping-store.css?v=64.5.5')||!html.includes('css/features/display-clarity.css?v=64.5.6')||!html.includes('js/features/shopping.js?v=64.5.6')||!html.includes('js/shopping/store-service.js?v=64.5.5')||!html.includes('js/tasks/daily-math-quest.js?v=64.5.4'))throw new Error('shopping or math cache versions are stale');
 console.log('SHOPPING_RELIABILITY_OK');

@@ -25,7 +25,7 @@ function run(userAgent,isMobile){
 
 const whaleBook=run("Mozilla/5.0 (X11; CrOS x86_64) Chrome/140",false);
 if(JSON.stringify(whaleBook.resizeCalls)!==JSON.stringify([[400,740]]))throw new Error("WhaleBook standalone sizing failed");
-if(whaleBook.moveCalls.length!==1)throw new Error("standalone centering failed");
+if(JSON.stringify(whaleBook.moveCalls)!==JSON.stringify([[952,14]]))throw new Error("standalone bottom-right placement failed");
 const mobile=run("Mozilla/5.0 (Linux; Android 16; Mobile)",true);
 if(mobile.resizeCalls.length)throw new Error("mobile standalone must not be resized");
 console.log("PWA_WINDOW_SIZE_RUNTIME_OK");

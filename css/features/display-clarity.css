@@ -210,3 +210,4 @@ canvas,
   scroll-behavior: auto !important;
   transition-duration: .01ms !important;
 }
+.admin-effect-field{display:grid;gap:9px}.admin-effect-preview{width:min(220px,100%);height:150px;object-fit:contain;justify-self:center;border:1px solid var(--line);border-radius:16px;background:var(--surface-2);padding:10px}.admin-effect-field .button-row{justify-content:center}.admin-image-effect{max-width:min(72vw,520px);max-height:72vh;object-fit:contain;border-radius:18px}.admin-image-effect.stamp-effect{width:min(44vw,260px);height:min(44vw,260px);object-fit:contain;border-radius:0}

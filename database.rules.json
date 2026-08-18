@@ -3,21 +3,21 @@
     ".read": false,
     ".write": false,
     "socialChat": {
-      ".read": "auth != null",
+      ".read": true,
       ".indexOn": ["ts"],
       "$msgId": {
-        ".read": "auth != null",
-        ".write": "auth != null",
+        ".read": true,
+        ".write": true,
         ".validate": "newData.hasChildren(['user_id','nickname','text','ts']) && newData.child('text').isString() && newData.child('text').val().length <= 500 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber()"
       }
     },
     "socialChatRooms": {
       "$roomId": {
-        ".read": "auth != null",
+        ".read": true,
         ".indexOn": ["ts"],
         "$msgId": {
-          ".read": "auth != null",
-          ".write": "auth != null",
+          ".read": true,
+          ".write": true,
           ".validate": "newData.hasChildren(['user_id','nickname','ts']) && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber()"
         }
       }
@@ -25,8 +25,8 @@
     "signals": {
       ".indexOn": ["ts"],
       "$roomId": {
-        ".read": "auth != null",
-        ".write": "auth != null",
+        ".read": true,
+        ".write": true,
         ".indexOn": ["ts"],
         "$signalId": {
           ".validate": "newData.child('ts').isNumber()"
@@ -35,8 +35,8 @@
     },
     "messages": {
       "$roomId": {
-        ".read": "auth != null",
-        ".write": "auth != null",
+        ".read": true,
+        ".write": true,
         ".indexOn": ["ts"],
         "$msgId": {
           ".validate": "newData.hasChildren(['user_id','ts']) && newData.child('ts').isNumber()"
@@ -44,31 +44,31 @@
       }
     },
     "profiles": {
-      ".read": "auth != null",
+      ".read": true,
       "$nickname": {
-        ".read": "auth != null",
-        ".write": "auth != null",
+        ".read": true,
+        ".write": true,
         ".validate": "$nickname.length <= 30"
       }
     },
     "rooms": {
-      ".read": "auth != null",
+      ".read": true,
       "$roomId": {
-        ".write": "auth != null",
+        ".write": true,
         ".validate": "newData.hasChildren(['name']) && newData.child('name').isString() && newData.child('name').val().length <= 50"
       }
     },
     "fcm_tokens": {
-      ".read": "auth != null",
+      ".read": true,
       "$userId": {
-        ".write": "auth != null",
+        ".write": true,
         ".validate": "newData.hasChildren(['token','user_id','ts']) && newData.child('token').isString() && newData.child('token').val().length > 10 && newData.child('user_id').isString() && newData.child('ts').isNumber()"
       }
     },
     "fcm_active_room": {
-      ".read": "auth != null",
+      ".read": true,
       "$userId": {
-        ".write": "auth != null",
+        ".write": true,
         ".validate": "newData.hasChildren(['room_id','ts']) && newData.child('room_id').isString() && newData.child('ts').isNumber()"
       }
     },

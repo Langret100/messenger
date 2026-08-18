@@ -17,11 +17,11 @@ ok(chats.includes('text:"⌕","aria-label":"검색"')&&chats.includes('class:"se
 ok(css.includes('.room-lock-badge{right:-5px;bottom:-4px;min-width:0;width:auto;height:auto;border:0;border-radius:0;background:transparent;box-shadow:none'),'room lock badge still has a circular overlay');
 ok(html.includes('js/features/chats.js?v=64.5.3'), 'stale cache version for js/features/chats.js');
 ok(html.includes('js/features/auth.js?v=64.5.1'),'stale cache version for js/features/auth.js');
-ok(html.includes('js/app.js?v=64.5.5'),'stale cache version for js/app.js');
+ok(html.includes('js/app.js?v=64.5.6'),'stale cache version for js/app.js');
 ok(html.includes('css/app.css?v=64.5.5'),'stale cache version for css/app.css');
-ok(html.includes('js/ui/shell.js?v=64.5.3'),'stale cache version for js/ui/shell.js');
+ok(html.includes('js/ui/shell.js?v=64.5.6'),'stale cache version for js/ui/shell.js');
 for(const asset of ['js/tools/profile-editor.js','js/tools/capture.js','js/features/tools.js'])ok(html.includes(`${asset}?v=64.4`),`stale cache version for ${asset}`);
-ok(sw.includes('moaru-v64.5.5-stable-shopping-profile-20260818')&&app.includes('sw.js?v=64.5.5'),'service worker v64.5.5 cache update is missing');
+ok(sw.includes('moaru-v64.5.6-admin-window-realtime-effects-20260818')&&app.includes('sw.js?v=64.5.6'),'service worker v64.5.6 cache update is missing');
 ok(shell.includes('modal-close-button')&&css.includes('.modal-close-button::before')&&css.includes('transform:translateY(-1px)'),'common close glyph is not visually centered');
 ok(css.includes('.mine .bubble{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)')&&css.includes('border-color:var(--accent);box-shadow:none'),'outgoing bubble still has a bright transparent ring');
 ok(chats.includes('composer-icon composer-attach-button')&&css.includes('.composer-attach-button::before{content:"+"')&&css.includes('font-size:25px'),'composer attach button is not visibly centered and enlarged');

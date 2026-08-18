@@ -1,12 +1,22 @@
 # 모아루 프로젝트 인수인계
 
+## v64.5.6 현재 상태
+
+- PC 관리자 화면은 별도 1100×820 창에서 동작하고 원래 메신저는 즉시 대화 화면으로 돌아가 동시 사용 가능
+- 관리자 별도 창은 전용 Document·Shell 문맥을 사용하여 원래 메신저의 헤더·모달·토스트와 충돌하지 않음
+- PiP 종료 시 원본 탭까지 로그아웃하고 로그인 화면으로 복귀
+- 관리자 명령은 Apps Script 서버 권한 검증 후 Firebase 신호로 즉시 서버 큐를 확인하며 10초 폴링은 장애 대비용으로 유지
+- 도장 효과는 실제 도장 이미지, 이미지 효과는 파일 선택·카메라 촬영 이미지로 전송
+- 자동 기능·회귀 테스트 39개, 정적 검사, JavaScript·Apps Script 문법 검사 통과
+
 ## 새 작업에서 가장 먼저 할 일
 
 이 파일을 끝까지 읽고 현재 소스를 기준으로 이어서 작업한다. 과거 `토리`, `미니톡`, `마이톡` 명칭은 호환 경로나 오래된 주석을 제외하면 사용자 화면에 다시 사용하지 않는다. 현재 제품명은 **모아루**다.
 
 ## 현재 기준
 
-- 기준 버전: `3.44.0-server-source-integration` / 배포 표기 v64
+- 기준 버전: `v64.5.6-admin-window-realtime-effects` / 배포 표기 v64.5.6
+- 현재 작업 폴더: `C:\Users\USER\Documents\ChatGPT\메신저생성\.work-v64.5.6-full-20260818`
 - 현재 폴더가 웹 앱 전체 소스다.
 - 원본 작업 폴더: `C:\Users\USER\Documents\Codex\2026-08-11\dka\work\mini-talk-current\mini-talk-polished-tori-chat-audited2`
 - 이관된 새 프로젝트: `C:\Users\USER\Documents\Codex\Moaru`

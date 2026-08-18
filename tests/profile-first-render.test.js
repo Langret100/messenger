@@ -8,5 +8,5 @@ const wait=realtime.indexOf('await Promise.all(initialData)');
 const room=realtime.indexOf('await ensureDefaultRoom()',wait);
 if(wait<0||room<wait)throw new Error('profiles and rooms are not awaited before the initial workspace render');
 if(!chats.includes('MiniTalk.Store.set("profiles",profiles||{})'))throw new Error('profile snapshot is not stored before chat rendering');
-for(const ref of ['js/adapters/auth-api.js?v=64.5.5','js/adapters/realtime.js?v=64.5.5'])if(!html.includes(ref))throw new Error(`stale profile/auth cache version: ${ref}`);
+for(const ref of ['js/adapters/auth-api.js?v=64.5.5','js/adapters/realtime.js?v=64.5.6'])if(!html.includes(ref))throw new Error(`stale profile/auth cache version: ${ref}`);
 console.log('PROFILE_FIRST_RENDER_OK');

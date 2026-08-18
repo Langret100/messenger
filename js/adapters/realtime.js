@@ -68,6 +68,9 @@ MiniTalk.Realtime=(()=>{
     const fail=error=>{console.error(errorMessage,error);emit("error",{message:errorMessage,code:String(error?.code||"")})};
     ref.on(event,fn,fail);const off=()=>ref.off(event,fn);unsubs.push(off);return off
   }
+  function bindFirstValue(ref,fn,errorMessage="실시간 데이터를 읽지 못했습니다."){
+    return new Promise(resolve=>{let pending=true;const finish=()=>{if(!pending)return;pending=false;resolve()};const success=snapshot=>{try{fn(snapshot)}finally{finish()}};const fail=error=>{console.error(errorMessage,error);emit("error",{message:errorMessage,code:String(error?.code||"")});finish()};ref.on("value",success,fail);unsubs.push(()=>ref.off("value",success))})
+  }
   function normalizeProfiles(source={}){
     const result={};
     Object.entries(source||{}).forEach(([key,raw])=>{
@@ -124,21 +127,23 @@ MiniTalk.Realtime=(()=>{
   }
 
   async function startFirebase(){
-    bind(db.ref(MiniTalkConfig.paths.rooms),"value",s=>{const source=s.val()||{},rooms={};Object.entries(source).forEach(([id,value])=>{rooms[id]=normalizeRoom(id,value||{})});emit("rooms",rooms)},"대화방 목록을 읽을 권한이 없습니다.");
+    const initialData=[];
+    initialData.push(bindFirstValue(db.ref(MiniTalkConfig.paths.rooms),s=>{const source=s.val()||{},rooms={};Object.entries(source).forEach(([id,value])=>{rooms[id]=normalizeRoom(id,value||{})});emit("rooms",rooms)},"대화방 목록을 읽을 권한이 없습니다."));
     // 프로필 호환 경로는 시트 로그인 사용자도 읽을 수 있으므로 Firebase 익명 인증과 무관하게 구독합니다.
-    bind(db.ref(MiniTalkConfig.paths.legacyProfiles),"value",s=>{legacyProfiles=s.val()||{};publishProfiles()},"기존 프로필 목록을 읽을 권한이 없습니다.");
+    initialData.push(bindFirstValue(db.ref(MiniTalkConfig.paths.legacyProfiles),s=>{legacyProfiles=s.val()||{};publishProfiles()},"기존 프로필 목록을 읽을 권한이 없습니다."));
     if(firebaseAuthenticated){
       presenceRef=db.ref(`${MiniTalkConfig.paths.presence}/${user.user_id}`);
       await presenceRef.set({user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
       presenceRef.onDisconnect().update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});
       bind(db.ref(MiniTalkConfig.paths.presence),"value",s=>emit("presence",s.val()||{}));
-      bind(db.ref(MiniTalkConfig.paths.profiles),"value",s=>{currentProfiles=s.val()||{};publishProfiles()});
+      initialData.push(bindFirstValue(db.ref(MiniTalkConfig.paths.profiles),s=>{currentProfiles=s.val()||{};publishProfiles()}));
       shopInventoryUnsub=bind(db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}`),"value",s=>emit("shop-inventory",s.val()||{}));
       syncPendingShopInventory().catch(error=>console.warn("보관함 대기 항목 동기화 실패",error));
     }else{
       shopInventoryFallback=true;emit("presence",{});publishProfiles();emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));emit("tasks",{});
     }
-    await ensureDefaultRoom();
+    // 첫 대화 화면보다 사용자 프로필·대화방 목록이 먼저 준비되어 기본 이미지가 잠깐 보이는 현상을 막습니다.
+    await Promise.all(initialData);await ensureDefaultRoom();
   }
 
   async function startLocal(){

@@ -8,14 +8,15 @@ MiniTalk.Features.Shopping = (() => {
 
   function refreshVisible() {
     const route = MiniTalk.Store.get("route"), host = MiniTalk.UI.Dom.byId("viewHost");
-    if (route === "shopping" && host) render(host);
+    if (route === "shopping" && host) render(host, { animate: false, preserveScroll: true, refreshCatalog: false });
   }
 
-  function render(host) {
+  function render(host, options = {}) {
     const D = MiniTalk.UI.Dom, user = MiniTalk.Store.get("user") || {};
-    Service.refreshCatalog().catch(error => console.warn("상품 목록을 불러오지 못했습니다.", error));
+    const previousScroll = options.preserveScroll ? Number(host.querySelector(".shopping-screen")?.scrollTop || 0) : 0;
+    if (options.refreshCatalog !== false) Service.refreshCatalog().catch(error => console.warn("상품 목록을 불러오지 못했습니다.", error));
     MiniTalk.UI.Shell.setHeader("쇼핑", [MiniTalk.Economy.CoinWallet.badge({ header: true })]);
-    const view = D.el("section", { class: "view utility-view shopping-view view-enter" });
+    const view = D.el("section", { class: `view utility-view shopping-view${options.animate === false ? "" : " view-enter"}` });
     const wrap = D.el("div", { class: "card-list shopping-screen" });
     const products = Service.products();
     wrap.append(shopHero(products.length, user.isGuest));
@@ -37,6 +38,7 @@ MiniTalk.Features.Shopping = (() => {
     if (inventoryOpen) view.append(inventoryPanel(user, owned, () => { inventoryOpen = false; render(host); }));
     view.append(inventoryButton);
     host.replaceChildren(view);
+    if (previousScroll > 0) wrap.scrollTop = previousScroll;
   }
 
   function shopHero(count, guest) {
@@ -103,10 +105,12 @@ MiniTalk.Features.Shopping = (() => {
   function inventoryCard(item) {
     const D = MiniTalk.UI.Dom, used = Boolean(item.usedAt);
     const actions = D.el("div", { class: "shop-inventory-actions" });
-    if (!used) actions.append(
-      D.el("button", { class: "button secondary compact-button", type: "button", text: "선물", onclick: () => openGift(item) }),
-      D.el("button", { class: "button primary compact-button", type: "button", text: "사용", onclick: () => useItem(item) })
-    );
+    if (!used) {
+      const giftButton = D.el("button", { class: "button secondary compact-button", type: "button", text: "선물", onclick: () => openGift(item) });
+      const useButton = D.el("button", { class: "button primary compact-button", type: "button", text: "사용" });
+      useButton.onclick = () => useItem(item, useButton);
+      actions.append(giftButton, useButton);
+    }
     return D.el("article", { class: `shop-inventory-item${used ? " used" : ""}` }, [
       item.imageUrl ? D.el("img", { class: "shop-inventory-image", src: item.imageUrl, alt: "", loading: "lazy" }) : null,
       D.el("div", { class: "shop-inventory-copy" }, [
@@ -116,9 +120,11 @@ MiniTalk.Features.Shopping = (() => {
     ].filter(Boolean));
   }
 
-  async function useItem(item) {
+  async function useItem(item, button) {
+    if (button?.disabled) return;
+    if (button) { button.disabled = true;button.textContent = "처리 중"; }
     try { await Service.use(item.id); MiniTalk.UI.Shell.toast(`${item.name}을(를) 사용했습니다.`); }
-    catch (error) { MiniTalk.UI.Shell.toast(error.message); }
+    catch (error) { MiniTalk.UI.Shell.toast(error.message || "상품을 사용하지 못했습니다.");if (button?.isConnected) { button.disabled = false;button.textContent = "사용"; } }
   }
 
   async function openGift(item) {

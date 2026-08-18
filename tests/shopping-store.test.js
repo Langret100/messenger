@@ -2,6 +2,7 @@ const fs=require('fs'),vm=require('vm'),path=require('path'),cryptoNode=require(
 const root=path.resolve(__dirname,'..');
 class CE extends Event{constructor(type,options={}){super(type);this.detail=options.detail}}
 const calls=[];
+let inventoryStateChanges=0;
 const persisted=new Map();
 let rejectPurchase=false;
 const ctx={console,EventTarget,Event,CustomEvent:CE,window:null,document:{},crypto:{randomUUID:()=>cryptoNode.randomUUID()},setTimeout,clearTimeout};
@@ -30,6 +31,7 @@ ctx.MiniTalk.Realtime={
   giftShopInventory:async(id,target,nickname)=>calls.push(['legacy-gift',id,target,nickname])
 };
 vm.runInContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'utf8'),ctx,{filename:'js/shopping/store-service.js'});
+ctx.MiniTalk.Events.on('state:shopInventory',()=>{inventoryStateChanges++});
 
 (async()=>{
   const service=ctx.MiniTalk.Shopping.StoreService;
@@ -56,6 +58,10 @@ vm.runInContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'
     recent:{id:'recent',name:'노트',createdAt:now-10,usedAt:now-2*86400000},
     expired:{id:'expired',name:'지우개',createdAt:now-20,usedAt:now-8*86400000}
   });
+  await service.refreshInventory(true);
+  const changesAfterNormalize=inventoryStateChanges;
+  await service.refreshInventory(true);
+  if(inventoryStateChanges!==changesAfterNormalize)throw new Error('unchanged inventory polling must not emit another state change');
   const visible=service.inventory(now).map(x=>x.id);
   if(!visible.includes('ready')||!visible.includes('recent')||visible.includes('expired'))throw new Error('used-item seven-day visibility is invalid');
 
@@ -80,6 +86,7 @@ vm.runInContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'
   await service.use('ready');
   await service.gift('ready','user-b');
   if(!calls.some(x=>x[0]==='use'&&x[1].inventoryId==='ready'))throw new Error('use action was not forwarded to Apps Script');
+  if(!calls.some(x=>x[0]==='legacy-use'&&x[1]==='ready'))throw new Error('used state was not synchronized to Firebase inventory');
   if(!calls.some(x=>x[0]==='gift'&&x[1].targetId==='user-b'))throw new Error('gift action was not forwarded to Apps Script');
 
   await service.refreshCatalog(true);

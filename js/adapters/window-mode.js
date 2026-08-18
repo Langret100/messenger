@@ -19,6 +19,7 @@ MiniTalk.WindowMode=(()=>{
   const BOUNDS_VERSION=4;
   const DEFAULT_BOUNDS={width:360,height:760};
   const STANDALONE_BOUNDS={width:400,height:740};
+  const PIP_BOUNDS={width:350,height:680};
   const POPUP_PARAM="window";
   let installEvent=null,pipWindow=null,movedNodes=[],popupHandle=null,popupWatchTimer=0,boundsTimer=0;
 
@@ -201,7 +202,7 @@ MiniTalk.WindowMode=(()=>{
   async function openPiP(){
     if(!window.documentPictureInPicture)return false;
     if(pipWindow&&!pipWindow.closed){pipWindow.focus();return true}
-    pipWindow=await documentPictureInPicture.requestWindow({width:400,height:740,disallowReturnToOpener:true});
+    pipWindow=await documentPictureInPicture.requestWindow({...PIP_BOUNDS,disallowReturnToOpener:true});
     const doc=pipWindow.document,meta=doc.createElement("meta"),base=doc.createElement("base");
     meta.name="viewport";meta.content="width=device-width,initial-scale=1,viewport-fit=cover";base.href=document.baseURI;
     doc.head.append(meta,base);doc.title=MiniTalkConfig.appName;

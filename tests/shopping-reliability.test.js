@@ -7,6 +7,7 @@ const css=fs.readFileSync(path.join(root,'css/features/shopping-store.css'),'utf
 const math=fs.readFileSync(path.join(root,'js/tasks/daily-math-quest.js'),'utf8');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const server=fs.readFileSync(path.join(root,'docs/apps-script/coin-shopping-extension.gs'),'utf8');
+const clarity=fs.readFileSync(path.join(root,'css/features/display-clarity.css'),'utf8');
 if(service.includes('const balance = await MiniTalk.Economy.CoinWallet.refresh(true)'))throw new Error('redundant pre-purchase balance request remains');
 if(!service.includes('result.product?.imageUrl')||!service.includes('writeCatalog('))throw new Error('optimistic saved-image catalog update is missing');
 if(!realtime.includes('pendingSync:true')||!realtime.includes('syncPendingShopInventory'))throw new Error('purchased inventory fallback/sync queue is missing');
@@ -17,8 +18,12 @@ if(!service.includes('CATALOG_CACHE_KEY')||!service.includes('refreshCatalog(tru
 if(!service.includes('MiniTalk.AuthApi.shopGift')||!server.includes('function handleShopGift'))throw new Error('server-mediated gift flow is missing');
 if(!service.includes('notifyGift')||!server.includes('giftedAt'))throw new Error('gift receipt notification metadata is missing');
 if(ui.includes('관리자가 상품을 등록하면')||!ui.includes('상점을 준비하고 있어요'))throw new Error('empty shop copy is not clean');
-if(!css.includes('.shop-market-mark::before')||!css.includes('.shop-empty-illustration > span::before'))throw new Error('shop diamond icons are not geometrically centered');
+if(!css.includes('transform: translate(-50%, -50%) rotate(45deg)')||!css.includes('.shop-market-mark { grid-row: 1 / span 2'))throw new Error('shop icons are not centered in their glyph or mobile card');
 if(!css.includes('.shop-inventory-fab b { flex: 0 0 18px')||!css.includes('margin: 0; padding: 0'))throw new Error('inventory count badge alignment is stale');
 if(!ui.includes('modal-close-button')||!math.includes('icon: "123"')||math.includes('icon: "∑"'))throw new Error('inventory close or elementary math icon polish is missing');
-if(!html.includes('css/features/shopping-store.css?v=64.5.4')||!html.includes('js/features/shopping.js?v=64.5.4')||!html.includes('js/tasks/daily-math-quest.js?v=64.5.4'))throw new Error('shopping or math cache versions are stale');
+if(!clarity.includes('grid-template-rows: minmax(0, 1fr) 56px')||!clarity.includes('min-height: 56px'))throw new Error('last-loaded clarity CSS still overrides the compact bottom navigation');
+if(!service.includes('sameValue')||!ui.includes('preserveScroll: true')||!ui.includes('animate: false'))throw new Error('unchanged shop polling can still redraw or jump the whole view');
+if(!service.includes('MiniTalk.Realtime.useShopInventory(id)'))throw new Error('used state is not synchronized to Firebase inventory');
+if(!ui.includes('button?.disabled')||!ui.includes('button.textContent = "처리 중"'))throw new Error('duplicate inventory use clicks are not blocked');
+if(!html.includes('css/features/shopping-store.css?v=64.5.5')||!html.includes('css/features/display-clarity.css?v=64.5.5')||!html.includes('js/features/shopping.js?v=64.5.5')||!html.includes('js/shopping/store-service.js?v=64.5.5')||!html.includes('js/tasks/daily-math-quest.js?v=64.5.4'))throw new Error('shopping or math cache versions are stale');
 console.log('SHOPPING_RELIABILITY_OK');

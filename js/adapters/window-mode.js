@@ -19,7 +19,6 @@ MiniTalk.WindowMode=(()=>{
   const BOUNDS_VERSION=4;
   const DEFAULT_BOUNDS={width:360,height:760};
   const STANDALONE_BOUNDS={width:400,height:740};
-  const STANDALONE_SIZE_KEY="window.standaloneSize.v2";
   const POPUP_PARAM="window";
   let installEvent=null,pipWindow=null,movedNodes=[],popupHandle=null,popupWatchTimer=0,boundsTimer=0;
 
@@ -39,28 +38,32 @@ MiniTalk.WindowMode=(()=>{
   const mobileWindow=()=>Boolean(MiniTalk.MobileImmersive?.isMobile?.())||/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||"");
   const canInstall=()=>Boolean(installEvent);
 
-  function fitStandaloneWindowOnce(){
+  function fitStandaloneWindow(){
     const fit=()=>{
       if(!standalone()||mobileWindow())return;
+      const availW=Math.max(320,screen.availWidth||STANDALONE_BOUNDS.width);
+      const availH=Math.max(520,screen.availHeight||STANDALONE_BOUNDS.height);
+      const width=Math.min(STANDALONE_BOUNDS.width,availW);
+      const height=Math.min(STANDALONE_BOUNDS.height,availH);
       try{
-        if(localStorage.getItem(STANDALONE_SIZE_KEY)==="done")return;
-        localStorage.setItem(STANDALONE_SIZE_KEY,"done");
-        const availW=Math.max(320,screen.availWidth||STANDALONE_BOUNDS.width);
-        const availH=Math.max(520,screen.availHeight||STANDALONE_BOUNDS.height);
-        const width=Math.min(STANDALONE_BOUNDS.width,availW);
-        const height=Math.min(STANDALONE_BOUNDS.height,availH);
-        requestAnimationFrame(()=>{
-          try{
-            window.resizeTo(width,height);
-            const left=(Number(screen.availLeft)||0)+Math.max(0,Math.round((availW-width)/2));
-            const top=(Number(screen.availTop)||0)+Math.max(0,Math.round((availH-height)/2));
-            window.moveTo(left,top);
-          }catch{}
-        });
+        window.resizeTo(width,height);
+        const actualW=Math.max(width,Number(window.outerWidth)||width);
+        const actualH=Math.max(height,Number(window.outerHeight)||height);
+        const margin=14;
+        const left=(Number(screen.availLeft)||0)+Math.max(0,Math.round(availW-actualW-margin));
+        const top=(Number(screen.availTop)||0)+Math.max(0,Math.round(availH-actualH-margin));
+        window.moveTo(left,top);
       }catch{}
     };
-    if(document.readyState==="loading")addEventListener("DOMContentLoaded",fit,{once:true});
-    else fit();
+    const start=()=>{
+      /* 설치 직후 첫 실행에서는 Chrome이 첫 resizeTo를 무시할 수 있어 짧게 재시도합니다.
+         영구 완료 표식을 저장하지 않아 다음 실행에서도 정상 크기로 복구할 수 있습니다. */
+      requestAnimationFrame(fit);
+      [180,650,1400].forEach(delay=>setTimeout(()=>requestAnimationFrame(fit),delay));
+      addEventListener("pageshow",fit,{once:true});
+    };
+    if(document.readyState==="loading")addEventListener("DOMContentLoaded",start,{once:true});
+    else start();
   }
 
   function clampNumber(value,min,max,fallback){
@@ -255,7 +258,7 @@ MiniTalk.WindowMode=(()=>{
       startPopupBoundsTracking();
     }else if(standalone()){
       document.documentElement.dataset.windowMode="standalone";
-      fitStandaloneWindowOnce();
+      fitStandaloneWindow();
     }else{
       document.documentElement.dataset.windowMode="browser";
     }

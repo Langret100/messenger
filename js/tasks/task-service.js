@@ -63,7 +63,9 @@ MiniTalk.Tasks.TaskService = (() => {
 
   async function assign(targets, task) {
     const current = user();
-    return MiniTalk.AuthApi.adminTaskAssign({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken(), targets, title: task.title, description: task.description, rewardCoin: task.rewardCoin });
+    const result = await MiniTalk.AuthApi.adminTaskAssign({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken(), targets, title: task.title, description: task.description, rewardCoin: task.rewardCoin });
+    await MiniTalk.Realtime.notifyCommandTargets?.(targets);
+    return result;
   }
 
   async function adminList(force = false) {
@@ -76,7 +78,9 @@ MiniTalk.Tasks.TaskService = (() => {
   async function review(taskId, action, feedback = "") {
     const current = user();
     const result = await MiniTalk.AuthApi.adminTaskReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken(), taskId, action, feedback });
-    return normalize(result.task || {});
+    const task = normalize(result.task || {});
+    if (task.userId) await MiniTalk.Realtime.notifyCommandTargets?.([task.userId]);
+    return task;
   }
 
   MiniTalk.Events.on("rt:command", command => {

@@ -22,6 +22,7 @@ MiniTalk.Realtime=(()=>{
   const isRoomMember=room=>room?.id==="global"||Boolean(roomMembers(room)[user?.user_id]);
   const requireWritableUser=()=>{if(!user?.user_id||user.isGuest)throw new Error("게스트는 내용을 볼 수만 있습니다.");return user};
   const messagesPath=roomId=>roomId==="global"?MiniTalkConfig.paths.globalMessages:`${MiniTalkConfig.paths.roomMessages}/${roomId}`;
+  const commandSignalRoom=userId=>`admin-${String(userId||"").replace(/[^0-9A-Za-z_-]/g,"_").slice(0,100)}`;
   function normalizeRoom(id,value={}){
     const participants=Array.isArray(value.participants)?value.participants:(Array.isArray(value.members)?value.members:[]);
     const members={};
@@ -142,6 +143,8 @@ MiniTalk.Realtime=(()=>{
     }else{
       shopInventoryFallback=true;emit("presence",{});publishProfiles();emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));emit("tasks",{});
     }
+    /* 명령 내용은 서버에서 검증·보관하고, Firebase 신호는 수신자가 즉시 서버 큐를 확인하게만 합니다. */
+    bind(db.ref(`signals/${commandSignalRoom(user.user_id)}`).limitToLast(1),"child_added",()=>pollServerCommands(),"관리자 알림 신호를 읽지 못했습니다.");
     // 첫 대화 화면보다 사용자 프로필·대화방 목록이 먼저 준비되어 기본 이미지가 잠깐 보이는 현상을 막습니다.
     await Promise.all(initialData);await ensureDefaultRoom();
   }
@@ -284,16 +287,17 @@ MiniTalk.Realtime=(()=>{
     else{const profiles=localGet("profiles",{});profiles[user.user_id]=value;localSet("profiles",profiles);broadcast("profiles",profiles)}
     return value;
   }
-  async function sendCommand(target,type,payload){const token=MiniTalk.AdminSession.requireToken();const command={type,payload,createdAt:Date.now(),issuedBy:user.user_id,status:"pending"};if(MiniTalk.AuthApi?.adminDispatch)await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type,payload});else broadcast("command",{target,command:{id:crypto.randomUUID(),...command}})}
-  async function assignTask(target,task){const token=MiniTalk.AdminSession.requireToken();const id=crypto.randomUUID(),value={...task,id,status:"open",createdAt:Date.now(),issuedBy:user.user_id};if(MiniTalk.AuthApi?.adminDispatch)await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type:"TASK",payload:{task:value}});else{const all=localGet(`tasks.${target}`,{});all[id]=value;localSet(`tasks.${target}`,all);broadcast("task",{target})}return id}
+  async function sendCommand(target,type,payload){const token=MiniTalk.AdminSession.requireToken();const command={type,payload,createdAt:Date.now(),issuedBy:user.user_id,status:"pending"};if(MiniTalk.AuthApi?.adminDispatch){await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type,payload});await notifyCommandTargets([target])}else broadcast("command",{target,command:{id:crypto.randomUUID(),...command}})}
+  async function assignTask(target,task){const token=MiniTalk.AdminSession.requireToken();const id=crypto.randomUUID(),value={...task,id,status:"open",createdAt:Date.now(),issuedBy:user.user_id};if(MiniTalk.AuthApi?.adminDispatch){await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:[target],type:"TASK",payload:{task:value}});await notifyCommandTargets([target])}else{const all=localGet(`tasks.${target}`,{});all[id]=value;localSet(`tasks.${target}`,all);broadcast("task",{target})}return id}
   async function sendCommands(targets,type,payload){
     const token=MiniTalk.AdminSession.requireToken(),ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
-    if(MiniTalk.AuthApi?.adminDispatch){const result=await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:ids,type,payload});return Number(result.count)||ids.length}
+    if(MiniTalk.AuthApi?.adminDispatch){const result=await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:ids,type,payload});await notifyCommandTargets(ids);return Number(result.count)||ids.length}
     ids.forEach(target=>broadcast("command",{target,command:{id:crypto.randomUUID(),type,payload,createdAt,issuedBy:user.user_id,status:"pending"}}));return ids.length
   }
+  async function notifyCommandTargets(targets){const ids=[...new Set((targets||[]).map(String).map(value=>value.trim()).filter(Boolean))];if(mode!=="firebase"||!db||!ids.length)return false;const updates={};ids.forEach(target=>{updates[`signals/${commandSignalRoom(target)}/${crypto.randomUUID()}`]={ts:firebase.database.ServerValue.TIMESTAMP}});try{await db.ref().update(updates);return true}catch(error){console.warn("관리자 즉시 알림 신호 전송 실패, 서버 폴링으로 대체",error);return false}}
   async function assignTasks(targets,task){
     const token=MiniTalk.AdminSession.requireToken(),ids=[...new Set((targets||[]).map(String).map(v=>v.trim()).filter(Boolean))];if(!ids.length)throw new Error("대상 사용자를 선택하세요.");const createdAt=Date.now();
-    if(MiniTalk.AuthApi?.adminDispatch){const result=await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:ids,type:"TASK",payload:{task:{...task,status:"open",createdAt,issuedBy:user.user_id}}});return Number(result.count)||ids.length}
+    if(MiniTalk.AuthApi?.adminDispatch){const result=await MiniTalk.AuthApi.adminDispatch({userId:user.user_id,adminToken:token,targets:ids,type:"TASK",payload:{task:{...task,status:"open",createdAt,issuedBy:user.user_id}}});await notifyCommandTargets(ids);return Number(result.count)||ids.length}
     ids.forEach(target=>{const id=crypto.randomUUID(),all=localGet(`tasks.${target}`,{});all[id]={...task,id,status:"open",createdAt,issuedBy:user.user_id};localSet(`tasks.${target}`,all);broadcast("task",{target})});return ids.length
   }
   async function submitTask(id,answer){requireWritableUser();const server=localGet(`server.tasks.${user.user_id}`,{});if(server[id]){server[id]={...server[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`server.tasks.${user.user_id}`,server);emit("tasks",server);return}const all=localGet(`tasks.${user.user_id}`,{});all[id]={...all[id],answer,status:"submitted",submittedAt:Date.now()};localSet(`tasks.${user.user_id}`,all);broadcast("task",{target:user.user_id})}
@@ -328,5 +332,5 @@ MiniTalk.Realtime=(()=>{
     }else throw new Error("실시간 서버 연결 후 선물할 수 있습니다.");
     return{targetId,targetNickname};
   }
-  return{init,cleanup,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,giftShopInventory};
+  return{init,cleanup,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,notifyCommandTargets,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,giftShopInventory};
 })();

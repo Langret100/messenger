@@ -139,10 +139,10 @@ MiniTalk.Features.Shopping = (() => {
     search.oninput = draw;body.replaceChildren(D.el("p", { text: `${item.name}을(를) 누구에게 선물할까요?` }), search, list, send);draw();setTimeout(() => search.focus(), 30);
   }
 
-  function adminPanel(onChanged) {
-    const D = MiniTalk.UI.Dom, panel = D.el("section", { class: "tool-card admin-shop-panel" });
+  function adminPanel(onChanged, context = {}) {
+    const D = context.Dom || MiniTalk.UI.Dom, Shell = context.Shell || MiniTalk.UI.Shell, panel = D.el("section", { class: "tool-card admin-shop-panel" });
     if (!Service.products().length) Service.refreshCatalog().then(rows => { if (rows.length) onChanged?.(); }).catch(error => console.warn("상품 목록을 불러오지 못했습니다.", error));
-    const add = D.el("button", { class: "button primary compact-button", type: "button", text: "상품 추가", onclick: () => openProductEditor(null, onChanged) });
+    const add = D.el("button", { class: "button primary compact-button", type: "button", text: "상품 추가", onclick: () => openProductEditor(null, onChanged, { D, Shell }) });
     panel.append(D.el("div", { class: "admin-shop-head" }, [D.el("div", {}, [D.el("strong", { text: "쇼핑 상품 관리" }), D.el("small", { class: "muted", text: "상품 이름·가격·설명을 설정합니다." })]), add]));
     const list = D.el("div", { class: "admin-product-list" });
     const products = Service.products();
@@ -150,13 +150,13 @@ MiniTalk.Features.Shopping = (() => {
     products.forEach(product => list.append(D.el("article", { class: "admin-product-row" }, [
       product.imageUrl ? D.el("img", { class: "admin-product-image", src: product.imageUrl, alt: "", loading: "lazy" }) : D.el("span", { class: "admin-product-image placeholder", text: "▤" }),
       D.el("div", {}, [D.el("strong", { text: product.name }), D.el("small", { class: "muted", text: `${product.price} 코인 · ${product.description || "설명 없음"}` })]),
-      D.el("div", { class: "button-row compact-row" }, [D.el("button", { class: "button secondary compact-button", type: "button", text: "수정", onclick: () => openProductEditor(product, onChanged) }), D.el("button", { class: "button secondary compact-button", type: "button", text: "삭제", onclick: () => deleteProduct(product, onChanged) })])
+      D.el("div", { class: "button-row compact-row" }, [D.el("button", { class: "button secondary compact-button", type: "button", text: "수정", onclick: () => openProductEditor(product, onChanged, { D, Shell }) }), D.el("button", { class: "button secondary compact-button", type: "button", text: "삭제", onclick: () => deleteProduct(product, onChanged, { D, Shell }) })])
     ])));
     panel.append(list);return panel;
   }
 
-  function openProductEditor(product, onChanged) {
-    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "modal-stack" });
+  function openProductEditor(product, onChanged, context = {}) {
+    const D = context.D || MiniTalk.UI.Dom, Shell = context.Shell || MiniTalk.UI.Shell, body = D.el("div", { class: "modal-stack" });
     body.innerHTML = `<button id="productImagePicker" class="product-image-picker" type="button" aria-label="상품 이미지 촬영 또는 선택"><span>▤</span><strong>상품 이미지</strong><small>눌러서 촬영하거나 선택하세요</small></button><div id="productImageActions" class="product-image-actions hidden"><button id="productCamera" class="button secondary compact-button" type="button">카메라로 촬영</button><button id="productGallery" class="button secondary compact-button" type="button">이미지 선택</button><button id="productImageRemove" class="button text compact-button" type="button">이미지 제거</button></div><input id="productCameraInput" class="hidden" type="file" accept="image/*" capture="environment"><input id="productGalleryInput" class="hidden" type="file" accept="image/png,image/jpeg,image/webp"><p class="muted modal-note">사진은 실제 표시 크기에 맞는 160×120 이미지로 자동 압축됩니다.</p><label class="field">상품 이름<input id="productName" maxlength="60"></label><label class="field">가격<input id="productPrice" type="number" min="1" step="1"></label><label class="field">설명<textarea id="productDescription" maxlength="160"></textarea></label><button id="productSave" class="button primary" type="button">저장</button>`;
     const picker = body.querySelector("#productImagePicker"), actions = body.querySelector("#productImageActions"), cameraInput = body.querySelector("#productCameraInput"), galleryInput = body.querySelector("#productGalleryInput");
     let imageUrl = product?.imageUrl || "", pendingImage = "";
@@ -166,11 +166,11 @@ MiniTalk.Features.Shopping = (() => {
     body.querySelector("#productCamera").onclick = () => cameraInput.click();
     body.querySelector("#productGallery").onclick = () => galleryInput.click();
     body.querySelector("#productImageRemove").onclick = () => { imageUrl = "";pendingImage = "";updatePreview("");actions.classList.add("hidden"); };
-    const chooseImage = async input => { const file = input.files?.[0];if (!file) return;actions.classList.add("hidden");picker.disabled = true;try { pendingImage = await compressProductImage(file);updatePreview(pendingImage); } catch (error) { MiniTalk.UI.Shell.toast(error.message); } finally { picker.disabled = false;input.value = ""; } };
+    const chooseImage = async input => { const file = input.files?.[0];if (!file) return;actions.classList.add("hidden");picker.disabled = true;try { pendingImage = await compressProductImage(file);updatePreview(pendingImage); } catch (error) { Shell.toast(error.message); } finally { picker.disabled = false;input.value = ""; } };
     cameraInput.onchange = () => chooseImage(cameraInput);galleryInput.onchange = () => chooseImage(galleryInput);
     body.querySelector("#productName").value = product?.name || "";body.querySelector("#productPrice").value = product?.price || "";body.querySelector("#productDescription").value = product?.description || "";
-    body.querySelector("#productSave").onclick = async event => { const button = event.currentTarget,name = body.querySelector("#productName").value.trim(),price = body.querySelector("#productPrice").value,description = body.querySelector("#productDescription").value;button.disabled = true;try { if (pendingImage) imageUrl = pendingImage;await Service.saveProduct({ id: product?.id, name, price, description, imageUrl });MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("상품을 저장했습니다.");onChanged?.(); } catch (error) { MiniTalk.UI.Shell.toast(error.message);button.disabled = false; } };
-    MiniTalk.UI.Shell.modal(product ? "상품 수정" : "상품 추가", body);
+    body.querySelector("#productSave").onclick = async event => { const button = event.currentTarget,name = body.querySelector("#productName").value.trim(),price = body.querySelector("#productPrice").value,description = body.querySelector("#productDescription").value;button.disabled = true;try { if (pendingImage) imageUrl = pendingImage;await Service.saveProduct({ id: product?.id, name, price, description, imageUrl });Shell.closeModal();Shell.toast("상품을 저장했습니다.");onChanged?.(); } catch (error) { Shell.toast(error.message);button.disabled = false; } };
+    Shell.modal(product ? "상품 수정" : "상품 추가", body);
   }
 
   function compressProductImage(file) {
@@ -201,10 +201,10 @@ MiniTalk.Features.Shopping = (() => {
     });
   }
 
-  function deleteProduct(product, onChanged) {
-    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "modal-stack" }), remove = D.el("button", { class: "button primary", type: "button", text: "삭제" });
-    remove.onclick = async () => { remove.disabled = true;try { await Service.deleteProduct(product.id);MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("상품을 삭제했습니다.");onChanged?.(); } catch (error) { MiniTalk.UI.Shell.toast(error.message);remove.disabled = false; } };
-    body.append(D.el("p", { text: `${product.name} 상품을 삭제할까요?` }), D.el("small", { class: "muted", text: "이미 구매한 사용자의 보관함 상품은 유지됩니다." }), remove);MiniTalk.UI.Shell.modal("상품 삭제", body);
+  function deleteProduct(product, onChanged, context = {}) {
+    const D = context.D || MiniTalk.UI.Dom, Shell = context.Shell || MiniTalk.UI.Shell, body = D.el("div", { class: "modal-stack" }), remove = D.el("button", { class: "button primary", type: "button", text: "삭제" });
+    remove.onclick = async () => { remove.disabled = true;try { await Service.deleteProduct(product.id);Shell.closeModal();Shell.toast("상품을 삭제했습니다.");onChanged?.(); } catch (error) { Shell.toast(error.message);remove.disabled = false; } };
+    body.append(D.el("p", { text: `${product.name} 상품을 삭제할까요?` }), D.el("small", { class: "muted", text: "이미 구매한 사용자의 보관함 상품은 유지됩니다." }), remove);Shell.modal("상품 삭제", body);
   }
 
   return { id: "shopping", title: "쇼핑", icon: "▤", render, adminPanel };

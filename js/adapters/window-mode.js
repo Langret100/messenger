@@ -194,10 +194,11 @@ MiniTalk.WindowMode=(()=>{
     try{pipWindow?.document?.getElementById("hardLock")?.remove()}catch{}
     for(const node of movedNodes)document.body.append(node);
     movedNodes=[];
-    setTransferredState(false);document.getElementById("launchView")?.classList.add("hidden");
+    setTransferredState(false);
     MiniTalk.Store.set("rootDocument",document);
-    MiniTalk.Features.Layout?.apply?.();
-    MiniTalk.Features.Admin?.applyStoredLock?.();
+    /* PiP 닫기는 메신저 종료로 처리합니다. 원본 탭에 큰 앱 화면을 남기지 않고 로그인부터 다시 시작합니다. */
+    MiniTalk.UI.Shell?.resetWorkspaceSession?.();
+    setTimeout(()=>MiniTalk.Features.Auth?.logout?.(),0);
   }
   async function openPiP(){
     if(!window.documentPictureInPicture)return false;

@@ -196,9 +196,10 @@ MiniTalk.WindowMode=(()=>{
     movedNodes=[];
     setTransferredState(false);
     MiniTalk.Store.set("rootDocument",document);
-    /* PiP 닫기는 메신저 종료로 처리합니다. 원본 탭에 큰 앱 화면을 남기지 않고 로그인부터 다시 시작합니다. */
+    /* PiP 닫기는 명시적 로그아웃이 아닙니다.
+       저장 로그인 세션은 유지하고 원본 탭만 로그인 대기 화면으로 되돌립니다. */
     MiniTalk.UI.Shell?.resetWorkspaceSession?.();
-    setTimeout(()=>MiniTalk.Features.Auth?.logout?.(),0);
+    setTimeout(()=>MiniTalk.Features.Auth?.returnToLogin?.(),0);
   }
   async function openPiP(){
     if(!window.documentPictureInPicture)return false;

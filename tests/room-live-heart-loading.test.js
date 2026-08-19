@@ -12,6 +12,6 @@ ok(shell.includes('function beginLoading()')&&shell.includes('setTimeout(()=>{lo
 ok(router.includes('MiniTalk.UI.Shell.beginLoading?.()')&&auth.includes('MiniTalk.UI.Shell.beginLoading?.()'),'route/auth loading indicator is not wired');
 ok(appcss.includes('.moaru-loading-host{')&&appcss.includes('@keyframes moaru-loading-pulse'),'loading overlay CSS missing');
 ok(feedcss.includes('.header-heart-inline.heart-pop'),'header heart animation CSS missing');
-ok(html.includes('css/app.css?v=64.5.9')&&html.includes('feed-classinfo-weekly.css?v=65.0.11')&&html.includes('js/core/router.js')&&html.includes('realtime.js?v=64.5.30')&&html.includes('js/chat/unread.js')&&html.includes('features/feed.js?v=65.0.7')&&html.includes('app.js?v=64.5.31'),'v5.23 cache versions stale');
-ok(sw.includes('moaru-v64.5.31-room-summary-mobile-chrome-20260819')&&app.includes('sw.js?v=64.5.31'),'v5.23 service worker version stale');
+ok(html.includes('css/app.css?v=64.5.10')&&html.includes('feed-classinfo-weekly.css?v=65.0.12')&&html.includes('js/core/router.js')&&html.includes('realtime.js?v=64.5.33')&&html.includes('js/chat/unread.js')&&html.includes('features/feed.js?v=65.0.7')&&html.includes('app.js?v=64.5.33'),'v5.23 cache versions stale');
+ok(sw.includes('moaru-v64.5.33-pip-session-idle-cache-20260819')&&app.includes('sw.js?v=64.5.33'),'v5.23 service worker version stale');
 console.log('ROOM_LIVE_HEART_LOADING_OK');

@@ -8,6 +8,7 @@ MiniTalk.Realtime=(()=>{
   let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,connectionError="",firebaseAuthenticated=false;
   let initGeneration=0,transportReady=Promise.resolve("idle"),resolveTransportReady=null,requestedMessageRoom=null,roomListRequested=false,roomIndexReady=Promise.resolve();
   let currentProfiles={},legacyProfiles={},presenceCache={},roomsCache={},roomDirectoryCache={},memberRoomMemberships={};
+  let roomCacheWriteQueued=false;
   let messageUnsub=null,shopInventoryUnsub=null,shopInventoryFallback=false,serverCommandTimer=0,serverCommandPolling=false,serverCommandRepoll=false,groupRoomUnsubs=[];
   const memberSummaryUnsubs=new Map();
   const unsubs=[];
@@ -32,6 +33,35 @@ MiniTalk.Realtime=(()=>{
   }
   const isRoomMember=room=>room?.id==="global"||room?._member===true||Boolean(roomMembers(room)[user?.user_id])||String(room?.creator||"")===String(user?.user_id||"");
   const roomSummariesPath=()=>MiniTalkConfig.paths.roomSummaries||"moaru/v3/roomSummaries";
+  const ROOM_SUMMARY_CACHE_MAX_IDLE=30*24*60*60*1000;
+  const roomSummaryCacheKey=()=>`room.summaryCache.${user?.user_id||"guest"}`;
+  function purgeStaleRoomSummaryCaches(){
+    const prefix=localPrefix+"room.summaryCache.",at=Date.now();
+    try{
+      for(let i=localStorage.length-1;i>=0;i--){
+        const storageKey=localStorage.key(i);if(!storageKey?.startsWith(prefix))continue;
+        let saved=null;try{saved=JSON.parse(localStorage.getItem(storageKey)||"null")}catch{}
+        const lastUsed=Number(saved?.lastAccessedAt||saved?.savedAt||0);
+        if(!lastUsed||at-lastUsed>=ROOM_SUMMARY_CACHE_MAX_IDLE)localStorage.removeItem(storageKey);
+      }
+    }catch{}
+  }
+  function hydrateRoomSummaryCache(){
+    purgeStaleRoomSummaryCaches();
+    if(!user?.user_id||user.isGuest)return;
+    const key=roomSummaryCacheKey(),saved=localGet(key,{}),lastUsed=Number(saved?.lastAccessedAt||saved?.savedAt||0),idle=Date.now()-lastUsed,cached=saved?.rooms;
+    if(!lastUsed||idle>=ROOM_SUMMARY_CACHE_MAX_IDLE){localRemove(key);return}
+    if(cached&&typeof cached==="object"&&!Array.isArray(cached)&&Object.keys(cached).length){
+      roomsCache={...cached};roomDirectoryCache={...roomsCache};
+      /* 실제로 재사용한 순간만 마지막 사용 시각을 갱신합니다. */
+      try{localSet(key,{...saved,lastAccessedAt:Date.now(),rooms:{...cached}})}catch{}
+      publishRooms();
+    }
+  }
+  function persistRoomSummaryCacheSoon(){
+    if(roomCacheWriteQueued||!user?.user_id||user.isGuest)return;roomCacheWriteQueued=true;
+    queueMicrotask(()=>{roomCacheWriteQueued=false;try{const at=Date.now();localSet(roomSummaryCacheKey(),{savedAt:at,lastAccessedAt:at,rooms:{...roomsCache}})}catch{}})
+  }
   const userRoomsPath=userId=>`${MiniTalkConfig.paths.userRooms||"moaru/v3/userRooms"}/${String(userId||"")}`;
   const roomSchemaPath=()=>MiniTalkConfig.paths.roomSchema||"moaru/v3/schema/roomSummaryVersion";
   const roomIndexUsersPath=userId=>`${MiniTalkConfig.paths.roomIndexUsers||"moaru/v3/roomIndexUsers"}/${String(userId||"")}`;
@@ -204,7 +234,7 @@ MiniTalk.Realtime=(()=>{
 
   async function init(nextUser){
     cleanup();user=nextUser;db=null;connectionError="";firebaseAuthenticated=false;shopInventoryFallback=false;currentProfiles={};legacyProfiles={};presenceCache={};roomsCache={};roomDirectoryCache={};memberRoomMemberships={};roomIndexReady=Promise.resolve();
-    const generation=beginTransportInit();
+    const generation=beginTransportInit();hydrateRoomSummaryCache();
     // 사용자 신원 확인은 Apps Script 로그인에서 끝냅니다. Firebase 데이터 채널은 별도로 준비하며 첫 화면 진입을 막지 않습니다.
     let nextMode="local";
     if(validKey()&&!nextUser?.isGuest){
@@ -224,7 +254,7 @@ MiniTalk.Realtime=(()=>{
     return mode;
   }
 
-  function publishRooms(){emit("rooms",{...(roomListRequested?roomDirectoryCache:roomsCache)})}
+  function publishRooms(){persistRoomSummaryCacheSoon();emit("rooms",{...(roomListRequested?roomDirectoryCache:roomsCache)})}
   function clearGroupRoomSubscription(){while(groupRoomUnsubs.length){try{groupRoomUnsubs.pop()()}catch{}}}
   function clearMemberSummarySubscriptions(){for(const off of memberSummaryUnsubs.values()){try{off()}catch{}}memberSummaryUnsubs.clear()}
   function previewFromMessage(value={}){const type=value.type||(value.fileUrl?"file":(value.image||value.imageUrl?"image":"text"));return type==="file"?`[파일] ${value.fileName||"파일"}`:type==="image"?"[사진]":String(value.text||"")}

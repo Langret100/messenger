@@ -70,6 +70,18 @@ MiniTalk.Features.Auth=(()=>{
   function showInstallGuide(){const D=MiniTalk.UI.Dom,ua=navigator.userAgent||"",ios=/iPhone|iPad|iPod/i.test(ua),mobile=MiniTalk.MobileImmersive?.isMobile?.(),steps=ios?["Safari의 공유 버튼을 누르세요.","‘홈 화면에 추가’를 선택하세요.","홈 화면의 모아루 아이콘으로 실행하세요."]:mobile?["브라우저의 ⋮ 메뉴를 여세요.","‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택하세요.","홈 화면의 모아루 아이콘으로 실행하세요."]:["주소창 오른쪽의 설치 아이콘을 누르세요.","아이콘이 없으면 브라우저 메뉴에서 ‘앱 설치’를 선택하세요.","설치된 모아루를 실행하면 주소창 없이 열립니다."];const body=D.el("div",{class:"install-guide"},[D.el("p",{class:"muted",text:"모아루를 설치하면 주소창 없이 앱처럼 실행할 수 있습니다."}),D.el("ol",{},steps.map(text=>D.el("li",{text}))),D.el("button",{class:"button primary",type:"button",text:"확인",onclick:()=>MiniTalk.UI.Shell.closeModal()})]);MiniTalk.UI.Shell.modal("모아루 앱 설치",body)}
 
   function escapeAttribute(value){return String(value||"").replace(/[&<>'"]/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]))}
+  /* PiP/보조창을 닫는 것은 로그아웃이 아닙니다.
+     서버 연결과 현재 화면만 정리하고 저장된 로그인 세션(KEY)은 그대로 둡니다. */
+  function returnToLogin(){
+    MiniTalk.AdminSession?.clear?.();
+    MiniTalk.Realtime.cleanup?.();
+    MiniTalk.Store.set("user",null);
+    MiniTalk.UI.Shell?.resetWorkspaceSession?.();
+    const host=document.getElementById("authHost"),workspace=document.getElementById("workspace");
+    workspace?.classList.add("hidden");
+    host?.classList.remove("hidden");
+    if(host)render(host);
+  }
   function logout(){MiniTalk.AdminSession?.clear?.();MiniTalk.Realtime.cleanup?.();MiniTalk.Persistence.remove(KEY);rememberedUser=null;location.reload()}
-  return{render,restore,logout};
+  return{render,restore,returnToLogin,logout};
 })();

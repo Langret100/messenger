@@ -5,12 +5,12 @@ ok(feed.includes("function patchHeart(id,previous=null)")&&feed.includes("samePo
 ok(!feed.includes('current?current.replaceWith(next):list.append(next);sortFeedCards(list);syncFeedEmpty(list);setupLazyMedia(list)'),"feed still recreates card for every post change");
 ok(feed.includes('if(!observer)observer=new IntersectionObserver'),"feed media observer should be retained instead of reset on each card update");
 ok(css.includes("scrollbar-width:none")&&css.includes("::-webkit-scrollbar{display:none"),"feed scrollbar should be hidden while native drag/scroll remains");
-ok(css.includes("bottom:calc(-12px + 58px"),"feed add button was not lowered");
+ok(css.includes("bottom:calc(-20px + 58px"),"feed add button was not lowered");
 ok(rt.includes('function startMemberRoomIndexSubscription()')&&rt.includes('orderByChild("lastMessageAt").startAt(1)'),"room list should use member summaries and group summaries on demand");
 ok(rt.includes('base.limitToLast(50)')&&rt.includes('base.startAt(lastTs)'),"room messages must use 50-message cold load and cache delta subscription");
 ok(chats.includes('"data-has-message":roomHasVisibleActivity(room)?"1":"0"')&&chats.includes('mode==="group"&&item.dataset.roomType==="group"&&hasMessage'),"empty room UI fallback filter missing");
 ok(chats.includes('class:"room-summary-icon profile-image"')&&chats.includes('class:"room-member-avatar profile-image"'),"room information profile images missing");
 ok(appcss.includes('.room-summary-icon{')&&appcss.includes('object-fit:cover'),"room profile image crop style missing");
-ok(html.includes('feed-classinfo-weekly.css?v=65.0.11')&&html.includes('realtime.js?v=64.5.30')&&html.includes('features/chats.js?v=64.5.14')&&html.includes('features/feed.js?v=65.0.7')&&html.includes('app.js?v=64.5.31'),"delta patch cache versions stale");
-ok(sw.includes('moaru-v64.5.31-room-summary-mobile-chrome-20260819')&&app.includes('sw.js?v=64.5.31'),"service worker cache bump missing");
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.12')&&html.includes('realtime.js?v=64.5.33')&&html.includes('features/chats.js?v=64.5.15')&&html.includes('features/feed.js?v=65.0.7')&&html.includes('app.js?v=64.5.33'),"delta patch cache versions stale");
+ok(sw.includes('moaru-v64.5.33-pip-session-idle-cache-20260819')&&app.includes('sw.js?v=64.5.33'),"service worker cache bump missing");
 console.log("FEED_ROOM_DELTA_OK");

@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.8-full-flow-audit-20260818";
+const CACHE = "moaru-v64.5.10-final-device-clock-20260819";
 const CORE = [
   "./",
   "./index.html",
@@ -20,6 +20,7 @@ const CORE = [
   "./css/features/coin-wallet.css",
   "./css/features/shopping-store.css",
   "./css/features/display-clarity.css",
+  "./css/features/feed-classinfo-weekly.css",
   "./js/config.js",
   "./js/core/namespace.js",
   "./js/core/events.js",
@@ -53,10 +54,12 @@ const CORE = [
   "./js/tasks/daily-quest-clock.js",
   "./js/tasks/daily-math-quest.js",
   "./js/tasks/daily-korean-quest.js",
+  "./js/tasks/friday-grade6-mission.js",
   "./js/tasks/task-service.js",
   "./js/tasks/task-window.js",
   "./js/features/auth.js",
   "./js/features/chats.js",
+  "./js/features/feed.js",
   "./js/features/games.js",
   "./js/tarot.js",
   "./js/tools/notifications.js",
@@ -64,6 +67,7 @@ const CORE = [
   "./js/tools/tarot-view.js",
   "./js/tools/profile-editor.js",
   "./js/tools/capture.js",
+  "./js/tools/class-info.js",
   "./js/features/tools.js",
   "./js/features/tasks.js",
   "./js/features/links.js",

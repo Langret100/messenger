@@ -54,15 +54,7 @@ MiniTalk.Realtime=(()=>{
   function addScript(src){return new Promise((resolve,reject)=>{const existing=[...document.scripts].find(s=>s.src===src);if(existing){if(window.firebase)return resolve();existing.addEventListener("load",resolve,{once:true});existing.addEventListener("error",reject,{once:true});return}const script=document.createElement("script");script.src=src;script.onload=resolve;script.onerror=()=>reject(new Error(`SDK 로드 실패: ${src}`));document.head.append(script)})}
   async function loadFirebase(){
     if(!window.firebase?.app)await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
-    if(!window.firebase?.auth)await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js");
     if(!window.firebase?.database)await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js")
-  }
-  // Apps Script 로그인과 Firebase 인증은 별개입니다. DB 규칙에서 auth != null을 사용할 수 있도록 익명 세션을 유지합니다.
-  async function ensureFirebaseAuth(){
-    const auth=firebase.auth();
-    if(auth.currentUser)return auth.currentUser;
-    try{const credential=await auth.signInAnonymously();return credential.user}
-    catch(error){console.warn("Firebase 익명 인증 없이 기존 토리 공개 경로로 연결합니다.",error);return null}
   }
   function waitForConnected(database,timeout=7000){return new Promise((resolve,reject)=>{const ref=database.ref(".info/connected");const timer=setTimeout(()=>{ref.off("value",onValue);reject(new Error("Firebase 연결 시간 초과"))},timeout);function onValue(s){if(s.val()===true){clearTimeout(timer);ref.off("value",onValue);resolve()}}ref.on("value",onValue)})}
 
@@ -119,7 +111,7 @@ MiniTalk.Realtime=(()=>{
     cleanup();user=nextUser;db=null;mode="local";connectionError="";firebaseAuthenticated=false;shopInventoryFallback=false;currentProfiles={};legacyProfiles={};
     // 사용자 인증의 기준은 Apps Script/시트 로그인입니다. 게스트는 Firebase에 연결하지 않습니다.
     if(validKey()&&!nextUser?.isGuest){
-      try{await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);firebaseAuthenticated=Boolean(await ensureFirebaseAuth());db=firebase.database();await waitForConnected(db);mode="firebase"}
+      try{await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);db=firebase.database();await waitForConnected(db);mode="firebase"}
       catch(error){connectionError=String(error?.code||error?.message||error);console.warn("Firebase 연결 실패, 로컬 모드로 전환",error);db=null;mode="local"}
     }
     MiniTalk.Store.set("transport",mode);
@@ -131,19 +123,18 @@ MiniTalk.Realtime=(()=>{
   async function startFirebase(){
     const initialData=[];
     initialData.push(bindFirstValue(db.ref(MiniTalkConfig.paths.rooms),s=>{const source=s.val()||{},rooms={};Object.entries(source).forEach(([id,value])=>{rooms[id]=normalizeRoom(id,value||{})});emit("rooms",rooms)},"대화방 목록을 읽을 권한이 없습니다."));
-    // 프로필 호환 경로는 시트 로그인 사용자도 읽을 수 있으므로 Firebase 익명 인증과 무관하게 구독합니다.
+    // 사용자 신원 확인은 Apps Script 로그인에서 끝냅니다. Firebase 익명 인증은 사용하지 않습니다.
+    // Firebase는 로그인 성공 후 실시간 데이터 저장/동기화 통로로만 사용합니다.
     initialData.push(bindFirstValue(db.ref(MiniTalkConfig.paths.legacyProfiles),s=>{legacyProfiles=s.val()||{};publishProfiles()},"기존 프로필 목록을 읽을 권한이 없습니다."));
-    if(firebaseAuthenticated){
-      presenceRef=db.ref(`${MiniTalkConfig.paths.presence}/${user.user_id}`);
-      await presenceRef.set({user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
-      presenceRef.onDisconnect().update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});
-      bind(db.ref(MiniTalkConfig.paths.presence),"value",s=>emit("presence",s.val()||{}));
-      initialData.push(bindFirstValue(db.ref(MiniTalkConfig.paths.profiles),s=>{currentProfiles=s.val()||{};publishProfiles()}));
-      shopInventoryUnsub=bind(db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}`),"value",s=>emit("shop-inventory",s.val()||{}));
-      syncPendingShopInventory().catch(error=>console.warn("보관함 대기 항목 동기화 실패",error));
-    }else{
-      shopInventoryFallback=true;emit("presence",{});publishProfiles();emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));emit("tasks",{});
-    }
+    presenceRef=db.ref(`${MiniTalkConfig.paths.presence}/${user.user_id}`);
+    await presenceRef.set({user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
+    presenceRef.onDisconnect().update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});
+    bind(db.ref(MiniTalkConfig.paths.presence),"value",s=>emit("presence",s.val()||{}));
+    initialData.push(bindFirstValue(db.ref(MiniTalkConfig.paths.profiles),s=>{currentProfiles=s.val()||{};publishProfiles()}));
+    // 쇼핑 보관함은 기존 서버(Apps Script) 흐름을 유지하므로 Firebase 공개 경로로 전환하지 않습니다.
+    shopInventoryFallback=true;
+    emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));
+    emit("tasks",{});
     /* 명령 내용은 서버에서 검증·보관하고, Firebase 신호는 수신자가 즉시 서버 큐를 확인하게만 합니다. */
     bind(db.ref(`signals/${commandSignalRoom(user.user_id)}/wakeup`),"value",snapshot=>{if(snapshot.exists())pollServerCommands()},"관리자 알림 신호를 읽지 못했습니다.");
     // 첫 대화 화면보다 사용자 프로필·대화방 목록이 먼저 준비되어 기본 이미지가 잠깐 보이는 현상을 막습니다.
@@ -196,6 +187,24 @@ MiniTalk.Realtime=(()=>{
       ref.on("child_added",fn,fail);messageUnsub=()=>ref.off("child_added",fn);
     }else localGet(`messages.${roomId}`,[]).slice(-100).forEach(message=>emit("message",message));
   }
+  async function pruneRoomMessages(roomId,keep=100){
+    if(mode!=="firebase"||!db)return;
+    try{
+      /* 기존 서버에 100개보다 훨씬 많이 쌓여 있어도 한 번의 정리 호출로 끝까지 줄입니다.
+       * 매번 최신 keep+50개만 읽고 가장 오래된 초과분을 지운 뒤, 100개 이하가 될 때까지 반복합니다. */
+      for(let pass=0;pass<40;pass+=1){
+        const snap=await db.ref(messagesPath(roomId)).orderByChild("ts").limitToLast(keep+50).once("value"),rows=[];
+        snap.forEach(child=>rows.push({key:child.key,ts:Number(child.child("ts").val())||0}));
+        if(rows.length<=keep)return;
+        rows.sort((a,b)=>a.ts-b.ts||String(a.key).localeCompare(String(b.key)));
+        const updates={};rows.slice(0,rows.length-keep).forEach(row=>updates[row.key]=null);
+        if(!Object.keys(updates).length)return;
+        await db.ref(messagesPath(roomId)).update(updates);
+      }
+      console.warn("오래된 대화 정리가 40회 제한에 도달했습니다.",roomId);
+    }catch(error){console.warn("오래된 대화 정리 실패",error)}
+  }
+
   async function sendMessage(roomId,payload){
     requireWritableUser();
     payload=payload||{};
@@ -204,13 +213,14 @@ MiniTalk.Realtime=(()=>{
       roomId,user_id:user.user_id,nickname:user.nickname,
       type:payload.type||(payload.fileUrl?"file":(payload.image||payload.imageUrl?"image":"text")),
       text:payload.text||"",image:payload.image||null,imageUrl:payload.imageUrl||null,
-      fileUrl:payload.fileUrl||null,fileName:payload.fileName||null,emoticon:payload.emoticon||null,avatar:senderProfile.avatar||null,ts:Date.now()
+      fileUrl:payload.fileUrl||null,fileName:payload.fileName||null,emoticon:payload.emoticon||null,avatar:senderProfile.avatar||null,clientTs:Date.now(),ts:Date.now()
     };
     const preview=message.type==="file"?`[파일] ${message.fileName||"파일"}`:message.type==="image"?"[사진]":message.text;
     if(mode==="firebase"){
-      const ref=db.ref(messagesPath(roomId)).push();await ref.set(message);
+      const ref=db.ref(messagesPath(roomId)).push(),serverMessage={...message,ts:firebase.database.ServerValue.TIMESTAMP};
+      await ref.set(serverMessage);
       await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).update({lastMessage:preview,lastMessageAt:firebase.database.ServerValue.TIMESTAMP,lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:firebase.database.ServerValue.TIMESTAMP});
-      const saved={id:ref.key,...message};MiniTalk.Chat.ServerBackup?.message(saved);return saved;
+      const snap=await ref.once("value"),saved={id:ref.key,...(snap.val()||message)};MiniTalk.Chat.ServerBackup?.message(saved);pruneRoomMessages(roomId).catch(()=>{});return saved;
     }
     const value={id:crypto.randomUUID(),...message},list=localGet(`messages.${roomId}`,[]);list.push(value);localSet(`messages.${roomId}`,list.slice(-200));
     const rooms=localGet("rooms",{});rooms[roomId]={...(rooms[roomId]||{id:roomId,title:roomId}),lastMessage:preview,lastMessageAt:Date.now(),lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:Date.now()};localSet("rooms",rooms);broadcast("message",value);broadcast("rooms",rooms);return value;
@@ -278,14 +288,11 @@ MiniTalk.Realtime=(()=>{
     if(mode==="firebase"){
       const saved={...value,updatedAt:firebase.database.ServerValue.TIMESTAMP};
       const legacyKey=String(user.nickname||user.user_id).replace(/[.#$\[\]\/]/g,"_").slice(0,30);
-      /* 시트 로그인은 Firebase auth가 없을 수 있으므로 공개 호환 경로를 먼저 저장합니다.
-         인증된 세션에서만 moaru/v3 프로필에도 복제해 전체 저장 취소를 막습니다. */
+      /* Apps Script 로그인 성공 사용자를 기준으로 기존 호환 경로와 v3 프로필 경로를 함께 갱신합니다. */
       await db.ref(`${MiniTalkConfig.paths.legacyProfiles}/${legacyKey}`).set(saved);
       legacyProfiles={...legacyProfiles,[legacyKey]:saved};publishProfiles();
-      if(firebaseAuthenticated){
-        try{await db.ref(`${MiniTalkConfig.paths.profiles}/${user.user_id}`).set(saved)}
-        catch(error){console.warn("새 프로필 경로 동기화 실패",error)}
-      }
+      try{await db.ref(`${MiniTalkConfig.paths.profiles}/${user.user_id}`).set(saved)}
+      catch(error){console.warn("새 프로필 경로 동기화 실패",error)}
     }
     else{const profiles=localGet("profiles",{});profiles[user.user_id]=value;localSet("profiles",profiles);broadcast("profiles",profiles)}
     return value;
@@ -340,5 +347,15 @@ MiniTalk.Realtime=(()=>{
     }else throw new Error("실시간 서버 연결 후 선물할 수 있습니다.");
     return{targetId,targetNickname};
   }
-  return{init,cleanup,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,notifyCommandTargets,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,removeShopInventory,giftShopInventory};
+
+  function safeCloudPath(path){const clean=String(path||"").replace(/^\/+|\/+$/g,"");if(!clean||clean.includes(".."))throw new Error("올바르지 않은 데이터 경로입니다.");return clean}
+  async function cloudGet(path,fallback=null){const clean=safeCloudPath(path);if(mode==="firebase"&&db){const snap=await db.ref(clean).once("value");return snap.exists()?snap.val():fallback}return localGet(`cloud.${clean}`,fallback)}
+  async function cloudSet(path,value){requireWritableUser();const clean=safeCloudPath(path);if(mode==="firebase"&&db){await db.ref(clean).set(value);return value}localSet(`cloud.${clean}`,value);return value}
+  async function cloudUpdate(path,value){requireWritableUser();const clean=safeCloudPath(path);if(mode==="firebase"&&db){await db.ref(clean).update(value);return value}const current=localGet(`cloud.${clean}`,{});localSet(`cloud.${clean}`,{...current,...value});return value}
+  async function cloudRemove(path){requireWritableUser();const clean=safeCloudPath(path);if(mode==="firebase"&&db){await db.ref(clean).remove();return true}localRemove(`cloud.${clean}`);return true}
+  async function cloudPush(path,value){requireWritableUser();const clean=safeCloudPath(path),id=crypto.randomUUID();if(mode==="firebase"&&db){const ref=db.ref(clean).push(),payload={...value,createdAt:value?.createdAt??firebase.database.ServerValue.TIMESTAMP};await ref.set(payload);const snap=await ref.once("value");return{id:ref.key,...(snap.val()||value)}}const payload={id,...value,createdAt:Number(value?.createdAt)||Date.now()},current=localGet(`cloud.${clean}`,{});current[id]=payload;localSet(`cloud.${clean}`,current);return payload}
+  async function cloudTransaction(path,updater){requireWritableUser();const clean=safeCloudPath(path);if(mode==="firebase"&&db){const result=await db.ref(clean).transaction(current=>updater(current));return result.snapshot?.val?.()}const current=localGet(`cloud.${clean}`,null),next=updater(current);if(next===undefined)return current;localSet(`cloud.${clean}`,next);return next}
+  function cloudSubscribe(path,listener){const clean=safeCloudPath(path);if(mode==="firebase"&&db){const ref=db.ref(clean),fn=s=>listener(s.val());ref.on("value",fn);return()=>ref.off("value",fn)}listener(localGet(`cloud.${clean}`,null));return()=>{}}
+
+  return{init,cleanup,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,notifyCommandTargets,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,removeShopInventory,giftShopInventory,cloudGet,cloudSet,cloudUpdate,cloudRemove,cloudPush,cloudTransaction,cloudSubscribe};
 })();

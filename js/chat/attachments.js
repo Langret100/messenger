@@ -18,13 +18,33 @@ MiniTalk.Chat.Attachments=(()=>{
     try{input.click()}catch(error){finish(null);throw error}
   })}
   const readData=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("파일을 읽지 못했습니다."));r.readAsDataURL(file)});
-  async function compressImage(file,max=900,quality=.76){if(!file?.type?.startsWith("image/"))throw new Error("이미지 파일이 아닙니다.");if(file.size>15*1024*1024)throw new Error("이미지가 너무 큽니다.");const data=await readData(file);const doc=MiniTalk.UI?.Dom?.doc?.()||document,Img=doc.defaultView?.Image||Image;const img=await new Promise((resolve,reject)=>{const i=new Img();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error("이미지를 읽지 못했습니다."));i.src=data});const scale=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const c=doc.createElement("canvas");c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=c.getContext("2d");ctx.drawImage(img,0,0,c.width,c.height);return c.toDataURL("image/jpeg",quality)}
+  const CHAT_IMAGE_LIMIT=80*1024;
+  async function compressImage(file,max=720,targetBytes=CHAT_IMAGE_LIMIT){
+    if(!file?.type?.startsWith("image/"))throw new Error("이미지 파일이 아닙니다.");
+    if(file.size>15*1024*1024)throw new Error("이미지가 너무 큽니다.");
+    const data=await readData(file),doc=MiniTalk.UI?.Dom?.doc?.()||document,Img=doc.defaultView?.Image||Image;
+    const img=await new Promise((resolve,reject)=>{const i=new Img();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error("이미지를 읽지 못했습니다."));i.src=data});
+    let scale=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+    const canvas=doc.createElement("canvas"),ctx=canvas.getContext("2d",{alpha:false});
+    const encode=(quality)=>new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",quality));
+    for(let sizePass=0;sizePass<6;sizePass+=1){
+      canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+      ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      for(const quality of [.78,.68,.58,.48,.38,.3]){
+        const blob=await encode(quality);if(blob&&blob.size<=targetBytes){
+          return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||""));reader.onerror=()=>reject(new Error("이미지를 압축하지 못했습니다."));reader.readAsDataURL(blob)});
+        }
+      }
+      scale*=.82;
+    }
+    throw new Error("사진을 80KB 이하로 줄이지 못했습니다. 다른 사진을 선택해주세요.");
+  }
   async function upload(mode,file,dataUrl){
     const endpoint=MiniTalkConfig.sheetUrl;if(!endpoint)throw new Error("업로드 서버가 설정되지 않았습니다.");
     const body=new URLSearchParams();body.set("mode",mode);body.set("mime",file.type||"application/octet-stream");body.set("filename",file.name||"file");body.set("size",String(file.size||0));body.set("data",String(dataUrl||"").split(",").pop());const u=MiniTalk.Store.get("user")||{};body.set("user_id",u.user_id||"");body.set("nickname",u.nickname||"");body.set("ts",String(Date.now()));
     const res=await fetch(endpoint,{method:"POST",body});const txt=await res.text();let j={};try{j=JSON.parse(txt||"{}") }catch{}const url=j.url||j.file_url||j.fileUrl||j.image_url||j.link||j.downloadUrl||"";if(!res.ok||!url)throw new Error(j.error||"업로드 서버가 파일 URL을 반환하지 않았습니다.");return url;
   }
-  async function image({camera=false}={}){const file=await pick({accept:"image/*",capture:camera});if(!file)return null;const dataUrl=await compressImage(file);try{return{type:"image",imageUrl:await upload("social_upload_image",file,dataUrl),text:"[사진]"}}catch(error){if(dataUrl.length<=850000)return{type:"image",image:dataUrl,text:"[사진]",uploadFallback:true};throw error}}
+  async function image({camera=false}={}){const file=await pick({accept:"image/*",capture:camera});if(!file)return null;const dataUrl=await compressImage(file);return{type:"image",image:dataUrl,text:"[사진]",inlineImage:true}}
   async function file(){const f=await pick();if(!f)return null;if(f.size>MAX_FILE)throw new Error("파일은 5MB 이하만 보낼 수 있습니다.");const data=await readData(f);const url=await upload("social_upload_file",f,data);return{type:"file",fileUrl:url,fileName:f.name,text:`[파일] ${f.name}`}}
   return{image,file};
 })();

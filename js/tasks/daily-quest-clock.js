@@ -1,23 +1,29 @@
-/* 수학·국어 일일 퀘스트가 함께 사용하는 오전 9시 기준 시계입니다. */
+/* 수학·국어 일일 퀘스트가 함께 사용하는 기기 로컬시간 기준 오전 9시 시계입니다. */
 MiniTalk.Tasks = MiniTalk.Tasks || {};
 MiniTalk.Tasks.DailyQuestClock = (() => {
   const RESET_HOUR = 9;
 
-  function dateKey(date = new Date()) {
-    const questDate = new Date(date);
+  function currentDate(date) {
+    return date ? new Date(date) : new Date();
+  }
+
+  function dateKey(date) {
+    const questDate = currentDate(date);
     if (questDate.getHours() < RESET_HOUR) questDate.setDate(questDate.getDate() - 1);
     return `${questDate.getFullYear()}-${String(questDate.getMonth() + 1).padStart(2, "0")}-${String(questDate.getDate()).padStart(2, "0")}`;
   }
 
-  function nextReset(date = new Date()) {
-    const reset = new Date(date);
+  function nextReset(date) {
+    const current = currentDate(date);
+    const reset = new Date(current);
     reset.setHours(RESET_HOUR, 0, 0, 0);
-    if (date.getTime() >= reset.getTime()) reset.setDate(reset.getDate() + 1);
+    if (current.getTime() >= reset.getTime()) reset.setDate(reset.getDate() + 1);
     return reset;
   }
 
-  function remaining(date = new Date()) {
-    const milliseconds = Math.max(0, nextReset(date).getTime() - date.getTime());
+  function remaining(date) {
+    const current = currentDate(date);
+    const milliseconds = Math.max(0, nextReset(current).getTime() - current.getTime());
     const totalMinutes = Math.ceil(milliseconds / 60000);
     return {
       milliseconds,
@@ -26,7 +32,7 @@ MiniTalk.Tasks.DailyQuestClock = (() => {
     };
   }
 
-  function label(date = new Date()) {
+  function label(date) {
     const time = remaining(date);
     return `새 문제까지 ${time.hours}시간 ${String(time.minutes).padStart(2, "0")}분`;
   }

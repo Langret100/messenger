@@ -67,15 +67,19 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
     ]
   };
 
-  function dateKey(date = new Date()) {
-    return MiniTalk.Tasks.DailyQuestClock.dateKey(date);
+  function dateKey(date) {
+    const current=date||new Date();
+    return MiniTalk.Tasks.DailyQuestClock.dateKey(current);
   }
   const userId = () => MiniTalk.Store.get("user")?.user_id || "guest";
   function hash(text) { let value = 2166136261; for (const char of text) { value ^= char.charCodeAt(0); value = Math.imul(value, 16777619); } return value >>> 0; }
   function random(seed) { let state = seed >>> 0; return () => { state += 0x6D2B79F5; let value = state; value = Math.imul(value ^ value >>> 15, value | 1); value ^= value + Math.imul(value ^ value >>> 7, value | 61); return ((value ^ value >>> 14) >>> 0) / 4294967296; }; }
-  function emptyProgress() { return { date: dateKey(), userId: userId(), correct: Object.fromEntries(MISSIONS.map(item => [item.id, 0])), completed: {} }; }
-  function loadProgress() { const saved = MiniTalk.Persistence.get(STORAGE_KEY, null), progress = emptyProgress(); if (!saved || saved.date !== progress.date || saved.userId !== progress.userId) return progress; MISSIONS.forEach(item => { progress.correct[item.id] = Math.min(5, Math.max(0, Math.floor(Number(saved.correct?.[item.id]) || 0))); progress.completed[item.id] = saved.completed?.[item.id] === true; }); return progress; }
-  function saveProgress(progress) { MiniTalk.Persistence.set(STORAGE_KEY, progress); MiniTalk.Store.set("dailyKoreanQuest", progress); }
+  function emptyProgress() { return { date: dateKey(), userId: userId(), correct: Object.fromEntries(MISSIONS.map(item => [item.id, 0])), completed: {}, attempts: Object.fromEntries(MISSIONS.map(item => [item.id, 0])), updatedAt: 0 }; }
+  function loadProgress() { const saved = MiniTalk.Persistence.get(STORAGE_KEY, null), progress = emptyProgress(); if (!saved || saved.date !== progress.date || saved.userId !== progress.userId) return progress; MISSIONS.forEach(item => { progress.correct[item.id] = Math.min(5, Math.max(0, Math.floor(Number(saved.correct?.[item.id]) || 0))); progress.completed[item.id] = saved.completed?.[item.id] === true; progress.attempts[item.id]=Math.max(0,Math.floor(Number(saved.attempts?.[item.id])||0)); }); progress.updatedAt=Number(saved.updatedAt)||0;return progress; }
+  function cloudPath(progress=loadProgress()){const key=String(progress.userId||userId()).replace(/[.#$\[\]\/]/g,"_");return `moaru/v3/questProgress/${key}/korean/${progress.date}`}
+  function mergeProgress(base,incoming){const next={...base,date:base.date,userId:base.userId,correct:{...(base.correct||{})},completed:{...(base.completed||{})},attempts:{...(base.attempts||{})}};MISSIONS.forEach(m=>{next.correct[m.id]=Math.min(QUESTIONS_PER_MISSION,Math.max(Number(base.correct?.[m.id])||0,Number(incoming?.correct?.[m.id])||0));next.completed[m.id]=base.completed?.[m.id]===true||incoming?.completed?.[m.id]===true;next.attempts[m.id]=Math.max(Number(base.attempts?.[m.id])||0,Number(incoming?.attempts?.[m.id])||0)});next.updatedAt=Math.max(Number(base.updatedAt)||0,Number(incoming?.updatedAt)||0);return next}
+  function saveProgress(progress) { progress.updatedAt=Date.now();MiniTalk.Persistence.set(STORAGE_KEY, progress); MiniTalk.Store.set("dailyKoreanQuest", progress);if(progress.userId!=="guest")MiniTalk.Realtime?.cloudTransaction?.(cloudPath(progress),remote=>{if(!remote||remote.date!==progress.date||remote.userId!==progress.userId)return progress;return mergeProgress(progress,remote)}).catch(error=>console.warn("국어 퀘스트 서버 동기화 실패",error)); }
+  let lastSyncKey="",lastSyncAt=0;async function syncProgress(onProgress){const local=loadProgress(),key=cloudPath(local);if(local.userId==="guest"||key===lastSyncKey&&Date.now()-lastSyncAt<30000)return;lastSyncKey=key;lastSyncAt=Date.now();try{const remote=await MiniTalk.Realtime?.cloudGet?.(key,null);if(!remote||remote.date!==local.date||remote.userId!==local.userId)return;const merged=mergeProgress(local,remote),changed=JSON.stringify({correct:merged.correct,completed:merged.completed,attempts:merged.attempts})!==JSON.stringify({correct:local.correct,completed:local.completed,attempts:local.attempts});if(changed){MiniTalk.Persistence.set(STORAGE_KEY,merged);MiniTalk.Store.set("dailyKoreanQuest",merged);onProgress?.()}}catch(error){console.warn("국어 퀘스트 진행 불러오기 실패",error)}}
   function formatQuestion(raw) {
     const separator = raw.indexOf("? ");
     if (separator > -1) {
@@ -87,10 +91,10 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
     }
     return { instruction: "문제를 읽고 가장 알맞은 답을 고르세요.", question: raw };
   }
-  function generate(missionId) { const items = (BANK[missionId] || []).map(([raw, answer, choices]) => ({ ...formatQuestion(raw), answer, choices: choices.slice() })); const rng = random(hash(`${dateKey()}|${userId()}|${missionId}|korean`)); for (let i = items.length - 1; i > 0; i -= 1) { const j = Math.floor(rng() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; } return items.slice(0, QUESTIONS_PER_MISSION); }
+  function generate(missionId, variant = 0) { const items = (BANK[missionId] || []).map(([raw, answer, choices]) => ({ ...formatQuestion(raw), answer, choices: choices.slice() })); const rng = random(hash(`${dateKey()}|${userId()}|${missionId}|korean|${variant}`)); for (let i = items.length - 1; i > 0; i -= 1) { const j = Math.floor(rng() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; } return items.slice(0, QUESTIONS_PER_MISSION); }
 
   function render(onProgress) {
-    const D = MiniTalk.UI.Dom, guest = Boolean(MiniTalk.Store.get("user")?.isGuest), progress = loadProgress(), grid = D.el("div", { class: "daily-quest-grid" });
+    const D = MiniTalk.UI.Dom, guest = Boolean(MiniTalk.Store.get("user")?.isGuest), progress = loadProgress(), grid = D.el("div", { class: "daily-quest-grid" });syncProgress(onProgress);
     const completedCount = MISSIONS.filter(item => progress.completed[item.id]).length;
     if (!guest && completedCount === MISSIONS.length) MiniTalk.Economy.QuestReward?.ensure("korean", progress.date);
     MISSIONS.forEach(mission => {
@@ -108,14 +112,14 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
   function openMission(missionId, onProgress) {
     if (MiniTalk.Store.get("user")?.isGuest) { MiniTalk.UI.Shell.toast("게스트는 과제를 볼 수만 있어요.");return; }
     const mission = MISSIONS.find(item => item.id === missionId); if (!mission) return;
-    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), questions = generate(missionId), progress = loadProgress();
+    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), progress = loadProgress();let questions = generate(missionId,progress.attempts?.[missionId]||0);
     function renderQuestion() {
       const index = progress.correct[missionId] || 0; body.replaceChildren();
       if (index >= 5 || progress.completed[missionId]) return renderComplete();
       const current = questions[index], feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" }), choices = D.el("div", { class: "quest-choice-grid korean-choice-grid", role: "group", "aria-label": "정답 보기" });
       current.choices.forEach(answer => { const button = D.el("button", { class: "quest-choice korean-choice", type: "button", text: answer }); button.onclick = () => submit(answer, button); choices.append(button); });
       function submit(answer, selected) {
-        if (answer !== current.answer) { selected.classList.add("wrong"); selected.disabled = true; feedback.textContent = "다시 생각해 보세요."; feedback.className = "quest-feedback wrong"; return; }
+        if (answer !== current.answer) { D.all(".quest-choice",choices).forEach(button=>{button.disabled=true});selected.classList.add("wrong");feedback.textContent="아쉬워요. 새 문제로 바꿀게요.";feedback.className="quest-feedback wrong";progress.attempts[missionId]=(Number(progress.attempts?.[missionId])||0)+1;saveProgress(progress);setTimeout(()=>{questions=generate(missionId,progress.attempts[missionId]);renderQuestion()},420);return; }
         D.all(".quest-choice", choices).forEach(button => { button.disabled = true; }); selected.classList.add("correct"); progress.correct[missionId] = index + 1;
         if (progress.correct[missionId] >= 5) progress.completed[missionId] = true;
         saveProgress(progress); onProgress?.(); if (MISSIONS.every(item => progress.completed[item.id])) MiniTalk.Events.emit("quest:subject-complete", { subject: "korean", date: progress.date, userId: progress.userId });

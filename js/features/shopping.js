@@ -99,18 +99,27 @@ MiniTalk.Features.Shopping = (() => {
     return D.el("div", { class: "empty-state compact-empty" }, [D.el("span", { text: "▤" }), D.el("strong", { text: title }), D.el("small", { class: "muted", text: subtitle })]);
   }
 
+
+  function coinAmount(value, className="coin-amount") {
+    const D = MiniTalk.UI.Dom;
+    return D.el("span", { class: className, "aria-label": `${Number(value)||0}코인` }, [
+      D.el("img", { src: "assets/ui/notebook-coin.svg", alt: "" }),
+      D.el("b", { text: String(Number(value)||0) })
+    ]);
+  }
+
   function productCard(product, guest) {
     const D = MiniTalk.UI.Dom;
     return D.el("button", { class: "shop-product-card", type: "button", onclick: () => guest ? MiniTalk.UI.Shell.toast("로그인 후 구매할 수 있어요.") : openPurchase(product) }, [
       product.imageUrl ? D.el("img", { class: "shop-product-image", src: product.imageUrl, alt: "", loading: "lazy" }) : D.el("span", { class: "shop-product-icon", text: "▤" }),
       D.el("span", { class: "shop-product-copy" }, [D.el("strong", { text: product.name }), D.el("small", { class: "muted", text: product.description || "설명 없음" })]),
-      D.el("span", { class: "shop-price", text: `${product.price} 코인` })
+      coinAmount(product.price, "shop-price coin-amount")
     ]);
   }
 
   function openPurchase(product) {
     const D = MiniTalk.UI.Dom, body = D.el("div", { class: "modal-stack purchase-confirm" });
-    const confirm = D.el("button", { class: "button primary", type: "button", text: `${product.price} 코인으로 구매` });
+    const confirm = D.el("button", { class: "button primary purchase-confirm-button", type: "button" }, [coinAmount(product.price, "coin-amount button-coin"), D.el("span", { text: "으로 구매" })]);
     confirm.onclick = async () => {
       confirm.disabled = true;
       try { await Service.purchase(product); MiniTalk.UI.Shell.closeModal(); MiniTalk.UI.Shell.toast(`${product.name}을(를) 구매했습니다.`); }
@@ -122,7 +131,7 @@ MiniTalk.Features.Shopping = (() => {
         MiniTalk.UI.Shell.toast(error.message);
       }
     };
-    body.append(D.el("div", { class: "purchase-product" }, [product.imageUrl ? D.el("img", { class: "purchase-product-image", src: product.imageUrl, alt: product.name }) : null, D.el("strong", { text: product.name }), D.el("p", { class: "muted", text: product.description || "상품 설명이 없습니다." }), D.el("b", { text: `${product.price} 코인` })].filter(Boolean)), D.el("p", { text: "이 상품을 구매하시겠습니까?" }), confirm);
+    body.append(D.el("div", { class: "purchase-product" }, [product.imageUrl ? D.el("img", { class: "purchase-product-image", src: product.imageUrl, alt: product.name }) : null, D.el("strong", { text: product.name }), D.el("p", { class: "muted", text: product.description || "상품 설명이 없습니다." }), coinAmount(product.price, "coin-amount purchase-price")].filter(Boolean)), D.el("p", { text: "이 상품을 구매하시겠습니까?" }), confirm);
     MiniTalk.UI.Shell.modal("구매 확인", body);
   }
 
@@ -173,7 +182,7 @@ MiniTalk.Features.Shopping = (() => {
     if (!products.length) list.append(empty("등록된 상품이 없어요", "상품 추가 버튼으로 첫 상품을 등록하세요."));
     products.forEach(product => list.append(D.el("article", { class: "admin-product-row" }, [
       product.imageUrl ? D.el("img", { class: "admin-product-image", src: product.imageUrl, alt: "", loading: "lazy" }) : D.el("span", { class: "admin-product-image placeholder", text: "▤" }),
-      D.el("div", {}, [D.el("strong", { text: product.name }), D.el("small", { class: "muted", text: `${product.price} 코인 · ${product.description || "설명 없음"}` })]),
+      D.el("div", {}, [D.el("strong", { text: product.name }), D.el("small", { class: "muted admin-product-meta" }, [coinAmount(product.price, "coin-amount inline-coin"), D.el("span", { text: ` · ${product.description || "설명 없음"}` })])]),
       D.el("div", { class: "button-row compact-row" }, [D.el("button", { class: "button secondary compact-button", type: "button", text: "수정", onclick: () => openProductEditor(product, onChanged, { D, Shell }) }), D.el("button", { class: "button secondary compact-button", type: "button", text: "삭제", onclick: () => deleteProduct(product, onChanged, { D, Shell }) })])
     ])));
     panel.append(list);return panel;

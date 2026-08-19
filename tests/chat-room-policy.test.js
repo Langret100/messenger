@@ -13,7 +13,7 @@ if(!realtime.includes("senderProfile"))throw new Error("new messages must includ
 if(!realtime.includes("MiniTalkConfig.paths.legacyProfiles"))throw new Error("profile updates must also update the legacy nickname profile path");
 if(!chats.includes("assets/mascot-avatar.png"))throw new Error("messages without a custom image must use the mascot avatar");
 if(!chats.includes("function roomAvatar(room)"))throw new Error("room list profile image resolver is missing");
-if(!realtime.includes("if(firebaseAuthenticated)"))throw new Error("sheet-login profile saves must not require Firebase auth");
+if(!realtime.includes("Apps Script 로그인 성공 사용자를 기준으로 기존 호환 경로와 v3 프로필 경로를 함께 갱신합니다"))throw new Error("sheet-login profile saves must not depend on Firebase anonymous auth");
 if(!chats.includes('mode==="group"&&item.dataset.roomType==="group"'))throw new Error("group discovery filter is missing");
 if(!chats.includes("quickRoomActions")||!chats.includes("onpointerdown"))throw new Error("long-press room actions are missing");
 if(chats.includes("avatar-presence"))throw new Error("decorative green room-presence dot must not remain");

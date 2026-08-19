@@ -10,7 +10,9 @@ MiniTalk.Features.Tools = (() => {
     { id: "timer", icon: "◷", title: "타이머", description: "간단한 시간 재기" },
     { id: "alarm", icon: "◉", title: "알람", description: "원하는 시간에 알림" },
     { id: "playground", icon: "◇", title: "놀이터", description: "온라인 놀이학습", url: "https://langret100.github.io/multiroom-playground/" },
-    { id: "layout", icon: "✦", title: "화면 표시", description: "글자·메뉴 크기와 움직임" }
+    { id: "layout", icon: "✦", title: "화면 표시", description: "글자·메뉴 크기와 움직임" },
+    { id: "timetable", icon: "▦", title: "오늘의 시간표", description: "이미지로 함께 갱신" },
+    { id: "lunch", icon: "☰", title: "오늘의 급식표", description: "TXT에서 오늘 급식 보기" }
   ];
 
   /* 분기문을 늘리지 않도록 도구 ID와 실행 모듈을 명시적으로 연결합니다. */
@@ -20,7 +22,9 @@ MiniTalk.Features.Tools = (() => {
     timer: () => MiniTalk.Tools.TimerAlarm.openTimer(),
     alarm: () => MiniTalk.Tools.TimerAlarm.openAlarm(),
     layout: () => MiniTalk.Features.Layout.open(),
-    profile: () => MiniTalk.Tools.ProfileEditor.open(refreshIfVisible)
+    profile: () => MiniTalk.Tools.ProfileEditor.open(refreshIfVisible),
+    timetable: () => MiniTalk.Tools.ClassInfo.openTimetable(),
+    lunch: () => MiniTalk.Tools.ClassInfo.openLunch()
   };
 
   function render(host) {

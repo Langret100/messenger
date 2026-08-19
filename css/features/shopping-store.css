@@ -102,3 +102,4 @@
   .shop-inventory-image, .admin-product-image { width: 64px; height: 48px; }
   .shop-inventory-actions, .admin-product-row .button-row { justify-content: flex-end; }
 }
+.coin-amount{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}.coin-amount img{width:16px;height:16px;object-fit:contain}.coin-amount b{font:inherit;font-weight:850}.shop-price.coin-amount{justify-content:center}.purchase-confirm-button{display:flex;justify-content:center;align-items:center;gap:4px}.button-coin img{width:17px;height:17px}.purchase-price{justify-content:center}.admin-product-meta{display:flex;align-items:center;gap:2px;flex-wrap:wrap}.inline-coin img{width:13px;height:13px}

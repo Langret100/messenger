@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.10-final-device-clock-20260819";
+const CACHE = "moaru-v64.5.12-traffic-final-20260819";
 const CORE = [
   "./",
   "./index.html",

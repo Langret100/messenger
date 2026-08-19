@@ -4,30 +4,38 @@
     ".write": false,
     "socialChat": {
       ".read": true,
-      ".indexOn": ["ts"],
+      ".indexOn": [
+        "ts"
+      ],
       "$msgId": {
         ".read": true,
         ".write": true,
-        ".validate": "newData.hasChildren(['user_id','nickname','text','ts']) && newData.child('text').isString() && newData.child('text').val().length <= 500 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber()"
+        ".validate": "newData.hasChildren(['user_id','nickname','text','ts']) && newData.child('text').isString() && newData.child('text').val().length <= 500 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber() && (!newData.child('image').exists() || (newData.child('image').isString() && newData.child('image').val().length <= 120000))"
       }
     },
     "socialChatRooms": {
       "$roomId": {
         ".read": true,
-        ".indexOn": ["ts"],
+        ".indexOn": [
+          "ts"
+        ],
         "$msgId": {
           ".read": true,
           ".write": true,
-          ".validate": "newData.hasChildren(['user_id','nickname','ts']) && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber()"
+          ".validate": "newData.hasChildren(['user_id','nickname','ts']) && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber() && (!newData.child('text').exists() || (newData.child('text').isString() && newData.child('text').val().length <= 500)) && (!newData.child('image').exists() || (newData.child('image').isString() && newData.child('image').val().length <= 120000))"
         }
       }
     },
     "signals": {
-      ".indexOn": ["ts"],
+      ".indexOn": [
+        "ts"
+      ],
       "$roomId": {
         ".read": true,
         ".write": true,
-        ".indexOn": ["ts"],
+        ".indexOn": [
+          "ts"
+        ],
         "$signalId": {
           ".validate": "newData.child('ts').isNumber()"
         }
@@ -37,7 +45,9 @@
       "$roomId": {
         ".read": true,
         ".write": true,
-        ".indexOn": ["ts"],
+        ".indexOn": [
+          "ts"
+        ],
         "$msgId": {
           ".validate": "newData.hasChildren(['user_id','ts']) && newData.child('ts').isNumber()"
         }
@@ -75,12 +85,12 @@
     "moaru": {
       "v3": {
         "presence": {
-          ".read": "auth != null",
-          ".write": "auth != null"
+          ".read": true,
+          ".write": true
         },
         "profiles": {
-          ".read": "auth != null",
-          ".write": "auth != null"
+          ".read": true,
+          ".write": true
         },
         "commands": {
           ".read": false,
@@ -95,10 +105,69 @@
           ".write": false
         },
         "messages": {
-          ".read": "auth != null",
-          ".write": "auth != null",
+          ".read": true,
+          ".write": true,
           "$roomId": {
-            ".indexOn": ["ts"]
+            ".indexOn": [
+              "ts"
+            ]
+          }
+        },
+        "questProgress": {
+          ".read": true,
+          "$userKey": {
+            "$subject": {
+              "$dateKey": {
+                ".write": true,
+                ".validate": "newData.hasChildren(['date','userId','correct','attempts','updatedAt']) && newData.child('date').isString() && newData.child('date').val().length <= 16 && newData.child('userId').isString() && newData.child('userId').val().length <= 100 && newData.child('updatedAt').isNumber()"
+              }
+            }
+          }
+        },
+        "feedState": {
+          ".read": true,
+          ".write": true,
+          "posts": {
+            "$postId": {
+              ".validate": "newData.hasChildren(['id','user_id','nickname','text','mediaType','createdAt','heartCount']) && newData.child('id').isString() && newData.child('id').val() == $postId && newData.child('user_id').isString() && newData.child('user_id').val().length <= 100 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('text').isString() && newData.child('text').val().length <= 180 && newData.child('createdAt').isNumber() && newData.child('heartCount').isNumber() && newData.child('heartCount').val() >= 0 && newData.child('heartCount').val() <= 10000 && (!newData.child('mediaType').exists() || (newData.child('mediaType').isString() && (newData.child('mediaType').val() == '' || newData.child('mediaType').val() == 'image' || newData.child('mediaType').val() == 'video')))",
+              "hearts": {
+                "$userKey": {
+                  ".validate": "newData.val() == true"
+                }
+              }
+            }
+          },
+          "totals": {
+            "$userKey": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
+            }
+          }
+        },
+        "feedMedia": {
+          ".read": true,
+          "$postId": {
+            ".write": true,
+            ".validate": "newData.hasChildren(['type','data']) && newData.child('type').isString() && (newData.child('type').val() == 'image' || newData.child('type').val() == 'video') && newData.child('data').isString() && newData.child('data').val().length <= 900000 && (!newData.child('size').exists() || (newData.child('size').isNumber() && newData.child('size').val() >= 0 && newData.child('size').val() <= 614400))"
+          }
+        },
+        "classInfo": {
+          ".read": true,
+          "timetable": {
+            ".write": true,
+            ".validate": "newData.hasChildren(['image','updatedAt','updatedBy']) && newData.child('image').isString() && newData.child('image').val().length <= 260000 && newData.child('updatedAt').isNumber() && newData.child('updatedBy').isString() && newData.child('updatedBy').val().length <= 30"
+          },
+          "lunch": {
+            ".write": true,
+            ".validate": "newData.hasChildren(['days','updatedAt','updatedBy']) && newData.child('updatedAt').isNumber() && newData.child('updatedBy').isString() && newData.child('updatedBy').val().length <= 30 && (!newData.child('sourceName').exists() || (newData.child('sourceName').isString() && newData.child('sourceName').val().length <= 120))"
+          }
+        },
+        "fridayMission": {
+          ".read": true,
+          "$userKey": {
+            "$weekKey": {
+              ".write": true,
+              ".validate": "newData.hasChildren(['week','index','answers','completed']) && newData.child('week').isString() && newData.child('week').val().length <= 16 && newData.child('index').isNumber() && newData.child('index').val() >= 0 && newData.child('index').val() <= 20 && newData.child('completed').isBoolean()"
+            }
           }
         }
       }

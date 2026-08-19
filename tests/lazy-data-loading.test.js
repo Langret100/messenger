@@ -8,7 +8,8 @@ if(!chats.includes('if(mode==="group")')||!chats.includes("startRoomListSubscrip
 if(feed.includes("scheduleRender()")||feed.includes('render(MiniTalk.UI.Dom.byId("viewHost"))'))throw new Error("feed realtime events still trigger full-screen render");
 if(!feed.includes("patchPost(id)")||!feed.includes("patchHeaderHeart()")||!feed.includes("playHeartFeedback"))throw new Error("feed partial update/heart feedback missing");
 if(!feed.includes('liked||hasHearts')||!feed.includes('text:(liked||hasHearts)?"♥":"♡"'))throw new Error("author-visible red heart state missing");
-if(shop.includes("setInterval(()=>refreshInventory(true)")||shop.includes("상품 목록 미리 불러오기 실패")||shop.includes("보관함 미리 불러오기 실패"))throw new Error("shopping background preload/polling remains");
+if(shop.includes("상품 목록 미리 불러오기 실패"))throw new Error("shopping catalog preload returned");
+if(!shop.includes("setInterval(()=>refreshInventory(true).catch(()=>{}),15000)"))throw new Error("Apps Script shopping safety polling is missing");
 if(!shop.includes("async function enter()")||!shop.includes("function leave(){shopActive=false}")||!shopFeature.includes("Service.enter()")||!shopFeature.includes("Service.leave?.()"))throw new Error("shopping route-scoped loading missing");
 if(shell.includes("StoreService?.refreshCatalog?.()"))throw new Error("shopping catalog is still prefetched at app startup");
 console.log("LAZY_DATA_LOADING_OK");

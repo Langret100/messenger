@@ -219,13 +219,11 @@ MiniTalk.Realtime=(()=>{
   }
   function startServerCommandPolling(){
     const saved=localGet(`server.tasks.${user.user_id}`,{});if(Object.keys(saved).length)emit("tasks",{...(MiniTalk.Store.get("tasks")||{}),...saved});
-    /* Firebase 연결 중에는 사용자별 wakeup 신호가 명령 큐를 깨웁니다.
-     * 로그인 직후 1회만 큐를 확인해 오프라인 중 누락된 명령을 복구하고, 이후 주기 폴링은 하지 않습니다.
-     * Firebase 연결 자체가 실패한 local 모드에서만 기능 복구용 저빈도 폴링을 둡니다. */
+    /* Firebase wakeup 신호는 즉시 반응용으로 유지합니다.
+     * Apps Script 명령 큐도 기존 안정 동작처럼 10초마다 확인해 신호 누락/절전/일시 연결 문제를 빠르게 복구합니다.
+     * 이 폴링은 Apps Script 요청이며 Firebase Realtime Database 다운로드량과는 별개입니다. */
     pollServerCommands();
-    /* 기능 누락 방지용 안전망: Firebase에서는 30분에 한 번만 큐를 확인합니다.
-     * 정상 동작은 wakeup 신호가 즉시 처리하며, 이 타이머는 신호 쓰기 실패/장시간 절전 복귀 같은 예외만 복구합니다. */
-    if(!serverCommandTimer)serverCommandTimer=setInterval(pollServerCommands,mode==="firebase"?1800000:60000);
+    if(!serverCommandTimer)serverCommandTimer=setInterval(pollServerCommands,10000);
   }
 
   async function ensureDefaultRoom(){

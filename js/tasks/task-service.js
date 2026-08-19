@@ -2,7 +2,7 @@
 MiniTalk.Tasks = MiniTalk.Tasks || {};
 MiniTalk.Tasks.TaskService = (() => {
   const COMPLETED_VISIBLE_MS = 2 * 24 * 60 * 60 * 1000;
-  let activeUserId = "", inFlight = null, adminInFlight = null, refreshVersion = 0, adminRefreshVersion = 0;
+  let activeUserId = "", pollTimer = 0, inFlight = null, adminInFlight = null, refreshVersion = 0, adminRefreshVersion = 0;
   const pendingAssignments = new Map();
 
   const user = () => MiniTalk.Store.get("user") || {};
@@ -50,10 +50,12 @@ MiniTalk.Tasks.TaskService = (() => {
   }
 
   function start(current = user()) {
-    if (!current.user_id || current.isGuest) { refreshVersion++;activeUserId = "";inFlight = null;publish([]);return; }
-    if (activeUserId !== current.user_id) { refreshVersion++;activeUserId = current.user_id;inFlight = null; }
-    /* 로그인만 해둔 상태에서는 과제 목록을 주기적으로 읽지 않습니다.
-     * TASK_* wakeup 명령을 받거나 과제 화면에 들어갈 때만 최신 목록을 읽습니다. */
+    if (!current.user_id || current.isGuest) { refreshVersion++;clearInterval(pollTimer);pollTimer = 0;activeUserId = "";inFlight = null;publish([]);return; }
+    if (activeUserId !== current.user_id) { refreshVersion++;clearInterval(pollTimer);pollTimer = 0;activeUserId = current.user_id;inFlight = null; }
+    /* Firebase TASK_* wakeup 신호는 즉시 반응용으로 유지하고,
+     * Apps Script 과제 목록은 기존처럼 12초마다 확인해 신호 누락에도 상태를 빠르게 복구합니다. */
+    refresh(true).catch(error => console.warn("과제 목록을 불러오지 못했습니다.", error));
+    if (!pollTimer) pollTimer = setInterval(() => refresh(true).catch(() => {}), 12000);
   }
   async function enter(){
     const current=user();

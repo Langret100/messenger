@@ -32,6 +32,6 @@ const taskUi=fs.readFileSync(path.join(root,'js/tasks/task-window.js'),'utf8'),f
 if(!taskUi.includes('maxlength: String(ANSWER_MAX)')||!taskUi.includes('maxlength: String(FEEDBACK_MAX)')||!taskUi.includes('image/*')||!taskUi.includes('sourceView.open'))throw new Error('task editor/review UI constraints are incomplete');
 if(!feature.includes('완료 후 2일 동안 표시')||!feature.includes('다시!')||!admin.includes('과제 확인'))throw new Error('task status/review UI is incomplete');
 if(!taskUi.includes('sourceView.open(')||!taskUi.includes('sourceDoc.styleSheets')||!admin.includes('},D.doc())'))throw new Error('admin task review is not opened from the admin window document');
-if(admin.includes('["open","진행 중"]')||!admin.includes('tasks:admin-refresh')||admin.includes('setInterval(()=>{if(!section.isConnected)'))throw new Error('admin task review must refresh from task signals/manual refresh without periodic polling');
+if(admin.includes('["open","진행 중"]')||!admin.includes('tasks:admin-refresh')||!admin.includes('setInterval(()=>{if(!section.isConnected)'))throw new Error('admin task review must keep signal/manual refresh plus Apps Script safety polling');
 if(!server.includes('normalizeMoaruTaskState_')||!server.includes('"TASK_SUBMITTED"'))throw new Error('submitted task state recovery or admin wake-up is missing');
 console.log('TASK_WORKFLOW_OK');

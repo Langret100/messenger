@@ -5,7 +5,7 @@ MiniTalk.Shopping.StoreService = (() => {
   const CATALOG_CACHE_KEY = "shop.catalog.cache.v2";
   const objectValue = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-  let catalogPromise = null, catalogLoadedAt = 0, inventoryPromise = null, activeUserId = "", inventoryVersion = 0, shopActive = false, inventoryDirty = true;
+  let catalogPromise = null, catalogLoadedAt = 0, inventoryPromise = null, pollTimer = 0, activeUserId = "", inventoryVersion = 0, shopActive = false, inventoryDirty = true;
   const pendingPurchaseKeys = new Map();
   const pendingGiftKeys = new Map();
 
@@ -56,10 +56,14 @@ MiniTalk.Shopping.StoreService = (() => {
     return inventoryPromise;
   }
   function start(current=user()) {
-    // 로그인 시에는 캐시만 준비합니다. 쇼핑 화면을 열기 전에는 Apps Script 상품/보관함을 읽지 않습니다.
+    /* Firebase 상품/피드/방 데이터를 상시 읽지 않는 최적화는 유지합니다.
+     * Apps Script 보관함은 기존 안정 동작처럼 15초마다 확인해 선물/사용 상태 누락을 빠르게 복구합니다. */
     hydrateCatalogCache();shopActive=false;inventoryDirty=true;
     const nextUserId=!current.user_id||current.isGuest?"":String(current.user_id);
-    if(activeUserId!==nextUserId){inventoryVersion++;inventoryPromise=null;activeUserId=nextUserId;const cached=activeUserId?objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{})):{};MiniTalk.Store.set("shopInventory",cached)}
+    if(activeUserId!==nextUserId){inventoryVersion++;clearInterval(pollTimer);pollTimer=0;inventoryPromise=null;activeUserId=nextUserId;const cached=activeUserId?objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{})):{};MiniTalk.Store.set("shopInventory",cached)}
+    if(!activeUserId)return;
+    refreshInventory(true).catch(error=>console.warn("보관함을 불러오지 못했습니다.",error));
+    if(!pollTimer)pollTimer=setInterval(()=>refreshInventory(true).catch(()=>{}),15000);
   }
   async function enter(){
     shopActive=true;const current=user();hydrateCatalogCache();

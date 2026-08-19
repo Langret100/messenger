@@ -1,6 +1,6 @@
 /* 일일 국어·수학 퀘스트와 관리자 지정 제출형 과제를 구분해 표시합니다. */
 MiniTalk.Features.Tasks = (() => {
-  let tasks = {};
+  let tasks = {}, entered = false;
 
   MiniTalk.Events.on("rt:tasks", value => {
     tasks = value || {};
@@ -10,6 +10,7 @@ MiniTalk.Features.Tasks = (() => {
 
   function render(host) {
     if (!host) return;
+    if(!entered){entered=true;MiniTalk.Tasks.TaskService?.enter?.().catch(error=>console.warn("과제 목록을 불러오지 못했습니다.",error));}
     const D = MiniTalk.UI.Dom, guest = Boolean(MiniTalk.Store.get("user")?.isGuest), view = D.el("section", { class: "view task-center-view" }), list = D.el("div", { class: "card-list" }), assigned = D.el("section", { class: "assigned-tasks" }), assignedList = D.el("div", { class: "assigned-task-list" });
     const rows = Object.values(tasks).filter(task => MiniTalk.Tasks.TaskService?.visible?.(task) !== false).sort((a, b) => statusOrder(a.status) - statusOrder(b.status) || Number(b.updatedAt || b.createdAt) - Number(a.updatedAt || a.createdAt));
     rows.forEach(task => assignedList.append(taskCard(task, host)));
@@ -40,6 +41,6 @@ MiniTalk.Features.Tasks = (() => {
     return card;
   }
 
-  return { id: "tasks", title: "과제", icon: "✓", render };
+  return { id: "tasks", title: "과제", icon: "✓", render, leave(){entered=false;} };
 })();
 MiniTalk.Registry.register(MiniTalk.Features.Tasks);

@@ -86,7 +86,15 @@
       "v3": {
         "presence": {
           ".read": true,
-          ".write": true
+          ".write": true,
+          ".indexOn": ["online"]
+        },
+        "capacitySessions": {
+          ".read": true,
+          ".write": true,
+          "$sessionId": {
+            ".validate": "!newData.exists() || (newData.hasChildren(['user_id','nickname','connectedAt']) && newData.child('user_id').isString() && newData.child('user_id').val().length <= 100 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('connectedAt').isNumber())"
+          }
         },
         "profiles": {
           ".read": true,

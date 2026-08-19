@@ -5,14 +5,16 @@
    - 재로그인·재진입 시 기존 구독과 타이머를 반드시 정리합니다.
    ============================================================ */
 MiniTalk.Realtime=(()=>{
-  let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,connectionError="",firebaseAuthenticated=false;
+  let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,capacityRef=null,connectionError="",firebaseAuthenticated=false;
   let currentProfiles={},legacyProfiles={},presenceCache={},roomsCache={};
-  let messageUnsub=null,shopInventoryUnsub=null,shopInventoryFallback=false,serverCommandTimer=0,serverCommandPolling=false,serverCommandRepoll=false;
+  let messageUnsub=null,shopInventoryUnsub=null,shopInventoryFallback=false,serverCommandTimer=0,serverCommandPolling=false,serverCommandRepoll=false,roomListUnsubs=[];
   const unsubs=[];
   const handledCommands=new Set();
   const pendingAdminDispatches=new Map();
   const pruneLastAt=new Map();
   const localPrefix="miniTalk.v3.data.";
+  const CAPACITY_SOFT_LIMIT=92,CAPACITY_RETRY_MS=25000;
+  let capacitySessionId="",capacityEstimateLast=0;
 
   const validKey=()=>{const k=MiniTalkConfig.firebase.apiKey;return Boolean(k&&!k.includes("__FIREBASE")&&k.length>20)};
   const emit=(type,data)=>MiniTalk.Events.emit(`rt:${type}`,data);
@@ -57,6 +59,34 @@ MiniTalk.Realtime=(()=>{
     if(!window.firebase?.app)await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
     if(!window.firebase?.database)await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js")
   }
+
+  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  function capacitySessionPath(){return MiniTalkConfig.paths.capacitySessions||"moaru/v3/capacitySessions"}
+  async function restJson(path,{shallow=false,timeout=5000}={}){
+    const base=String(MiniTalkConfig.firebase.databaseURL||"").replace(/\/$/,"");if(!base)throw new Error("Firebase Database URL이 없습니다.");
+    const encoded=String(path||"").split("/").filter(Boolean).map(encodeURIComponent).join("/");
+    const controller=typeof AbortController!=="undefined"?new AbortController():null,timer=controller?setTimeout(()=>controller.abort(),timeout):0;
+    try{const query=shallow?"?shallow=true":"";const response=await fetch(`${base}/${encoded}.json${query}`,{cache:"no-store",signal:controller?.signal});if(!response.ok)throw new Error(`Firebase 사전 확인 실패 (${response.status})`);return await response.json()}finally{if(timer)clearTimeout(timer)}
+  }
+  async function estimateCapacity(){
+    const [slotsResult,presenceResult]=await Promise.allSettled([restJson(capacitySessionPath(),{shallow:true}),restJson(MiniTalkConfig.paths.presence)]);
+    const slots=slotsResult.status==="fulfilled"&&slotsResult.value&&typeof slotsResult.value==="object"?Object.keys(slotsResult.value).length:0;
+    const presence=presenceResult.status==="fulfilled"&&presenceResult.value&&typeof presenceResult.value==="object"?presenceResult.value:{};
+    const onlineUsers=Object.values(presence).filter(entry=>entry&&entry.online===true).length;
+    if(slotsResult.status==="rejected"&&presenceResult.status==="rejected")throw slotsResult.reason||presenceResult.reason;
+    return Math.max(slots,onlineUsers)
+  }
+  async function waitForCapacity(){
+    capacitySessionId=`s-${crypto.randomUUID().replace(/-/g,"").slice(0,24)}`;
+    while(true){
+      try{const count=await estimateCapacity();capacityEstimateLast=count;if(count<CAPACITY_SOFT_LIMIT){emit("capacity",{state:"admitted",count,limit:CAPACITY_SOFT_LIMIT});return}
+        emit("capacity",{state:"waiting",count,limit:CAPACITY_SOFT_LIMIT,retryMs:CAPACITY_RETRY_MS});await wait(CAPACITY_RETRY_MS)
+      }catch(error){
+        /* 정원 확인 서버가 일시적으로 실패해도 로그인/채팅 기능 자체를 막지는 않습니다. */
+        console.warn("접속 정원 사전 확인 실패, 기능 보존을 위해 입장을 계속합니다.",error);emit("capacity",{state:"unknown",limit:CAPACITY_SOFT_LIMIT});return
+      }
+    }
+  }
   function waitForConnected(database,timeout=7000){return new Promise((resolve,reject)=>{const ref=database.ref(".info/connected");const timer=setTimeout(()=>{ref.off("value",onValue);reject(new Error("Firebase 연결 시간 초과"))},timeout);function onValue(s){if(s.val()===true){clearTimeout(timer);ref.off("value",onValue);resolve()}}ref.on("value",onValue)})}
 
   function bind(ref,event,fn,errorMessage="실시간 데이터를 읽지 못했습니다."){
@@ -83,12 +113,14 @@ MiniTalk.Realtime=(()=>{
   function cleanup(){
     const previousUser=user;
     messageUnsub?.();messageUnsub=null;
+    stopRoomListSubscription();
     shopInventoryUnsub?.();shopInventoryUnsub=null;shopInventoryFallback=false;
     while(unsubs.length){try{unsubs.pop()()}catch{}}
     if(heartbeat){clearInterval(heartbeat);heartbeat=null}
     if(serverCommandTimer){clearInterval(serverCommandTimer);serverCommandTimer=0}serverCommandPolling=false;serverCommandRepoll=false;
     if(storageHandler){removeEventListener("storage",storageHandler);storageHandler=null}
     if(channel){channel.close();channel=null}
+    if(mode==="firebase"&&capacityRef){capacityRef.remove().catch(()=>{});capacityRef=null}
     if(mode==="firebase"&&presenceRef){presenceRef.update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP}).catch(()=>{});presenceRef=null}
     if(mode==="local"&&previousUser?.user_id){try{const all=localGet("presence",{});if(all[previousUser.user_id]){all[previousUser.user_id].online=false;all[previousUser.user_id].lastSeen=Date.now();localSet("presence",all)}}catch{}}
     handledCommands.clear();pendingAdminDispatches.clear();pruneLastAt.clear();
@@ -112,7 +144,7 @@ MiniTalk.Realtime=(()=>{
     cleanup();user=nextUser;db=null;mode="local";connectionError="";firebaseAuthenticated=false;shopInventoryFallback=false;currentProfiles={};legacyProfiles={};presenceCache={};roomsCache={};
     // 사용자 인증의 기준은 Apps Script/시트 로그인입니다. 게스트는 Firebase에 연결하지 않습니다.
     if(validKey()&&!nextUser?.isGuest){
-      try{await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);db=firebase.database();await waitForConnected(db);mode="firebase"}
+      try{await waitForCapacity();await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);db=firebase.database();await waitForConnected(db);mode="firebase"}
       catch(error){connectionError=String(error?.code||error?.message||error);console.warn("Firebase 연결 실패, 로컬 모드로 전환",error);db=null;mode="local"}
     }
     MiniTalk.Store.set("transport",mode);
@@ -121,13 +153,26 @@ MiniTalk.Realtime=(()=>{
     return mode;
   }
 
+  function stopRoomListSubscription(){while(roomListUnsubs.length){try{roomListUnsubs.pop()()}catch{}}}
+  async function startRoomListSubscription(){
+    stopRoomListSubscription();
+    if(mode!=="firebase"||!db){emit("rooms",localGet("rooms",{}));return}
+    const ref=db.ref(MiniTalkConfig.paths.rooms),publish=()=>emit("rooms",{...roomsCache});
+    try{const snap=await ref.once("value");roomsCache={};const source=snap.val()||{};Object.entries(source).forEach(([id,value])=>{roomsCache[id]=normalizeRoom(id,value||{})});publish()}catch(error){console.error("대화방 목록을 읽을 권한이 없습니다.",error);emit("error",{message:"대화방 목록을 읽을 권한이 없습니다.",code:String(error?.code||"")});return}
+    const add=(event,handler)=>{ref.on(event,handler);roomListUnsubs.push(()=>ref.off(event,handler))};
+    add("child_added",s=>{const next=normalizeRoom(s.key,s.val()||{});if(JSON.stringify(roomsCache[s.key])===JSON.stringify(next))return;roomsCache[s.key]=next;publish()});
+    add("child_changed",s=>{roomsCache[s.key]=normalizeRoom(s.key,s.val()||{});publish()});
+    add("child_removed",s=>{delete roomsCache[s.key];publish()});
+  }
+
   async function startFirebase(){
     const initialData=[];
-    const roomsRef=db.ref(MiniTalkConfig.paths.rooms),presenceListRef=db.ref(MiniTalkConfig.paths.presence);
-    initialData.push(roomsRef.once("value").then(s=>{roomsCache={};const source=s.val()||{};Object.entries(source).forEach(([id,value])=>{roomsCache[id]=normalizeRoom(id,value||{})});emit("rooms",{...roomsCache})}).catch(error=>{console.error("대화방 목록을 읽을 권한이 없습니다.",error);emit("error",{message:"대화방 목록을 읽을 권한이 없습니다.",code:String(error?.code||"")})}));
-    bind(roomsRef,"child_added",s=>{roomsCache[s.key]=normalizeRoom(s.key,s.val()||{});emit("rooms",{...roomsCache})},"대화방 변경을 읽지 못했습니다.");
-    bind(roomsRef,"child_changed",s=>{roomsCache[s.key]=normalizeRoom(s.key,s.val()||{});emit("rooms",{...roomsCache})},"대화방 변경을 읽지 못했습니다.");
-    bind(roomsRef,"child_removed",s=>{delete roomsCache[s.key];emit("rooms",{...roomsCache})},"대화방 변경을 읽지 못했습니다.");
+    const presenceListRef=db.ref(MiniTalkConfig.paths.presence);
+    /* Spark의 실제 한도는 연결 수 기준이므로 user_id가 아닌 탭/세션 단위 슬롯을 별도로 유지합니다.
+     * 사전 REST 확인은 지속 연결을 만들지 않고, 입장 후 이 슬롯은 onDisconnect로 자동 제거됩니다. */
+    capacityRef=db.ref(`${capacitySessionPath()}/${capacitySessionId||`s-${crypto.randomUUID().replace(/-/g,"").slice(0,24)}`}`);
+    await capacityRef.set({user_id:user.user_id,nickname:user.nickname,connectedAt:firebase.database.ServerValue.TIMESTAMP});
+    capacityRef.onDisconnect().remove();
     // 사용자 신원 확인은 Apps Script 로그인에서 끝냅니다. Firebase 익명 인증은 사용하지 않습니다.
     // Firebase는 로그인 성공 후 실시간 데이터 저장/동기화 통로로만 사용합니다.
     const legacyProfilesRef=db.ref(MiniTalkConfig.paths.legacyProfiles);
@@ -177,12 +222,18 @@ MiniTalk.Realtime=(()=>{
   }
   function startServerCommandPolling(){
     const saved=localGet(`server.tasks.${user.user_id}`,{});if(Object.keys(saved).length)emit("tasks",{...(MiniTalk.Store.get("tasks")||{}),...saved});
-    pollServerCommands();if(!serverCommandTimer)serverCommandTimer=setInterval(pollServerCommands,10000);
+    /* Firebase 연결 중에는 사용자별 wakeup 신호가 명령 큐를 깨웁니다.
+     * 로그인 직후 1회만 큐를 확인해 오프라인 중 누락된 명령을 복구하고, 이후 주기 폴링은 하지 않습니다.
+     * Firebase 연결 자체가 실패한 local 모드에서만 기능 복구용 저빈도 폴링을 둡니다. */
+    pollServerCommands();
+    /* 기능 누락 방지용 안전망: Firebase에서는 30분에 한 번만 큐를 확인합니다.
+     * 정상 동작은 wakeup 신호가 즉시 처리하며, 이 타이머는 신호 쓰기 실패/장시간 절전 복귀 같은 예외만 복구합니다. */
+    if(!serverCommandTimer)serverCommandTimer=setInterval(pollServerCommands,mode==="firebase"?1800000:60000);
   }
 
   async function ensureDefaultRoom(){
     const room={id:"global",name:"전체 대화",title:"전체 대화",type:"group",updatedAt:Date.now(),lastMessage:""};
-    if(mode==="firebase"){const ref=db.ref(`${MiniTalkConfig.paths.rooms}/global`);const snap=await ref.once("value");if(!snap.exists()){await ref.set(room);MiniTalk.Chat.ServerBackup?.room("CREATE",room)}}
+    if(mode==="firebase"){const ref=db.ref(`${MiniTalkConfig.paths.rooms}/global`);const snap=await ref.once("value");let value=snap.val();if(!snap.exists()){await ref.set(room);MiniTalk.Chat.ServerBackup?.room("CREATE",room);value=room}roomsCache.global=normalizeRoom("global",value||room);emit("rooms",{...roomsCache})}
     else{const rooms=localGet("rooms",{});if(!rooms.global){rooms.global=room;localSet("rooms",rooms)}}
   }
   function updatePresence(){const all=localGet("presence",{}),now=Date.now();for(const id of Object.keys(all))all[id].online=Boolean(all[id].online&&now-(all[id].lastSeen||0)<45000);all[user.user_id]={user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:now};localSet("presence",all);broadcast("presence",all)}
@@ -385,5 +436,5 @@ MiniTalk.Realtime=(()=>{
   function cloudSubscribe(path,listener){const clean=safeCloudPath(path);if(mode==="firebase"&&db){const ref=db.ref(clean),fn=s=>listener(s.val());ref.on("value",fn);return()=>ref.off("value",fn)}listener(localGet(`cloud.${clean}`,null));return()=>{}}
   function cloudSubscribeChildren(path,{added,changed,removed}={}){const clean=safeCloudPath(path);if(mode==="firebase"&&db){const ref=db.ref(clean),onAdded=s=>added?.(s.key,s.val()),onChanged=s=>changed?.(s.key,s.val()),onRemoved=s=>removed?.(s.key,s.val());if(added)ref.on("child_added",onAdded);if(changed)ref.on("child_changed",onChanged);if(removed)ref.on("child_removed",onRemoved);return()=>{if(added)ref.off("child_added",onAdded);if(changed)ref.off("child_changed",onChanged);if(removed)ref.off("child_removed",onRemoved)}}const value=localGet(`cloud.${clean}`,{});Object.entries(value&&typeof value==="object"?value:{}).forEach(([key,row])=>added?.(key,row));return()=>{}}
 
-  return{init,cleanup,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,notifyCommandTargets,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,removeShopInventory,giftShopInventory,cloudGet,cloudSet,cloudUpdate,cloudRemove,cloudPush,cloudTransaction,cloudSubscribe,cloudSubscribeChildren};
+  return{init,cleanup,startRoomListSubscription,stopRoomListSubscription,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,notifyCommandTargets,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,removeShopInventory,giftShopInventory,cloudGet,cloudSet,cloudUpdate,cloudRemove,cloudPush,cloudTransaction,cloudSubscribe,cloudSubscribeChildren};
 })();

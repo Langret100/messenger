@@ -8,6 +8,6 @@ window.MiniTalkConfig={
   appName:"모아루",
   sheetUrl:"https://script.google.com/macros/s/AKfycbz6PjWqKuoTmTalX7ieq3NuhJr-6DPwFQI3c7sDCu9cSCFDt90DP4Ju0yIjfjOgyNoI6w/exec",
   firebase:{apiKey:"__FIREBASE_API_KEY__",authDomain:"web-ghost-c447b.firebaseapp.com",databaseURL:"https://web-ghost-c447b-default-rtdb.firebaseio.com",projectId:"web-ghost-c447b",storageBucket:"web-ghost-c447b.firebasestorage.app",messagingSenderId:"198377381878",appId:"1:198377381878:web:83b56b1b4d63138d27b1d7"},
-  paths:{rooms:"rooms",globalMessages:"socialChat",roomMessages:"socialChatRooms",legacyProfiles:"profiles",presence:"moaru/v3/presence",commands:"moaru/v3/commands",tasks:"moaru/v3/tasks",profiles:"moaru/v3/profiles",shopInventory:"moaru/v3/shop/inventory"},
+  paths:{rooms:"rooms",globalMessages:"socialChat",roomMessages:"socialChatRooms",legacyProfiles:"profiles",presence:"moaru/v3/presence",capacitySessions:"moaru/v3/capacitySessions",commands:"moaru/v3/commands",tasks:"moaru/v3/tasks",profiles:"moaru/v3/profiles",shopInventory:"moaru/v3/shop/inventory"},
   sites:[{name:"Google",url:"https://www.google.com"},{name:"네이버",url:"https://www.naver.com"},{name:"YouTube",url:"https://www.youtube.com"},{name:"Classroom",url:"https://classroom.google.com"},{name:"Padlet",url:"https://padlet.com"},{name:"Canva",url:"https://www.canva.com"}]
 };

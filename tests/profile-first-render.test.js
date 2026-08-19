@@ -9,5 +9,5 @@ const room=realtime.indexOf('await ensureDefaultRoom()',wait);
 if(wait<0||room<wait)throw new Error('profiles and rooms are not awaited before the initial workspace render');
 if(!chats.includes('MiniTalk.Store.set("profiles",profiles||{})'))throw new Error('profile snapshot is not stored before chat rendering');
 if(!chats.includes('const isRenderedChatRoute=()=>MiniTalk.Router.current()==="chats"')||chats.includes('if(MiniTalk.Store.get("route")!=="chats")return'))throw new Error('initial Firebase events can render the chat list before the router enters it');
-for(const ref of ['js/adapters/auth-api.js?v=64.5.8','js/adapters/realtime.js?v=64.5.12'])if(!html.includes(ref))throw new Error(`stale profile/auth cache version: ${ref}`);
+for(const ref of ['js/adapters/auth-api.js?v=64.5.8','js/adapters/realtime.js?v=64.5.15'])if(!html.includes(ref))throw new Error(`stale profile/auth cache version: ${ref}`);
 console.log('PROFILE_FIRST_RENDER_OK');

@@ -35,10 +35,10 @@ MiniTalk.Features.Shopping = (() => {
     screen.scrollTop = scrollTop;
   }
 
-  function render(host, options = {}) {
+  async function render(host, options = {}) {
     const D = MiniTalk.UI.Dom, user = MiniTalk.Store.get("user") || {};
     const previousScroll = options.preserveScroll ? Number(host.querySelector(".shopping-screen")?.scrollTop || 0) : 0;
-    if (options.refreshCatalog !== false) Service.refreshCatalog().catch(error => console.warn("상품 목록을 불러오지 못했습니다.", error));
+    if (options.refreshCatalog !== false) await Service.enter();
     MiniTalk.UI.Shell.setHeader("쇼핑", [MiniTalk.Economy.CoinWallet.badge({ header: true })]);
     const view = D.el("section", { class: `view utility-view shopping-view${options.animate === false ? "" : " view-enter"}` });
     const wrap = D.el("div", { class: "card-list shopping-screen" });
@@ -240,6 +240,7 @@ MiniTalk.Features.Shopping = (() => {
     body.append(D.el("p", { text: `${product.name} 상품을 삭제할까요?` }), D.el("small", { class: "muted", text: "이미 구매한 사용자의 보관함 상품은 유지됩니다." }), remove);Shell.modal("상품 삭제", body);
   }
 
-  return { id: "shopping", title: "쇼핑", icon: "▤", render, adminPanel };
+  function leave(){inventoryOpen=false;clearTimeout(refreshTimer);refreshTimer=0;Service.leave?.()}
+  return { id: "shopping", title: "쇼핑", icon: "▤", render, leave, adminPanel };
 })();
 MiniTalk.Registry.register(MiniTalk.Features.Shopping);

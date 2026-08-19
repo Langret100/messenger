@@ -1,0 +1,16 @@
+const fs=require('fs'),path=require('path'),root=path.resolve(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
+const rt=read('js/adapters/realtime.js'),chats=read('js/features/chats.js'),css=read('css/app.css'),feedcss=read('css/features/feed-classinfo-weekly.css'),html=read('index.html'),sw=read('sw.js'),app=read('js/app.js');
+ok(rt.includes('function parseLegacyParticipantList(value)'),'legacy room participant parser missing');
+ok(rt.includes('value.participants??value.memberNames??value.member_names'),'legacy room member formats are not normalized');
+ok(rt.includes('roomDirectoryCache=directory'),'initial full room metadata is not retained for group compatibility');
+ok(rt.includes('const publish=()=>emit("rooms",{...roomDirectoryCache});publish();'),'group view does not reuse initial room directory');
+ok(rt.includes('startAt(Date.now())')&&rt.includes('add(ref,"child_changed",upsert)'),'group live updates should only fetch changes after initial metadata');
+ok(chats.includes('function roomPreview(room)')&&chats.includes('MiniTalk.Chat.Emoji.appendText(text,node,room?.lastMessageEmoticon||"")'),'room list custom emoticon preview missing');
+ok(rt.includes('lastMessageEmoticon:message.emoticon||null'),'room metadata does not preserve custom emoticon code');
+ok(css.includes('.conversation-preview .chat-emoticon{width:22px!important;height:22px!important'),'room-list emoticon is not compact');
+ok(feedcss.includes('background:color-mix(in srgb,#cfd3da 68%,transparent)'),'feed FAB is not translucent light gray');
+ok(feedcss.includes('bottom:calc(-6px + 58px'),'feed FAB was not lowered further');
+ok(html.includes('css/app.css?v=64.5.7')&&html.includes('feed-classinfo-weekly.css?v=65.0.10')&&html.includes('realtime.js?v=64.5.27')&&html.includes('features/chats.js?v=64.5.12')&&html.includes('app.js?v=64.5.28'),'v5.20 cache versions stale');
+ok(sw.includes('moaru-v64.5.28-login-first-paint-20260819')&&app.includes('sw.js?v=64.5.28'),'v5.20 service worker version stale');
+console.log('LEGACY_ROOM_EMOJI_UI_OK');

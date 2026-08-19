@@ -7,7 +7,7 @@
 MiniTalk.Realtime=(()=>{
   let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,connectionError="",firebaseAuthenticated=false;
   let initGeneration=0,transportReady=Promise.resolve("idle"),resolveTransportReady=null,requestedMessageRoom=null,roomListRequested=false;
-  let currentProfiles={},legacyProfiles={},presenceCache={},roomsCache={};
+  let currentProfiles={},legacyProfiles={},presenceCache={},roomsCache={},roomDirectoryCache={};
   let messageUnsub=null,shopInventoryUnsub=null,shopInventoryFallback=false,serverCommandTimer=0,serverCommandPolling=false,serverCommandRepoll=false,roomListUnsubs=[];
   const unsubs=[];
   const handledCommands=new Set();
@@ -22,28 +22,37 @@ MiniTalk.Realtime=(()=>{
   const localRemove=key=>{try{localStorage.removeItem(localPrefix+key)}catch{}};
   const memberValue=(role="member")=>({user_id:user.user_id,nickname:user.nickname,role,joinedAt:Date.now()});
   const roomMembers=room=>room?.members&&typeof room.members==="object"&&!Array.isArray(room.members)?room.members:{};
-  const isRoomMember=room=>room?.id==="global"||Boolean(roomMembers(room)[user?.user_id]);
+  function parseLegacyParticipantList(value){
+    if(Array.isArray(value))return value;
+    if(typeof value!=="string")return[];
+    const raw=value.trim();if(!raw)return[];
+    if(raw.startsWith("[")){try{const parsed=JSON.parse(raw);if(Array.isArray(parsed))return parsed}catch{}}
+    return raw.split(/[,|\n]/).map(item=>item.trim()).filter(Boolean)
+  }
+  const isRoomMember=room=>room?.id==="global"||Boolean(roomMembers(room)[user?.user_id])||String(room?.creator||"")===String(user?.user_id||"");
   const requireWritableUser=()=>{if(!user?.user_id||user.isGuest)throw new Error("게스트는 내용을 볼 수만 있습니다.");return user};
   const messagesPath=roomId=>roomId==="global"?MiniTalkConfig.paths.globalMessages:`${MiniTalkConfig.paths.roomMessages}/${roomId}`;
   const commandSignalRoom=userId=>`admin-${String(userId||"").replace(/[^0-9A-Za-z_-]/g,"_").slice(0,100)}`;
   function normalizeRoom(id,value={}){
-    const participants=Array.isArray(value.participants)?value.participants:(Array.isArray(value.members)?value.members:[]);
+    const participantSource=value.participants??value.memberNames??value.member_names??(Array.isArray(value.members)||typeof value.members==="string"?value.members:[]);
+    const participants=parseLegacyParticipantList(participantSource);
     const members={};
     Object.entries(roomMembers(value)).forEach(([key,entry])=>{
       const member=entry&&typeof entry==="object"?entry:{nickname:String(entry||key)};
-      const nickname=String(member.nickname||key);
-      const memberId=nickname===user?.nickname?user.user_id:String(member.user_id||key);
+      const nickname=String(member.nickname||member.name||key).trim();
+      const memberId=nickname===user?.nickname?String(user.user_id):String(member.user_id||member.userId||key);
       members[memberId]={...member,user_id:memberId,nickname}
     });
     participants.forEach((entry,index)=>{
-      const nickname=String(typeof entry==="string"?entry:(entry?.nickname||"")).trim();if(!nickname)return;
-      const memberId=String(entry?.user_id||(nickname===user?.nickname?user.user_id:`legacy-${index}-${nickname.replace(/[.#$\[\]/]/g,"-")}`));
-      members[memberId]={user_id:memberId,nickname,role:index===0?"owner":"member",joinedAt:Number(entry?.joinedAt||0)}
+      const nickname=String(typeof entry==="string"?entry:(entry?.nickname||entry?.name||"")).trim();if(!nickname)return;
+      const memberId=String((typeof entry==="object"&&(entry.user_id||entry.userId))||(nickname===user?.nickname?user.user_id:`legacy-${index}-${nickname.replace(/[.#$\[\]/]/g,"-")}`));
+      members[memberId]={...(typeof entry==="object"?entry:{}),user_id:memberId,nickname,role:index===0?"owner":"member",joinedAt:Number((typeof entry==="object"&&entry.joinedAt)||0)}
     });
-    const creatorRaw=String(value.creator||"");
-    const creator=creatorRaw===user?.nickname?user.user_id:creatorRaw;
-    const lastMessageAt=Number(value.lastMessageAt||value.last_message_at||(value.lastMessage?value.updatedAt:0)||0);
-    return{...value,id:String(value.id||id),title:String(value.title||value.name||(id==="global"?"전체 대화":"대화방")),creator,members,hasPassword:Boolean(value.hasPassword||value.password),lastMessageAt}
+    const creatorRaw=String(value.creator||value.creator_user_id||value.owner||"");
+    const creator=creatorRaw===user?.nickname?String(user.user_id):creatorRaw;
+    const lastMessage=String(value.lastMessage||value.last_message||value.preview||"");
+    const lastMessageAt=Number(value.lastMessageAt||value.last_message_at||(lastMessage?(value.updatedAt||value.updated_at):0)||0);
+    return{...value,id:String(value.id||value.room_id||id),title:String(value.title||value.name||(id==="global"?"전체 대화":"대화방")),creator,members,participants,lastMessage,hasPassword:Boolean(value.hasPassword||value.has_password||value.password),lastMessageAt}
   }
   const firebaseRoomValue=room=>({...room,name:String(room?.title||room?.name||"대화방")});
   async function passwordHash(password,salt){
@@ -179,7 +188,7 @@ MiniTalk.Realtime=(()=>{
   }
 
   async function init(nextUser){
-    cleanup();user=nextUser;db=null;connectionError="";firebaseAuthenticated=false;shopInventoryFallback=false;currentProfiles={};legacyProfiles={};presenceCache={};roomsCache={};
+    cleanup();user=nextUser;db=null;connectionError="";firebaseAuthenticated=false;shopInventoryFallback=false;currentProfiles={};legacyProfiles={};presenceCache={};roomsCache={};roomDirectoryCache={};
     const generation=beginTransportInit();
     // 사용자 신원 확인은 Apps Script 로그인에서 끝냅니다. Firebase 데이터 채널은 별도로 준비하며 첫 화면 진입을 막지 않습니다.
     let nextMode="local";
@@ -207,27 +216,29 @@ MiniTalk.Realtime=(()=>{
     await awaitTransport();
     if(!roomListRequested)return;
     if(mode!=="firebase"||!db){emit("rooms",localGet("rooms",{}));return}
-    const ref=db.ref(MiniTalkConfig.paths.rooms),query=ref.orderByChild("lastMessageAt").startAt(1),publish=()=>emit("rooms",{...roomsCache});
-    try{const snap=await query.once("value");if(!roomListRequested)return;roomsCache={};const source=snap.val()||{};Object.entries(source).forEach(([id,value])=>{roomsCache[id]=normalizeRoom(id,value||{})});publish()}catch(error){console.error("대화방 목록을 읽을 권한이 없습니다.",error);emit("error",{message:"대화방 목록을 읽을 권한이 없습니다.",code:String(error?.code||"")});return}
-    if(!roomListRequested)return;
-    const add=(event,handler)=>{query.on(event,handler);roomListUnsubs.push(()=>query.off(event,handler))};
-    add("child_added",s=>{const next=normalizeRoom(s.key,s.val()||{});if(JSON.stringify(roomsCache[s.key])===JSON.stringify(next))return;roomsCache[s.key]=next;publish()});
-    add("child_changed",s=>{roomsCache[s.key]=normalizeRoom(s.key,s.val()||{});publish()});
-    add("child_removed",s=>{delete roomsCache[s.key];publish()});
+    /* 로그인 때 이미 받은 방 메타 디렉터리를 즉시 재사용합니다. 그룹 탭 때문에 같은 전체 목록을 다시 받지 않습니다. */
+    const publish=()=>emit("rooms",{...roomDirectoryCache});publish();
+    const ref=db.ref(MiniTalkConfig.paths.rooms),liveQuery=ref.orderByChild("lastMessageAt").startAt(Date.now());
+    const add=(target,event,handler)=>{target.on(event,handler);roomListUnsubs.push(()=>target.off(event,handler))};
+    const upsert=s=>{const next=normalizeRoom(s.key,s.val()||{});roomDirectoryCache[s.key]=next;if(isRoomMember(next))roomsCache[s.key]=next;else delete roomsCache[s.key];publish()};
+    /* 기존 목록은 로그인 초기 메타를 재사용하고, 그룹 화면을 연 뒤 실제로 바뀐 방만 받습니다. */
+    add(liveQuery,"child_added",upsert);
+    add(ref,"child_changed",upsert);
+    add(ref,"child_removed",s=>{delete roomDirectoryCache[s.key];delete roomsCache[s.key];publish()});
   }
 
   async function loadInitialRooms(){
     if(mode!=="firebase"||!db)return;
     const ref=db.ref(MiniTalkConfig.paths.rooms);
     try{
-      const snap=await ref.once("value"),source=snap.val()||{},memberOnly={};
-      Object.entries(source).forEach(([id,value])=>{const room=normalizeRoom(id,value||{});if(isRoomMember(room))memberOnly[id]=room});
+      const snap=await ref.once("value"),source=snap.val()||{},memberOnly={},directory={};
+      Object.entries(source).forEach(([id,value])=>{const room=normalizeRoom(id,value||{});directory[id]=room;if(isRoomMember(room))memberOnly[id]=room});
       if(!memberOnly.global){
         const room={id:"global",name:"전체 대화",title:"전체 대화",type:"group",updatedAt:Date.now(),lastMessage:""};
-        memberOnly.global=normalizeRoom("global",room);
+        const normalized=normalizeRoom("global",room);memberOnly.global=normalized;directory.global=normalized;
         ref.child("global").set(room).then(()=>MiniTalk.Chat.ServerBackup?.room("CREATE",room)).catch(error=>console.warn("기본 대화방 생성 실패",error));
       }
-      roomsCache=memberOnly;emit("rooms",{...roomsCache})
+      roomsCache=memberOnly;roomDirectoryCache=directory;emit("rooms",{...roomsCache})
     }catch(error){console.error("내 대화방 목록을 읽지 못했습니다.",error);emit("error",{message:"내 대화방 목록을 읽지 못했습니다.",code:String(error?.code||"")})}
   }
 
@@ -356,13 +367,13 @@ MiniTalk.Realtime=(()=>{
     if(mode==="firebase"){
       const ref=db.ref(messagesPath(roomId)).push(),serverMessage={...message,ts:firebase.database.ServerValue.TIMESTAMP};
       await ref.set(serverMessage);
-      await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).update({lastMessage:preview,lastMessageAt:firebase.database.ServerValue.TIMESTAMP,lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:firebase.database.ServerValue.TIMESTAMP});
+      await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).update({lastMessage:preview,lastMessageEmoticon:message.emoticon||null,lastMessageAt:firebase.database.ServerValue.TIMESTAMP,lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:firebase.database.ServerValue.TIMESTAMP});
       /* 방금 쓴 메시지를 Firebase에서 다시 읽지 않습니다. 실시간 수신본의 ts는 child_added에서 서버 timestamp로 들어오며,
        * 시트 백업은 이미 가진 메시지 내용과 clientTs로 충분합니다. */
       const saved={id:ref.key,...message};MiniTalk.Chat.ServerBackup?.message(saved);pruneRoomMessages(roomId).catch(()=>{});return saved;
     }
     const value={id:crypto.randomUUID(),...message},list=localGet(`messages.${roomId}`,[]);list.push(value);localSet(`messages.${roomId}`,list.slice(-200));
-    const rooms=localGet("rooms",{});rooms[roomId]={...(rooms[roomId]||{id:roomId,title:roomId}),lastMessage:preview,lastMessageAt:Date.now(),lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:Date.now()};localSet("rooms",rooms);broadcast("message",value);broadcast("rooms",rooms);return value;
+    const rooms=localGet("rooms",{});rooms[roomId]={...(rooms[roomId]||{id:roomId,title:roomId}),lastMessage:preview,lastMessageEmoticon:message.emoticon||null,lastMessageAt:Date.now(),lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:Date.now()};localSet("rooms",rooms);broadcast("message",value);broadcast("rooms",rooms);return value;
   }
   async function getRoom(roomId){
     await awaitTransport();

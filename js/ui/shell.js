@@ -28,24 +28,35 @@ MiniTalk.UI.Shell=(()=>{
   function renderNav(){const features=visibleFeatures(),order=normalizedOrder(features);features.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));const side=D().byId("sideRail"),bottom=D().byId("bottomNav");if(side)side.replaceChildren(...features.map(navButton));if(bottom)bottom.replaceChildren(...features.map(navButton))}
   function setActiveNav(id){const navId=id==="games"||id==="links"?"tools":id==="admin"?"settings":id;D().all("[data-route]").forEach(b=>b.classList.toggle("active",b.dataset.route===navId))}
   async function showApp(){document.getElementById("launchView")?.classList.add("hidden");D().byId("appShell")?.classList.remove("hidden");document.documentElement.classList.add("app-visible");if(!started){started=true;MiniTalk.Features.Auth.render(D().byId("authHost"))}const user=MiniTalk.Store.get("user");if(user)await enterWorkspace(user);MiniTalk.MobileImmersive?.afterAppShown?.()}
+  function startWorkspaceBackground(user){
+    if(activeUserId!==user.user_id)return;
+    if(!user.isGuest)MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(error=>console.warn("코인 계정 동기화 실패",error));
+    MiniTalk.UserDirectory?.refresh?.().catch(error=>console.warn("가입자 명단을 불러오지 못했습니다.",error));
+    MiniTalk.Shopping.StoreService?.start?.(user);
+    MiniTalk.Tasks.TaskService?.start?.(user);
+  }
   async function enterWorkspace(user){
     if(entering||activeUserId===user.user_id)return;
     entering=true;activeUserId=user.user_id;
     D().byId("authHost")?.classList.add("hidden");D().byId("workspace")?.classList.remove("hidden");
-    /* Apps Script 인증 성공이 작업공간 진입 기준입니다. Firebase는 데이터 채널이므로 첫 화면을 막지 않고 동시에 초기화합니다. */
-    const realtimeReady=MiniTalk.Realtime.init(user).then(transport=>{
-      if(!user.isGuest&&transport!=="firebase"){const reason=MiniTalk.Realtime.getConnectionError?.()||"";toast(/permission-denied/i.test(reason)?"Firebase 데이터베이스 규칙을 적용해주세요.":"실시간 서버 연결을 확인해주세요.")}
-      return transport
-    }).catch(error=>{console.warn("실시간 데이터 채널 초기화 실패",error);if(!user.isGuest)toast("실시간 서버 연결을 확인해주세요.");return"local"});
     try{
-      if(!user.isGuest)MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(error=>console.warn("코인 계정 동기화 실패",error));
-      MiniTalk.UserDirectory?.refresh?.().catch(error=>console.warn("가입자 명단을 불러오지 못했습니다.",error));
-      MiniTalk.Shopping.StoreService?.start?.(user);MiniTalk.Tasks.TaskService?.start?.(user);
-      renderNav();await MiniTalk.Router.go("chats");MiniTalk.Features.Admin?.applyStoredLock?.();
+      /* 인증 응답 직후에는 첫 대화 화면 DOM을 먼저 완성합니다. */
+      renderNav();
+      await MiniTalk.Router.go("chats");
+      MiniTalk.Features.Admin?.applyStoredLock?.();
+
+      /* transport 준비 상태는 바로 시작하되 첫 화면 렌더를 기다리게 하지는 않습니다. */
+      const realtimeReady=MiniTalk.Realtime.init(user).then(transport=>{
+        if(!user.isGuest&&transport!=="firebase"){const reason=MiniTalk.Realtime.getConnectionError?.()||"";toast(/permission-denied/i.test(reason)?"Firebase 데이터베이스 규칙을 적용해주세요.":"실시간 서버 연결을 확인해주세요.")}
+        return transport
+      }).catch(error=>{console.warn("실시간 데이터 채널 초기화 실패",error);if(!user.isGuest)toast("실시간 서버 연결을 확인해주세요.");return"local"});
+      void realtimeReady;
+
+      /* 코인/가입자/과제/쇼핑 초기 조회는 첫 화면 페인트 뒤로 넘깁니다. */
+      requestAnimationFrame(()=>setTimeout(()=>startWorkspaceBackground(user),0));
     }catch(error){
       activeUserId=null;toast(error.message||"화면을 여는 중 오류가 발생했습니다.");D().byId("authHost")?.classList.remove("hidden");D().byId("workspace")?.classList.add("hidden");MiniTalk.Realtime.cleanup?.();
     }finally{entering=false}
-    void realtimeReady;
   }
   function resetWorkspaceSession(){activeUserId=null;entering=false;MiniTalk.Store.set("transport","idle")}
   function updateInstallButton(v){document.getElementById("installBtn")?.classList.toggle("hidden",!v)}

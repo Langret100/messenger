@@ -53,8 +53,10 @@ MiniTalk.Features.Auth=(()=>{
       if(!id||(!password&&!canReuse)){msg.textContent="아이디와 비밀번호를 입력하세요.";return}
       setBusy(true);
       try{
-        const windowReady=prepareWindow();msg.textContent="처리 중...";
+        msg.textContent="처리 중...";
+        /* 인증 서버 요청을 가장 먼저 시작합니다. 창/PiP 준비는 로그인 네트워크 요청의 앞을 막지 않습니다. */
         const authReady=canReuse?Promise.resolve(rememberedUser):(signup?MiniTalk.AuthApi.signup(id,password,host.querySelector("#authNick").value.trim()):MiniTalk.AuthApi.login(id,password));
+        const windowReady=prepareWindow();
         const user=await authReady;windowReady.catch(()=>{});
         if(Number.isFinite(Number(user.coin)))MiniTalk.Economy.CoinWallet?.setLocal?.(Number(user.coin),signup?"signup":"login");
         save(user)

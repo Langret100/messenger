@@ -242,3 +242,6 @@ body{min-height:100dvh}
 .profile-modal-host{align-items:center!important;padding:14px!important}.profile-modal-host .profile-modal{width:min(420px,calc(100vw - 28px));max-height:min(82dvh,680px);border-radius:22px;animation:modal-in .2s var(--ease)}
 .room-lock-badge{right:-5px;bottom:-4px;min-width:0;width:auto;height:auto;border:0;border-radius:0;background:transparent;box-shadow:none;font-size:15px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.28))}
 @media(max-width:700px),(pointer:coarse) and (max-width:900px){.modal-host{align-items:center;padding:14px}.modal-host .modal{border-radius:22px;animation:modal-in .2s var(--ease)}.profile-modal-host{align-items:center!important;padding:14px!important}.profile-modal-host .profile-modal{border-radius:22px}}
+
+/* 대화방 목록 마지막 메시지의 커스텀 이모티콘은 토큰 대신 작은 이미지로 표시 */
+.conversation-preview{display:flex;align-items:center;min-height:22px;gap:3px}.conversation-preview .chat-emoticon{width:22px!important;height:22px!important;display:inline-block;object-fit:contain;border-radius:0}.conversation-preview{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}

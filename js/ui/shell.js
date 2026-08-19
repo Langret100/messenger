@@ -28,7 +28,25 @@ MiniTalk.UI.Shell=(()=>{
   function renderNav(){const features=visibleFeatures(),order=normalizedOrder(features);features.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));const side=D().byId("sideRail"),bottom=D().byId("bottomNav");if(side)side.replaceChildren(...features.map(navButton));if(bottom)bottom.replaceChildren(...features.map(navButton))}
   function setActiveNav(id){const navId=id==="games"||id==="links"?"tools":id==="admin"?"settings":id;D().all("[data-route]").forEach(b=>b.classList.toggle("active",b.dataset.route===navId))}
   async function showApp(){document.getElementById("launchView")?.classList.add("hidden");D().byId("appShell")?.classList.remove("hidden");document.documentElement.classList.add("app-visible");if(!started){started=true;MiniTalk.Features.Auth.render(D().byId("authHost"))}const user=MiniTalk.Store.get("user");if(user)await enterWorkspace(user);MiniTalk.MobileImmersive?.afterAppShown?.()}
-  async function enterWorkspace(user){if(entering||(activeUserId===user.user_id&&MiniTalk.Store.get("transport")!=="idle"))return;entering=true;try{D().byId("authHost")?.classList.add("hidden");D().byId("workspace")?.classList.remove("hidden");const transport=await MiniTalk.Realtime.init(user);activeUserId=user.user_id;if(!user.isGuest)MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(error=>console.warn("코인 계정 동기화 실패",error));MiniTalk.UserDirectory?.refresh?.().catch(error=>console.warn("가입자 명단을 불러오지 못했습니다.",error));MiniTalk.Shopping.StoreService?.start?.(user);MiniTalk.Tasks.TaskService?.start?.(user);renderNav();await MiniTalk.Router.go("chats");MiniTalk.Features.Admin?.applyStoredLock?.();if(!user.isGuest&&transport!=="firebase"){const reason=MiniTalk.Realtime.getConnectionError?.()||"";toast(/permission-denied/i.test(reason)?"Firebase 데이터베이스 규칙을 적용해주세요.":"실시간 서버 연결을 확인해주세요.")}}catch(error){toast(error.message||"초기화에 실패했습니다.");D().byId("authHost")?.classList.remove("hidden");D().byId("workspace")?.classList.add("hidden")}finally{entering=false}}
+  async function enterWorkspace(user){
+    if(entering||activeUserId===user.user_id)return;
+    entering=true;activeUserId=user.user_id;
+    D().byId("authHost")?.classList.add("hidden");D().byId("workspace")?.classList.remove("hidden");
+    /* Apps Script 인증 성공이 작업공간 진입 기준입니다. Firebase는 데이터 채널이므로 첫 화면을 막지 않고 동시에 초기화합니다. */
+    const realtimeReady=MiniTalk.Realtime.init(user).then(transport=>{
+      if(!user.isGuest&&transport!=="firebase"){const reason=MiniTalk.Realtime.getConnectionError?.()||"";toast(/permission-denied/i.test(reason)?"Firebase 데이터베이스 규칙을 적용해주세요.":"실시간 서버 연결을 확인해주세요.")}
+      return transport
+    }).catch(error=>{console.warn("실시간 데이터 채널 초기화 실패",error);if(!user.isGuest)toast("실시간 서버 연결을 확인해주세요.");return"local"});
+    try{
+      if(!user.isGuest)MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(error=>console.warn("코인 계정 동기화 실패",error));
+      MiniTalk.UserDirectory?.refresh?.().catch(error=>console.warn("가입자 명단을 불러오지 못했습니다.",error));
+      MiniTalk.Shopping.StoreService?.start?.(user);MiniTalk.Tasks.TaskService?.start?.(user);
+      renderNav();await MiniTalk.Router.go("chats");MiniTalk.Features.Admin?.applyStoredLock?.();
+    }catch(error){
+      activeUserId=null;toast(error.message||"화면을 여는 중 오류가 발생했습니다.");D().byId("authHost")?.classList.remove("hidden");D().byId("workspace")?.classList.add("hidden");MiniTalk.Realtime.cleanup?.();
+    }finally{entering=false}
+    void realtimeReady;
+  }
   function resetWorkspaceSession(){activeUserId=null;entering=false;MiniTalk.Store.set("transport","idle")}
   function updateInstallButton(v){document.getElementById("installBtn")?.classList.toggle("hidden",!v)}
   function start(){MiniTalk.Events.on("state:transport",mode=>{const b=D().byId("connectionBadge");if(b){b.textContent=mode==="firebase"?"온라인":"로컬";b.dataset.mode=mode}});MiniTalk.Events.on("rt:error",info=>toast(info?.message||"실시간 서버 데이터를 읽지 못했습니다."));MiniTalk.Events.on("rt:connection-wait",renderRealtimeWaitState);MiniTalk.Events.on("auth:success",enterWorkspace);MiniTalk.Events.on("install:available",updateInstallButton);MiniTalk.Events.on("state:admin",renderNav);MiniTalk.Events.on("fullscreen:change",syncImmersiveButton);addEventListener("keydown",event=>{if(event.key==="Escape"&&!D().byId("modalHost")?.classList.contains("hidden"))closeModal()});updateInstallButton(MiniTalk.WindowMode.canInstall?.()===true)}

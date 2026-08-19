@@ -1,0 +1,16 @@
+const fs=require("fs"),path=require("path"),root=path.resolve(__dirname,"..");
+const read=p=>fs.readFileSync(path.join(root,p),"utf8"),ok=(v,m)=>{if(!v)throw new Error(m)};
+const feed=read("js/features/feed.js"),chats=read("js/features/chats.js"),rt=read("js/adapters/realtime.js"),css=read("css/features/feed-classinfo-weekly.css"),appcss=read("css/app.css"),html=read("index.html"),sw=read("sw.js"),app=read("js/app.js");
+ok(feed.includes("function patchHeart(id)")&&feed.includes("samePostBody(previous,post)"),"heart-only feed delta patch missing");
+ok(!feed.includes('current?current.replaceWith(next):list.append(next);sortFeedCards(list);syncFeedEmpty(list);setupLazyMedia(list)'),"feed still recreates card for every post change");
+ok(feed.includes('if(!observer)observer=new IntersectionObserver'),"feed media observer should be retained instead of reset on each card update");
+ok(css.includes("scrollbar-width:none")&&css.includes("::-webkit-scrollbar{display:none"),"feed scrollbar should be hidden while native drag/scroll remains");
+ok(css.includes("bottom:calc(2px + 58px"),"feed add button was not lowered");
+ok(rt.includes('orderByChild("lastMessageAt").startAt(1)'),"group list should query only rooms with messages");
+ok(rt.includes('base.limitToLast(50)')&&rt.includes('base.startAt(lastTs)'),"room messages must use 50-message cold load and cache delta subscription");
+ok(chats.includes('"data-has-message":roomMessageTime(room)>0?"1":"0"')&&chats.includes('mode==="group"&&item.dataset.roomType==="group"&&hasMessage'),"empty room UI fallback filter missing");
+ok(chats.includes('class:"room-summary-icon profile-image"')&&chats.includes('class:"room-member-avatar profile-image"'),"room information profile images missing");
+ok(appcss.includes('.room-summary-icon{')&&appcss.includes('object-fit:cover'),"room profile image crop style missing");
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.8')&&html.includes('realtime.js?v=64.5.24')&&html.includes('features/chats.js?v=64.5.11')&&html.includes('features/feed.js?v=65.0.6')&&html.includes('app.js?v=64.5.25'),"delta patch cache versions stale");
+ok(sw.includes('moaru-v64.5.25-admin-task-bulk-20260819')&&app.includes('sw.js?v=64.5.25'),"service worker cache bump missing");
+console.log("FEED_ROOM_DELTA_OK");

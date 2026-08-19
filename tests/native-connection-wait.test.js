@@ -6,7 +6,7 @@ for(const forbidden of ['capacitySessions','CAPACITY_SOFT_LIMIT','CAPACITY_RETRY
 ok(!config.includes('capacitySessions'),'capacitySessions config path must be removed');
 ok(!rules.rules?.moaru?.v3?.capacitySessions,'capacitySessions Firebase Rules must be removed');
 ok(rt.includes('database.ref(".info/connected")'),'Firebase native connection state must drive admission wait');
-ok(rt.includes('emit("connection-wait",{state:"waiting"})'),'connection waiting signal missing');
+ok(rt.includes('emit("connection-wait",{state:navigator.onLine===false?"offline":"waiting"})'),'connection waiting signal missing');
 ok(rt.includes('emit("connection-wait",{state:"connected"})'),'connection resume signal missing');
 ok(shell.includes('rt:connection-wait')&&shell.includes('현재 접속 인원이 많아 대기 중입니다.')&&shell.includes('잠시 후 자동으로 다시 연결합니다.'),'connection waiting UI missing');
 ok(css.includes('.realtime-wait-host')&&!css.includes('.capacity-wait-host'),'waiting CSS should use generic realtime naming');

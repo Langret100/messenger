@@ -751,6 +751,42 @@ function handleAdminTaskList(e) {
   return shopJson_({ ok: true, tasks: tasks });
 }
 
+/** 관리자 과제 ID 목록을 정규화합니다. */
+function parseMoaruTaskIds_(raw) {
+  let values = [];
+  try { values = JSON.parse(raw || "[]"); } catch (error) { return null; }
+  if (!Array.isArray(values)) return null;
+  return values.map(function (value) { return String(value || "").trim(); }).filter(function (id, index, list) { return id && list.indexOf(id) === index; }).slice(0, 200);
+}
+
+/** 단건/일괄 검토가 함께 사용하는 잠금 내부 처리입니다. */
+function reviewMoaruTaskUnlocked_(taskId, action, feedback, actor) {
+  const task = readMoaruTask_(taskId);
+  if (!task) return { ok: false, task_id: taskId, error: "TASK_NOT_FOUND" };
+  if (task.status !== "submitted" && !(action === "complete" && task.status === "completed")) return { ok: false, task_id: taskId, user_id: task.userId, error: "TASK_NOT_SUBMITTED" };
+  if (task.status === "completed") return { ok: true, task_id: task.id, user_id: task.userId, task: publicMoaruTask_(task), alreadyCompleted: true };
+  const now = Date.now();task.reviewedAt = now;task.updatedAt = now;task.feedback = feedback;
+  if (action === "retry") {
+    if (task.rewardPending) return { ok: false, task_id: task.id, user_id: task.userId, error: "COIN_REWARD_PENDING" };
+    task.status = "retry";writeMoaruTask_(task);backupMoaruTaskEvent_("RETRY", task, actor);
+    enqueueMoaruCommand_(task.userId, "TASK_RETRY", { taskId: task.id, title: task.title, feedback: feedback }, actor);
+    return { ok: true, task_id: task.id, user_id: task.userId, task: publicMoaruTask_(task) };
+  }
+  if (!task.rewardPending) {
+    const before = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), beforeCoin = Math.max(0, parseInt(before && before.coin, 10) || 0);
+    task.rewardPending = { beforeCoin: beforeCoin, expectedCoin: beforeCoin + task.rewardCoin, amount: task.rewardCoin, createdAt: now };writeMoaruTask_(task);
+  }
+  const currentReward = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), currentCoin = Math.max(0, parseInt(currentReward && currentReward.coin, 10) || 0), pending = task.rewardPending;
+  let result;
+  if (currentCoin === Number(pending.expectedCoin)) result = { success: true, newCoin: currentCoin, recovered: true };
+  else if (currentCoin === Number(pending.beforeCoin)) result = moaruCoinChangeGuarded_(task.userId, "add", task.rewardCoin);
+  else return { ok: false, task_id: task.id, user_id: task.userId, error: "COIN_REWARD_STATE_CONFLICT" };
+  if (!result || !result.success) return { ok: false, task_id: task.id, user_id: task.userId, error: "COIN_REWARD_FAILED" };
+  task.status = "completed";task.completedAt = now;task.rewardedAt = now;task.newCoin = Number(result.newCoin) || 0;delete task.rewardPending;writeMoaruTask_(task);backupMoaruTaskEvent_("COMPLETED", task, actor);
+  enqueueMoaruCommand_(task.userId, "TASK_COMPLETED", { taskId: task.id, title: task.title, amount: task.rewardCoin, newCoin: task.newCoin, feedback: feedback }, actor);
+  return { ok: true, task_id: task.id, user_id: task.userId, task: publicMoaruTask_(task) };
+}
+
 /** POST mode=admin_task_review */
 function handleAdminTaskReview(e) {
   const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token), taskId = String(p.task_id || "").trim(), action = String(p.action || "").trim(), feedback = String(p.feedback || "").trim();
@@ -759,31 +795,47 @@ function handleAdminTaskReview(e) {
   if (feedback.length > 100) return shopJson_({ ok: false, error: "TASK_FEEDBACK_TOO_LONG" });
   if (action === "retry" && !feedback) return shopJson_({ ok: false, error: "TASK_FEEDBACK_REQUIRED" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  try { cleanupCompletedMoaruTasks_();return shopJson_(reviewMoaruTaskUnlocked_(taskId, action, feedback, p.user_id)); }
+  finally { lock.releaseLock(); }
+}
+
+/** POST mode=admin_task_bulk_review - 선택 과제를 같은 액션/피드백으로 일괄 검토합니다. */
+function handleAdminTaskBulkReview(e) {
+  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token), action = String(p.action || "complete").trim(), feedback = String(p.feedback || "").trim(), taskIds = parseMoaruTaskIds_(p.task_ids_json);
+  if (!auth.ok) return shopJson_(auth);
+  if (!taskIds) return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" });
+  if (!taskIds.length) return shopJson_({ ok: false, error: "NO_TASKS_SELECTED" });
+  if (["complete", "retry"].indexOf(action) < 0) return shopJson_({ ok: false, error: "INVALID_TASK_REVIEW" });
+  if (feedback.length > 100) return shopJson_({ ok: false, error: "TASK_FEEDBACK_TOO_LONG" });
+  if (action === "retry" && !feedback) return shopJson_({ ok: false, error: "TASK_FEEDBACK_REQUIRED" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(5000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
-    cleanupCompletedMoaruTasks_();const task = readMoaruTask_(taskId);
-    if (!task) return shopJson_({ ok: false, error: "TASK_NOT_FOUND" });
-    if (task.status !== "submitted" && !(action === "complete" && task.status === "completed")) return shopJson_({ ok: false, error: "TASK_NOT_SUBMITTED" });
-    if (task.status === "completed") return shopJson_({ ok: true, task: publicMoaruTask_(task), alreadyCompleted: true });
-    const now = Date.now();task.reviewedAt = now;task.updatedAt = now;task.feedback = feedback;
-    if (action === "retry") {
-      if (task.rewardPending) return shopJson_({ ok: false, error: "COIN_REWARD_PENDING" });
-      task.status = "retry";writeMoaruTask_(task);backupMoaruTaskEvent_("RETRY", task, p.user_id);
-      enqueueMoaruCommand_(task.userId, "TASK_RETRY", { taskId: task.id, title: task.title, feedback: feedback }, p.user_id);
-      return shopJson_({ ok: true, task: publicMoaruTask_(task) });
-    }
-    if (!task.rewardPending) {
-      const before = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), beforeCoin = Math.max(0, parseInt(before && before.coin, 10) || 0);
-      task.rewardPending = { beforeCoin: beforeCoin, expectedCoin: beforeCoin + task.rewardCoin, amount: task.rewardCoin, createdAt: now };writeMoaruTask_(task);
-    }
-    const currentReward = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), currentCoin = Math.max(0, parseInt(currentReward && currentReward.coin, 10) || 0), pending = task.rewardPending;
-    let result;
-    if (currentCoin === Number(pending.expectedCoin)) result = { success: true, newCoin: currentCoin, recovered: true };
-    else if (currentCoin === Number(pending.beforeCoin)) result = moaruCoinChangeGuarded_(task.userId, "add", task.rewardCoin);
-    else return shopJson_({ ok: false, error: "COIN_REWARD_STATE_CONFLICT" });
-    if (!result || !result.success) return shopJson_({ ok: false, error: "COIN_REWARD_FAILED" });
-    task.status = "completed";task.completedAt = now;task.rewardedAt = now;task.newCoin = Number(result.newCoin) || 0;delete task.rewardPending;writeMoaruTask_(task);backupMoaruTaskEvent_("COMPLETED", task, p.user_id);
-    enqueueMoaruCommand_(task.userId, "TASK_COMPLETED", { taskId: task.id, title: task.title, amount: task.rewardCoin, newCoin: task.newCoin, feedback: feedback }, p.user_id);
-    return shopJson_({ ok: true, task: publicMoaruTask_(task) });
+    cleanupCompletedMoaruTasks_();
+    const results = taskIds.map(function (taskId) { return reviewMoaruTaskUnlocked_(taskId, action, feedback, p.user_id); }), succeeded = results.filter(function (row) { return row.ok; }).length;
+    return shopJson_({ ok: true, count: succeeded, failed: results.length - succeeded, results: results });
+  } finally { lock.releaseLock(); }
+}
+
+/** POST mode=admin_task_bulk_delete - 코인을 지급/차감하지 않고 선택 과제를 삭제합니다. */
+function handleAdminTaskBulkDelete(e) {
+  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token), taskIds = parseMoaruTaskIds_(p.task_ids_json);
+  if (!auth.ok) return shopJson_(auth);
+  if (!taskIds) return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" });
+  if (!taskIds.length) return shopJson_({ ok: false, error: "NO_TASKS_SELECTED" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(5000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  try {
+    cleanupCompletedMoaruTasks_();
+    const store = moaruTaskStore_(), results = taskIds.map(function (taskId) {
+      const task = readMoaruTask_(taskId);
+      if (!task) return { ok: false, task_id: taskId, error: "TASK_NOT_FOUND" };
+      if (task.rewardPending) return { ok: false, task_id: task.id, user_id: task.userId, error: "TASK_DELETE_CONFLICT" };
+      const snapshot = Object.assign({}, task, { status: "deleted", updatedAt: Date.now() });
+      backupMoaruTaskEvent_("DELETED", snapshot, p.user_id);
+      store.deleteProperty(moaruTaskPropertyKey_(task.id));
+      enqueueMoaruCommand_(task.userId, "TASK_DELETED", { taskId: task.id, title: task.title }, p.user_id);
+      return { ok: true, task_id: task.id, user_id: task.userId };
+    }), succeeded = results.filter(function (row) { return row.ok; }).length;
+    return shopJson_({ ok: true, count: succeeded, failed: results.length - succeeded, results: results });
   } finally { lock.releaseLock(); }
 }
 

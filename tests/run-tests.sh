@@ -11,3 +11,4 @@ for test_file in tests/*.test.js; do
 done
 node -e 'const fs=require("fs"),vm=require("vm");for(const f of ["docs/apps-script/Code.gs","docs/apps-script/coin-shopping-extension.gs"])new vm.Script(fs.readFileSync(f,"utf8"),{filename:f})'
 echo ALL_AVAILABLE_TESTS_OK
+

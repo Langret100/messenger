@@ -59,14 +59,20 @@
         ".read": true,
         ".write": true,
         ".validate": "$nickname.length <= 30"
-      }
+      },
+      ".indexOn": [
+        "updatedAt"
+      ]
     },
     "rooms": {
       ".read": true,
       "$roomId": {
         ".write": true,
         ".validate": "newData.hasChildren(['name']) && newData.child('name').isString() && newData.child('name').val().length <= 50"
-      }
+      },
+      ".indexOn": [
+        "lastMessageAt"
+      ]
     },
     "fcm_tokens": {
       ".read": true,
@@ -87,11 +93,16 @@
         "presence": {
           ".read": true,
           ".write": true,
-          ".indexOn": ["online"]
+          ".indexOn": [
+            "online"
+          ]
         },
         "profiles": {
           ".read": true,
-          ".write": true
+          ".write": true,
+          ".indexOn": [
+            "updatedAt"
+          ]
         },
         "commands": {
           ".read": false,
@@ -136,7 +147,10 @@
                   ".validate": "newData.val() == true"
                 }
               }
-            }
+            },
+            ".indexOn": [
+              "updatedAt"
+            ]
           },
           "totals": {
             "$userKey": {

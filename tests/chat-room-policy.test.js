@@ -9,7 +9,7 @@ if(chats.includes("isAdmin()||MiniTalk.Realtime.isRoomMember(room)"))throw new E
 if(!chats.includes('text:"친구 초대"')||!realtime.includes("inviteRoomMembers"))throw new Error("room invitation flow is missing");
 if(!realtime.includes("profileImage")||!realtime.includes("profile_image")||!chats.includes("profileForMessage"))throw new Error("legacy Tori profile image compatibility is missing");
 if(!realtime.includes('typeof raw==="string"'))throw new Error("direct-string legacy profile image compatibility is missing");
-if(!realtime.includes("senderProfile"))throw new Error("new messages must include the sender profile image");
+if(realtime.includes("senderProfile")||realtime.includes("avatar:senderProfile.avatar"))throw new Error("new messages must not duplicate profile image data");
 if(!realtime.includes("MiniTalkConfig.paths.legacyProfiles"))throw new Error("profile updates must also update the legacy nickname profile path");
 if(!chats.includes("assets/mascot-avatar.png"))throw new Error("messages without a custom image must use the mascot avatar");
 if(!chats.includes("function roomAvatar(room)"))throw new Error("room list profile image resolver is missing");

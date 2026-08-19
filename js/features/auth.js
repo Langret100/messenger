@@ -53,8 +53,9 @@ MiniTalk.Features.Auth=(()=>{
       if(!id||(!password&&!canReuse)){msg.textContent="아이디와 비밀번호를 입력하세요.";return}
       setBusy(true);
       try{
-        await prepareWindow();msg.textContent="처리 중...";
-        const user=canReuse?rememberedUser:(signup?await MiniTalk.AuthApi.signup(id,password,host.querySelector("#authNick").value.trim()):await MiniTalk.AuthApi.login(id,password));
+        const windowReady=prepareWindow();msg.textContent="처리 중...";
+        const authReady=canReuse?Promise.resolve(rememberedUser):(signup?MiniTalk.AuthApi.signup(id,password,host.querySelector("#authNick").value.trim()):MiniTalk.AuthApi.login(id,password));
+        const user=await authReady;windowReady.catch(()=>{});
         if(Number.isFinite(Number(user.coin)))MiniTalk.Economy.CoinWallet?.setLocal?.(Number(user.coin),signup?"signup":"login");
         save(user)
       }catch(error){msg.textContent=error.message||"인증에 실패했습니다.";setBusy(false)}

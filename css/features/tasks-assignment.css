@@ -20,3 +20,7 @@
 .task-window-body .task-review-content,.task-window-body .task-review-actions{background:#f8f9fc;border-color:#e9edf3}
 .task-window-body .task-submission-text{background:#fff}
 @media(max-width:760px){.task-window-body{padding:12px}.task-window-body .task-workbench-window{padding:16px;margin-bottom:12px}.task-window-body .task-review-grid{grid-template-columns:1fr}}
+
+/* 관리자 과제 일괄 검토 */
+.admin-review-bulk{display:grid;gap:8px;padding:9px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--surface-2) 88%,var(--accent-soft))}.admin-review-bulk-select{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.admin-review-selected{margin-left:auto;font-weight:800}.admin-bulk-feedback{width:100%;min-height:56px;resize:vertical}.admin-review-bulk-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.admin-bulk-delete{border-color:color-mix(in srgb,#d94b4b 42%,var(--line));color:#b43131}.admin-review-person{display:flex;align-items:center;gap:7px;min-width:0;cursor:pointer}.admin-task-check{width:16px;height:16px;flex:0 0 auto;accent-color:var(--accent)}
+@media(max-width:700px){.admin-review-bulk-actions{grid-template-columns:1fr}.admin-review-selected{width:100%;margin-left:0}}

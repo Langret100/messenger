@@ -33,7 +33,9 @@ MiniTalk.AuthApi = (() => {
     TASK_ALREADY_COMPLETED: "이미 완료된 과제입니다.",
     TASK_NOT_SUBMITTED: "제출된 과제만 검토할 수 있습니다.",
     TASK_FEEDBACK_TOO_LONG: "피드백은 100자 이하로 입력하세요.",
-    TASK_FEEDBACK_REQUIRED: "다시 보내려면 피드백을 입력하세요."
+    TASK_FEEDBACK_REQUIRED: "다시 보내려면 피드백을 입력하세요.",
+    NO_TASKS_SELECTED: "과제를 선택하세요.",
+    TASK_DELETE_CONFLICT: "보상 처리 중인 과제는 삭제할 수 없습니다. 잠시 후 다시 확인해주세요."
   };
   async function post(payload) {
     const body = new URLSearchParams();
@@ -171,6 +173,12 @@ MiniTalk.AuthApi = (() => {
     },
     async adminTaskReview({ userId, adminToken, taskId, action, feedback }) {
       return post({ mode: "admin_task_review", user_id: userId, admin_token: adminToken, task_id: taskId, action, feedback });
+    },
+    async adminTaskBulkReview({ userId, adminToken, taskIds, action = "complete", feedback = "" }) {
+      return post({ mode: "admin_task_bulk_review", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []), action, feedback });
+    },
+    async adminTaskBulkDelete({ userId, adminToken, taskIds }) {
+      return post({ mode: "admin_task_bulk_delete", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []) });
     },
     async userTaskList(userId) {
       const data = await post({ mode: "user_task_list", user_id: userId });

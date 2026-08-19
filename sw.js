@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.19-firebase-download-focus-20260819";
+const CACHE = "moaru-v64.5.25-admin-task-bulk-20260819";
 const CORE = [
   "./",
   "./index.html",
@@ -28,6 +28,7 @@ const CORE = [
   "./js/core/registry.js",
   "./js/core/router.js",
   "./js/adapters/persistence.js",
+  "./js/adapters/data-cache.js",
   "./js/adapters/auth-api.js",
   "./js/adapters/realtime.js",
   "./js/adapters/window-mode.js",

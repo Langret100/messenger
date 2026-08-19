@@ -101,8 +101,26 @@ MiniTalk.Tasks.TaskService = (() => {
     return task;
   }
 
+  async function bulkReview(taskIds, action = "complete", feedback = "") {
+    const current = user(), ids = [...new Set((taskIds || []).map(String).filter(Boolean))];
+    if (!ids.length) throw new Error("과제를 선택하세요.");
+    const result = await MiniTalk.AuthApi.adminTaskBulkReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken(), taskIds: ids, action, feedback });
+    const targets = (result.results || []).filter(row => row?.ok && row.user_id).map(row => row.user_id);
+    if (targets.length) MiniTalk.Realtime.notifyCommandTargets?.([...new Set(targets)]);
+    return result;
+  }
+
+  async function bulkDelete(taskIds) {
+    const current = user(), ids = [...new Set((taskIds || []).map(String).filter(Boolean))];
+    if (!ids.length) throw new Error("과제를 선택하세요.");
+    const result = await MiniTalk.AuthApi.adminTaskBulkDelete({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken(), taskIds: ids });
+    const targets = (result.results || []).filter(row => row?.ok && row.user_id).map(row => row.user_id);
+    if (targets.length) MiniTalk.Realtime.notifyCommandTargets?.([...new Set(targets)]);
+    return result;
+  }
+
   MiniTalk.Events.on("rt:command", command => {
-    if (!/^TASK_(?:ASSIGNED|SUBMITTED|RETRY|COMPLETED)$/.test(String(command?.type || ""))) return;
+    if (!/^TASK_(?:ASSIGNED|SUBMITTED|RETRY|COMPLETED|DELETED)$/.test(String(command?.type || ""))) return;
     if (command.type === "TASK_SUBMITTED") { MiniTalk.Events.emit("tasks:admin-refresh", command.payload || {});return; }
     refresh(true).catch(() => {});
     const payload = command.payload || {};
@@ -111,5 +129,5 @@ MiniTalk.Tasks.TaskService = (() => {
     if (command.type === "TASK_COMPLETED") MiniTalk.Tools.Notifications?.notifyCoinReward?.(Number(payload.amount) || 0, `${payload.title || "과제"} 완료`, Number(payload.newCoin) || 0);
   });
 
-  return { start, enter, refresh, submit, assign, adminList, review, normalize, visible, COMPLETED_VISIBLE_MS };
+  return { start, enter, refresh, submit, assign, adminList, review, bulkReview, bulkDelete, normalize, visible, COMPLETED_VISIBLE_MS };
 })();

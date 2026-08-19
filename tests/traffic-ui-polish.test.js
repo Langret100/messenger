@@ -8,14 +8,14 @@ if(!realtime.includes('cloudSubscribeChildren'))throw new Error('child subscript
 if(realtime.includes('const snap=await ref.once("value"),saved='))throw new Error('sendMessage still re-downloads the message immediately after writing');
 if(!realtime.includes('시트 백업은 이미 가진 메시지 내용과 clientTs로 충분합니다'))throw new Error('no-readback send path is missing');
 if(realtime.includes('bindFirstValue(db.ref(MiniTalkConfig.paths.legacyProfiles)')||realtime.includes('bindFirstValue(db.ref(MiniTalkConfig.paths.profiles)'))throw new Error('profile lists still use whole-value live subscriptions');
-if(!realtime.includes('legacyProfilesRef.once("value")')||!realtime.includes('currentProfilesRef.once("value")')||!realtime.includes('기존 프로필 변경을 읽지 못했습니다.')||!realtime.includes('프로필 변경을 읽지 못했습니다.'))throw new Error('profile child-event optimization is incomplete');
+if(!realtime.includes('startProfileCollection(legacyProfilesRef,"legacy"')||!realtime.includes('startProfileCollection(currentProfilesRef,"current"')||!realtime.includes('orderByChild("updatedAt").startAt(latest)'))throw new Error('profile cache/delta optimization is incomplete');
 if(feed.includes('cloudSubscribe(STATE_PATH'))throw new Error('feed still subscribes to the entire feedState');
-for(const required of ['cloudSubscribeChildren(POSTS_PATH','TOTALS_PATH','VIDEO_LIMIT=350*1024','feed-fab','video-gated','leave:stopSub'])if(!feed.includes(required))throw new Error(`feed optimization missing: ${required}`);
+for(const required of ['cloudSubscribeDelta(POSTS_PATH','TOTALS_PATH','VIDEO_LIMIT=350*1024','feed-fab','video-gated','leave:stopSub'])if(!feed.includes(required))throw new Error(`feed optimization missing: ${required}`);
 for(const removed of ['id: "notifications"','id: "timer"','id: "layout"'])if(tools.includes(removed))throw new Error(`removed tool still visible: ${removed}`);
 for(const required of ['오늘의 타로','알람','놀이터','오늘의 시간표','오늘의 급식표'])if(!tools.includes(required))throw new Error(`expected tool missing: ${required}`);
 if(friday.includes('평소에는 잠겨 있어요')||friday.includes('text:info.open?"시작":"잠김"'))throw new Error('old Friday mission lock copy/button remains');
 for(const required of ['friday-lock-overlay','주간 미션','수학·국어 20문항'])if(!friday.includes(required))throw new Error(`Friday mission polish missing: ${required}`);
 for(const required of ['.feed-fab','.feed-heart-total','.friday-lock-overlay','.video-gated'])if(!css.includes(required))throw new Error(`new UI style missing: ${required}`);
-for(const required of ['feed-classinfo-weekly.css?v=65.0.7','realtime.js?v=64.5.18','friday-grade6-mission.js?v=65.0.3','feed.js?v=65.0.4','features/tools.js?v=64.5'])if(!index.includes(required))throw new Error(`cache-busted asset missing: ${required}`);
-if(!sw.includes('moaru-v64.5.19-firebase-download-focus-20260819')||!app.includes('sw.js?v=64.5.19'))throw new Error('service worker cache bump missing');
+for(const required of ['feed-classinfo-weekly.css?v=65.0.8','realtime.js?v=64.5.24','friday-grade6-mission.js?v=65.0.3','feed.js?v=65.0.6','features/tools.js?v=64.5'])if(!index.includes(required))throw new Error(`cache-busted asset missing: ${required}`);
+if(!sw.includes('moaru-v64.5.25-admin-task-bulk-20260819')||!app.includes('sw.js?v=64.5.25'))throw new Error('service worker cache bump missing');
 console.log('TRAFFIC_UI_POLISH_OK');

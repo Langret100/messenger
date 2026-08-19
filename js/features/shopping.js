@@ -35,10 +35,10 @@ MiniTalk.Features.Shopping = (() => {
     screen.scrollTop = scrollTop;
   }
 
-  async function render(host, options = {}) {
+  function render(host, options = {}) {
     const D = MiniTalk.UI.Dom, user = MiniTalk.Store.get("user") || {};
     const previousScroll = options.preserveScroll ? Number(host.querySelector(".shopping-screen")?.scrollTop || 0) : 0;
-    if (options.refreshCatalog !== false) await Service.enter();
+    if (options.refreshCatalog !== false) Service.enter().catch(error=>console.warn("쇼핑 데이터 갱신 실패",error));
     MiniTalk.UI.Shell.setHeader("쇼핑", [MiniTalk.Economy.CoinWallet.badge({ header: true })]);
     const view = D.el("section", { class: `view utility-view shopping-view${options.animate === false ? "" : " view-enter"}` });
     const wrap = D.el("div", { class: "card-list shopping-screen" });

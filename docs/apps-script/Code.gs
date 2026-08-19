@@ -331,6 +331,12 @@ function doPost(e) {
       case "admin_task_review":
         return handleAdminTaskReview(e);
 
+      case "admin_task_bulk_review":
+        return handleAdminTaskBulkReview(e);
+
+      case "admin_task_bulk_delete":
+        return handleAdminTaskBulkDelete(e);
+
       case "user_task_list":
         return handleUserTaskList(e);
 

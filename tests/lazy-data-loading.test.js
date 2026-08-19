@@ -6,7 +6,7 @@ const startFirebase=realtime.split("async function startFirebase(){")[1]?.split(
 if(startFirebase.includes("db.ref(MiniTalkConfig.paths.rooms).once")||startFirebase.includes('bind(roomsRef'))throw new Error("rooms are still loaded/subscribed during Firebase startup");
 if(!chats.includes('if(mode==="group")')||!chats.includes("startRoomListSubscription")||!chats.includes("stopRoomListSubscription"))throw new Error("group-only room loading is incomplete");
 if(feed.includes("scheduleRender()")||feed.includes('render(MiniTalk.UI.Dom.byId("viewHost"))'))throw new Error("feed realtime events still trigger full-screen render");
-if(!feed.includes("patchPost(id)")||!feed.includes("patchHeaderHeart()")||!feed.includes("playHeartFeedback"))throw new Error("feed partial update/heart feedback missing");
+if(!feed.includes("patchPost(id)")||!feed.includes("patchHeaderHeart(animate,on)")||!feed.includes("playHeartFeedback"))throw new Error("feed partial update/heart feedback missing");
 if(!feed.includes('liked||hasHearts')||!feed.includes('text:(liked||hasHearts)?"♥":"♡"'))throw new Error("author-visible red heart state missing");
 if(shop.includes("상품 목록 미리 불러오기 실패"))throw new Error("shopping catalog preload returned");
 if(!shop.includes("setInterval(()=>refreshInventory(true).catch(()=>{}),15000)"))throw new Error("Apps Script shopping safety polling is missing");

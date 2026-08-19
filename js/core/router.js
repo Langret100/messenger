@@ -11,26 +11,30 @@ MiniTalk.Router = (() => {
     const requestId = ++navigationId;
     const feature = MiniTalk.Registry.get(id);
     if (!feature) throw new Error(`없는 화면: ${id}`);
-
-    if (currentFeature && currentFeature !== feature) {
-      try {
-        await currentFeature.leave?.();
-      } catch (error) {
-        console.warn("화면 종료 처리 실패", error);
+    const endLoading=MiniTalk.UI.Shell.beginLoading?.()||(()=>{});
+    try {
+      if (currentFeature && currentFeature !== feature) {
+        try {
+          await currentFeature.leave?.();
+        } catch (error) {
+          console.warn("화면 종료 처리 실패", error);
+        }
       }
+      if (requestId !== navigationId) return false;
+
+      currentFeature = feature;
+      MiniTalk.Store.set("route", id);
+      MiniTalk.UI.Shell.setActiveNav(id);
+      MiniTalk.UI.Shell.setHeader(feature.title || MiniTalkConfig.appName, feature.actions?.() || []);
+
+      const host = MiniTalk.UI.Dom.byId("viewHost");
+      if (!host) return false;
+      host.replaceChildren();
+      await feature.render(host, params);
+      return requestId === navigationId;
+    } finally {
+      endLoading();
     }
-    if (requestId !== navigationId) return false;
-
-    currentFeature = feature;
-    MiniTalk.Store.set("route", id);
-    MiniTalk.UI.Shell.setActiveNav(id);
-    MiniTalk.UI.Shell.setHeader(feature.title || MiniTalkConfig.appName, feature.actions?.() || []);
-
-    const host = MiniTalk.UI.Dom.byId("viewHost");
-    if (!host) return false;
-    host.replaceChildren();
-    await feature.render(host, params);
-    return requestId === navigationId;
   }
 
   return {

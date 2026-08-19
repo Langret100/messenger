@@ -51,7 +51,7 @@ MiniTalk.Features.Auth=(()=>{
       const id=host.querySelector("#authId").value.trim(),password=host.querySelector("#authPw").value;
       const canReuse=!signup&&rememberedUser?.user_id&&id===String(rememberedUser.username||"")&&!password;
       if(!id||(!password&&!canReuse)){msg.textContent="아이디와 비밀번호를 입력하세요.";return}
-      setBusy(true);
+      setBusy(true);const endLoading=MiniTalk.UI.Shell.beginLoading?.()||(()=>{});
       try{
         msg.textContent="처리 중...";
         /* 인증 서버 요청을 가장 먼저 시작합니다. 창/PiP 준비는 로그인 네트워크 요청의 앞을 막지 않습니다. */
@@ -60,7 +60,7 @@ MiniTalk.Features.Auth=(()=>{
         const user=await authReady;windowReady.catch(()=>{});
         if(Number.isFinite(Number(user.coin)))MiniTalk.Economy.CoinWallet?.setLocal?.(Number(user.coin),signup?"signup":"login");
         save(user)
-      }catch(error){msg.textContent=error.message||"인증에 실패했습니다.";setBusy(false)}
+      }catch(error){msg.textContent=error.message||"인증에 실패했습니다.";setBusy(false)}finally{endLoading()}
     });
     guest.onclick=()=>{if(busy)return;setBusy(true);save({user_id:`guest-${crypto.randomUUID().slice(0,8)}`,username:"guest",nickname:"게스트",isGuest:true})};
     if(installButton)installButton.onclick=async()=>{if(MiniTalk.WindowMode.canInstall?.()){installButton.disabled=true;try{const outcome=await MiniTalk.WindowMode.install();MiniTalk.UI.Shell.toast(outcome==="accepted"?"모아루 앱 설치를 시작했습니다.":"앱 설치를 취소했습니다.")}catch(error){MiniTalk.UI.Shell.toast(error.message||"앱 설치를 시작하지 못했습니다.")}finally{installButton.disabled=false}return}showInstallGuide()};

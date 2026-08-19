@@ -11,8 +11,9 @@ MiniTalk.Chat.Unread=(()=>{
   const get=()=>objectValue(key()),getSeen=()=>objectValue(seenKey());
   const save=v=>MiniTalk.Persistence.set(key(),v),saveSeen=v=>MiniTalk.Persistence.set(seenKey(),v);
   function emit(v){MiniTalk.Events.emit("chat:unread",v)}
-  function clear(roomId,updatedAt){const v=get(),seen=getSeen();delete v[roomId];const ts=Number(updatedAt||MiniTalk.Store.get("rooms")?.[roomId]?.updatedAt||Date.now());if(Number.isFinite(ts)&&ts>0)seen[roomId]=Math.max(Number(seen[roomId]||0),ts);save(v);saveSeen(seen);emit(v)}
-  function syncRooms(rooms,activeRoom){const v=get(),seen=getSeen();let countChanged=false,seenChanged=false;for(const room of Object.values(rooms||{})){if(!room?.id)continue;const ts=Number(room.updatedAt||0),prev=Number(seen[room.id]||0);if(!ts||ts<=prev)continue;seen[room.id]=ts;seenChanged=true;if(prev>0&&room.id!==activeRoom){v[room.id]=(v[room.id]||0)+1;countChanged=true}}if(seenChanged)saveSeen(seen);if(countChanged){save(v);emit(v)}return v}
+  const messageTime=room=>Number(room?.lastMessageAt||room?.last_message_at||(room?.lastMessage?(room?.updatedAt||room?.updated_at):0)||0);
+  function clear(roomId,updatedAt){const v=get(),seen=getSeen();delete v[roomId];const room=MiniTalk.Store.get("rooms")?.[roomId],ts=Number(updatedAt||messageTime(room)||Date.now());if(Number.isFinite(ts)&&ts>0)seen[roomId]=Math.max(Number(seen[roomId]||0),ts);save(v);saveSeen(seen);emit(v)}
+  function syncRooms(rooms,activeRoom){const v=get(),seen=getSeen();let countChanged=false,seenChanged=false;for(const room of Object.values(rooms||{})){if(!room?.id)continue;const ts=messageTime(room),prev=Number(seen[room.id]||0);if(!ts||ts<=prev)continue;seen[room.id]=ts;seenChanged=true;if(prev>0&&room.id!==activeRoom){v[room.id]=(v[room.id]||0)+1;countChanged=true}}if(seenChanged)saveSeen(seen);if(countChanged){save(v);emit(v)}return v}
   function count(roomId){return Number(get()[roomId]||0)}
   return{clear,count,all:get,syncRooms};
 })();

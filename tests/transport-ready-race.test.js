@@ -9,7 +9,7 @@ ok(rt.includes('async function cloudSet(path,value){requireWritableUser();await 
 ok(rt.includes('async function cloudTransaction(path,updater){requireWritableUser();await awaitTransport();'),'transactions can fall into local storage during Firebase bootstrap');
 ok(rt.includes('async function sendMessage(roomId,payload){\n    await awaitTransport();'),'chat send can race Firebase bootstrap');
 ok(rt.includes('requestedMessageRoom=String(roomId)'),'message subscription intent must survive transport bootstrap');
-ok(rt.includes('roomListRequested=true;clearRoomListSubscription();\n    await awaitTransport();'),'group room subscription must survive transport bootstrap');
+ok(rt.includes('roomListRequested=true;await awaitTransport();await roomIndexReady'),'group summary subscription must survive transport/index bootstrap');
 ok(rt.includes('return deferSubscription(()=>'),'cloud subscriptions must attach after transport resolves');
 ok(!shell.includes('const transport=await MiniTalk.Realtime.init(user)'),'workspace must not wait for realtime transport');
 ok(chats.includes('renderMessages(roomId);MiniTalk.Realtime.subscribeMessages(roomId).catch('),'room UI should render before network subscription completes');

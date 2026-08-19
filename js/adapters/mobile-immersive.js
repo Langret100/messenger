@@ -15,7 +15,7 @@
      best-effort 처리입니다. 실패해도 앱 레이아웃은 정상이어야 합니다.
    ============================================================ */
 MiniTalk.MobileImmersive=(()=>{
-  let started=false,viewportTimer=0,lastViewportHeight=0;
+  let started=false,viewportTimer=0,lastViewportHeight=0,touchStartY=0;
 
   const standalone=()=>MiniTalk.WindowMode?.standalone?.()===true ||
     matchMedia("(display-mode: standalone)").matches || navigator.standalone===true;
@@ -59,7 +59,7 @@ MiniTalk.MobileImmersive=(()=>{
     if(!isBrowserMode()||isFullscreen())return false;
     /* root가 1~2px 움직일 수 있을 때만 시도. 앱 내부 스크롤에는 손대지 않습니다. */
     try{
-      if(window.scrollY<1){window.scrollTo({top:1,left:0,behavior:"instant"})}
+      if(window.scrollY<8){window.scrollTo({top:Math.min(56,Math.max(1,document.documentElement.scrollHeight-window.innerHeight)),left:0,behavior:"instant"})}
       return true;
     }catch{
       try{window.scrollTo(0,1);return true}catch{return false}
@@ -125,6 +125,8 @@ MiniTalk.MobileImmersive=(()=>{
     addEventListener("resize",scheduleViewportUpdate,{passive:true});
     addEventListener("orientationchange",()=>setTimeout(()=>{updateViewport();nudgeBrowserChrome()},180),{passive:true});
     addEventListener("focus",()=>setTimeout(nudgeBrowserChrome,120),{passive:true});
+    addEventListener("touchstart",event=>{touchStartY=Number(event.touches?.[0]?.clientY||0)},{passive:true});
+    addEventListener("touchmove",event=>{const y=Number(event.touches?.[0]?.clientY||0);if(touchStartY-y>22){nudgeBrowserChrome();touchStartY=y}},{passive:true});
     const onFullscreenChange=()=>{updateViewport();MiniTalk.Events.emit("fullscreen:change",isFullscreen())};
     document.addEventListener("fullscreenchange",onFullscreenChange,{passive:true});
     document.addEventListener("webkitfullscreenchange",onFullscreenChange,{passive:true});

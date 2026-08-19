@@ -104,6 +104,23 @@
             "updatedAt"
           ]
         },
+        "roomSummaries": {
+          ".read": true,
+          ".write": true,
+          ".indexOn": ["lastMessageAt"]
+        },
+        "userRooms": {
+          ".read": true,
+          ".write": true
+        },
+        "roomIndexUsers": {
+          ".read": true,
+          ".write": true
+        },
+        "schema": {
+          ".read": true,
+          ".write": true
+        },
         "commands": {
           ".read": false,
           ".write": false

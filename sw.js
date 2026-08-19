@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.25-admin-task-bulk-20260819";
+const CACHE = "moaru-v64.5.26-room-feed-ui-fix-20260819";
 const CORE = [
   "./",
   "./index.html",

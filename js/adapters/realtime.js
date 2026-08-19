@@ -194,7 +194,8 @@ MiniTalk.Realtime=(()=>{
     if(generation!==initGeneration)return"idle";
     finishTransportInit(generation,nextMode);
     MiniTalk.Store.set("transport",mode);
-    if(mode==="local")await startLocal();
+    if(mode==="firebase")loadInitialRooms();
+    else if(mode==="local")await startLocal();
     if(!nextUser?.isGuest)startServerCommandPolling();
     return mode;
   }
@@ -250,7 +251,6 @@ MiniTalk.Realtime=(()=>{
 
     shopInventoryFallback=true;emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));emit("tasks",{});
     bind(db.ref(`signals/${commandSignalRoom(user.user_id)}/wakeup`),"value",snapshot=>{if(snapshot.exists())pollServerCommands()},"관리자 알림 신호를 읽지 못했습니다.");
-    loadInitialRooms();
   }
 
   async function startLocal(){

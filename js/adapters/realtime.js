@@ -5,7 +5,7 @@
    - 재로그인·재진입 시 기존 구독과 타이머를 반드시 정리합니다.
    ============================================================ */
 MiniTalk.Realtime=(()=>{
-  let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,capacityRef=null,connectionError="",firebaseAuthenticated=false;
+  let mode="idle",db=null,user=null,channel=null,heartbeat=null,storageHandler=null,presenceRef=null,connectionError="",firebaseAuthenticated=false;
   let currentProfiles={},legacyProfiles={},presenceCache={},roomsCache={};
   let messageUnsub=null,shopInventoryUnsub=null,shopInventoryFallback=false,serverCommandTimer=0,serverCommandPolling=false,serverCommandRepoll=false,roomListUnsubs=[];
   const unsubs=[];
@@ -13,8 +13,6 @@ MiniTalk.Realtime=(()=>{
   const pendingAdminDispatches=new Map();
   const pruneLastAt=new Map();
   const localPrefix="miniTalk.v3.data.";
-  const CAPACITY_SOFT_LIMIT=92,CAPACITY_RETRY_MS=25000;
-  let capacitySessionId="",capacityEstimateLast=0;
 
   const validKey=()=>{const k=MiniTalkConfig.firebase.apiKey;return Boolean(k&&!k.includes("__FIREBASE")&&k.length>20)};
   const emit=(type,data)=>MiniTalk.Events.emit(`rt:${type}`,data);
@@ -60,34 +58,23 @@ MiniTalk.Realtime=(()=>{
     if(!window.firebase?.database)await addScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js")
   }
 
-  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-  function capacitySessionPath(){return MiniTalkConfig.paths.capacitySessions||"moaru/v3/capacitySessions"}
-  async function restJson(path,{shallow=false,timeout=5000}={}){
-    const base=String(MiniTalkConfig.firebase.databaseURL||"").replace(/\/$/,"");if(!base)throw new Error("Firebase Database URL이 없습니다.");
-    const encoded=String(path||"").split("/").filter(Boolean).map(encodeURIComponent).join("/");
-    const controller=typeof AbortController!=="undefined"?new AbortController():null,timer=controller?setTimeout(()=>controller.abort(),timeout):0;
-    try{const query=shallow?"?shallow=true":"";const response=await fetch(`${base}/${encoded}.json${query}`,{cache:"no-store",signal:controller?.signal});if(!response.ok)throw new Error(`Firebase 사전 확인 실패 (${response.status})`);return await response.json()}finally{if(timer)clearTimeout(timer)}
-  }
-  async function estimateCapacity(){
-    const [slotsResult,presenceResult]=await Promise.allSettled([restJson(capacitySessionPath(),{shallow:true}),restJson(MiniTalkConfig.paths.presence)]);
-    const slots=slotsResult.status==="fulfilled"&&slotsResult.value&&typeof slotsResult.value==="object"?Object.keys(slotsResult.value).length:0;
-    const presence=presenceResult.status==="fulfilled"&&presenceResult.value&&typeof presenceResult.value==="object"?presenceResult.value:{};
-    const onlineUsers=Object.values(presence).filter(entry=>entry&&entry.online===true).length;
-    if(slotsResult.status==="rejected"&&presenceResult.status==="rejected")throw slotsResult.reason||presenceResult.reason;
-    return Math.max(slots,onlineUsers)
-  }
-  async function waitForCapacity(){
-    capacitySessionId=`s-${crypto.randomUUID().replace(/-/g,"").slice(0,24)}`;
-    while(true){
-      try{const count=await estimateCapacity();capacityEstimateLast=count;if(count<CAPACITY_SOFT_LIMIT){emit("capacity",{state:"admitted",count,limit:CAPACITY_SOFT_LIMIT});return}
-        emit("capacity",{state:"waiting",count,limit:CAPACITY_SOFT_LIMIT,retryMs:CAPACITY_RETRY_MS});await wait(CAPACITY_RETRY_MS)
-      }catch(error){
-        /* 정원 확인 서버가 일시적으로 실패해도 로그인/채팅 기능 자체를 막지는 않습니다. */
-        console.warn("접속 정원 사전 확인 실패, 기능 보존을 위해 입장을 계속합니다.",error);emit("capacity",{state:"unknown",limit:CAPACITY_SOFT_LIMIT});return
+  function waitForConnected(database){
+    return new Promise((resolve,reject)=>{
+      const ref=database.ref(".info/connected");
+      let settled=false;
+      const syncWaitState=()=>emit("connection-wait",{state:navigator.onLine===false?"offline":"waiting"});
+      const timer=setTimeout(syncWaitState,4500);
+      const onOffline=()=>emit("connection-wait",{state:"offline"});
+      const onOnline=()=>{if(!settled)emit("connection-wait",{state:"waiting"})};
+      const cleanupWait=()=>{clearTimeout(timer);ref.off("value",onValue);removeEventListener("offline",onOffline);removeEventListener("online",onOnline)};
+      function onValue(snapshot){
+        if(snapshot.val()!==true)return;
+        settled=true;cleanupWait();emit("connection-wait",{state:"connected"});resolve();
       }
-    }
+      function onError(error){settled=true;cleanupWait();emit("connection-wait",{state:"error"});reject(error)}
+      addEventListener("offline",onOffline);addEventListener("online",onOnline);ref.on("value",onValue,onError);
+    })
   }
-  function waitForConnected(database,timeout=7000){return new Promise((resolve,reject)=>{const ref=database.ref(".info/connected");const timer=setTimeout(()=>{ref.off("value",onValue);reject(new Error("Firebase 연결 시간 초과"))},timeout);function onValue(s){if(s.val()===true){clearTimeout(timer);ref.off("value",onValue);resolve()}}ref.on("value",onValue)})}
 
   function bind(ref,event,fn,errorMessage="실시간 데이터를 읽지 못했습니다."){
     const fail=error=>{console.error(errorMessage,error);emit("error",{message:errorMessage,code:String(error?.code||"")})};
@@ -120,7 +107,6 @@ MiniTalk.Realtime=(()=>{
     if(serverCommandTimer){clearInterval(serverCommandTimer);serverCommandTimer=0}serverCommandPolling=false;serverCommandRepoll=false;
     if(storageHandler){removeEventListener("storage",storageHandler);storageHandler=null}
     if(channel){channel.close();channel=null}
-    if(mode==="firebase"&&capacityRef){capacityRef.remove().catch(()=>{});capacityRef=null}
     if(mode==="firebase"&&presenceRef){presenceRef.update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP}).catch(()=>{});presenceRef=null}
     if(mode==="local"&&previousUser?.user_id){try{const all=localGet("presence",{});if(all[previousUser.user_id]){all[previousUser.user_id].online=false;all[previousUser.user_id].lastSeen=Date.now();localSet("presence",all)}}catch{}}
     handledCommands.clear();pendingAdminDispatches.clear();pruneLastAt.clear();
@@ -144,7 +130,11 @@ MiniTalk.Realtime=(()=>{
     cleanup();user=nextUser;db=null;mode="local";connectionError="";firebaseAuthenticated=false;shopInventoryFallback=false;currentProfiles={};legacyProfiles={};presenceCache={};roomsCache={};
     // 사용자 인증의 기준은 Apps Script/시트 로그인입니다. 게스트는 Firebase에 연결하지 않습니다.
     if(validKey()&&!nextUser?.isGuest){
-      try{await waitForCapacity();await loadFirebase();if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);db=firebase.database();await waitForConnected(db);mode="firebase"}
+      try{
+        /* Firebase 자체의 동시 연결 제한/재연결 정책을 그대로 사용합니다. 별도 인원 집계용 사전 REST 조회는 하지 않습니다. */
+        await loadFirebase();
+        if(!firebase.apps.length)firebase.initializeApp(MiniTalkConfig.firebase);db=firebase.database();await waitForConnected(db);mode="firebase"
+      }
       catch(error){connectionError=String(error?.code||error?.message||error);console.warn("Firebase 연결 실패, 로컬 모드로 전환",error);db=null;mode="local"}
     }
     MiniTalk.Store.set("transport",mode);
@@ -165,27 +155,34 @@ MiniTalk.Realtime=(()=>{
     add("child_removed",s=>{delete roomsCache[s.key];publish()});
   }
 
+  async function loadInitialMemberRooms(){
+    /* 전체 탭은 로그인 직후 내가 이미 참여 중인 방을 바로 보여줘야 합니다.
+     * 전체 rooms를 '실시간 구독'하지 않고 1회만 읽은 뒤, 내 참여방만 캐시에 남깁니다. */
+    if(mode!=="firebase"||!db)return;
+    const ref=db.ref(MiniTalkConfig.paths.rooms);
+    try{
+      const snap=await ref.once("value"),source=snap.val()||{},memberOnly={};
+      Object.entries(source).forEach(([id,value])=>{const room=normalizeRoom(id,value||{});if(isRoomMember(room))memberOnly[id]=room});
+      roomsCache=memberOnly;emit("rooms",{...roomsCache})
+    }catch(error){console.error("내 대화방 목록을 읽지 못했습니다.",error);emit("error",{message:"내 대화방 목록을 읽지 못했습니다.",code:String(error?.code||"")})}
+  }
+
   async function startFirebase(){
     const initialData=[];
     const presenceListRef=db.ref(MiniTalkConfig.paths.presence);
-    /* Spark의 실제 한도는 연결 수 기준이므로 user_id가 아닌 탭/세션 단위 슬롯을 별도로 유지합니다.
-     * 사전 REST 확인은 지속 연결을 만들지 않고, 입장 후 이 슬롯은 onDisconnect로 자동 제거됩니다. */
-    capacityRef=db.ref(`${capacitySessionPath()}/${capacitySessionId||`s-${crypto.randomUUID().replace(/-/g,"").slice(0,24)}`}`);
-    await capacityRef.set({user_id:user.user_id,nickname:user.nickname,connectedAt:firebase.database.ServerValue.TIMESTAMP});
-    capacityRef.onDisconnect().remove();
     // 사용자 신원 확인은 Apps Script 로그인에서 끝냅니다. Firebase 익명 인증은 사용하지 않습니다.
     // Firebase는 로그인 성공 후 실시간 데이터 저장/동기화 통로로만 사용합니다.
     const legacyProfilesRef=db.ref(MiniTalkConfig.paths.legacyProfiles);
-    initialData.push(legacyProfilesRef.once("value").then(s=>{legacyProfiles=s.val()||{};publishProfiles();bind(legacyProfilesRef,"child_added",c=>{legacyProfiles[c.key]=c.val()||{};publishProfiles()},"기존 프로필 변경을 읽지 못했습니다.");bind(legacyProfilesRef,"child_changed",c=>{legacyProfiles[c.key]=c.val()||{};publishProfiles()},"기존 프로필 변경을 읽지 못했습니다.");bind(legacyProfilesRef,"child_removed",c=>{delete legacyProfiles[c.key];publishProfiles()},"기존 프로필 변경을 읽지 못했습니다.")}).catch(error=>{console.error("기존 프로필 목록을 읽을 권한이 없습니다.",error);emit("error",{message:"기존 프로필 목록을 읽을 권한이 없습니다.",code:String(error?.code||"")})}));
+    initialData.push(legacyProfilesRef.once("value").then(s=>{legacyProfiles=s.val()||{};publishProfiles();bind(legacyProfilesRef,"child_added",c=>{const next=c.val()||{};if(JSON.stringify(legacyProfiles[c.key])===JSON.stringify(next))return;legacyProfiles[c.key]=next;publishProfiles()},"기존 프로필 변경을 읽지 못했습니다.");bind(legacyProfilesRef,"child_changed",c=>{legacyProfiles[c.key]=c.val()||{};publishProfiles()},"기존 프로필 변경을 읽지 못했습니다.");bind(legacyProfilesRef,"child_removed",c=>{delete legacyProfiles[c.key];publishProfiles()},"기존 프로필 변경을 읽지 못했습니다.")}).catch(error=>{console.error("기존 프로필 목록을 읽을 권한이 없습니다.",error);emit("error",{message:"기존 프로필 목록을 읽을 권한이 없습니다.",code:String(error?.code||"")})}));
     presenceRef=db.ref(`${MiniTalkConfig.paths.presence}/${user.user_id}`);
     await presenceRef.set({user_id:user.user_id,nickname:user.nickname,online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
     presenceRef.onDisconnect().update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});
     initialData.push(presenceListRef.once("value").then(s=>{presenceCache=s.val()||{};emit("presence",{...presenceCache})}).catch(error=>{console.error("접속 상태를 읽지 못했습니다.",error);emit("error",{message:"접속 상태를 읽지 못했습니다.",code:String(error?.code||"")})}));
-    bind(presenceListRef,"child_added",s=>{presenceCache[s.key]=s.val()||{};emit("presence",{...presenceCache})},"접속 상태를 읽지 못했습니다.");
+    bind(presenceListRef,"child_added",s=>{const next=s.val()||{};if(JSON.stringify(presenceCache[s.key])===JSON.stringify(next))return;presenceCache[s.key]=next;emit("presence",{...presenceCache})},"접속 상태를 읽지 못했습니다.");
     bind(presenceListRef,"child_changed",s=>{presenceCache[s.key]=s.val()||{};emit("presence",{...presenceCache})},"접속 상태를 읽지 못했습니다.");
     bind(presenceListRef,"child_removed",s=>{delete presenceCache[s.key];emit("presence",{...presenceCache})},"접속 상태를 읽지 못했습니다.");
     const currentProfilesRef=db.ref(MiniTalkConfig.paths.profiles);
-    initialData.push(currentProfilesRef.once("value").then(s=>{currentProfiles=s.val()||{};publishProfiles();bind(currentProfilesRef,"child_added",c=>{currentProfiles[c.key]=c.val()||{};publishProfiles()},"프로필 변경을 읽지 못했습니다.");bind(currentProfilesRef,"child_changed",c=>{currentProfiles[c.key]=c.val()||{};publishProfiles()},"프로필 변경을 읽지 못했습니다.");bind(currentProfilesRef,"child_removed",c=>{delete currentProfiles[c.key];publishProfiles()},"프로필 변경을 읽지 못했습니다.")}).catch(error=>{console.error("프로필 목록을 읽지 못했습니다.",error);emit("error",{message:"프로필 목록을 읽지 못했습니다.",code:String(error?.code||"")})}));
+    initialData.push(currentProfilesRef.once("value").then(s=>{currentProfiles=s.val()||{};publishProfiles();bind(currentProfilesRef,"child_added",c=>{const next=c.val()||{};if(JSON.stringify(currentProfiles[c.key])===JSON.stringify(next))return;currentProfiles[c.key]=next;publishProfiles()},"프로필 변경을 읽지 못했습니다.");bind(currentProfilesRef,"child_changed",c=>{currentProfiles[c.key]=c.val()||{};publishProfiles()},"프로필 변경을 읽지 못했습니다.");bind(currentProfilesRef,"child_removed",c=>{delete currentProfiles[c.key];publishProfiles()},"프로필 변경을 읽지 못했습니다.")}).catch(error=>{console.error("프로필 목록을 읽지 못했습니다.",error);emit("error",{message:"프로필 목록을 읽지 못했습니다.",code:String(error?.code||"")})}));
     // 쇼핑 보관함은 기존 서버(Apps Script) 흐름을 유지하므로 Firebase 공개 경로로 전환하지 않습니다.
     shopInventoryFallback=true;
     emit("shop-inventory",localGet(`shop.inventory.${user.user_id}`,{}));
@@ -193,7 +190,7 @@ MiniTalk.Realtime=(()=>{
     /* 명령 내용은 서버에서 검증·보관하고, Firebase 신호는 수신자가 즉시 서버 큐를 확인하게만 합니다. */
     bind(db.ref(`signals/${commandSignalRoom(user.user_id)}/wakeup`),"value",snapshot=>{if(snapshot.exists())pollServerCommands()},"관리자 알림 신호를 읽지 못했습니다.");
     // 첫 대화 화면보다 사용자 프로필·대화방 목록이 먼저 준비되어 기본 이미지가 잠깐 보이는 현상을 막습니다.
-    await Promise.all(initialData);await ensureDefaultRoom();
+    await Promise.all(initialData);await ensureDefaultRoom();await loadInitialMemberRooms();
   }
 
   async function startLocal(){

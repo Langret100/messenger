@@ -11,10 +11,11 @@
    - unread.js      방별 미확인 수
    ============================================================ */
 MiniTalk.Features.Chats=(()=>{
-  const messagesByRoom={},renderedMessageIds={};let roomAlertTimes={};let renderFrame=0;let eventsBound=false;
+  const messagesByRoom={},renderedMessageIds={};let roomAlertTimes={};let renderFrame=0;let eventsBound=false,roomSnapshotReceived=false;
+  let roomListReadyWaiters=[];
   const isRenderedChatRoute=()=>MiniTalk.Router.current()==="chats";
   function bindEvents(){if(eventsBound)return;eventsBound=true;
-    MiniTalk.Events.on("rt:rooms",rooms=>{const active=MiniTalk.Store.get("activeRoom"),memberRooms=Object.fromEntries(Object.entries(rooms||{}).filter(([,room])=>MiniTalk.Realtime.isRoomMember(room)));MiniTalk.Store.set("rooms",rooms);notifyRoomInvites(memberRooms);notifyMemberRoomUpdates(memberRooms,active);MiniTalk.Chat.Unread.syncRooms(memberRooms,active);if(!isRenderedChatRoute())return;if(active&&(!rooms?.[active]||!canViewRoom(rooms[active]))){MiniTalk.UI.Shell.closeModal();backToList();MiniTalk.UI.Shell.toast(rooms?.[active]?"대화방에서 나왔습니다.":"대화방이 삭제되었습니다.");return}if(!active)refreshRoomList()});
+    MiniTalk.Events.on("rt:rooms",rooms=>{roomSnapshotReceived=true;const active=MiniTalk.Store.get("activeRoom"),memberRooms=Object.fromEntries(Object.entries(rooms||{}).filter(([,room])=>MiniTalk.Realtime.isRoomMember(room)));MiniTalk.Store.set("rooms",rooms);notifyRoomInvites(memberRooms);notifyMemberRoomUpdates(memberRooms,active);MiniTalk.Chat.Unread.syncRooms(memberRooms,active);if(!isRenderedChatRoute())return;if(active&&(!rooms?.[active]||!canViewRoom(rooms[active]))){MiniTalk.UI.Shell.closeModal();backToList();MiniTalk.UI.Shell.toast(rooms?.[active]?"대화방에서 나왔습니다.":"대화방이 삭제되었습니다.");return}if(!active)refreshRoomList()});
     MiniTalk.Events.on("rt:profiles",profiles=>{MiniTalk.Store.set("profiles",profiles||{});if(!isRenderedChatRoute())return;const active=MiniTalk.Store.get("activeRoom");if(active){applyChatHeader(MiniTalk.Store.get("rooms")?.[active]?.title||"대화",roomHeaderActions(active),{back:()=>backToList()});scheduleMessageRender(active)}else{applyChatHeader(homeTitle(),headerListActions());refreshRoomList()}});
     MiniTalk.Events.on("rt:presence",presence=>MiniTalk.Store.set("presence",presence||{}));
     MiniTalk.Events.on("rt:message-reset",roomId=>{messagesByRoom[roomId]=[];renderedMessageIds[roomId]=new Set()});
@@ -22,6 +23,19 @@ MiniTalk.Features.Chats=(()=>{
     MiniTalk.Events.on("chat:unread",()=>{if(isRenderedChatRoute()&&!MiniTalk.Store.get("activeRoom"))refreshRoomList()});
   }
   function scheduleMessageRender(roomId){if(renderFrame)cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(()=>{renderFrame=0;if(MiniTalk.Store.get("activeRoom")===roomId)renderMessages(roomId)})}
+  function waitForRoomList(){
+    const host=MiniTalk.UI.Dom.byId("viewHost"),view=MiniTalk.UI.Dom.one(".chat-home",host);
+    if(roomSnapshotReceived&&view?.dataset?.roomsReady==="1"&&!MiniTalk.Store.get("activeRoom"))return Promise.resolve();
+    return new Promise(resolve=>roomListReadyWaiters.push(resolve))
+  }
+  function markRoomListReady(view){
+    if(!roomSnapshotReceived||!view?.isConnected||MiniTalk.Store.get("activeRoom"))return;
+    requestAnimationFrame(()=>{
+      if(!view.isConnected||view.dataset.roomsReady!=="1"||MiniTalk.Store.get("activeRoom"))return;
+      const waiters=roomListReadyWaiters.splice(0);waiters.forEach(resolve=>resolve());
+      MiniTalk.Events.emit("chat:room-list-ready",{count:MiniTalk.UI.Dom.all(".conversation-item:not(.hidden)",view).length})
+    })
+  }
   function render(host){MiniTalk.Store.set("activeRoom",null);MiniTalk.Realtime.unsubscribeMessages?.();applyChatHeader(homeTitle(),headerListActions());renderList(host)}
   function headerListActions(){const guest=Boolean(MiniTalk.Store.get("user")?.isGuest);return[
     guest?null:MiniTalk.UI.Dom.el("button",{class:"icon-button subtle header-create-button",type:"button",text:"＋","aria-label":"대화방 만들기",onclick:createRoomDialog}),
@@ -59,21 +73,22 @@ MiniTalk.Features.Chats=(()=>{
   function createRoomDialog(){const D=MiniTalk.UI.Dom,body=D.el("div",{class:"modal-stack"});body.innerHTML='<label class="field">대화방 이름<input id="newRoomName" maxlength="40" placeholder="예: 우리 반 수다방"></label><label class="field">비밀번호 (선택)<input id="newRoomPassword" type="password" minlength="4" maxlength="32" autocomplete="new-password" placeholder="비워두면 공개방"></label><p class="muted modal-note">비밀번호를 설정하면 처음 입장하는 사람에게만 입력을 요청합니다.</p><button id="newRoomCreate" type="button" class="button primary">만들기</button>';body.querySelector("#newRoomCreate").onclick=async()=>{const b=body.querySelector("#newRoomCreate");b.disabled=true;try{const room=await MiniTalk.Realtime.createRoom(body.querySelector("#newRoomName").value,body.querySelector("#newRoomPassword").value);MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("대화방을 만들었습니다.");setTimeout(()=>openRoom(room.id),30)}catch(e){MiniTalk.UI.Shell.toast(e.message)}finally{b.disabled=false}};MiniTalk.UI.Shell.modal("새 대화방",body);setTimeout(()=>body.querySelector("#newRoomName")?.focus(),30)}
   function renderList(host=MiniTalk.UI.Dom.byId("viewHost")){
     if(!host)return;const D=MiniTalk.UI.Dom,allRooms=Object.values(MiniTalk.Store.get("rooms")||{}).sort((a,b)=>roomMessageTime(b)-roomMessageTime(a)),rooms=allRooms.filter(canViewRoom);
-    const view=D.el("section",{class:"view chat-home view-enter","data-filter":"all"});
+    const view=D.el("section",{class:"view chat-home view-enter","data-filter":"all","data-rooms-ready":roomSnapshotReceived?"1":"0"});
     const top=D.el("div",{class:"chat-home-top"}),searchWrap=D.el("div",{class:"chat-search-wrap"}),search=D.el("input",{class:"search chat-search",placeholder:"대화방이나 메시지 검색","aria-label":"대화방 검색"});searchWrap.append(D.el("span",{class:"search-glyph",text:"⌕","aria-hidden":"true"}),search,D.el("span",{class:"search-hint",text:"검색"}));
     const filters=D.el("div",{class:"chat-filter-tabs","aria-label":"대화 필터"});[["all","전체"],["unread","안읽음"],["favorite","즐겨찾기"],["group","그룹"]].forEach(([mode,label])=>{const button=D.el("button",{class:`chat-filter ${mode==="all"?"active":""}`,type:"button",text:label});button.onclick=()=>{view.dataset.filter=mode;D.all(".chat-filter",filters).forEach(item=>item.classList.toggle("active",item===button));if(mode==="group"){filter(search.value,list,mode,view);MiniTalk.Realtime.startRoomListSubscription?.().then(()=>{if(view.isConnected&&view.dataset.filter==="group")refreshRoomList()}).catch(error=>console.warn("그룹 대화방 목록 갱신 실패",error))}else{MiniTalk.Realtime.stopRoomListSubscription?.();filter(search.value,list,mode,view)}};filters.append(button)});
     const sectionHead=D.el("div",{class:"conversation-section-head"},[D.el("strong",{text:"최근 대화"}),D.el("span",{class:"conversation-count",text:`${rooms.length}`})]);top.append(searchWrap,filters,sectionHead);
     const list=D.el("div",{class:"conversation-list",id:"conversationList"});search.oninput=e=>filter(e.target.value,list,view.dataset.filter,view);
     allRooms.forEach((room,i)=>{const node=roomItem(room);node.style.setProperty("--stagger",`${Math.min(i,8)*22}ms`);list.append(node)});
     list.append(D.el("div",{class:"empty-state filter-empty hidden","data-filter-empty":"1"},[D.el("span",{text:"●"}),D.el("strong",{text:allRooms.length?"표시할 대화방이 없습니다":"대화방이 없습니다"}),D.el("small",{class:"muted",text:allRooms.length?"그룹 탭에서 참여할 대화방을 찾아보세요.":"오른쪽 위 ＋ 버튼으로 새 대화를 만들 수 있어요."})]));
-    view.append(top,list);host.replaceChildren(view);filter("",list,"all",view)
+    view.append(top,list);host.replaceChildren(view);filter("",list,"all",view);markRoomListReady(view)
   }
   function refreshRoomList(){
     const D=MiniTalk.UI.Dom,host=D.byId("viewHost"),view=D.one(".chat-home",host);if(!view){renderList(host);return}
     const list=D.one("#conversationList",view),search=D.one(".chat-search",view);if(!list)return renderList(host);
+    view.dataset.roomsReady=roomSnapshotReceived?"1":"0";
     const mode=view.dataset.filter||"all",query=search?.value||"",scrollTop=list.scrollTop,allRooms=Object.values(MiniTalk.Store.get("rooms")||{}).sort((a,b)=>roomMessageTime(b)-roomMessageTime(a)||String(a.id).localeCompare(String(b.id)));
     const nodes=allRooms.map(room=>roomItem(room));nodes.push(D.el("div",{class:"empty-state filter-empty hidden","data-filter-empty":"1"},[D.el("span",{text:"●"}),D.el("strong",{text:allRooms.length?"표시할 대화방이 없습니다":"대화방이 없습니다"}),D.el("small",{class:"muted",text:allRooms.length?"그룹 탭에서 참여할 대화방을 찾아보세요.":"오른쪽 위 ＋ 버튼으로 새 대화를 만들 수 있어요."})]));
-    list.replaceChildren(...nodes);filter(query,list,mode,view);list.scrollTop=scrollTop;
+    list.replaceChildren(...nodes);filter(query,list,mode,view);list.scrollTop=scrollTop;markRoomListReady(view);
   }
   function roomPreview(room){const D=MiniTalk.UI.Dom,node=D.el("p",{class:"conversation-preview"}),text=String(room?.lastMessage||"");if(text)MiniTalk.Chat.Emoji.appendText(text,node,room?.lastMessageEmoticon||"");else node.textContent="대화를 시작하세요";return node}
   function roomItem(room){const D=MiniTalk.UI.Dom,unread=MiniTalk.Chat.Unread.count(room.id),messageAt=roomMessageTime(room),time=messageAt?new Date(messageAt).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}):"",tone=[...(room.id||"")].reduce((sum,char)=>sum+char.charCodeAt(0),0)%4,node=D.el("button",{class:"conversation-item conversation-enter",type:"button","data-room-id":room.id,"data-tone":String(tone),"data-unread":unread?"1":"0","data-favorite":isFavorite(room.id)?"1":"0","data-member":canViewRoom(room)?"1":"0","data-room-type":room.type||"group","data-has-message":roomHasVisibleActivity(room)?"1":"0"},[
@@ -81,7 +96,7 @@ MiniTalk.Features.Chats=(()=>{
     D.el("div",{class:"conversation-main"},[D.el("strong",{class:"conversation-title"},[D.el("span",{text:`${isFavorite(room.id)?"★ ":""}${room.title||room.id}`})]),roomPreview(room)]),
     D.el("div",{class:"conversation-meta"},[D.el("time",{text:time}),unread?D.el("b",{class:"unread",text:String(Math.min(99,unread))}):null])
   ]);let holdTimer=0,holdTriggered=false,startX=0,startY=0;const cancelHold=()=>{clearTimeout(holdTimer);holdTimer=0};node.onpointerdown=event=>{if(event.button!==0)return;holdTriggered=false;startX=event.clientX;startY=event.clientY;holdTimer=setTimeout(()=>{holdTriggered=true;quickRoomActions(room)},620)};node.onpointermove=event=>{if(Math.abs(event.clientX-startX)>10||Math.abs(event.clientY-startY)>10)cancelHold()};node.onpointerup=cancelHold;node.onpointercancel=cancelHold;node.onpointerleave=cancelHold;node.oncontextmenu=event=>{event.preventDefault();cancelHold();quickRoomActions(room)};node.onclick=event=>{if(holdTriggered){event.preventDefault();holdTriggered=false;return}openRoom(room.id)};return node}
-  function filter(query,root,mode="all",view=null){const q=query.trim().toLowerCase();let visible=0;MiniTalk.UI.Dom.all(".conversation-item",root).forEach(item=>{const textMatch=item.textContent.toLowerCase().includes(q),member=item.dataset.member==="1",hasMessage=item.dataset.hasMessage==="1",modeMatch=(mode==="all"&&member)||(mode==="unread"&&member&&item.dataset.unread==="1")||(mode==="favorite"&&member&&item.dataset.favorite==="1")||(mode==="group"&&item.dataset.roomType==="group"&&hasMessage);const show=textMatch&&modeMatch;item.classList.toggle("hidden",!show);if(show)visible++});MiniTalk.UI.Dom.one("[data-filter-empty]",root)?.classList.toggle("hidden",visible>0);const count=MiniTalk.UI.Dom.one(".conversation-count",view||root?.parentElement);if(count)count.textContent=String(visible)}
+  function filter(query,root,mode="all",view=null){const q=query.trim().toLowerCase();let visible=0;MiniTalk.UI.Dom.all(".conversation-item",root).forEach(item=>{const textMatch=item.textContent.toLowerCase().includes(q),member=item.dataset.member==="1",hasMessage=item.dataset.hasMessage==="1",modeMatch=(mode==="all"&&member)||(mode==="unread"&&member&&item.dataset.unread==="1")||(mode==="favorite"&&member&&item.dataset.favorite==="1")||(mode==="group"&&item.dataset.roomType==="group"&&hasMessage);const show=textMatch&&modeMatch;item.classList.toggle("hidden",!show);if(show)visible++});const ready=(view||root?.closest?.(".chat-home"))?.dataset?.roomsReady==="1";MiniTalk.UI.Dom.one("[data-filter-empty]",root)?.classList.toggle("hidden",!ready||visible>0);const count=MiniTalk.UI.Dom.one(".conversation-count",view||root?.parentElement);if(count)count.textContent=String(visible)}
   async function openRoom(roomId,verifiedRoom=null){let room=verifiedRoom||MiniTalk.Store.get("rooms")?.[roomId]||null;if(!room?._detail)room=await MiniTalk.Realtime.getRoom(roomId);if(!room){MiniTalk.UI.Shell.toast("대화방을 찾을 수 없습니다.");return}if(!MiniTalk.Realtime.isRoomMember(room)&&!isAdmin()){if(room.hasPassword){joinRoomDialog(room);return}try{room=await MiniTalk.Realtime.joinRoom(roomId)}catch(e){MiniTalk.UI.Shell.toast(e.message);return}}MiniTalk.Store.set("rooms",{...(MiniTalk.Store.get("rooms")||{}),[roomId]:room});MiniTalk.Store.set("activeRoom",roomId);MiniTalk.Store.set("lastRoom",roomId);MiniTalk.Realtime.stopRoomListSubscription?.();MiniTalk.Chat.Unread.clear(roomId,roomMessageTime(room));applyChatHeader(room.title,roomHeaderActions(roomId),{back:()=>backToList()});renderMessages(roomId);MiniTalk.Realtime.subscribeMessages(roomId).catch(error=>{console.warn("대화내역 구독 시작 실패",error);MiniTalk.UI.Shell.toast("대화내역을 불러오지 못했습니다.")})}
   function quickRoomActions(room){const D=MiniTalk.UI.Dom,body=D.el("div",{class:"modal-stack"}),favorite=D.el("button",{class:"button secondary",type:"button",text:isFavorite(room.id)?"즐겨찾기 해제":"즐겨찾기"});favorite.onclick=()=>{const active=toggleFavorite(room.id);MiniTalk.UI.Shell.closeModal();renderList();MiniTalk.UI.Shell.toast(active?"즐겨찾기에 추가했습니다.":"즐겨찾기에서 해제했습니다.")};body.append(favorite);if(room.id!=="global"&&MiniTalk.Realtime.isRoomMember(room)){const leave=D.el("button",{class:"button room-leave-button",type:"button",text:"대화방 나가기"});leave.onclick=()=>confirmLeaveRoom(room);body.append(leave)}else if(!MiniTalk.Realtime.isRoomMember(room)){const enter=D.el("button",{class:"button primary",type:"button",text:room.hasPassword?"비밀번호 입력 후 참여":"대화방 참여"});enter.onclick=()=>{MiniTalk.UI.Shell.closeModal();openRoom(room.id)};body.append(enter)}MiniTalk.UI.Shell.modal(room.title||"대화방",body)}
   function joinRoomDialog(room){const D=MiniTalk.UI.Dom,body=D.el("div",{class:"modal-stack"});body.innerHTML='<p class="modal-note">이 대화방은 비밀번호로 보호되어 있습니다.</p><label class="field">대화방 비밀번호<input id="roomJoinPassword" type="password" maxlength="32" autocomplete="current-password"></label><button id="roomJoinAction" type="button" class="button primary">입장하기</button>';const action=body.querySelector("#roomJoinAction"),input=body.querySelector("#roomJoinPassword");action.onclick=async()=>{action.disabled=true;try{const joined=await MiniTalk.Realtime.joinRoom(room.id,input.value);MiniTalk.Store.set("rooms",{...(MiniTalk.Store.get("rooms")||{}),[room.id]:joined});MiniTalk.UI.Shell.closeModal();setTimeout(()=>openRoom(room.id,joined),30)}catch(e){MiniTalk.UI.Shell.toast(e.message);input.select()}finally{action.disabled=false}};input.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();action.click()}};MiniTalk.UI.Shell.modal(room.title,body);setTimeout(()=>input.focus(),30)}
@@ -113,12 +128,13 @@ MiniTalk.Features.Chats=(()=>{
     if(existingList){refreshMessageList(roomId,existingList);return}
     const view=D.el("section",{class:"view chat-room view-enter","data-room-id":roomId}),list=D.el("div",{class:"message-list",id:"messageList"});
     fillMessageList(roomId,list,true);
-    const composer=buildComposer(roomId);view.append(list,composer.root);host.replaceChildren(view);requestAnimationFrame(()=>{list.scrollTop=list.scrollHeight})
+    const composer=buildComposer(roomId);view.append(list,composer.root);host.replaceChildren(view);scrollToLatest(list)
   }
+  function scrollToLatest(list){if(!list)return;list.scrollTop=list.scrollHeight;requestAnimationFrame(()=>{if(list.isConnected)list.scrollTop=list.scrollHeight})}
   function refreshMessageList(roomId,list){
     const distance=Math.max(0,list.scrollHeight-list.scrollTop-list.clientHeight),stickToBottom=distance<72,previousTop=list.scrollTop;
     fillMessageList(roomId,list,false);
-    requestAnimationFrame(()=>{list.scrollTop=stickToBottom?list.scrollHeight:Math.min(previousTop,Math.max(0,list.scrollHeight-list.clientHeight))})
+    requestAnimationFrame(()=>{if(stickToBottom)scrollToLatest(list);else list.scrollTop=Math.min(previousTop,Math.max(0,list.scrollHeight-list.clientHeight))})
   }
   function fillMessageList(roomId,list,initial){
     const sorted=[...(messagesByRoom[roomId]||[])].sort((a,b)=>(Number(a.ts)||Number(a.clientTs)||0)-(Number(b.ts)||Number(b.clientTs)||0)||String(a.id||"").localeCompare(String(b.id||""))),seen=renderedMessageIds[roomId]||(renderedMessageIds[roomId]=new Set());
@@ -168,6 +184,6 @@ MiniTalk.Features.Chats=(()=>{
   function openImage(src){const D=MiniTalk.UI.Dom,wrap=D.el("div",{class:"image-viewer"}),img=D.el("img",{src,alt:"이미지 크게 보기"});wrap.append(img);wrap.onclick=()=>wrap.remove();D.doc().body.append(wrap)}
   function openUserProfile(message,profile){const D=MiniTalk.UI.Dom,body=D.el("div",{class:"profile-viewer"}),avatar=D.el("img",{class:"profile-viewer-avatar",src:profile?.avatar||"assets/mascot-avatar.png",alt:"프로필"});avatar.onerror=()=>{avatar.onerror=null;avatar.src="assets/mascot-avatar.png"};body.append(avatar,D.el("strong",{class:"profile-viewer-name",text:message.nickname||"익명"}),D.el("p",{class:"muted profile-viewer-status",text:profile?.statusMsg||"상태메시지가 없습니다."}));MiniTalk.UI.Shell.modal("프로필",body,{hostClass:"profile-modal-host",modalClass:"profile-modal"})}
   function leave(){MiniTalk.Store.set("activeRoom",null);MiniTalk.Realtime.unsubscribeMessages?.();MiniTalk.Realtime.stopRoomListSubscription?.();MiniTalk.Chat.QR.stop?.();if(renderFrame){cancelAnimationFrame(renderFrame);renderFrame=0}}
-  bindEvents();return{id:"chats",title:"대화",icon:"◉",render,leave};
+  bindEvents();return{id:"chats",title:"대화",icon:"◉",render,leave,waitForRoomList};
 })();
 MiniTalk.Registry.register(MiniTalk.Features.Chats);

@@ -43,22 +43,26 @@ MiniTalk.UI.Shell=(()=>{
     if(entering||activeUserId===user.user_id)return;
     entering=true;activeUserId=user.user_id;
     D().byId("authHost")?.classList.add("hidden");D().byId("workspace")?.classList.remove("hidden");
+    const endInitialLoading=beginLoading();let initialLoadingOwned=true;
     try{
       /* 인증 응답 직후에는 첫 대화 화면 DOM을 먼저 완성합니다. */
       renderNav();
       await MiniTalk.Router.go("chats");
       MiniTalk.Features.Admin?.applyStoredLock?.();
+      const firstRoomListPaint=MiniTalk.Features.Chats?.waitForRoomList?.()||Promise.resolve();
 
-      /* transport 준비 상태는 바로 시작하되 첫 화면 렌더를 기다리게 하지는 않습니다. */
+      /* transport 준비는 즉시 시작합니다. 로딩 오버레이만 첫 방 목록의 실제 paint까지 유지합니다. */
       const realtimeReady=MiniTalk.Realtime.init(user).then(transport=>{
         if(!user.isGuest&&transport!=="firebase"){const reason=MiniTalk.Realtime.getConnectionError?.()||"";toast(/permission-denied/i.test(reason)?"Firebase 데이터베이스 규칙을 적용해주세요.":"실시간 서버 연결을 확인해주세요.")}
         return transport
       }).catch(error=>{console.warn("실시간 데이터 채널 초기화 실패",error);if(!user.isGuest)toast("실시간 서버 연결을 확인해주세요.");return"local"});
       void realtimeReady;
+      Promise.resolve(firstRoomListPaint).then(()=>new Promise(resolve=>requestAnimationFrame(resolve))).catch(error=>console.warn("첫 대화방 목록 렌더 확인 실패",error)).finally(()=>{if(initialLoadingOwned){initialLoadingOwned=false;endInitialLoading()}});
 
       /* 코인/가입자/과제/쇼핑 초기 조회는 첫 화면 페인트 뒤로 넘깁니다. */
       requestAnimationFrame(()=>setTimeout(()=>startWorkspaceBackground(user),0));
     }catch(error){
+      if(initialLoadingOwned){initialLoadingOwned=false;endInitialLoading()}
       activeUserId=null;toast(error.message||"화면을 여는 중 오류가 발생했습니다.");D().byId("authHost")?.classList.remove("hidden");D().byId("workspace")?.classList.add("hidden");MiniTalk.Realtime.cleanup?.();
     }finally{entering=false}
   }

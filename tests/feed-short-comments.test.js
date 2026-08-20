@@ -9,5 +9,5 @@ ok(feed.includes('patchHeart(id,previous);patchComments(id);return'),'realtime c
 ok(feed.includes('while(rows.length>MAX_COMMENTS)'),'comment cap cleanup missing');
 ok(css.includes('.feed-comments')&&css.includes('.feed-comment-compose')&&css.includes('.feed-comment-input'),'comment styles missing');
 ok(html.includes('feed-classinfo-weekly.css?v=65.0.16')&&html.includes('js/features/feed.js?v=65.0.10'),'comment asset cache versions missing');
-ok(sw.includes('moaru-v64.5.38-feed-short-comments-20260820')&&app.includes('sw.js?v=64.5.38'),'v5.38 service worker version missing');
+ok(sw.includes('moaru-v64.5.39-game-rank-weekly-20260820')&&app.includes('sw.js?v=64.5.39'),'v5.38 service worker version missing');
 console.log('FEED_SHORT_COMMENTS_OK');

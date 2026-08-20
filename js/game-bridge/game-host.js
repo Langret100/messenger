@@ -153,7 +153,9 @@ MiniTalk.GameHost=(()=>{
     if(data==="WG_EXIT_GAME"||data.type==="WG_EXIT_GAME")return closeGame();
     if(data.type==="GAME_SCORE")return sendScore(data.gameName||data.game,data.score);
     if(data.type==="MATH_EXPLORER_RESULT"){
-      const score=Number(data.score||0);
+      const rawScore=Math.max(0,Math.floor(Number(data.score)||0));
+      const supplied=Math.max(0,Math.floor(Number(data.rankingScore)||0));
+      const score=supplied||Math.floor(rawScore*(data.hardMode?1.2:1));
       if(score>0)sendScore("수학탐험대",score);
       return;
     }

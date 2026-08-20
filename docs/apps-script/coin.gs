@@ -332,6 +332,141 @@ function handleCoinReward(e) {
 }
 
 /**
+ * 게임 주간 TOP3 보상 내부 처리.
+ * - 매주 월요일 오전 9시대 예약 실행에서만 호출합니다.
+ * - 각 게임별로 같은 주(월요일 기준)에는 계정당 1회, +1 코인만 지급합니다.
+ * - 랭킹 1/2/3위 모두 동일하게 1코인입니다.
+ */
+function awardGameWeeklyTop3_(gameName, userId, rank) {
+  gameName = String(gameName || "").trim();
+  userId = String(userId || "").trim();
+  rank = Number(rank) || 0;
+  if (!gameName || !userId || rank < 1 || rank > 3) {
+    return { ok: true, applied: false, eligible: false, rank: rank || null };
+  }
+
+  const userData = getRewardUserData_(userId);
+  if (!userData) return { ok: false, applied: false, error: "NO_REWARD_USER", rank: rank };
+
+  // Code.gs의 한국 날짜 기준 주차 계산을 재사용합니다.
+  const weekMeta = typeof getWeekMeta_ === "function" ? getWeekMeta_(new Date()) : null;
+  const weekKey = weekMeta && weekMeta.weekKey ? String(weekMeta.weekKey) : Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd");
+  const type = "GAME_RANK_TOP3";
+  const key = gameName + ":" + weekKey;
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return { ok: false, applied: false, error: "COIN_BUSY", rank: rank };
+  try {
+    const logSheet = getOrCreateRewardLogSheet_();
+    const lastRow = logSheet.getLastRow();
+    if (lastRow > 1) {
+      const rows = logSheet.getRange(2, 1, lastRow - 1, 3).getValues();
+      for (let i = 0; i < rows.length; i++) {
+        if (String(rows[i][0] || "") === userId && String(rows[i][1] || "").toUpperCase() === type && String(rows[i][2] || "") === key) {
+          return { ok: true, applied: false, reason: "ALREADY_REWARDED", rank: rank, week_key: weekKey };
+        }
+      }
+    }
+
+    const result = processCoinChangeUnlocked_(userId, "add", 1);
+    logSheet.getRange(logSheet.getLastRow() + 1, 1, 1, 5).setValues([[userId, type, key, 1, new Date()]]);
+    return {
+      ok: true,
+      applied: true,
+      eligible: true,
+      rank: rank,
+      week_key: weekKey,
+      delta: 1,
+      newCoin: result && typeof result.newCoin !== "undefined" ? result.newCoin : null
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/**
+ * 매주 월요일 오전 9시(Asia/Seoul) 게임 랭킹 보상 트리거 본체.
+ * Apps Script 시간 트리거 특성상 정확히 09:00:00을 보장하지 않으며
+ * 09시대(nearMinute(0) 기준 보통 정각 근처)에 실행됩니다.
+ *
+ * 그 시점의 누적 랭킹 TOP3를 게임별로 확정하여 각 1코인을 지급합니다.
+ * 랭킹은 초기화하지 않습니다. 보상로그의 GAME_RANK_TOP3 + 게임명:주차키로
+ * 중복 실행/재시도에도 같은 주 같은 게임은 사용자별 1회만 지급됩니다.
+ */
+function runGameWeeklyRankingRewards() {
+  const now = new Date();
+  const meta = typeof getWeekMeta_ === "function" ? getWeekMeta_(now) : null;
+  const weekday = meta && meta.weekday ? Number(meta.weekday) : 0;
+  const hour = Number(Utilities.formatDate(now, "Asia/Seoul", "H"));
+
+  // 예약 실행이 엉뚱한 시각에 호출되는 상황을 방어합니다.
+  if (weekday !== 1 || hour !== 9) {
+    Logger.log("game weekly reward skipped: weekday=" + weekday + ", hour=" + hour);
+    return { ok: true, skipped: true, reason: "NOT_MONDAY_09_KST" };
+  }
+
+  const results = [];
+  GAME_SHEETS.forEach(function(gameName) {
+    try {
+      const sheet = getGameSheetSafe_(gameName);
+      sortGameSheetAndReRank_(sheet);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) {
+        results.push({ game_name: gameName, rewarded: 0, users: [] });
+        return;
+      }
+
+      const count = Math.min(3, lastRow - 1);
+      const rows = sheet.getRange(2, 1, count, 4).getValues();
+      const users = [];
+      rows.forEach(function(row, index) {
+        const userId = String(row[0] || "").trim();
+        if (!userId) return;
+        const rank = Number(row[3]) || (index + 1);
+        if (rank < 1 || rank > 3) return;
+        const reward = awardGameWeeklyTop3_(gameName, userId, rank);
+        users.push({ user_id: userId, rank: rank, applied: !!(reward && reward.applied), reason: reward && reward.reason ? reward.reason : "" });
+      });
+      results.push({
+        game_name: gameName,
+        rewarded: users.filter(function(item) { return item.applied; }).length,
+        users: users
+      });
+    } catch (err) {
+      Logger.log("game weekly reward error [" + gameName + "]: " + err);
+      results.push({ game_name: gameName, error: String(err) });
+    }
+  });
+
+  return { ok: true, week_key: meta && meta.weekKey ? meta.weekKey : "", results: results };
+}
+
+/**
+ * 월요일 오전 9시대 주간 게임 보상 트리거 설치.
+ * Apps Script 편집기에서 최초 1회 실행하면 됩니다.
+ * 같은 함수의 기존 트리거를 먼저 지워 중복 예약을 방지합니다.
+ */
+function installGameWeeklyRankingRewardTrigger() {
+  const handler = "runGameWeeklyRankingRewards";
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction && trigger.getHandlerFunction() === handler) {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  const trigger = ScriptApp.newTrigger(handler)
+    .timeBased()
+    .inTimezone("Asia/Seoul")
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(9)
+    .nearMinute(0)
+    .create();
+
+  return { ok: true, handler: handler, trigger_id: trigger.getUniqueId ? trigger.getUniqueId() : "" };
+}
+
+/**
  * (내부) 보상로그 시트를 가져오거나 없으면 생성
  */
 function getOrCreateRewardLogSheet_() {
@@ -403,5 +538,6 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("코인 관리")
     .addItem("동기화 실행", "syncUsersToRewards")
+    .addItem("게임 주간보상 트리거 설치", "installGameWeeklyRankingRewardTrigger")
     .addToUi();
 }

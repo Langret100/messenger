@@ -63,6 +63,8 @@ MiniTalk.Games.ScoreService = (() => {
       });
       const response = await fetch(MiniTalkConfig.sheetUrl, { method: "POST", body });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await response.json().catch(() => ({}));
+      // 주간 TOP3 코인은 게임 요청 시 즉시 지급하지 않고 월요일 오전 9시 서버 트리거에서만 지급합니다.
       MiniTalk.UI.Shell.toast(`${gameName} ${normalized}점 기록`);
       return true;
     } catch (error) {
@@ -101,10 +103,13 @@ MiniTalk.Games.ScoreService = (() => {
       const url = new URL(MiniTalkConfig.sheetUrl);
       url.searchParams.set("mode", "game_ranking");
       url.searchParams.set("game_name", gameName);
+      const user = MiniTalk.Store.get("user");
+      if (user?.user_id && !user.isGuest) url.searchParams.set("user_id", String(user.user_id));
       url.searchParams.set("t", String(Date.now()));
       const response = await fetch(url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const json = await response.json();
+      // 랭킹 조회도 읽기 전용입니다. 코인 지급은 월요일 오전 9시 서버 트리거만 담당합니다.
       const list = Array.isArray(json.list) ? json.list : Array.isArray(json.data) ? json.data : [];
       return { rows: merge(list.map(normalizeRemote), local), online: true };
     } catch (error) {

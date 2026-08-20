@@ -2157,11 +2157,16 @@ const G = {
         this.running = false;
         document.getElementById('gameOverScreen').classList.remove('hidden');
         try { if (typeof window._mathSay === "function") window._mathSay("gameover"); } catch(_) {}
+        const rawScore = Math.max(0, Math.floor(this.score));
+        const rankingScore = Math.max(0, Math.floor(rawScore * (hardMode ? 1.2 : 1)));
         document.getElementById('finalStats').innerHTML = `
-            <div>최종 점수: ${Math.floor(this.score)}</div>
+            <div>최종 점수: ${rawScore}</div>
+            ${hardMode ? `<div>랭킹 점수: ${rankingScore} <small>(하드 ×1.2)</small></div>` : ''}
             <div>레벨: ${this.player.level}</div>
             <div>생존 시간: ${Math.floor((Date.now() - this.startTime) / 1000)}초</div>
         `;
+        // 결과 전송은 하단의 math-explorer-bridge.js 한 경로에서만 담당합니다.
+        // gameOver() 본체와 브리지에서 동시에 보내면 Apps Script 점수 제출이 2회 발생할 수 있습니다.
     },
     
     loop(timestamp = 0) {

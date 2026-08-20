@@ -12,5 +12,5 @@ ok(css.includes('.conversation-preview .chat-emoticon{width:22px!important;heigh
 ok(feedcss.includes('background:color-mix(in srgb,#d5d9e1 48%,transparent)'),'feed FAB is not translucent light gray');
 ok(feedcss.includes('bottom:calc(-20px + 58px'),'feed FAB was not lowered further');
 ok(html.includes('css/app.css?v=64.5.11')&&html.includes('feed-classinfo-weekly.css?v=65.0.16')&&html.includes('realtime.js?v=64.5.33')&&html.includes('features/chats.js?v=64.5.15')&&html.includes('app.js?v=64.5.33'),'v5.22 cache versions stale');
-ok(sw.includes('moaru-v64.5.38-feed-short-comments-20260820')&&app.includes('sw.js?v=64.5.38'),'v5.22 service worker version stale');
+ok(sw.includes('moaru-v64.5.39-game-rank-weekly-20260820')&&app.includes('sw.js?v=64.5.39'),'v5.22 service worker version stale');
 console.log('LEGACY_ROOM_EMOJI_UI_OK');

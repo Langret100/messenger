@@ -9,7 +9,7 @@ const DIALOG_SHEET  = "대화";
 const BOARD_SHEET   = "게시판";
 
 // 🔹 게임 랭킹용 시트 이름 목록 (각 게임별 탭 이름과 정확히 일치해야 함)
-const GAME_SHEETS   = ["구구단게임", "덧셈주사위", "꿈틀이도형추적자"];
+const GAME_SHEETS   = ["구구단게임", "덧셈주사위", "꿈틀이도형추적자", "수학탐험대", "마이다마고치"];
 const GAME_RANK_LIMIT_DEFAULT = 10;
 
 /**
@@ -1185,16 +1185,39 @@ function getMailCheck_(param) {
  * ---------------------------------------------------
  */
 
+function ensureGameSheetHeader_(sheet) {
+  const headers = ["user_id", "username", "score", "rank"];
+  const lastRow = sheet.getLastRow();
+
+  // 새로 생성된 빈 랭킹 시트는 반드시 1행을 헤더로 예약합니다.
+  if (lastRow < 1) {
+    sheet.getRange(1, 1, 1, 4).setValues([headers]);
+    return sheet;
+  }
+
+  // v9/v10에서 빈 시트에 첫 점수가 1행부터 기록된 적이 있다면 자동 복구합니다.
+  // 기존 운영 시트의 한글/영문 헤더는 그대로 존중하고, 3열이 실제 숫자 점수인 경우만 데이터 행으로 판정합니다.
+  const firstRow = sheet.getRange(1, 1, 1, 4).getValues()[0];
+  const firstUserId = String(firstRow[0] || "").trim();
+  const firstScoreText = String(firstRow[2] == null ? "" : firstRow[2]).trim();
+  const firstRowLooksLikeData = !!firstUserId && firstScoreText !== "" && !isNaN(Number(firstScoreText));
+  if (firstRowLooksLikeData) {
+    sheet.insertRowsBefore(1, 1);
+    sheet.getRange(1, 1, 1, 4).setValues([headers]);
+  }
+  return sheet;
+}
+
 function getGameSheetSafe_(gameName) {
   if (GAME_SHEETS.indexOf(gameName) === -1) {
     throw new Error("알 수 없는 게임 이름입니다: " + gameName);
   }
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = ss.getSheetByName(gameName);
+  let sheet = ss.getSheetByName(gameName);
   if (!sheet) {
-    return ss.insertSheet(gameName);
+    sheet = ss.insertSheet(gameName);
   }
-  return sheet;
+  return ensureGameSheetHeader_(sheet);
 }
 
 function sortGameSheetAndReRank_(sheet) {
@@ -1214,6 +1237,18 @@ function sortGameSheetAndReRank_(sheet) {
   }
 
   range.setValues(newValues);
+}
+
+function getGameUserRank_(sheet, userId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const values = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][0] || "").trim() === String(userId || "").trim()) {
+      return Number(values[i][3]) || (i + 1);
+    }
+  }
+  return null;
 }
 
 function gameUpdateScore_(data) {

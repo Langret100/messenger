@@ -13,5 +13,5 @@ ok(router.includes('MiniTalk.UI.Shell.beginLoading?.()')&&auth.includes('MiniTal
 ok(appcss.includes('.moaru-loading-host{')&&appcss.includes('@keyframes moaru-loading-pulse'),'loading overlay CSS missing');
 ok(feedcss.includes('.header-heart-inline.heart-pop'),'header heart animation CSS missing');
 ok(html.includes('css/app.css?v=64.5.11')&&html.includes('feed-classinfo-weekly.css?v=65.0.16')&&html.includes('js/core/router.js')&&html.includes('realtime.js?v=64.5.33')&&html.includes('js/chat/unread.js')&&html.includes('features/feed.js?v=65.0.10')&&html.includes('app.js?v=64.5.33'),'v5.23 cache versions stale');
-ok(sw.includes('moaru-v64.5.38-feed-short-comments-20260820')&&app.includes('sw.js?v=64.5.38'),'v5.23 service worker version stale');
+ok(sw.includes('moaru-v64.5.39-game-rank-weekly-20260820')&&app.includes('sw.js?v=64.5.39'),'v5.23 service worker version stale');
 console.log('ROOM_LIVE_HEART_LOADING_OK');

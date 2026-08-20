@@ -1,6 +1,7 @@
 /*
  * 공용 코인 지갑 표시기
- * 현재는 조회만 제공하며, 이후 보상·구매 기능은 refresh/setLocal API에 연결할 수 있습니다.
+ * 서버 잔액을 로컬에 짧게 캐시하되, force=true는 진행 중인 예전 조회가 있어도
+ * 그 조회가 끝난 뒤 반드시 새 서버 조회를 한 번 더 수행합니다.
  */
 MiniTalk.Economy = MiniTalk.Economy || {};
 MiniTalk.Economy.CoinWallet = (() => {
@@ -40,25 +41,44 @@ MiniTalk.Economy.CoinWallet = (() => {
     });
   }
 
-  async function refresh(force = false) {
-    const user = MiniTalk.Store.get("user");
-    if (!user?.user_id || user.isGuest) return setLocal(0, "guest");
-    const cached = snapshot();
-    if (!force && cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
-      MiniTalk.Store.set("coins", cached.value);
-      return cached.value;
-    }
-    if (inFlight) return inFlight;
-    inFlight = MiniTalk.AuthApi.coinStatus(user.user_id)
+  function startServerRefresh(user, cached) {
+    const request = MiniTalk.AuthApi.coinStatus(user.user_id)
       .then(amount => setLocal(amount, "server"))
       .catch(error => {
         console.warn("코인 잔액 조회 실패", error);
         return setLocal(cached?.value || 0, "fallback");
-      })
-      .finally(() => {
-        inFlight = null;
       });
-    return inFlight;
+
+    inFlight = request;
+    request.finally(() => {
+      if (inFlight === request) inFlight = null;
+    });
+    return request;
+  }
+
+  async function refresh(force = false) {
+    const user = MiniTalk.Store.get("user");
+    if (!user?.user_id || user.isGuest) return setLocal(0, "guest");
+
+    let cached = snapshot();
+    if (!force && cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
+      MiniTalk.Store.set("coins", cached.value);
+      return cached.value;
+    }
+
+    if (inFlight) {
+      if (!force) return inFlight;
+
+      /*
+       * 보상/구매 직후 force refresh가 이전에 시작된 잔액 조회 Promise를 그대로
+       * 재사용하면, 서버 코인은 증가했는데 화면에는 보상 전 잔액이 남을 수 있습니다.
+       * 강제 새로고침은 이전 조회를 기다린 뒤 반드시 새 요청을 보냅니다.
+       */
+      try { await inFlight; } catch (error) {}
+      cached = snapshot();
+    }
+
+    return startServerRefresh(user, cached);
   }
 
   function badge(options = {}) {

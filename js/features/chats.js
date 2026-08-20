@@ -11,14 +11,14 @@
    - unread.js      방별 미확인 수
    ============================================================ */
 MiniTalk.Features.Chats=(()=>{
-  const messagesByRoom={},renderedMessageIds={};let roomAlertTimes={};let renderFrame=0;let eventsBound=false,roomSnapshotReceived=false;
+  const messagesByRoom={},renderedMessageIds={},olderStateByRoom={};let roomAlertTimes={};let renderFrame=0;let eventsBound=false,roomSnapshotReceived=false;
   let roomListReadyWaiters=[];
   const isRenderedChatRoute=()=>MiniTalk.Router.current()==="chats";
   function bindEvents(){if(eventsBound)return;eventsBound=true;
     MiniTalk.Events.on("rt:rooms",rooms=>{roomSnapshotReceived=true;const active=MiniTalk.Store.get("activeRoom"),memberRooms=Object.fromEntries(Object.entries(rooms||{}).filter(([,room])=>MiniTalk.Realtime.isRoomMember(room)));MiniTalk.Store.set("rooms",rooms);notifyRoomInvites(memberRooms);notifyMemberRoomUpdates(memberRooms,active);MiniTalk.Chat.Unread.syncRooms(memberRooms,active);if(!isRenderedChatRoute())return;if(active&&(!rooms?.[active]||!canViewRoom(rooms[active]))){MiniTalk.UI.Shell.closeModal();backToList();MiniTalk.UI.Shell.toast(rooms?.[active]?"대화방에서 나왔습니다.":"대화방이 삭제되었습니다.");return}if(!active)refreshRoomList()});
     MiniTalk.Events.on("rt:profiles",profiles=>{MiniTalk.Store.set("profiles",profiles||{});if(!isRenderedChatRoute())return;const active=MiniTalk.Store.get("activeRoom");if(active){applyChatHeader(MiniTalk.Store.get("rooms")?.[active]?.title||"대화",roomHeaderActions(active),{back:()=>backToList()});scheduleMessageRender(active)}else{applyChatHeader(homeTitle(),headerListActions());refreshRoomList()}});
     MiniTalk.Events.on("rt:presence",presence=>MiniTalk.Store.set("presence",presence||{}));
-    MiniTalk.Events.on("rt:message-reset",roomId=>{messagesByRoom[roomId]=[];renderedMessageIds[roomId]=new Set()});
+    MiniTalk.Events.on("rt:message-reset",roomId=>{messagesByRoom[roomId]=[];renderedMessageIds[roomId]=new Set();olderStateByRoom[roomId]={loading:false,hasMore:true}});
     MiniTalk.Events.on("rt:message",message=>{const roomId=message.roomId;if(!roomId)return;const list=messagesByRoom[roomId]||(messagesByRoom[roomId]=[]),isNew=!list.some(item=>item.id===message.id);if(isNew)list.push(message);const active=isRenderedChatRoute()&&MiniTalk.Store.get("activeRoom")===roomId,room=MiniTalk.Store.get("rooms")?.[roomId],stillMember=Boolean(room&&MiniTalk.Realtime.isRoomMember(room));if(active)scheduleMessageRender(roomId);if(isNew&&!active&&stillMember&&(message.ts||0)>Date.now()-7000)MiniTalk.Features.Tools?.notifyIncoming?.(message)});
     MiniTalk.Events.on("chat:unread",()=>{if(isRenderedChatRoute()&&!MiniTalk.Store.get("activeRoom"))refreshRoomList()});
   }
@@ -128,9 +128,21 @@ MiniTalk.Features.Chats=(()=>{
     if(existingList){refreshMessageList(roomId,existingList);return}
     const view=D.el("section",{class:"view chat-room view-enter","data-room-id":roomId}),list=D.el("div",{class:"message-list",id:"messageList"});
     fillMessageList(roomId,list,true);
+    list.addEventListener("scroll",()=>{if(list.scrollTop<=72)loadOlderMessages(roomId,list).catch(error=>console.warn("이전 대화 불러오기 실패",error))},{passive:true});
     const composer=buildComposer(roomId);view.append(list,composer.root);host.replaceChildren(view);scrollToLatest(list)
   }
   function scrollToLatest(list){if(!list)return;list.scrollTop=list.scrollHeight;requestAnimationFrame(()=>{if(list.isConnected)list.scrollTop=list.scrollHeight})}
+  async function loadOlderMessages(roomId,list){
+    const state=olderStateByRoom[roomId]||(olderStateByRoom[roomId]={loading:false,hasMore:true});if(state.loading||state.hasMore===false||!list?.isConnected)return;
+    const sorted=[...(messagesByRoom[roomId]||[])].sort((a,b)=>(Number(a.ts)||Number(a.clientTs)||0)-(Number(b.ts)||Number(b.clientTs)||0)||String(a.id||"").localeCompare(String(b.id||"")));if(!sorted.length)return;
+    const oldest=sorted[0],beforeTs=Number(oldest.ts)||Number(oldest.clientTs)||0;if(!beforeTs)return;state.loading=true;
+    const oldHeight=list.scrollHeight,oldTop=list.scrollTop;
+    try{
+      const result=await MiniTalk.Realtime.loadOlderMessages?.(roomId,beforeTs,oldest.id)||{messages:[],hasMore:false},incoming=Array.isArray(result.messages)?result.messages:[],current=messagesByRoom[roomId]||(messagesByRoom[roomId]=[]),known=new Set(current.map(message=>String(message.id||"")));
+      incoming.forEach(message=>{if(message?.id&&!known.has(String(message.id))){known.add(String(message.id));current.push(message)}});state.hasMore=result.hasMore!==false;
+      if(incoming.length){fillMessageList(roomId,list,false);requestAnimationFrame(()=>{if(list.isConnected)list.scrollTop=Math.max(0,list.scrollHeight-oldHeight+oldTop)})}
+    }finally{state.loading=false}
+  }
   function refreshMessageList(roomId,list){
     const distance=Math.max(0,list.scrollHeight-list.scrollTop-list.clientHeight),stickToBottom=distance<72,previousTop=list.scrollTop;
     fillMessageList(roomId,list,false);

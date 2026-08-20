@@ -18,8 +18,8 @@ MiniTalk.Chat.Attachments=(()=>{
     try{input.click()}catch(error){finish(null);throw error}
   })}
   const readData=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("파일을 읽지 못했습니다."));r.readAsDataURL(file)});
-  const CHAT_IMAGE_LIMIT=80*1024;
-  async function compressImage(file,max=720,targetBytes=CHAT_IMAGE_LIMIT){
+  const CHAT_IMAGE_DATA_LIMIT=60*1024,CHAT_IMAGE_BLOB_TARGET=44*1024;
+  async function compressImage(file,max=720,targetBytes=CHAT_IMAGE_BLOB_TARGET){
     if(!file?.type?.startsWith("image/"))throw new Error("이미지 파일이 아닙니다.");
     if(file.size>15*1024*1024)throw new Error("이미지가 너무 큽니다.");
     const data=await readData(file),doc=MiniTalk.UI?.Dom?.doc?.()||document,Img=doc.defaultView?.Image||Image;
@@ -32,12 +32,13 @@ MiniTalk.Chat.Attachments=(()=>{
       ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
       for(const quality of [.78,.68,.58,.48,.38,.3]){
         const blob=await encode(quality);if(blob&&blob.size<=targetBytes){
-          return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||""));reader.onerror=()=>reject(new Error("이미지를 압축하지 못했습니다."));reader.readAsDataURL(blob)});
+          const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||""));reader.onerror=()=>reject(new Error("이미지를 압축하지 못했습니다."));reader.readAsDataURL(blob)});
+          if(dataUrl.length<=CHAT_IMAGE_DATA_LIMIT)return dataUrl;
         }
       }
       scale*=.82;
     }
-    throw new Error("사진을 80KB 이하로 줄이지 못했습니다. 다른 사진을 선택해주세요.");
+    throw new Error("사진을 Firebase 저장 기준 60KB 이하로 줄이지 못했습니다. 다른 사진을 선택해주세요.");
   }
   async function upload(mode,file,dataUrl){
     const endpoint=MiniTalkConfig.sheetUrl;if(!endpoint)throw new Error("업로드 서버가 설정되지 않았습니다.");

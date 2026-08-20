@@ -78,7 +78,12 @@ MiniTalk.Features.Auth=(()=>{
     MiniTalk.Realtime.cleanup?.();
     MiniTalk.Store.set("user",null);
     MiniTalk.UI.Shell?.resetWorkspaceSession?.();
-    const host=document.getElementById("authHost"),workspace=document.getElementById("workspace");
+    const launch=document.getElementById("launchView"),shell=document.getElementById("appShell"),host=document.getElementById("authHost"),workspace=document.getElementById("workspace");
+    /* PiP의 appShell이 원본 document로 돌아온 뒤 launcher까지 동시에 보이면
+       body grid가 두 행으로 나뉘어 로그인 카드가 아래로 밀립니다. */
+    launch?.classList.add("hidden");
+    shell?.classList.remove("hidden");
+    document.documentElement.classList.add("app-visible");
     MiniTalk.UI.Shell?.setAuthMode?.(true);
     workspace?.classList.add("hidden");
     host?.classList.remove("hidden");

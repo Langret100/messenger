@@ -108,7 +108,8 @@ MiniTalk.Shopping.StoreService = (() => {
     pendingDeliveryKeys.set(pendingKey,requestId);
     try {
       const result=await MiniTalk.AuthApi.shopRequestDelivery({userId:current.user_id,inventoryId:id,item,requestId});
-      await refreshInventory(true).catch(()=>{});
+      // 서버 성공 직후 호출자에게 반환해 음원/연출을 즉시 시작하고, 보관함 동기화는 뒤에서 처리합니다.
+      refreshInventory(true).catch(()=>{});
       return result;
     } finally {
       pendingDeliveryKeys.delete(pendingKey);

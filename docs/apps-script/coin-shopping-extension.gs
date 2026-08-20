@@ -472,11 +472,17 @@ function readShopInventoryRowsForUser_(userId) {
     .map(shopInventoryRowToItem_)
     .filter(function (item) { return item.id && item.ownerId === id; });
 }
+function readShopInventoryFresh_(userId) {
+  const id = String(userId || "");
+  if (!id) return [];
+  const catalog = readShopCatalog_();
+  return readShopInventoryRowsForUser_(id).map(function (item) { return hydrateShopInventoryItem_(item, catalog); }).sort(function (a, b) { return Number(b.createdAt || b.giftedAt || 0) - Number(a.createdAt || a.giftedAt || 0); });
+}
 function readShopInventory_(userId) {
   const id = String(userId || ""), cache = CacheService.getScriptCache(), cacheKey = shopInventoryCacheKey_(id);
   if (!id) return [];
   try { const cached = cache.get(cacheKey);if (cached) { const parsed = JSON.parse(cached);if (Array.isArray(parsed)) return parsed; } } catch (error) {}
-  const catalog = readShopCatalog_(), items = readShopInventoryRowsForUser_(id).map(function (item) { return hydrateShopInventoryItem_(item, catalog); }).sort(function (a, b) { return Number(b.createdAt || b.giftedAt || 0) - Number(a.createdAt || a.giftedAt || 0); });
+  const items = readShopInventoryFresh_(id);
   try { cache.put(cacheKey, JSON.stringify(items), 45); } catch (error) {}
   return items;
 }
@@ -602,7 +608,7 @@ function handleShopRequestDelivery(e) {
   if (!inventoryId) return shopJson_({ ok: false, error: "MISSING_INVENTORY_ID" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
-    const item = readShopInventory_(userId).filter(function (row) { return row.id === inventoryId; })[0];
+    const item = readShopInventoryFresh_(userId).filter(function (row) { return row.id === inventoryId; })[0];
     if (!item || String(item.ownerId || userId) !== userId) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
     const status = normalizeDeliveryStatus_(item);
     if (status === "requested" || status === "shipping") return shopJson_({ ok: true, alreadyRequested: true, item: item, deliveryStatus: status });
@@ -631,7 +637,7 @@ function updateShopDeliveryByManager_(e, nextStatus) {
   if (!ownerId || !inventoryId) return shopJson_({ ok: false, error: "INVALID_DELIVERY_TARGET" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
-    const item = readShopInventory_(ownerId).filter(function (row) { return row.id === inventoryId; })[0];if (!item) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+    const item = readShopInventoryFresh_(ownerId).filter(function (row) { return row.id === inventoryId; })[0];if (!item) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
     const current = normalizeDeliveryStatus_(item), now = Date.now();
     if (current === nextStatus) return shopJson_({ ok: true, alreadyApplied: true, item: item, deliveryStatus: current });
     if (nextStatus === "shipping" && current !== "requested") return shopJson_({ ok: false, error: "DELIVERY_STATE_INVALID", status: current });

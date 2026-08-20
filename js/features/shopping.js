@@ -3,6 +3,21 @@ MiniTalk.Features.Shopping = (() => {
   const Service = MiniTalk.Shopping.StoreService;
   let inventoryOpen = false, refreshTimer = 0;
 
+  const DELIVERY_AUDIO_URLS = ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'];
+  const deliveryAudioPool = new Map();
+
+  function preloadDeliveryAudio() {
+    DELIVERY_AUDIO_URLS.forEach(src => {
+      if (deliveryAudioPool.has(src)) return;
+      try {
+        const audio = new Audio(src);
+        audio.preload = 'auto';
+        audio.load?.();
+        deliveryAudioPool.set(src, audio);
+      } catch (_) {}
+    });
+  }
+
   MiniTalk.Events.on("state:shopCatalog", refreshVisible);
   MiniTalk.Events.on("state:shopInventory", refreshVisible);
 
@@ -36,6 +51,7 @@ MiniTalk.Features.Shopping = (() => {
   }
 
   function render(host, options = {}) {
+    preloadDeliveryAudio();
     const D = MiniTalk.UI.Dom, user = MiniTalk.Store.get("user") || {};
     const previousScroll = options.preserveScroll ? Number(host.querySelector(".shopping-screen")?.scrollTop || 0) : 0;
     if (options.refreshCatalog !== false) Service.enter().catch(error=>console.warn("쇼핑 데이터 갱신 실패",error));
@@ -160,12 +176,14 @@ MiniTalk.Features.Shopping = (() => {
     ]);
     host.append(card);
     doc.body.append(host);
-    const choices = Array.isArray(cue.soundUrls) && cue.soundUrls.length ? cue.soundUrls : ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'];
+    const choices = Array.isArray(cue.soundUrls) && cue.soundUrls.length ? cue.soundUrls : DELIVERY_AUDIO_URLS;
     const src = choices[Math.floor(Math.random() * choices.length)] || choices[0];
     try {
-      const audio = new Audio(src);
+      const audio = deliveryAudioPool.get(src) || new Audio(src);
       audio.preload = 'auto';
+      try { audio.currentTime = 0; } catch (_) {}
       audio.play().catch(() => {});
+      if (!deliveryAudioPool.has(src)) deliveryAudioPool.set(src, audio);
     } catch (_) {}
     setTimeout(() => host.classList.add('leaving'), 1800);
     setTimeout(() => host.remove(), 2350);

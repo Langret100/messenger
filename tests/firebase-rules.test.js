@@ -15,6 +15,12 @@ for(const pathName of ['presence','profiles','messages'])if(v3?.[pathName]?.['.r
 for(const pathName of ['questProgress','feedState','feedMedia','classInfo','fridayMission'])if(v3?.[pathName]?.['.read']!==true)throw new Error(`Firebase v3 ${pathName} read must not depend on Firebase anonymous auth`);
 for(const pathName of ['commands','tasks','shop'])if(v3?.[pathName]?.['.read']!==false||v3?.[pathName]?.['.write']!==false)throw new Error(`Firebase v3 ${pathName} must stay closed in favor of the server-validated API`);
 if(!v3?.messages?.$roomId?.['.indexOn']?.includes('ts'))throw new Error('message timestamp index is missing');
+
+if(!rootRules?.socialChat?.$msgId?.['.validate']?.includes('<= 61440')||!rootRules?.socialChatRooms?.$roomId?.$msgId?.['.validate']?.includes('<= 61440'))throw new Error('chat image rules must enforce 60KB Firebase payloads');
+if(!rootRules?.profiles?.$nickname?.['.validate']?.includes('<= 15360')||!v3?.profiles?.$userId?.['.validate']?.includes('<= 15360'))throw new Error('profile image rules must enforce 15KB Firebase payloads');
+if(!v3?.feedMedia?.$postId?.['.validate']?.includes('<= 61440')||!v3?.feedMedia?.$postId?.['.validate']?.includes('<= 716800')||!v3?.feedMedia?.$postId?.['.validate']?.includes('<= 18432'))throw new Error('feed media image/video/thumbnail budgets are missing');
+if(!v3?.feedState?.posts?.$postId?.comments?.$commentId?.['.validate']?.includes('length <= 60'))throw new Error('feed comment payload validation is missing');
+
 if(rules?.rules?.mini_talk)throw new Error('legacy mini_talk namespace must not remain in Firebase rules');
 const realtime=fs.readFileSync(path.join(root,'js/adapters/realtime.js'),'utf8');
 if(realtime.includes('firebase-auth-compat.js')||realtime.includes('signInAnonymously')||realtime.includes('ensureFirebaseAuth'))throw new Error('Firebase anonymous authentication must not be bootstrapped');

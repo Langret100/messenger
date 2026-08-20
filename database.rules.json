@@ -10,7 +10,7 @@
       "$msgId": {
         ".read": true,
         ".write": true,
-        ".validate": "newData.hasChildren(['user_id','nickname','text','ts']) && newData.child('text').isString() && newData.child('text').val().length <= 500 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber() && (!newData.child('image').exists() || (newData.child('image').isString() && newData.child('image').val().length <= 120000))"
+        ".validate": "newData.hasChildren(['user_id','nickname','text','ts']) && newData.child('text').isString() && newData.child('text').val().length <= 500 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber() && (!newData.child('image').exists() || (newData.child('image').isString() && newData.child('image').val().length <= 61440))"
       }
     },
     "socialChatRooms": {
@@ -22,7 +22,7 @@
         "$msgId": {
           ".read": true,
           ".write": true,
-          ".validate": "newData.hasChildren(['user_id','nickname','ts']) && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber() && (!newData.child('text').exists() || (newData.child('text').isString() && newData.child('text').val().length <= 500)) && (!newData.child('image').exists() || (newData.child('image').isString() && newData.child('image').val().length <= 120000))"
+          ".validate": "newData.hasChildren(['user_id','nickname','ts']) && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('ts').isNumber() && (!newData.child('text').exists() || (newData.child('text').isString() && newData.child('text').val().length <= 500)) && (!newData.child('image').exists() || (newData.child('image').isString() && newData.child('image').val().length <= 61440))"
         }
       }
     },
@@ -58,7 +58,7 @@
       "$nickname": {
         ".read": true,
         ".write": true,
-        ".validate": "$nickname.length <= 30"
+        ".validate": "$nickname.length <= 30 && (newData.isString() || !newData.child('avatar').exists() || (newData.child('avatar').isString() && newData.child('avatar').val().length <= 15360))"
       },
       ".indexOn": [
         "updatedAt"
@@ -102,12 +102,17 @@
           ".write": true,
           ".indexOn": [
             "updatedAt"
-          ]
+          ],
+          "$userId": {
+            ".validate": "(!newData.child('nickname').exists() || (newData.child('nickname').isString() && newData.child('nickname').val().length <= 30)) && (!newData.child('statusMsg').exists() || (newData.child('statusMsg').isString() && newData.child('statusMsg').val().length <= 100)) && (!newData.child('avatar').exists() || (newData.child('avatar').isString() && newData.child('avatar').val().length <= 15360)) && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber())"
+          }
         },
         "roomSummaries": {
           ".read": true,
           ".write": true,
-          ".indexOn": ["lastMessageAt"]
+          ".indexOn": [
+            "lastMessageAt"
+          ]
         },
         "userRooms": {
           ".read": true,
@@ -158,15 +163,21 @@
           ".write": true,
           "posts": {
             "$postId": {
-              ".validate": "newData.hasChildren(['id','user_id','nickname','text','mediaType','createdAt','heartCount']) && newData.child('id').isString() && newData.child('id').val() == $postId && newData.child('user_id').isString() && newData.child('user_id').val().length <= 100 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('text').isString() && newData.child('text').val().length <= 180 && newData.child('createdAt').isNumber() && newData.child('heartCount').isNumber() && newData.child('heartCount').val() >= 0 && newData.child('heartCount').val() <= 10000 && (!newData.child('mediaType').exists() || (newData.child('mediaType').isString() && (newData.child('mediaType').val() == '' || newData.child('mediaType').val() == 'image' || newData.child('mediaType').val() == 'video')))",
+              ".validate": "newData.hasChildren(['id','user_id','nickname','text','mediaType','createdAt','heartCount']) && newData.child('id').isString() && newData.child('id').val() == $postId && newData.child('user_id').isString() && newData.child('user_id').val().length <= 100 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('text').isString() && newData.child('text').val().length <= 180 && newData.child('createdAt').isNumber() && newData.child('heartCount').isNumber() && newData.child('heartCount').val() >= 0 && newData.child('heartCount').val() <= 10000 && (!newData.child('mediaType').exists() || (newData.child('mediaType').isString() && (newData.child('mediaType').val() == '' || newData.child('mediaType').val() == 'image' || newData.child('mediaType').val() == 'video'))) && (!newData.child('commentCount').exists() || (newData.child('commentCount').isNumber() && newData.child('commentCount').val() >= 0 && newData.child('commentCount').val() <= 20))",
               "hearts": {
                 "$userKey": {
                   ".validate": "newData.val() == true"
                 }
+              },
+              "comments": {
+                "$commentId": {
+                  ".validate": "newData.hasChildren(['id','user_id','nickname','text','createdAt']) && newData.child('id').isString() && newData.child('id').val() == $commentId && newData.child('user_id').isString() && newData.child('user_id').val().length <= 100 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 30 && newData.child('text').isString() && newData.child('text').val().length <= 60 && newData.child('createdAt').isNumber()"
+                }
               }
             },
             ".indexOn": [
-              "updatedAt"
+              "updatedAt",
+              "createdAt"
             ]
           },
           "totals": {
@@ -179,7 +190,7 @@
           ".read": true,
           "$postId": {
             ".write": true,
-            ".validate": "newData.hasChildren(['type','data']) && newData.child('type').isString() && (newData.child('type').val() == 'image' || newData.child('type').val() == 'video') && newData.child('data').isString() && newData.child('data').val().length <= 900000 && (!newData.child('size').exists() || (newData.child('size').isNumber() && newData.child('size').val() >= 0 && newData.child('size').val() <= 614400))"
+            ".validate": "newData.hasChildren(['type','data']) && newData.child('type').isString() && (newData.child('type').val() == 'image' || newData.child('type').val() == 'video') && newData.child('data').isString() && ((newData.child('type').val() == 'image' && newData.child('data').val().length <= 61440) || (newData.child('type').val() == 'video' && newData.child('data').val().length <= 716800)) && (!newData.child('thumbnail').exists() || (newData.child('type').val() == 'video' && newData.child('thumbnail').isString() && newData.child('thumbnail').val().length <= 18432)) && (!newData.child('size').exists() || (newData.child('size').isNumber() && newData.child('size').val() >= 0 && newData.child('size').val() <= 512000))"
           }
         },
         "classInfo": {

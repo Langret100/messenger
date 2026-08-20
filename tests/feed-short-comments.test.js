@@ -8,6 +8,6 @@ ok(feed.includes('function commentsBlock(post)')&&feed.includes('짧게 댓글 �
 ok(feed.includes('patchHeart(id,previous);patchComments(id);return'),'realtime comment patch missing');
 ok(feed.includes('while(rows.length>MAX_COMMENTS)'),'comment cap cleanup missing');
 ok(css.includes('.feed-comments')&&css.includes('.feed-comment-compose')&&css.includes('.feed-comment-input'),'comment styles missing');
-ok(html.includes('feed-classinfo-weekly.css?v=65.0.16')&&html.includes('js/features/feed.js?v=65.0.12'),'comment asset cache versions missing');
-ok(sw.includes('moaru-v64.5.43-feed-heart-state-audio-reward-20260820')&&app.includes('sw.js?v=64.5.43'),'v5.38 service worker version missing');
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.17')&&html.includes('js/features/feed.js?v=65.0.14'),'comment asset cache versions missing');
+ok(sw.includes('moaru-v64.5.46-profile-15kb-20260820')&&app.includes('sw.js?v=64.5.46'),'v5.38 service worker version missing');
 console.log('FEED_SHORT_COMMENTS_OK');

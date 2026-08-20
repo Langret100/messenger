@@ -1,7 +1,7 @@
-/* 학급 피드: 최대 40개, 미디어는 별도 경로에서 지연 로드합니다. Apps Script를 사용하지 않습니다. */
+/* 학급 피드: 서버 최신 30개만 유지하고 5개씩 페이지 조회합니다. 미디어는 별도 경로에서 지연 로드합니다. */
 MiniTalk.Features.Feed=(()=>{
-  const STATE_PATH="moaru/v3/feedState",POSTS_PATH=`${STATE_PATH}/posts`,TOTALS_PATH=`${STATE_PATH}/totals`,MEDIA_PATH="moaru/v3/feedMedia",MAX_POSTS=40,MAX_COMMENTS=20,COMMENT_LIMIT=60,PHOTO_LIMIT=100*1024,VIDEO_LIMIT=350*1024,VIDEO_SECONDS=7,CLEANUP_KEY="feed.pendingMediaCleanup",POST_CACHE="feed-post",MEDIA_CACHE="feed-media";
-  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,heartAudioCtx=null;const pendingLocalHeartEffects=new Set();
+  const STATE_PATH="moaru/v3/feedState",POSTS_PATH=`${STATE_PATH}/posts`,TOTALS_PATH=`${STATE_PATH}/totals`,MEDIA_PATH="moaru/v3/feedMedia",MAX_POSTS=30,PAGE_SIZE=5,MAX_COMMENTS=20,COMMENT_LIMIT=60,PHOTO_LIMIT=60*1024,PHOTO_BLOB_TARGET=44*1024,VIDEO_LIMIT=700*1024,VIDEO_BLOB_LIMIT=500*1024,VIDEO_THUMB_LIMIT=18*1024,VIDEO_THUMB_BLOB_TARGET=12*1024,VIDEO_SECONDS=7,CLEANUP_KEY="feed.pendingMediaCleanup",POST_CACHE="feed-post",MEDIA_CACHE="feed-media",THUMB_CACHE="feed-thumb";
+  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0;const pendingLocalHeartEffects=new Set();
   const user=()=>MiniTalk.Store.get("user")||{};
   const safeUserKey=id=>String(id||"").replace(/[.#$\[\]\/]/g,"_");
   function postRows(){return Object.values(state.posts||{}).filter(Boolean).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)||String(b.id).localeCompare(String(a.id)))}
@@ -14,35 +14,58 @@ MiniTalk.Features.Feed=(()=>{
   function sortFeedCards(list){const cards=[...list.querySelectorAll(".feed-card")].sort((a,b)=>Number(state.posts[b.dataset.postId]?.createdAt||0)-Number(state.posts[a.dataset.postId]?.createdAt||0)||String(b.dataset.postId).localeCompare(String(a.dataset.postId)));cards.forEach(card=>list.append(card))}
   function syncFeedEmpty(list){const cards=list.querySelectorAll(".feed-card");let empty=list.querySelector(".feed-empty-state");if(cards.length){empty?.remove();return}if(!empty){empty=MiniTalk.UI.Dom.el("div",{class:"empty-state feed-empty-state"},[MiniTalk.UI.Dom.el("span",{text:"♡"}),MiniTalk.UI.Dom.el("strong",{text:"아직 게시물이 없어요"}),MiniTalk.UI.Dom.el("small",{class:"muted",text:"짧은 글과 사진·영상을 올려보세요."})]);list.append(empty)}}
   function paintCachedPosts(){if(MiniTalk.Router.current()!=="feed")return;const list=MiniTalk.UI.Dom.one(".feed-list");if(!list)return;list.replaceChildren(...postRows().map(postCard));syncFeedEmpty(list);setupLazyMedia(list)}
+  function cachePost(id,value){if(!id||!value)return;MiniTalk.DataCache?.put?.(POST_CACHE,id,value,{sortAt:Number(value.updatedAt)||Number(value.createdAt)||0}).catch(()=>{})}
+  function applyPost(id,value,previous=state.posts[id]){if(!value)return;state.posts[id]={...value,id:value.id||id};cachePost(id,state.posts[id]);patchPost(id,previous)}
+  function takeCachedOlder(oldest,limit=PAGE_SIZE){
+    const known=new Set(Object.keys(state.posts)),cutoff=Number(oldest?.createdAt)||Number.MAX_SAFE_INTEGER,cursorId=String(oldest?.id||"");
+    return cachedPostRows.filter(row=>{
+      const value=row.value||{},id=String(row.key||value.id||"");if(!id||known.has(id))return false;
+      const ts=Number(value.createdAt)||0;return ts<cutoff||(ts===cutoff&&cursorId&&id<cursorId)
+    }).slice(0,Math.max(1,Number(limit)||PAGE_SIZE))
+  }
+  async function loadOlderPosts(){
+    if(loadingOlder||!hasMorePosts||MiniTalk.Router.current()!=="feed")return;let rows=postRows(),oldest=rows[rows.length-1];if(!oldest){hasMorePosts=false;return}loadingOlder=true;pagingArmed=false;
+    try{
+      const cachedOlder=takeCachedOlder(oldest,PAGE_SIZE);
+      cachedOlder.forEach(row=>applyPost(String(row.key||row.value?.id||""),row.value));
+      if(cachedOlder.length>=PAGE_SIZE){hasMorePosts=serverPostCount?postRows().length<serverPostCount:true;return}
+      rows=postRows();oldest=rows[rows.length-1];
+      const page=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",endAt:Number(oldest.createdAt)||0,endKey:String(oldest.id||""),limitToLast:PAGE_SIZE+1}),known=new Set(Object.keys(state.posts));
+      const need=Math.max(0,PAGE_SIZE-cachedOlder.length),older=page.filter(row=>row.key!==String(oldest.id)&&!known.has(String(row.key))).slice(-need);
+      older.forEach(row=>applyPost(row.key,row.value));
+      hasMorePosts=serverPostCount?postRows().length<serverPostCount:page.length>=need+1;
+    }catch(error){console.warn("이전 소식을 불러오지 못했습니다.",error)}finally{loadingOlder=false}
+  }
   async function ensureSub(){
     if(!totalUnsub){const uid=safeUserKey(user().user_id);totalUnsub=MiniTalk.Realtime.cloudSubscribe(`${TOTALS_PATH}/${uid}`,value=>{const next=Math.max(0,Number(value)||0),animate=totalHeartReady&&next!==totalHearts,on=next>totalHearts;totalHearts=next;patchHeaderHeart(animate,on);totalHeartReady=true})}
     if(postsUnsub||syncStarting)return;syncStarting=true;
     try{
-      const cached=await MiniTalk.DataCache?.list?.(POST_CACHE)||[];state.posts={};cached.forEach(row=>{if(row.value?.id)state.posts[row.key]=row.value});paintCachedPosts();
-      const serverKeys=await MiniTalk.Realtime.cloudKeys(POSTS_PATH).catch(()=>null);
-      if(Array.isArray(serverKeys)){
-        const serverSet=new Set(serverKeys);
-        for(const id of Object.keys(state.posts))if(!serverSet.has(id)){delete state.posts[id];MiniTalk.DataCache?.remove?.(POST_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(MEDIA_CACHE,id).catch(()=>{});patchPost(id)}
-        const missing=serverKeys.filter(id=>!state.posts[id]);
-        for(const id of missing){const value=await MiniTalk.Realtime.cloudGet(`${POSTS_PATH}/${id}`,null).catch(()=>null);if(value){state.posts[id]=value;MiniTalk.DataCache?.put?.(POST_CACHE,id,value,{sortAt:Number(value.updatedAt)||Number(value.createdAt)||0}).catch(()=>{});patchPost(id)}}
-      }
-      const latestUpdated=Object.values(state.posts).reduce((max,post)=>Math.max(max,Number(post?.updatedAt)||0),0);
-      const apply=(id,value)=>{if(!value)return;const previous=state.posts[id];state.posts[id]=value;MiniTalk.DataCache?.put?.(POST_CACHE,id,value,{sortAt:Number(value.updatedAt)||Number(value.createdAt)||0}).catch(()=>{});patchPost(id,previous)};
-      const remove=id=>{delete state.posts[id];MiniTalk.DataCache?.remove?.(POST_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(MEDIA_CACHE,id).catch(()=>{});patchPost(id)};
-      postsUnsub=MiniTalk.Realtime.cloudSubscribeDelta(POSTS_PATH,{added:apply,changed:apply,removed:remove},{orderByChild:"updatedAt",startAt:Math.max(1,latestUpdated)});
+      const cached=await MiniTalk.DataCache?.list?.(POST_CACHE)||[];
+      cachedPostRows=cached.sort((a,b)=>(Number(b.value?.createdAt)||Number(b.sortAt)||0)-(Number(a.value?.createdAt)||Number(a.sortAt)||0)||String(b.key).localeCompare(String(a.key))).slice(0,MAX_POSTS);
+      state.posts={};cachedPostRows.slice(0,PAGE_SIZE).forEach(row=>{if(row.value?.id)state.posts[row.key]=row.value});paintCachedPosts();
+      const latest=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToLast:PAGE_SIZE});
+      latest.forEach(row=>{if(row.value)state.posts[row.key]={...row.value,id:row.value.id||row.key};cachePost(row.key,state.posts[row.key])});
+      paintCachedPosts();hasMorePosts=latest.length===PAGE_SIZE;
+      reconcileFeedCacheAndLimit().catch(error=>console.warn("피드 30개/기기 캐시 동기화 실패",error));
+      const latestCreated=latest.reduce((max,row)=>Math.max(max,Number(row.value?.createdAt)||0),0);
+      const apply=(id,value)=>{applyPost(id,value);if(serverPostCount)serverPostCount=Math.min(MAX_POSTS,serverPostCount+1)};
+      const changed=(id,value)=>{if(!state.posts[id])return;applyPost(id,value,state.posts[id])};
+      const remove=id=>{delete state.posts[id];cachedPostRows=cachedPostRows.filter(row=>String(row.key)!==String(id));MiniTalk.DataCache?.remove?.(POST_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(MEDIA_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(THUMB_CACHE,id).catch(()=>{});serverPostCount=Math.max(0,serverPostCount-1);patchPost(id)};
+      postsUnsub=MiniTalk.Realtime.cloudSubscribeDelta(POSTS_PATH,{added:apply,changed,removed:remove},{orderByChild:"createdAt",startAt:latestCreated?latestCreated+1:1});
     }finally{syncStarting=false}
   }
-  function stopSub(){postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;totalHeartReady=false;pendingLocalHeartEffects.clear()}
+  function stopSub(){postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;loadingOlder=false;hasMorePosts=true;pagingArmed=false;totalHeartReady=false;serverPostCount=0;cachedPostRows=[];pendingLocalHeartEffects.clear();state={posts:{}}}
   async function compressImageFile(file,maxSide=960,target=PHOTO_LIMIT){
     if(!file?.type?.startsWith("image/"))throw new Error("사진 파일을 선택해주세요.");
     const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("사진을 읽지 못했습니다."));r.readAsDataURL(file)});
     const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error("사진을 읽지 못했습니다."));i.src=data});
-    return encodeCanvas(img,img.naturalWidth,img.naturalHeight,maxSide,target);
+    return encodeCanvas(img,img.naturalWidth,img.naturalHeight,maxSide,target,PHOTO_BLOB_TARGET);
   }
-  async function encodeCanvas(source,w,h,maxSide,target){
+  async function encodeCanvas(source,w,h,maxSide,target=PHOTO_LIMIT,blobTarget=PHOTO_BLOB_TARGET){
     let scale=Math.min(1,maxSide/Math.max(w,h));const c=document.createElement("canvas"),ctx=c.getContext("2d",{alpha:false});
-    for(let pass=0;pass<6;pass++){c.width=Math.max(1,Math.round(w*scale));c.height=Math.max(1,Math.round(h*scale));ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(source,0,0,c.width,c.height);for(const q of [.78,.68,.58,.48,.38,.3]){const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",q));if(blob&&blob.size<=target)return await blobToData(blob)}scale*=.82}throw new Error("사진 용량을 줄이지 못했습니다.")
+    for(let pass=0;pass<6;pass++){c.width=Math.max(1,Math.round(w*scale));c.height=Math.max(1,Math.round(h*scale));ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(source,0,0,c.width,c.height);for(const q of [.78,.68,.58,.48,.38,.3]){const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",q));if(!blob||blob.size>blobTarget)continue;const data=await blobToData(blob);if(data.length<=target)return data}scale*=.82}throw new Error(target===VIDEO_THUMB_LIMIT?"영상 첫 화면을 작게 만들지 못했습니다.":"사진을 Firebase 저장 기준 60KB 이하로 줄이지 못했습니다.")
   }
+  function captureFrame(source,w,h){const c=document.createElement("canvas");c.width=Math.max(1,Number(w)||320);c.height=Math.max(1,Number(h)||240);const ctx=c.getContext("2d",{alpha:false});ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(source,0,0,c.width,c.height);return c}
   const blobToData=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("미디어를 읽지 못했습니다."));r.readAsDataURL(blob)});
   function pickPhoto(){return new Promise(resolve=>{const input=document.createElement("input");input.type="file";input.accept="image/*";input.onchange=()=>resolve(input.files?.[0]||null);input.click()})}
   async function compose(){
@@ -60,24 +83,59 @@ MiniTalk.Features.Feed=(()=>{
     const cleanup=()=>{clearInterval(timer);stream?.getTracks?.().forEach(t=>t.stop());stream=null};
     MiniTalk.UI.Shell.modal("피드 카메라",body);body.append(video,status,D.el("div",{class:"button-row"},[photoBtn,videoBtn]));
     navigator.mediaDevices?.getUserMedia({video:{width:{ideal:320,max:480},height:{ideal:240,max:360},frameRate:{ideal:12,max:15},facingMode:"environment"},audio:false}).then(s=>{stream=s;video.srcObject=s}).catch(()=>{status.textContent="카메라 권한을 사용할 수 없습니다.";photoBtn.disabled=videoBtn.disabled=true});
-    photoBtn.onclick=async()=>{if(!video.videoWidth)return;photoBtn.disabled=videoBtn.disabled=true;try{const data=await encodeCanvas(video,video.videoWidth,video.videoHeight,640,PHOTO_LIMIT);cleanup();MiniTalk.UI.Shell.closeModal();onDone({type:"image",data})}catch(e){MiniTalk.UI.Shell.toast(e.message);photoBtn.disabled=videoBtn.disabled=false}};
-    videoBtn.onclick=async()=>{if(!stream||typeof MediaRecorder==="undefined")return MiniTalk.UI.Shell.toast("이 브라우저는 영상 촬영을 지원하지 않습니다.");photoBtn.disabled=videoBtn.disabled=true;const chunks=[],mime=["video/webm;codecs=vp8","video/webm"].find(v=>MediaRecorder.isTypeSupported?.(v))||"";let recorder;try{recorder=new MediaRecorder(stream,{mimeType:mime||undefined,videoBitsPerSecond:220000})}catch{recorder=new MediaRecorder(stream)}recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};const done=new Promise(resolve=>recorder.onstop=resolve);recorder.start(250);let left=VIDEO_SECONDS;status.textContent=`촬영 중 · ${left}초`;timer=setInterval(()=>{left-=1;status.textContent=`촬영 중 · ${Math.max(0,left)}초`;if(left<=0){clearInterval(timer);if(recorder.state!=="inactive")recorder.stop()}},1000);await done;cleanup();const blob=new Blob(chunks,{type:recorder.mimeType||"video/webm"});if(blob.size>VIDEO_LIMIT){MiniTalk.UI.Shell.toast("영상 용량이 너무 큽니다. 다시 촬영해주세요.");MiniTalk.UI.Shell.closeModal();return}const data=await blobToData(blob);MiniTalk.UI.Shell.closeModal();onDone({type:"video",data,duration:VIDEO_SECONDS,size:blob.size})};
-    const host=MiniTalk.UI.Dom.byId("modalHost");const close=host?.querySelector?.(".modal-close-button");if(close){const old=close.onclick;close.onclick=()=>{cleanup();old?.()}}
+    photoBtn.onclick=async()=>{if(!video.videoWidth)return;photoBtn.disabled=videoBtn.disabled=true;try{const data=await encodeCanvas(video,video.videoWidth,video.videoHeight,640,PHOTO_LIMIT,PHOTO_BLOB_TARGET);cleanup();MiniTalk.UI.Shell.closeModal();onDone({type:"image",data})}catch(e){MiniTalk.UI.Shell.toast(e.message);photoBtn.disabled=videoBtn.disabled=false}};
+    videoBtn.onclick=async()=>{
+      if(!stream||typeof MediaRecorder==="undefined")return MiniTalk.UI.Shell.toast("이 브라우저는 영상 촬영을 지원하지 않습니다.");if(!video.videoWidth)return MiniTalk.UI.Shell.toast("카메라 준비가 끝난 뒤 다시 눌러주세요.");photoBtn.disabled=videoBtn.disabled=true;
+      const frame=captureFrame(video,video.videoWidth,video.videoHeight),thumbnailPromise=encodeCanvas(frame,frame.width,frame.height,320,VIDEO_THUMB_LIMIT,VIDEO_THUMB_BLOB_TARGET).catch(()=>""),chunks=[];let chunkBytes=0,stopping=false,mime=["video/webm;codecs=vp8","video/webm"].find(v=>MediaRecorder.isTypeSupported?.(v))||"",recorder;try{recorder=new MediaRecorder(stream,{mimeType:mime||undefined,videoBitsPerSecond:420000})}catch{recorder=new MediaRecorder(stream)}
+      const stop=()=>{if(stopping||recorder.state==="inactive")return;stopping=true;try{recorder.stop()}catch{}};recorder.ondataavailable=e=>{if(!e.data?.size)return;chunks.push(e.data);chunkBytes+=e.data.size;if(chunkBytes>=VIDEO_BLOB_LIMIT)stop()};const done=new Promise(resolve=>recorder.onstop=resolve);recorder.start(200);
+      let left=VIDEO_SECONDS;status.textContent=`촬영 중 · ${left}초`;timer=setInterval(()=>{left-=1;status.textContent=`촬영 중 · ${Math.max(0,left)}초`;if(left<=0){clearInterval(timer);stop()}},1000);await done;cleanup();const blob=new Blob(chunks,{type:recorder.mimeType||"video/webm"});if(blob.size>VIDEO_BLOB_LIMIT){MiniTalk.UI.Shell.toast("영상 용량이 너무 큽니다. 다시 촬영해주세요.");MiniTalk.UI.Shell.closeModal();return}const data=await blobToData(blob);if(data.length>VIDEO_LIMIT){MiniTalk.UI.Shell.toast("영상이 Firebase 저장 기준 700KB를 넘었습니다. 다시 촬영해주세요.");MiniTalk.UI.Shell.closeModal();return}const thumbnail=await thumbnailPromise;MiniTalk.UI.Shell.closeModal();onDone({type:"video",data,thumbnail,duration:Math.max(1,VIDEO_SECONDS-left),size:blob.size})
+    };
+    const host=MiniTalk.UI.Dom.byId("modalHost"),close=host?.querySelector?.(".modal-close-button");if(close){const old=close.onclick;close.onclick=()=>{cleanup();old?.()}}
   }
   function pendingCleanup(){const rows=MiniTalk.Persistence.get(CLEANUP_KEY,[]);return Array.isArray(rows)?rows:[]}
   function queueCleanup(id){if(!id)return;const rows=[...new Set(pendingCleanup().concat(String(id)))].slice(-30);MiniTalk.Persistence.set(CLEANUP_KEY,rows)}
   async function retryCleanup(){const rows=pendingCleanup();if(!rows.length)return;const failed=[];for(const id of rows){try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{failed.push(id)}}MiniTalk.Persistence.set(CLEANUP_KEY,failed)}
+  async function reconcileFeedCacheAndLimit(){
+    const keys=await MiniTalk.Realtime.cloudKeys(POSTS_PATH),serverSet=new Set(keys.map(String)),excess=Math.max(0,keys.length-MAX_POSTS),removed=[];
+    if(excess){
+      const rows=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToFirst:excess});
+      for(const row of rows){
+        const oldId=String(row.key||row.value?.id||"");if(!oldId)continue;
+        await MiniTalk.Realtime.cloudRemove(`${POSTS_PATH}/${oldId}`);serverSet.delete(oldId);removed.push(oldId);
+        try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${oldId}`)}catch{queueCleanup(oldId)}
+      }
+    }
+    serverPostCount=Math.min(MAX_POSTS,serverSet.size);
+    const cached=await MiniTalk.DataCache?.list?.(POST_CACHE,{touchRecords:false})||[];
+    const stale=cached.filter(row=>!serverSet.has(String(row.key)));
+    for(const row of stale){
+      const id=String(row.key);delete state.posts[id];
+      await MiniTalk.DataCache?.remove?.(POST_CACHE,id);MiniTalk.DataCache?.remove?.(MEDIA_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(THUMB_CACHE,id).catch(()=>{})
+    }
+    cachedPostRows=(await MiniTalk.DataCache?.list?.(POST_CACHE,{touchRecords:false})||[]).sort((a,b)=>(Number(b.value?.createdAt)||Number(b.sortAt)||0)-(Number(a.value?.createdAt)||Number(a.sortAt)||0)||String(b.key).localeCompare(String(a.key))).slice(0,MAX_POSTS);
+    hasMorePosts=postRows().length<serverPostCount;
+    if(removed.length||stale.length)paintCachedPosts();
+    return serverSet
+  }
+  async function pruneFeedPosts(){return reconcileFeedCacheAndLimit()}
   async function createPost(text,media){
     const u=user(),id=crypto.randomUUID(),createdAt=Date.now(),meta={id,user_id:u.user_id,nickname:u.nickname,text:String(text||"").slice(0,180),mediaType:media?.type||"",createdAt,updatedAt:createdAt,heartCount:0,hearts:{},commentCount:0,comments:{}};
     await retryCleanup().catch(()=>{});
-    if(media?.data){try{await MiniTalk.Realtime.cloudSet(`${MEDIA_PATH}/${id}`,{type:media.type,data:media.data,size:Number(media.size)||0,createdAt:meta.createdAt})}catch(error){throw new Error("사진·영상을 저장하지 못했습니다. 게시물은 등록되지 않았습니다.")}}
+    if(media?.data){
+      const mediaValue={type:media.type,data:media.data,size:Number(media.size)||0,createdAt:meta.createdAt};
+      if(media.type==="video"&&media.thumbnail){const thumbnail=String(media.thumbnail);if(thumbnail.length>VIDEO_THUMB_LIMIT)throw new Error("영상 첫 화면 용량이 너무 큽니다.");mediaValue.thumbnail=thumbnail}
+      try{await MiniTalk.Realtime.cloudSet(`${MEDIA_PATH}/${id}`,mediaValue)}
+      catch(error){throw new Error("사진·영상을 저장하지 못했습니다. 게시물은 등록되지 않았습니다.")}
+    }
     try{await MiniTalk.Realtime.cloudSet(`${POSTS_PATH}/${id}`,{...meta,updatedAt:MiniTalk.Realtime.serverTimestamp()})}catch(error){if(media?.data){try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{queueCleanup(id)}}throw error}
-    MiniTalk.DataCache?.put?.(POST_CACHE,id,meta,{sortAt:createdAt}).catch(()=>{});if(media?.data)MiniTalk.DataCache?.put?.(MEDIA_CACHE,id,{type:media.type,data:media.data,size:Number(media.size)||0,createdAt},{sortAt:createdAt}).catch(()=>{});
-    /* 게시물 작성 때만 최대 41개의 가벼운 메타데이터를 확인합니다. 하트/조회 때 feedState 전체를 읽지 않습니다. */
-    try{
-      const posts=await MiniTalk.Realtime.cloudGet(POSTS_PATH,{}),rows=Object.values(posts||{}).filter(Boolean).sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0)||String(a.id).localeCompare(String(b.id)));
-      while(rows.length>MAX_POSTS){const old=rows.shift();if(!old?.id)continue;await MiniTalk.Realtime.cloudRemove(`${POSTS_PATH}/${old.id}`);try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${old.id}`);MiniTalk.DataCache?.remove?.(MEDIA_CACHE,old.id).catch(()=>{});MiniTalk.DataCache?.remove?.(POST_CACHE,old.id).catch(()=>{})}catch{queueCleanup(old.id)}}
-    }catch(error){console.warn("오래된 피드 정리 실패",error)}
+    MiniTalk.DataCache?.put?.(POST_CACHE,id,meta,{sortAt:createdAt}).catch(()=>{});
+    if(media?.data){
+      const cachedMedia={type:media.type,data:media.data,size:Number(media.size)||0,createdAt,thumbnail:media.thumbnail||""};
+      MiniTalk.DataCache?.put?.(MEDIA_CACHE,id,cachedMedia,{sortAt:createdAt}).catch(()=>{});
+      if(media.thumbnail)MiniTalk.DataCache?.put?.(THUMB_CACHE,id,media.thumbnail,{sortAt:createdAt}).catch(()=>{})
+    }
+    /* 게시물 본문은 다시 읽지 않고 shallow key + 실제 초과분만 정리합니다. */
+    try{await pruneFeedPosts()}catch(error){console.warn("오래된 피드 정리 실패",error)}
   }
   async function toggleHeart(postId,button){
     /* 카드가 처음 만들어졌을 때의 post 스냅샷을 쓰지 않습니다.
@@ -159,11 +217,60 @@ MiniTalk.Features.Feed=(()=>{
     if(!button)return;animateHeartTarget(button,.42,440);if(on)spawnHeartBurst(button,6,{spread:14,rise:42,size:13,duration:700});if(sound)playHeartSound(on);
   }
   function headerHeartBadge(){const D=MiniTalk.UI.Dom;return D.el("div",{class:"header-heart-inline","aria-label":`받은 하트 ${totalHearts}개`},[D.el("span",{text:"♥"}),D.el("b",{text:String(totalHearts)})])}
-  function render(host){if(!host)return;MiniTalk.UI.Shell.setHeader("소식",[headerHeartBadge()]);ensureSub();const D=MiniTalk.UI.Dom,u=user(),shell=D.el("section",{class:"view feed-shell view-enter"}),scroller=D.el("div",{class:"feed-view"}),list=D.el("div",{class:"feed-list"});postRows().forEach(post=>list.append(postCard(post)));if(!postRows().length)list.append(D.el("div",{class:"empty-state feed-empty-state"},[D.el("span",{text:"♡"}),D.el("strong",{text:"아직 게시물이 없어요"}),D.el("small",{class:"muted",text:"짧은 글과 사진·영상을 올려보세요."})]));scroller.append(list);shell.append(scroller);if(!u.isGuest)shell.append(D.el("button",{class:"feed-fab",type:"button","aria-label":"게시물 올리기",onclick:compose},[D.el("span",{text:"＋"})]));host.replaceChildren(shell);setupLazyMedia(scroller)}
+  function render(host){if(!host)return;MiniTalk.UI.Shell.setHeader("소식",[headerHeartBadge()]);const D=MiniTalk.UI.Dom,u=user(),shell=D.el("section",{class:"view feed-shell view-enter"}),scroller=D.el("div",{class:"feed-view"}),list=D.el("div",{class:"feed-list"});postRows().slice(0,PAGE_SIZE).forEach(post=>list.append(postCard(post)));if(!postRows().length)list.append(D.el("div",{class:"empty-state feed-empty-state"},[D.el("span",{text:"♡"}),D.el("strong",{text:"아직 게시물이 없어요"}),D.el("small",{class:"muted",text:"짧은 글과 사진·영상을 올려보세요."})]));scroller.append(list);shell.append(scroller);if(!u.isGuest)shell.append(D.el("button",{class:"feed-fab",type:"button","aria-label":"게시물 올리기",onclick:compose},[D.el("span",{text:"＋"})]));host.replaceChildren(shell);pagingArmed=false;scroller.addEventListener("pointerdown",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("touchmove",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("wheel",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("scroll",()=>{if(pagingArmed&&scroller.scrollTop+scroller.clientHeight>=scroller.scrollHeight-180)loadOlderPosts()},{passive:true});setupLazyMedia(scroller);ensureSub()}
   function youtubePlayer(text){const D=MiniTalk.UI.Dom,id=MiniTalk.Chat.Linkify?.youtubeId?.(text);if(!id)return null;return D.el("div",{class:"feed-youtube-player"},[D.el("iframe",{src:`https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?playsinline=1&rel=0`,title:"YouTube 영상",loading:"lazy",allow:"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",allowfullscreen:true,referrerpolicy:"strict-origin-when-cross-origin"})])}
-  function postCard(post){const D=MiniTalk.UI.Dom,u=user(),uid=safeUserKey(u.user_id),liked=post.hearts?.[uid]===true,card=D.el("article",{class:"feed-card","data-post-id":post.id}),avatar=D.el("img",{class:"feed-avatar",src:avatarForPost(post),alt:""});avatar.onerror=()=>{avatar.src="assets/mascot-avatar.png"};card.append(D.el("header",{class:"feed-card-head"},[avatar,D.el("div",{},[D.el("strong",{text:post.nickname||"사용자"}),D.el("small",{class:"muted",text:new Date(Number(post.createdAt)||Date.now()).toLocaleString("ko-KR")})]) ]));if(post.text){const display=MiniTalk.Chat.Linkify?.displayText?.(post.text)??post.text;if(display)card.append(D.el("p",{class:"feed-text",text:display}));const player=youtubePlayer(post.text);if(player)card.append(player)}if(post.mediaType){const mediaHost=D.el("div",{class:`feed-media-placeholder${post.mediaType==="video"?" video-gated":""}`,"data-media-id":post.id,"data-media-type":post.mediaType},[D.el("span",{text:post.mediaType==="video"?"▶ 영상 보기":"사진 불러오는 중…"})]);if(post.mediaType==="video")mediaHost.onclick=()=>{mediaHost.onclick=null;mediaHost.classList.add("loading");mediaHost.replaceChildren(D.el("span",{text:"영상 불러오는 중…"}));loadMedia(mediaHost)};card.append(mediaHost)};const hasHearts=(Number(post.heartCount)||0)>0,heart=D.el("button",{class:`feed-heart ${(liked||hasHearts)?"active":""}`,type:"button","aria-label":"하트"},[D.el("span",{text:(liked||hasHearts)?"♥":"♡"}),D.el("b",{text:String(Number(post.heartCount)||0)})]);heart.onpointerdown=primeHeartAudio;heart.onclick=()=>toggleHeart(post.id,heart);card.append(D.el("footer",{class:"feed-card-foot"},[heart]),commentsBlock(post));return card}
-  function setupLazyMedia(root){if(typeof IntersectionObserver==="undefined"){root.querySelectorAll?.('[data-media-type="image"]').forEach(loadMedia);return}if(!observer)observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){observer.unobserve(e.target);loadMedia(e.target)}}),{rootMargin:"220px"});root.querySelectorAll?.('[data-media-type="image"]').forEach(el=>observer.observe(el))}
-  async function loadMedia(host){const id=host.dataset.mediaId;try{let media=await MiniTalk.DataCache?.get?.(MEDIA_CACHE,id,null);if(!media?.data){media=await MiniTalk.Realtime.cloudGet(`${MEDIA_PATH}/${id}`,null);if(media?.data)MiniTalk.DataCache?.put?.(MEDIA_CACHE,id,media,{sortAt:Number(media.createdAt)||0}).catch(()=>{})}if(!host.isConnected)return;if(!media?.data)return host.replaceChildren(MiniTalk.UI.Dom.el("span",{class:"muted",text:"미디어가 없습니다."}));host.replaceChildren(media.type==="video"?MiniTalk.UI.Dom.el("video",{src:media.data,controls:true,playsinline:true,preload:"metadata"}):MiniTalk.UI.Dom.el("img",{src:media.data,alt:"게시물 사진",loading:"lazy"}))}catch{host.replaceChildren(MiniTalk.UI.Dom.el("span",{class:"muted",text:"미디어를 불러오지 못했습니다."}))}}
+  function videoPlayButton(host){
+    const button=MiniTalk.UI.Dom.el("button",{class:"feed-video-play",type:"button","aria-label":"영상 재생",text:"▶"});
+    button.onclick=async event=>{event.preventDefault();event.stopPropagation();if(button.disabled)return;button.disabled=true;host.classList.add("loading");try{await loadMedia(host,{autoplay:true})}finally{if(button.isConnected)button.disabled=false;host.classList.remove("loading")}};
+    return button
+  }
+  function postCard(post){
+    const D=MiniTalk.UI.Dom,u=user(),uid=safeUserKey(u.user_id),liked=post.hearts?.[uid]===true,card=D.el("article",{class:"feed-card","data-post-id":post.id}),avatar=D.el("img",{class:"feed-avatar",src:avatarForPost(post),alt:""});
+    avatar.onerror=()=>{avatar.src="assets/mascot-avatar.png"};
+    card.append(D.el("header",{class:"feed-card-head"},[avatar,D.el("div",{},[D.el("strong",{text:post.nickname||"사용자"}),D.el("small",{class:"muted",text:new Date(Number(post.createdAt)||Date.now()).toLocaleString("ko-KR")})]) ]));
+    if(post.text){const display=MiniTalk.Chat.Linkify?.displayText?.(post.text)??post.text;if(display)card.append(D.el("p",{class:"feed-text",text:display}));const player=youtubePlayer(post.text);if(player)card.append(player)}
+    if(post.mediaType){
+      const video=post.mediaType==="video",mediaHost=D.el("div",{class:`feed-media-placeholder${video?" video-gated":""}`,"data-media-id":post.id,"data-media-type":post.mediaType});
+      if(video)mediaHost.append(D.el("span",{class:"feed-video-thumb-status",text:"영상 미리보기 불러오는 중…"}),videoPlayButton(mediaHost));
+      else mediaHost.append(D.el("span",{text:"사진 불러오는 중…"}));
+      card.append(mediaHost)
+    }
+    const hasHearts=(Number(post.heartCount)||0)>0,heart=D.el("button",{class:`feed-heart ${(liked||hasHearts)?"active":""}`,type:"button","aria-label":"하트"},[D.el("span",{text:(liked||hasHearts)?"♥":"♡"}),D.el("b",{text:String(Number(post.heartCount)||0)})]);
+    heart.onpointerdown=primeHeartAudio;heart.onclick=()=>toggleHeart(post.id,heart);card.append(D.el("footer",{class:"feed-card-foot"},[heart]),commentsBlock(post));return card
+  }
+  function setupLazyMedia(root){
+    const nodes=[...(root.querySelectorAll?.("[data-media-type]")||[])];
+    if(typeof IntersectionObserver==="undefined"){nodes.forEach(el=>el.dataset.mediaType==="video"?loadVideoThumbnail(el):loadMedia(el));return}
+    if(!observer)observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){observer.unobserve(e.target);e.target.dataset.mediaType==="video"?loadVideoThumbnail(e.target):loadMedia(e.target)}}),{rootMargin:"220px"});
+    nodes.forEach(el=>observer.observe(el))
+  }
+  async function loadVideoThumbnail(host){
+    if(!host?.isConnected||host.dataset.thumbReady==="1")return;const id=host.dataset.mediaId;host.dataset.thumbReady="1";
+    try{
+      let thumbnail=await MiniTalk.DataCache?.get?.(THUMB_CACHE,id,"");
+      if(!thumbnail){
+        const cachedMedia=await MiniTalk.DataCache?.get?.(MEDIA_CACHE,id,null);thumbnail=String(cachedMedia?.thumbnail||"");
+        if(!thumbnail)thumbnail=String(await MiniTalk.Realtime.cloudGet(`${MEDIA_PATH}/${id}/thumbnail`,"")||"");
+        if(thumbnail)MiniTalk.DataCache?.put?.(THUMB_CACHE,id,thumbnail,{sortAt:Number(state.posts[id]?.createdAt)||0}).catch(()=>{})
+      }
+      if(!host.isConnected)return;
+      host.querySelector(".feed-video-thumb-status")?.remove();
+      if(thumbnail&&!host.querySelector(".feed-video-thumb"))host.prepend(MiniTalk.UI.Dom.el("img",{class:"feed-video-thumb",src:thumbnail,alt:"영상 첫 화면",loading:"lazy"}))
+    }catch{host.querySelector(".feed-video-thumb-status")?.replaceWith(MiniTalk.UI.Dom.el("span",{class:"feed-video-thumb-status muted",text:"영상"}))}
+  }
+  async function loadMedia(host,{autoplay=false}={}){
+    const id=host.dataset.mediaId;
+    try{
+      let media=await MiniTalk.DataCache?.get?.(MEDIA_CACHE,id,null);
+      if(!media?.data){media=await MiniTalk.Realtime.cloudGet(`${MEDIA_PATH}/${id}`,null);if(media?.data){MiniTalk.DataCache?.put?.(MEDIA_CACHE,id,media,{sortAt:Number(media.createdAt)||0}).catch(()=>{});if(media.thumbnail)MiniTalk.DataCache?.put?.(THUMB_CACHE,id,media.thumbnail,{sortAt:Number(media.createdAt)||0}).catch(()=>{})}}
+      if(!host.isConnected)return;
+      if(!media?.data)return host.replaceChildren(MiniTalk.UI.Dom.el("span",{class:"muted",text:"미디어가 없습니다."}));
+      if(media.type==="video"){
+        const video=MiniTalk.UI.Dom.el("video",{src:media.data,controls:true,playsinline:true,preload:"metadata",muted:true,autoplay:Boolean(autoplay)});
+        host.replaceChildren(video);if(autoplay)video.play?.().catch(()=>{})
+      }else host.replaceChildren(MiniTalk.UI.Dom.el("img",{src:media.data,alt:"게시물 사진",loading:"lazy"}))
+    }catch{host.replaceChildren(MiniTalk.UI.Dom.el("span",{class:"muted",text:"미디어를 불러오지 못했습니다."}))}
+  }
   return{id:"feed",title:"소식",icon:"♡",render,leave:stopSub};
 })();
 MiniTalk.Registry.register(MiniTalk.Features.Feed);

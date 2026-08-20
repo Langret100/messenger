@@ -240,31 +240,10 @@ function doPost(e) {
         return gameBestStatus_(data);
   
       // MOA_CHAT_INTEGRATION_START
-      // 모아 AI 기능 제거 시 이 블록 전체 + MOA_CHAT.gs + MOA_LEARNING.gs를 삭제하고 재배포하세요.
-      // 기존 미나용 `대화` 시트/기존 대화 API와는 독립된 기능입니다.
-      case "moa_chat":
-        return moaChatResponse_(data);
-
-      case "moa_search":
-        return moaSearchAssist_(data);
-
-      case "moa_feedback":
-        return moaFeedback_(data);
-
-      case "moa_reaction_observe":
-        return moaReactionObserve_(data);
-
-      case "moa_topic_observe":
-        return moaTopicObserve_(data);
-
-      case "moa_reaction_lexicon":
-        return moaReactionLexicon_(data);
-
-      case "moa_memory_get":
-        return moaMemoryGet_(data);
-
-      case "moa_memory_set":
-        return moaMemorySet_(data);
+      // v91: 클라이언트가 대화/선제 대화 판단. GS는 스냅샷 동기화/묶음저장/외부검색만 담당.
+      case "moa_sync": return moaSync_(data);
+      case "moa_commit": return moaCommit_(data);
+      case "moa_search": return moaSearchAssist_(data);
       // MOA_CHAT_INTEGRATION_END
 
       // 🔹 소통 채팅 시트 기록 추가 ★여기 추가

@@ -208,30 +208,21 @@ MiniTalk.AuthApi = (() => {
       return Array.isArray(data.commands) ? data.commands : [];
     },
     /* MOA_CHAT_INTEGRATION_START
-       모아 AI 기능 제거 시 이 블록 전체를 삭제합니다. 자세한 순서는 js/features/moa-chat.js 상단 참고. */
-    async moaChat({ userId, text, context = [], semantic = {} }) {
-      return post({ mode: "moa_chat", user_id: userId, text, context_json: JSON.stringify(context || []), semantic_json: JSON.stringify(semantic || {}) });
+       v91: 대화 판단은 local-first 소통엔진이 담당합니다.
+       Apps Script는 스냅샷 동기화, 묶음 학습 저장, 외부 검색만 담당합니다. */
+    async moaSync(userId, knownVersion = 0) {
+      return post({ mode: "moa_sync", user_id: userId, known_version: Number(knownVersion || 0) });
+    },
+    async moaCommit({ userId, events = [], profile = {} }) {
+      return post({
+        mode: "moa_commit",
+        user_id: userId,
+        events_json: JSON.stringify(events || []),
+        profile_json: JSON.stringify(profile || {})
+      });
     },
     async moaSearch({ userId, text, query = "", context = [] }) {
       return post({ mode: "moa_search", user_id: userId, text, query, context_json: JSON.stringify(context || []) });
-    },
-    async moaFeedback({ userId, reaction, reactionTag = "", candidateId = "", previousUserText = "", previousReply = "", previousSource = "", followup = "" }) {
-      return post({ mode: "moa_feedback", user_id: userId, reaction, reaction_tag: reactionTag, candidate_id: candidateId, previous_user_text: previousUserText, previous_reply: previousReply, previous_source: previousSource, followup });
-    },
-    async moaTopicObserve({ userId, concepts = [], action = "", affect = "neutral", intent = "statement" }) {
-      return post({ mode: "moa_topic_observe", user_id: userId, concepts_json: JSON.stringify((concepts || []).slice(0, 4)), action, affect, intent });
-    },
-    async moaReactionObserve({ userId, expression, suggestedTag = "", confidence = 0, unknownTerms = [], observationMode = "", evidenceKey = "" }) {
-      return post({ mode: "moa_reaction_observe", user_id: userId, expression, suggested_tag: suggestedTag, confidence: String(confidence || 0), unknown_terms: (unknownTerms || []).join(","), observation_mode: observationMode, evidence_key: evidenceKey });
-    },
-    async moaReactionLexicon(userId) {
-      return post({ mode: "moa_reaction_lexicon", user_id: userId });
-    },
-    async moaMemoryGet(userId, key) {
-      return post({ mode: "moa_memory_get", user_id: userId, memory_key: key });
-    },
-    async moaMemorySet({ userId, key, value, label = "" }) {
-      return post({ mode: "moa_memory_set", user_id: userId, memory_key: key, value, label });
     }
     /* MOA_CHAT_INTEGRATION_END */
   };

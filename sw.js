@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.48-moa-conversation-v85-20260820";
+const CACHE = "moaru-v64.5.48-moa-solo-public-learning-v91-20260820";
 const CORE = [
   "./",
   "./index.html",
@@ -21,8 +21,9 @@ const CORE = [
   "./css/features/shopping-store.css",
   "./css/features/display-clarity.css",
   "./css/features/feed-classinfo-weekly.css",
-  // MOA_CHAT_INTEGRATION_START - 모아 AI 제거 시 moa-chat.css / moa-dialogue-core.js / moa-chat-engine.js / moa-chat.js 항목 제거
+  // MOA_CHAT_INTEGRATION_START - 모아 AI 제거 시 moa-chat.css / moa-communication-engine.js / moa-chat.js 항목 제거
   "./css/features/moa-chat.css",
+  "./js/ai/moa-communication-engine.js",
   "./js/config.js",
   "./js/core/namespace.js",
   "./js/core/events.js",
@@ -61,8 +62,6 @@ const CORE = [
   "./js/tasks/task-service.js",
   "./js/tasks/task-window.js",
   "./js/features/auth.js",
-  "./js/ai/moa-dialogue-core.js",
-  "./js/ai/moa-chat-engine.js",
   "./js/features/moa-chat.js",
   // MOA_CHAT_INTEGRATION_END
   "./js/features/chats.js",

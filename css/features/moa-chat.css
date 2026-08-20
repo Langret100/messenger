@@ -19,3 +19,8 @@
 .moa-ai-bubble.moa-weather-card{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .moa-ai-bubble.moa-search-card{max-width:min(82vw,430px)}
 .moa-answer-link{display:inline-block;margin-top:4px;font-weight:800;text-decoration:none;color:var(--accent);word-break:break-word}.moa-answer-link:hover{text-decoration:underline}
+
+/* v90: 모아가 먼저 건 대화의 읽지 않음 표시. 과도한 주의 유도 없이 숫자만 작게 표시한다. */
+.moa-proactive-unread{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--accent);color:#fff;font-size:9px;font-weight:900;line-height:1}
+.moa-chat-list-item[data-unread="0"] .conversation-preview{color:var(--muted)}
+.moa-chat-list-item:not([data-unread="0"]) .conversation-preview{color:var(--text);font-weight:750}

@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="css/features/display-clarity.css?v=64.5.6">
   <link rel="stylesheet" href="css/features/feed-classinfo-weekly.css?v=65.0.18">
   <!-- MOA_CHAT_INTEGRATION_START: 기능 제거 시 이 CSS와 아래 모아 JS 2개 로드 태그를 삭제 -->
-  <link rel="stylesheet" href="css/features/moa-chat.css?v=4">
+  <link rel="stylesheet" href="css/features/moa-chat.css?v=5">
 </head>
 <body>
   <!-- 앱의 고정 뼈대. 기능 화면은 각 feature 모듈이 #viewHost에 렌더링합니다. -->
@@ -91,7 +91,7 @@
   <!-- ADAPTERS: 외부 서비스/브라우저 기능과의 경계 -->
   <script src="js/adapters/persistence.js"></script>
   <script src="js/adapters/data-cache.js?v=64.5.24"></script>
-  <script src="js/adapters/auth-api.js?v=64.5.30"></script>
+  <script src="js/adapters/auth-api.js?v=64.5.31"></script>
   <script src="js/core/user-directory.js?v=64.5.8"></script>
   <script src="js/adapters/realtime.js?v=64.5.37"></script>
   <script src="js/adapters/window-mode.js?v=64.5.33"></script>
@@ -134,12 +134,11 @@
   <script src="js/tasks/task-window.js?v=64.5.8"></script>
 
   <!-- MOA AI: Firebase와 분리된 로컬/Apps Script 학습형 대화 -->
-  <script src="js/ai/moa-dialogue-core.js?v=2"></script>
-  <script src="js/ai/moa-chat-engine.js?v=12"></script>
+  <script src="js/ai/moa-communication-engine.js?v=6"></script>
 
   <!-- FEATURES: 삭제/교체 가능한 독립 기능 -->
   <script src="js/features/auth.js?v=64.5.35"></script>
-  <script src="js/features/moa-chat.js?v=6"></script>
+  <script src="js/features/moa-chat.js?v=8"></script>
   <!-- MOA_CHAT_INTEGRATION_END -->
   <script src="js/features/chats.js?v=64.5.20"></script>
   <script src="js/features/feed.js?v=65.0.18"></script>

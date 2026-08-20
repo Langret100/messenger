@@ -13,5 +13,5 @@ ok(shell.includes('setAuthMode(false);D().byId("authHost")?.classList.add("hidde
 ok(feed.includes('MiniTalk.Chat.Linkify?.youtubeId?.(text)')&&feed.includes('youtube-nocookie.com/embed/')&&feed.includes('MiniTalk.Chat.Linkify?.displayText?.(post.text)'),'feed inline YouTube player missing');
 ok(css.includes('.feed-youtube-player{')&&css.includes('aspect-ratio:16/9'),'feed YouTube player styling missing');
 ok(html.includes('feed-classinfo-weekly.css?v=65.0.18')&&html.includes('js/features/feed.js?v=65.0.18')&&html.includes('js/features/auth.js?v=64.5.35')&&html.includes('js/ui/shell.js?v=64.5.31'),'new asset versions stale');
-ok(sw.includes('moaru-v64.5.48-moa-conversation-v85-20260820')&&app.includes('sw.js?v=64.5.48'),'service worker cache version stale');
+ok(sw.includes('moaru-v64.5.48-moa-communication-v86-20260820')&&app.includes('sw.js?v=64.5.48'),'service worker cache version stale');
 console.log('PIP_AUTH_FEED_YOUTUBE_OK');

@@ -20,10 +20,19 @@ MiniTalk.AI.MoaChatEngine = (() => {
   const lastReplyByUser = new Map();
   const rpsState = new Map();
   const conversationState = new Map();
+  const recentReplyPatterns = new Map();
 
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
   const clean = text => String(text || "").replace(/\s+/g, " ").trim();
   const compact = text => clean(text).toLowerCase().replace(/\s+/g, "");
+  function freshPick(family, entries){
+    const key=userKey(), recent=recentReplyPatterns.get(key)||[];
+    const items=entries.map((text,index)=>({id:`${family}:${index}`,text}));
+    let pool=items.filter(item=>!recent.includes(item.id));if(!pool.length)pool=items;
+    const chosen=pool[Math.floor(Math.random()*pool.length)]||items[0];
+    recentReplyPatterns.set(key,[chosen.id,...recent.filter(v=>v!==chosen.id)].slice(0,6));
+    return chosen?.text||"";
+  }
   const learnedReactionLexicon = new Map();
   let reactionLexiconLoaded=false, reactionLexiconLoading=null;
 
@@ -134,6 +143,7 @@ MiniTalk.AI.MoaChatEngine = (() => {
     conversationState.delete(key);
     lastReplyByUser.delete(key);
     rpsState.delete(key);
+    recentReplyPatterns.delete(key);
     MiniTalk.AI.MoaDialogueCore?.clear?.(key);
     MiniTalk.Persistence.remove(`moa.context.${key}`);
   }
@@ -216,7 +226,7 @@ MiniTalk.AI.MoaChatEngine = (() => {
      기존 미나/기존 '대화' 시트와 무관하며, 이후 공용 학습은 모아 전용 시트에만 누적됩니다. */
   function builtinReply(text){
     const c=compact(text);
-    const out=(id,replies)=>{const index=Math.floor(Math.random()*replies.length);return {id:`builtin:${id}:${index}`,reply:replies[index]};};
+    const out=(id,replies)=>{const reply=freshPick(`builtin:${id}`,replies),index=Math.max(0,replies.indexOf(reply));return {id:`builtin:${id}:${index}`,reply};};
     if(/^(안녕|ㅎㅇ|하이|hello|hi|반가워)/.test(c)) return out("hello",["안녕! 오늘은 무슨 얘기 할래?","왔구나! 편하게 말해줘.","안녕! 나 여기 있어. 뭐부터 얘기할까?"]);
     if(/잘자|자러갈|졸려서잘/.test(c)) return out("goodnight",["응, 푹 자. 내일 또 얘기하자!","잘 자! 오늘도 고생했어.","좋은 꿈 꿔. 다음에 또 보자!"]);
     if(/^(고마워|고맙다|땡큐|감사)/.test(c)) return out("thanks",["응! 또 필요한 거 있으면 말해.","뭘, 같이 보면 되지.","좋아! 도움이 됐다니 다행이야."]);
@@ -454,14 +464,14 @@ MiniTalk.AI.MoaChatEngine = (() => {
   function socialReactionReply(text){
     const r=reactionSignal(text), c=compact(text);
     if(!isPureReaction(text,r))return "";
-    if(r.tag==="laughter"||r.tag==="playful_positive")return pick(["ㅋㅋㅋ 그치?", "ㅋㅋ 나도 좀 웃겼어.", "ㅋㅋㅋ 반응 좋네.", "아 ㅋㅋ 그건 좀 웃겼다."]);
-    if(r.tag==="gratitude")return pick(["뭘 ㅎㅎ 또 물어봐.", "오케이, 도움 됐으면 됐지!", "좋지. 또 필요하면 불러.", "응! 같이 해결하면 되지."]);
-    if(r.tag==="praise")return pick(["오 ㅋㅋ 칭찬 고마운데?", "좋아, 그 말은 좀 뿌듯한데.", "ㅋㅋ 고마워. 계속 잘해볼게."]);
-    if(r.tag==="agreement"&&c.length<=14)return pick(["그치 ㅋㅋ", "ㅇㅇ 딱 그거야.", "좋아, 통했네.", "맞지. 계속 얘기해봐.", "오케이, 그걸로 가자."]);
-    if(r.tag==="surprise"&&c.length<=10)return pick(["ㅋㅋ 놀랐지?", "나도 그건 좀 오 했어.", "그치? 생각보다 그렇더라.", "오 반응 큰데 ㅋㅋ"]);
-    if(r.tag==="uncertain"&&c.length<=18)return pick(["애매하지? 확실한 부분만 다시 보자.", "그럴 수 있어. 뭐가 제일 걸려?", "응, 확신 안 들면 한 번 더 확인해보자."]);
-    if((r.tag==="negative"||r.tag==="correction")&&state().mode==="joke")return pick(["ㅋㅋ 인정. 이건 접고 다른 걸로 간다.","오케이 이건 실패 ㅋㅋ 다른 거 해볼게.","인정, 방금 건 좀 약했다 ㅋㅋ 하나 더 갈까?"]);
-    if(r.tag==="playful"&&c.length<=16)return pick(["ㅋㅋ 왜 그래", "에이 ㅋㅋ 장난이지?", "ㅋㅋ 나한테 그러기야?", "오호, 도발인가 ㅋㅋ"]);
+    if(r.tag==="laughter"||r.tag==="playful_positive")return freshPick('social:laugh',["ㅋㅋㅋ 그치?", "아 ㅋㅋ 반응 보니까 좀 살았다.", "ㅋㅋ 그건 웃겼지.", "오케이 ㅋㅋ 이 분위기로 가자.", "ㅋㅋㅋ 인정, 좀 웃기긴 했어."]);
+    if(r.tag==="gratitude")return freshPick('social:thanks',["뭘 ㅎㅎ 또 물어봐.", "오케이, 도움 됐으면 됐지!", "좋지. 또 필요하면 불러.", "응! 같이 해결하면 되지.", "별말을 ㅋㅋ 필요한 거 있으면 또 말해."]);
+    if(r.tag==="praise")return freshPick('social:praise',["오 ㅋㅋ 칭찬 고마운데?", "좋아, 그 말은 좀 뿌듯한데.", "ㅋㅋ 고마워. 계속 잘해볼게.", "오 인정받았다 ㅋㅋ 고마워."]);
+    if(r.tag==="agreement"&&c.length<=14)return freshPick('social:agree',["그치 ㅋㅋ", "ㅇㅇ 딱 그거야.", "좋아, 통했네.", "맞지.", "오케이, 그걸로 가자.", "응, 같은 생각이네."]);
+    if(r.tag==="surprise"&&c.length<=10)return freshPick('social:surprise',["ㅋㅋ 놀랐지?", "나도 그건 좀 오 했어.", "그치? 생각보다 그렇더라.", "오 반응 큰데 ㅋㅋ", "ㅋㅋ 그 정도로 놀랐어?"]);
+    if(r.tag==="uncertain"&&c.length<=18)return freshPick('social:uncertain',["애매하지? 확실한 부분만 다시 보자.", "그럴 수 있어. 뭐가 제일 걸려?", "응, 확신 안 들면 한 번 더 확인해보자.", "그럼 단정하지 말고 같이 확인해보자."]);
+    if((r.tag==="negative"||r.tag==="correction")&&state().mode==="joke")return freshPick('social:joke-negative',["ㅋㅋ 인정. 이건 접고 다른 걸로 간다.","오케이 이건 실패 ㅋㅋ 다른 거 해볼게.","인정, 방금 건 좀 약했다 ㅋㅋ 하나 더 갈까?","아 이건 못 살렸다 ㅋㅋ 다른 걸로 바꿀게."]);
+    if(r.tag==="playful"&&c.length<=16)return freshPick('social:playful',["ㅋㅋ 왜 그래", "에이 ㅋㅋ 장난이지?", "ㅋㅋ 나한테 그러기야?", "오호, 도발인가 ㅋㅋ", "ㅋㅋ 갑자기 공격 들어오네"]);
     return "";
   }
 
@@ -470,7 +480,7 @@ MiniTalk.AI.MoaChatEngine = (() => {
     const retry=st.mode==='joke'&&isJokeRetry(text);
     if(!retry&&!isJokeCommand(text))return "";
     MiniTalk.AI.MoaDialogueCore?.setMode?.('joke',90000); st.mode='joke';
-    return pick([
+    return freshPick('joke',[
       "세상에서 제일 뜨거운 복숭아가 뭔지 알아? 천도복숭아 ㅋㅋ",
       "왕이 넘어지면? 킹콩 ㅋㅋ 이건 좀 오래됐지.",
       "자동차가 놀라면? 카놀라유... 미안 ㅋㅋ",
@@ -551,8 +561,8 @@ MiniTalk.AI.MoaChatEngine = (() => {
     if(!answer){
       const natural=naturalStatementReply(raw,topicHints);
       if(natural){answer=natural;source="dialogue_core";candidateId="dialogue:generic"}
-      else if(raw.length<=32&&!/[?？]/.test(raw))answer=pick(["응응, 계속 말해봐.","오 그랬구나. 그다음은?","그래? 조금 더 들어볼래."]);
-      else answer=pick(["잠깐, 이건 내가 제대로 못 잡았어. 조금만 다르게 말해줄래?","이건 내가 아직 잘 못 알아들었어. 다른 말로 한 번만 말해줘."]);
+      else if(raw.length<=32&&!/[?？]/.test(raw))answer=freshPick("fallback:short",["응, 듣고 있어.","오, 그런 얘기였구나.","그래? 좀 더 얘기해봐.","오호, 그건 조금 궁금한데.","그랬구나. 네 생각은 어때?","응응. 그 상황이 좀 기억에 남았나 보네."]);
+      else answer=freshPick("fallback:unknown",["잠깐, 이건 내가 제대로 못 잡았어. 핵심만 한 번 더 말해줄래?","이건 내가 아직 정확히 이해 못 했어. 표현을 조금만 바꿔서 말해줘.","내가 엉뚱하게 짚을까 봐 그러는데, 이건 한 번만 더 설명해줘."]);
       source=source==="local"?"fallback":source;candidateId=candidateId||"fallback";
     }
 

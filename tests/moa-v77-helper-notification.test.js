@@ -18,7 +18,7 @@ ok(server.includes('moaAirQualitySearch_')&&server.includes('air-quality-api.ope
 ok(server.includes('moaCityTimeSearch_')&&server.includes('Utilities.formatDate'),'city-time helper missing');
 ok(server.includes('youtube.com/results?search_query=')&&server.includes('map.naver.com/p/search/'),'search shortcuts missing');
 ok(server.includes('dict.naver.com/dict.search')&&server.includes('tbm=isch'),'dictionary/image shortcuts missing');
-ok(html.includes('css/features/moa-chat.css?v=4')&&html.includes('js/ai/moa-chat-engine.js?v=11')&&html.includes('js/features/moa-chat.js?v=6'),'moa v77 cache bust missing');
+ok(html.includes('css/features/moa-chat.css?v=4')&&html.includes('js/ai/moa-chat-engine.js?v=12')&&html.includes('js/features/moa-chat.js?v=6'),'moa v77 cache bust missing');
 ok(html.includes('js/features/chats.js?v=64.5.20')&&html.includes('js/tools/notifications.js?v=64.5.4'),'notification cache bust missing');
 
 let started=null,alarm=null,searchArgs=null;

@@ -6,7 +6,7 @@ const api=fs.readFileSync('js/adapters/auth-api.js','utf8');
 const chatGs=fs.readFileSync('docs/apps-script/MOA_CHAT.gs','utf8');
 const learnGs=fs.readFileSync('docs/apps-script/MOA_LEARNING.gs','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('js/ai/moa-chat-engine.js?v=11'),'v78 engine cache bust missing');
+ok(html.includes('js/ai/moa-chat-engine.js?v=12'),'v78 engine cache bust missing');
 ok(html.includes('js/adapters/auth-api.js?v=64.5.30'),'v78 auth cache bust missing');
 ok(engine.includes('builtin:${id}:${index}'),'builtin answer variants must learn independently');
 ok(engine.includes('shouldTryLearnedFirst')&&engine.indexOf('shouldTryLearnedFirst(raw)')<engine.indexOf('const builtin=builtinReply(raw)'),'learned answer must be considered before builtin fallback');

@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,"..");
 const read=p=>fs.readFileSync(path.join(root,p),"utf8");
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const html=read("index.html"), chats=read("js/features/chats.js"), feature=read("js/features/moa-chat.js"), core=read("js/ai/moa-dialogue-core.js"), engine=read("js/ai/moa-chat-engine.js"), api=read("js/adapters/auth-api.js"), code=read("docs/apps-script/Code.gs"), chatGs=read("docs/apps-script/MOA_CHAT.gs"), learnGs=read("docs/apps-script/MOA_LEARNING.gs"), sw=read("sw.js"), install=read("docs/apps-script/MOA_AI_INSTALL.md"), css=read("css/features/moa-chat.css");
-ok(html.includes('css/features/moa-chat.css?v=4')&&html.includes('js/ai/moa-dialogue-core.js?v=1')&&html.includes('js/ai/moa-chat-engine.js?v=11')&&html.includes('js/features/moa-chat.js?v=6'),"moa client assets missing/stale");
+ok(html.includes('css/features/moa-chat.css?v=4')&&html.includes('js/ai/moa-dialogue-core.js?v=2')&&html.includes('js/ai/moa-chat-engine.js?v=12')&&html.includes('js/features/moa-chat.js?v=6'),"moa client assets missing/stale");
 ok(chats.includes('MiniTalk.Features.MoaChat?.listItem?.()')&&chats.includes('MOA_CHAT_INTEGRATION_START'),"moa fixed chat room/integration marker missing");
 ok(feature.includes('모아와 대화하기')&&feature.includes('MiniTalk.Router.go("chats")'),"moa chat screen/back route missing");
 ok(feature.includes('MiniTalk.DataCache')&&feature.includes('moa-chat-history')&&feature.includes('IndexedDB'),"visible moa chat history must stay in device IndexedDB cache");

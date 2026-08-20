@@ -14,3 +14,8 @@
 @media(max-width:700px){.moa-learning-hint{font-size:9px;padding-inline:8px}.moa-chat-messages{padding-bottom:12px}}
 
 .moa-suggestion-row{display:flex;gap:6px;padding:4px 9px 3px;overflow-x:auto;scrollbar-width:none;overscroll-behavior-inline:contain}.moa-suggestion-row::-webkit-scrollbar{display:none}.moa-suggestion-chip{flex:0 0 auto;border:1px solid color-mix(in srgb,var(--accent) 18%,var(--line));border-radius:999px;background:color-mix(in srgb,var(--surface) 96%,var(--accent-soft));color:var(--text);padding:6px 9px;font-size:9px;font-weight:800;cursor:pointer;white-space:nowrap}.moa-suggestion-chip:active{transform:translateY(1px);background:var(--accent-soft)}
+/* v85: 날씨/검색 결과는 일반 잡담과 구분되는 읽기 쉬운 정보 카드로 표시 */
+.moa-ai-bubble.moa-info-card{line-height:1.55;padding:11px 13px;border:1px solid color-mix(in srgb,var(--accent) 14%,var(--line));background:color-mix(in srgb,var(--surface) 96%,var(--accent-soft));box-shadow:0 5px 16px rgba(15,23,42,.05)}
+.moa-ai-bubble.moa-weather-card{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.moa-ai-bubble.moa-search-card{max-width:min(82vw,430px)}
+.moa-answer-link{display:inline-block;margin-top:4px;font-weight:800;text-decoration:none;color:var(--accent);word-break:break-word}.moa-answer-link:hover{text-decoration:underline}

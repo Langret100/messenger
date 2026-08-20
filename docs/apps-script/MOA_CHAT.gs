@@ -188,6 +188,41 @@ function moaFetchJson_(url){
     return JSON.parse(res.getContentText());
   }catch(e){return null;}
 }
+function moaFetchText_(url){
+  try{
+    var res=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:true,headers:{"Accept":"text/html,application/xhtml+xml","User-Agent":"Mozilla/5.0 MOARU-Moa/1.0"}});
+    if(res.getResponseCode()<200||res.getResponseCode()>=300)return "";
+    return String(res.getContentText()||"");
+  }catch(e){return "";}
+}
+function moaDecodeHtml_(text){
+  return String(text||"")
+    .replace(/<[^>]+>/g," ")
+    .replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'")
+    .replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&nbsp;/g," ")
+    .replace(/&#(\d+);/g,function(_,n){try{return String.fromCharCode(Number(n))}catch(e){return ""}})
+    .replace(/\s+/g," ").trim();
+}
+function moaWeatherIcon_(code){
+  var c=Number(code);if(c===0)return "☀️";if(c<=3)return "⛅";if(c===45||c===48)return "🌫️";if(c>=51&&c<=67)return "🌧️";if(c>=71&&c<=77)return "🌨️";if(c>=80&&c<=82)return "🌦️";if(c>=85&&c<=86)return "🌨️";if(c>=95)return "⛈️";return "🌤️";
+}
+function moaWikiSearch_(query){
+  var url="https://ko.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch="+encodeURIComponent(query)+"&gsrlimit=3&prop=extracts|info&exintro=1&explaintext=1&inprop=url&format=json&origin=*";
+  var data=moaFetchJson_(url), pages=data&&data.query&&data.query.pages?data.query.pages:null;if(!pages)return [];
+  var rows=[];Object.keys(pages).forEach(function(k){var v=pages[k]||{};if(v.title&&v.extract)rows.push({title:v.title,snippet:moaTrimAnswer_(v.extract,260),url:v.fullurl||("https://ko.wikipedia.org/wiki/"+encodeURIComponent(String(v.title).replace(/ /g,"_")))})});
+  rows.sort(function(a,b){return a.title===query?-1:b.title===query?1:0});return rows.slice(0,3);
+}
+function moaDuckHtmlSearch_(query){
+  var html=moaFetchText_("https://html.duckduckgo.com/html/?q="+encodeURIComponent(query));if(!html)return [];
+  var rows=[], re=/<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]{0,1600}?(?:class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/[^>]+>)?/gi, m;
+  while((m=re.exec(html))&&rows.length<3){
+    var url=moaDecodeHtml_(m[1]), title=moaDecodeHtml_(m[2]), snippet=moaDecodeHtml_(m[3]||"");
+    var uddg=url.match(/[?&]uddg=([^&]+)/);if(uddg){try{url=decodeURIComponent(uddg[1])}catch(e){}}
+    if(title&&/^https?:\/\//i.test(url))rows.push({title:title,snippet:moaTrimAnswer_(snippet,180),url:url});
+  }
+  return rows;
+}
+
 function moaTrimAnswer_(text,max){
   var s=String(text||"").replace(/\s+/g," ").trim(), n=Number(max||420);if(s.length<=n)return s;return s.slice(0,n-1).replace(/\s+\S*$/g,"")+"…";
 }
@@ -204,8 +239,12 @@ function moaWeatherSearch_(text){
   var forecast=moaFetchJson_("https://api.open-meteo.com/v1/forecast?latitude="+encodeURIComponent(loc.latitude)+"&longitude="+encodeURIComponent(loc.longitude)+"&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2");
   if(!forecast||!forecast.current)return null;
   var cur=forecast.current,d=forecast.daily||{}, name=[loc.name,loc.admin1].filter(Boolean).join(" "), tomorrow=/내일/.test(text), idx=tomorrow?1:0;
-  if(tomorrow&&d.time&&d.time[idx])return {reply:name+" 내일은 최고 "+Math.round(Number(d.temperature_2m_max[idx]))+"도, 최저 "+Math.round(Number(d.temperature_2m_min[idx]))+"도 정도로 예상돼. 강수확률은 최대 "+Math.round(Number(d.precipitation_probability_max[idx]||0))+"%야.",source:"open-meteo",kind:"weather"};
-  return {reply:name+" 지금은 "+moaWeatherCodeText_(cur.weather_code)+", "+Math.round(Number(cur.temperature_2m))+"도야. 체감은 "+Math.round(Number(cur.apparent_temperature))+"도 정도고, 오늘 최고/최저는 "+Math.round(Number((d.temperature_2m_max||[])[0]))+"/"+Math.round(Number((d.temperature_2m_min||[])[0]))+"도 정도야.",source:"open-meteo",kind:"weather"};
+  if(tomorrow&&d.time&&d.time[idx]){
+    var tmax=Math.round(Number(d.temperature_2m_max[idx])),tmin=Math.round(Number(d.temperature_2m_min[idx])),rain=Math.round(Number(d.precipitation_probability_max[idx]||0));
+    return {reply:"📍 "+name+" · 내일\n🌡️ "+tmin+"° ~ "+tmax+"°\n☔ 강수확률 최대 "+rain+"%\n\n외출 전에는 한 번 더 확인해줘. 예보는 바뀔 수 있어.",source:"open-meteo",kind:"weather"};
+  }
+  var max0=Math.round(Number((d.temperature_2m_max||[])[0])),min0=Math.round(Number((d.temperature_2m_min||[])[0])),rain0=Math.round(Number((d.precipitation_probability_max||[])[0]||0));
+  return {reply:"📍 "+name+" · 현재\n"+moaWeatherIcon_(cur.weather_code)+" "+moaWeatherCodeText_(cur.weather_code)+"  "+Math.round(Number(cur.temperature_2m))+"°\n🌡️ 체감 "+Math.round(Number(cur.apparent_temperature))+"° · 오늘 "+min0+"° ~ "+max0+"°\n☔ 강수확률 최대 "+rain0+"%\n💨 바람 "+Math.round(Number(cur.wind_speed_10m||0))+" km/h",source:"open-meteo",kind:"weather"};
 }
 
 function moaGeoPlace_(place){
@@ -285,14 +324,22 @@ function moaNewsSearch_(text,query){
 function moaGeneralSearch_(query){
   var q=String(query||"").trim();if(!q)return null;
   var cache=CacheService.getScriptCache(), key="moa.search."+Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,q)).slice(0,28), hit=cache.get(key);if(hit){try{return JSON.parse(hit)}catch(e){}}
-  var wiki=moaFetchJson_("https://ko.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(q));
-  var ddg=moaFetchJson_("https://api.duckduckgo.com/?q="+encodeURIComponent(q)+"&format=json&no_html=1&no_redirect=1&skip_disambig=1");
-  var summary="", source="";
-  if(wiki&&wiki.extract){summary=moaTrimAnswer_(wiki.extract,420);source="wikipedia";}
-  if(!summary&&ddg){summary=moaTrimAnswer_(ddg.Answer||ddg.AbstractText||"",420);source="duckduckgo";}
+  var results=[], wiki=moaWikiSearch_(q);
+  wiki.forEach(function(v){if(results.length<3)results.push(v)});
+  if(results.length<2){
+    var ddgJson=moaFetchJson_("https://api.duckduckgo.com/?q="+encodeURIComponent(q)+"&format=json&no_html=1&no_redirect=1&skip_disambig=1");
+    if(ddgJson&&(ddgJson.Answer||ddgJson.AbstractText))results.push({title:ddgJson.Heading||q,snippet:moaTrimAnswer_(ddgJson.Answer||ddgJson.AbstractText,260),url:ddgJson.AbstractURL||""});
+  }
+  if(results.length<2){
+    moaDuckHtmlSearch_(q).forEach(function(v){if(results.length<3&&!results.some(function(x){return x.url&&x.url===v.url}))results.push(v)});
+  }
   var safeUrl="https://www.google.com/search?safe=active&q="+encodeURIComponent(q), out;
-  if(summary)out={reply:summary+"\n\n더 찾아보기: "+safeUrl,source:source,kind:"general"};
-  else out={reply:"바로 요약할 만한 공개 정보를 못 찾았어. 안전검색으로 더 찾아볼 수 있어:\n"+safeUrl,source:"web-search",kind:"general"};
+  if(results.length){
+    var lines=results.slice(0,3).map(function(v,i){return (i+1)+". "+v.title+(v.snippet?"\n"+v.snippet:"")+(v.url?"\n"+v.url:"")});
+    out={reply:"🔎 ‘"+q+"’ 찾아봤어.\n\n"+lines.join("\n\n")+"\n\n더 찾아보기\n"+safeUrl,source:results[0].url&&/wikipedia\.org/.test(results[0].url)?"wikipedia-search":"web-search",kind:"general"};
+  }else{
+    out={reply:"🔎 ‘"+q+"’로 공개 검색에서 바로 확인할 만한 결과를 못 찾았어.\n표현이나 철자가 맞는지 한 번 확인해볼래?\n\n직접 더 찾아보기\n"+safeUrl,source:"web-search",kind:"general"};
+  }
   cache.put(key,JSON.stringify(out),600);return out;
 }
 function moaSearchAssist_(data){

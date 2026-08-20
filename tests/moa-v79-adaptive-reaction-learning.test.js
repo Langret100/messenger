@@ -9,8 +9,8 @@ const feature=fs.readFileSync('js/features/moa-chat.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
 const sw=fs.readFileSync('sw.js','utf8'),app=fs.readFileSync('js/app.js','utf8');
 
-ok(html.includes('js/ai/moa-chat-engine.js?v=11')&&html.includes('js/features/moa-chat.js?v=6')&&html.includes('js/adapters/auth-api.js?v=64.5.30'),'v79 client cache bust missing');
-ok(sw.includes('moaru-v64.5.48-moa-holistic-v84-20260820')&&app.includes('sw.js?v=64.5.48'),'v79 service worker cache bump missing');
+ok(html.includes('js/ai/moa-chat-engine.js?v=12')&&html.includes('js/features/moa-chat.js?v=6')&&html.includes('js/adapters/auth-api.js?v=64.5.30'),'v79 client cache bust missing');
+ok(sw.includes('moaru-v64.5.48-moa-conversation-v85-20260820')&&app.includes('sw.js?v=64.5.48'),'v79 service worker cache bump missing');
 ok(engine.includes('reactionAliasGroups'),'wide reaction alias groups missing');
 ok(engine.includes('reactionTypoAliases')&&engine.includes('anchoredReactionTag'),'safe typo/attached slang handling missing');
 ok(!engine.includes('fuzzyReactionTag'),'unsafe edit-distance reaction matching must stay removed');

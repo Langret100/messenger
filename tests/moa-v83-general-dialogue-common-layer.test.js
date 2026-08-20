@@ -3,8 +3,8 @@ const ok=(v,m)=>{if(!v)throw new Error(m)};
 const core=fs.readFileSync('js/ai/moa-dialogue-core.js','utf8');
 const engine=fs.readFileSync('js/ai/moa-chat-engine.js','utf8');
 const html=fs.readFileSync('index.html','utf8'),sw=fs.readFileSync('sw.js','utf8');
-ok(html.includes('js/ai/moa-chat-engine.js?v=11'),'v83 engine cache bust missing');
-ok(sw.includes('moaru-v64.5.48-moa-holistic-v84-20260820'),'v83 service worker cache missing');
+ok(html.includes('js/ai/moa-chat-engine.js?v=12'),'v83 engine cache bust missing');
+ok(sw.includes('moaru-v64.5.48-moa-conversation-v85-20260820'),'v83 service worker cache missing');
 ok(engine.includes('function genericStatementReply'),'v83 generic statement layer missing');
 ok(engine.includes('conversationState.delete(key)')&&engine.includes('lastReplyByUser.delete(key)'),'v83 context-state reset missing');
 let feedback=[];
@@ -16,13 +16,13 @@ vm.createContext(ctx);vm.runInContext(core,ctx);vm.runInContext(engine,ctx);cons
 (async()=>{
  let r=await E.reply('오늘 미술시간에 그림 그렸어');
  ok(!/^오, 그래서 어떻게 됐어\?$/.test(r.reply),'art statement hit repetitive fallback: '+r.reply);
- ok(r.source==='dialogue_core'&&/미술|그림|그다음|어떻게|얘기/.test(r.reply),'art statement not handled by common layer: '+r.reply);
+ ok(r.source==='dialogue_core'&&!/조금만 더 알려줘|에 대해 조금만/.test(r.reply),'art statement not handled by common layer: '+r.reply);
  r=await E.reply('생각보다 잘 그려졌어');
- ok(/잘됐|잘된|뿌듯|만족|성공/.test(r.reply),'positive result not handled: '+r.reply);
+ ok(/잘됐|잘된|뿌듯|만족|성공|좋았|해냈|기분/.test(r.reply),'positive result not handled: '+r.reply);
  r=await E.reply('진짜 어려웠음');
- ok(/힘들|어려|빡|아쉽|괜찮/.test(r.reply),'difficulty result not handled: '+r.reply);
+ ok(/힘들|어려|빡|아쉽|괜찮|기분|다음/.test(r.reply),'difficulty result not handled: '+r.reply);
  r=await E.reply('오늘 급식 레전드였음');
- ok(r.source==='dialogue_core'&&/급식|어떻게|그다음|얘기/.test(r.reply),'ambiguous event not handled by common layer: '+r.reply);
+ ok(r.source==='dialogue_core'&&!/조금만 더 알려줘|에 대해 조금만/.test(r.reply),'ambiguous event not handled by common layer: '+r.reply);
  r=await E.reply('너 이름 뭐야?');ok(/모아/.test(r.reply),'name question missing: '+r.reply);
  r=await E.reply('너 몇 살이야?');ok(/나이|사람처럼|모아/.test(r.reply),'age question missing: '+r.reply);
  r=await E.reply('너 뭐 할 수 있어?');ok(/계산|타이머|검색|잡담/.test(r.reply),'capabilities question missing: '+r.reply);

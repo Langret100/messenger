@@ -14,9 +14,17 @@ MiniTalk.AI.MoaDialogueCore = (() => {
   const TIME = /^(오늘|어제|내일|아까|방금|지금|주말|이번주|다음주|저번주)$/;
   const clean = text => String(text || '').replace(/\s+/g,' ').trim();
   const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+  function choose(family, entries){
+    const s=state(), items=entries.map((v,i)=>typeof v==='string'?{id:String(i),text:v}:v), recent=s.recentPatterns||[];
+    let pool=items.filter(item=>!recent.includes(family+':'+item.id));
+    if(!pool.length)pool=items;
+    const chosen=pool[Math.floor(Math.random()*pool.length)]||items[0];
+    s.recentPatterns=[family+':'+chosen.id,...recent.filter(v=>v!==family+':'+chosen.id)].slice(0,5);
+    return chosen?chosen.text:'';
+  }
   function key(){return String(MiniTalk.Store.get('user')?.user_id || 'guest')}
   function state(userId=key()){
-    if(!states.has(userId)) states.set(userId,{topics:[],lastPerson:'',lastIntent:'',lastAction:'',lastAffect:'neutral',mode:'',modeUntil:0,lastStatement:'',turn:0});
+    if(!states.has(userId)) states.set(userId,{topics:[],lastPerson:'',lastIntent:'',lastAction:'',lastAffect:'neutral',mode:'',modeUntil:0,lastStatement:'',turn:0,recentPatterns:[]});
     const s=states.get(userId); if(s.mode && s.modeUntil && Date.now()>s.modeUntil){s.mode='';s.modeUntil=0;} return s;
   }
   function clear(userId=key()){states.delete(userId)}
@@ -102,18 +110,81 @@ MiniTalk.AI.MoaDialogueCore = (() => {
   }
   function genericReply(text,frame=analyze(text),hints=[]){
     const s=state(), topic=topicLabel(frame,s), t=topic?` ${topic}`:'', related=(hints||[]).map(v=>typeof v==='string'?v:v?.term).filter(Boolean).find(v=>v!==topic);
-    const relQ=related?` ${related}도 같이 나왔어?`:'';
+    const rel=related?related:'';
     if(frame.question)return '';
-    if(frame.action==='success')return pick([`오${t} 잘됐네 ㅋㅋ 그건 좀 뿌듯했겠다.`,topic?`좋았겠다. ${topic}에서 뭐가 제일 잘됐어?`:'좋았겠다. 뭐가 제일 잘됐어?',`오 성공했네. 생각했던 것보다 잘된 거야?`]);
-    if(frame.action==='failure'||frame.affect==='negative')return pick([`아${t} 그건 좀 아쉽거나 힘들었겠다. 지금은 괜찮아?`,`으, 그건 좀 빡셌겠다. 뭐가 제일 힘들었어?`,`아쉽거나 좀 힘들었겠다. 얘기하고 싶으면 계속 말해봐.`]);
-    if(frame.affect==='positive')return pick([`오${t} 좋았나 보네 ㅋㅋ 뭐가 제일 좋았어?`,`ㅋㅋ 말투부터 괜찮았던 게 느껴지는데. 뭐가 제일 기억나?`,`좋았겠다.${relQ||' 더 얘기해봐.'}`]);
-    if(frame.action==='consume')return pick([`오${topic?' '+topic:' 그거'} 먹었구나. 맛은 어땠어?`,`${topic?topic+' ':''}좋네 ㅋㅋ 또 먹을 만했어?`,`오${topic?' '+topic:''} 먹었네.${related?` ${related}랑 같이 먹은 거야?`:' 제일 맛있던 건 뭐였어?'}`]);
-    if(frame.action==='consume_media')return pick([`오${t||' 그거'} 봤구나. 어땠어?`,`볼 만했어? 뭐가 제일 기억나?`,`오 그거 봤네 ㅋㅋ${related?` ${related} 얘기도 나와?`:' 재밌었어?'}`]);
-    if(frame.action==='go')return pick([`오${t?` ${topic}`:''} 다녀왔구나. 어땠어?`,`거기서 뭐가 제일 기억나?`,`오 갔다 왔네.${relQ||' 괜찮았어?'}`]);
-    if(frame.action==='plan')return pick([`오 계획 있네. 기대돼?`,`좋네. 제일 기대되는 게 뭐야?`,`오케이 ㅋㅋ 잘 하고 와. 나중에 어땠는지도 말해줘.`]);
-    if(frame.action==='preference')return topic?`오, ${topic} 쪽을 그렇게 생각하는구나. 어떤 점 때문에 그래?`:'오, 취향 얘기네. 어떤 점이 제일 좋아?';
-    if(frame.action==='activity')return pick([topic?`오, ${topic} 얘기네. 그래서 어떻게 됐어?`:'오, 그래서 어떻게 됐어?',topic?`${topic} 쪽 얘기구나. 그다음은?`:'응응, 그다음은?',`오 ㅋㅋ ${topic?topic+' ':''}그 뒤엔 어떻게 됐어?${relQ}`]);
-    if(frame.concepts.length)return pick([`오, ${topic} 얘기구나. 그래서 어떻게 됐어?`,`${topic} 쪽 얘기네. 계속 말해봐 ㅋㅋ`,`오 ${topic}.${related?` ${related}랑도 관련 있어?`:' 그다음은?'}`]);
+    if(frame.action==='success')return choose('success',[
+      {id:'empathy',text:`오${t} 잘됐네 ㅋㅋ 그건 좀 뿌듯했겠다.`},
+      {id:'detail',text:topic?`좋았겠다. ${topic}에서 뭐가 제일 잘된 것 같아?`:'좋았겠다. 뭐가 제일 잘된 것 같아?'},
+      {id:'expect',text:'오 성공했네. 원래 기대했던 것보다 잘된 거야?'},
+      {id:'simple',text:`오${t} 제대로 해냈네. 좋았겠다 ㅋㅋ`},
+      {id:'after',text:'그 순간 기분 꽤 좋았겠다. 그 뒤엔 뭐 했어?'}
+    ]);
+    if(frame.action==='failure'||frame.affect==='negative')return choose('negative',[
+      {id:'empathy',text:`아${t} 그건 좀 아쉽거나 힘들었겠다.`},
+      {id:'detail',text:'으, 그건 좀 빡셌겠다. 뭐가 제일 힘들었어?'},
+      {id:'support',text:'아쉽겠다. 그래도 얘기하고 싶으면 내가 들어줄게.'},
+      {id:'recover',text:'그건 기분 좀 꺾였겠다. 다음엔 어떻게 해볼 생각이야?'},
+      {id:'short',text:'아… 그건 좀 아쉽네.'}
+    ]);
+    if(frame.affect==='positive')return choose('positive',[
+      {id:'detail',text:`오${t} 좋았나 보네 ㅋㅋ 뭐가 제일 좋았어?`},
+      {id:'mirror',text:'ㅋㅋ 말투부터 꽤 좋았던 게 느껴지는데.'},
+      {id:'memory',text:'좋았겠다. 그런 건 은근 오래 기억나더라.'},
+      {id:'expand',text:rel?`${rel} 얘기도 같이 나온 거야?`:'오 좋네 ㅋㅋ 더 얘기해봐.'},
+      {id:'opinion',text:'그 정도면 꽤 만족스러웠나 보네 ㅋㅋ'}
+    ]);
+    if(frame.action==='consume')return choose('consume',[
+      {id:'taste',text:`오${topic?' '+topic:' 그거'} 먹었구나. 맛은 어땠어?`},
+      {id:'again',text:`${topic?topic+' ':''}좋네 ㅋㅋ 또 먹을 만했어?`},
+      {id:'best',text:'오 먹었네. 제일 괜찮았던 건 뭐였어?'},
+      {id:'company',text:rel?`${rel}랑 같이 먹은 거야?`:'누구랑 먹었어?'},
+      {id:'short',text:`오${topic?' '+topic:''}. 맛있었으면 성공이지 ㅋㅋ`}
+    ]);
+    if(frame.action==='consume_media')return choose('media',[
+      {id:'review',text:`오${t||' 그거'} 봤구나. 어땠어?`},
+      {id:'memory',text:'볼 만했어? 뭐가 제일 기억나?'},
+      {id:'fun',text:'오 그거 봤네 ㅋㅋ 재밌었어?'},
+      {id:'recommend',text:'보고 나서 남한테 추천할 정도였어?'},
+      {id:'relation',text:rel?`${rel} 얘기도 나오는 거야?`:'끝나고도 생각날 만한 장면 있었어?'}
+    ]);
+    if(frame.action==='go')return choose('go',[
+      {id:'review',text:`오${t?` ${topic}`:''} 다녀왔구나. 어땠어?`},
+      {id:'memory',text:'거기서 뭐가 제일 기억나?'},
+      {id:'short',text:'오 갔다 왔네. 괜찮았어?'},
+      {id:'people',text:'누구랑 같이 간 거야?'},
+      {id:'again',text:'다시 가고 싶을 정도였어?'}
+    ]);
+    if(frame.action==='plan')return choose('plan',[
+      {id:'expect',text:'오 계획 있네. 기대돼?'},
+      {id:'best',text:'좋네. 제일 기대되는 게 뭐야?'},
+      {id:'support',text:'오케이 ㅋㅋ 잘 하고 와. 나중에 어땠는지도 말해줘.'},
+      {id:'prep',text:'준비할 건 다 챙겼어?'},
+      {id:'short',text:'좋다 ㅋㅋ 계획 세운 거면 반은 한 거지.'}
+    ]);
+    if(frame.action==='preference')return choose('preference',[
+      {id:'why',text:topic?`오, ${topic} 쪽을 그렇게 생각하는구나. 어떤 점 때문에 그래?`:'오, 취향 얘기네. 어떤 점이 제일 좋아?'},
+      {id:'agree',text:topic?`${topic} 취향이구나 ㅋㅋ 확실하네.`:'취향 확실하네 ㅋㅋ'},
+      {id:'compare',text:'비슷한 것 중에서는 또 뭐 좋아해?'},
+      {id:'story',text:'그거 좋아하게 된 계기 같은 것도 있어?'}
+    ]);
+    if(frame.action==='activity')return choose('activity',[
+      {id:'reaction',text:topic?`오, ${topic} 했구나.`:'오, 그런 일이 있었구나.'},
+      {id:'detail',text:topic?`${topic} 하면서 제일 기억나는 건 뭐였어?`:'그중에 제일 기억나는 건 뭐였어?'},
+      {id:'feeling',text:'하고 나서는 기분이 어땠어?'},
+      {id:'result',text:'오 ㅋㅋ 결과는 괜찮았어?'},
+      {id:'company',text:'혼자 한 거야, 같이 한 거야?'},
+      {id:'after',text:'그 뒤에는 뭐 했어?'},
+      {id:'relation',text:rel?`${rel}랑도 이어지는 얘기야?`:'꽤 얘깃거리 있었나 보네 ㅋㅋ'}
+    ]);
+    if(frame.concepts.length)return choose('concept',[
+      {id:'ack',text:`오, ${topic} 얘기구나.`},
+      {id:'opinion',text:`${topic}은 너한테 어떤 느낌이야?`},
+      {id:'why',text:`${topic} 얘기가 나온 이유가 있어?`},
+      {id:'memory',text:`${topic} 하면 제일 먼저 생각나는 게 뭐야?`},
+      {id:'relation',text:rel?`${topic}이랑 ${rel}이 같이 연결되는구나.`:`오 ${topic}. 그 얘기 좀 궁금하네.`},
+      {id:'share',text:`응, ${topic} 얘기 듣고 있어.`},
+      {id:'compare',text:`${topic}이랑 비슷한 것 중엔 또 뭐가 있어?`}
+    ]);
     return '';
   }
   function observation(text,signal){

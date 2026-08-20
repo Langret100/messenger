@@ -11,5 +11,5 @@ ok(realtime.includes("ROOM_SUMMARY_CACHE_MAX_IDLE=30*24*60*60*1000"),"room summa
 ok(realtime.includes("purgeStaleRoomSummaryCaches()")&&realtime.includes("localStorage.removeItem(storageKey)"),"stale room summary cache sweep is missing");
 ok(realtime.includes("lastAccessedAt:Date.now()")&&realtime.includes("idle>=ROOM_SUMMARY_CACHE_MAX_IDLE"),"room summary cache is not based on last use");
 ok(index.includes("js/adapters/realtime.js?v=64.5.37")&&index.includes("js/adapters/window-mode.js?v=64.5.33")&&index.includes("js/features/auth.js?v=64.5.35"),"updated scripts are not cache-busted");
-ok(sw.includes("moaru-v64.5.48-moa-communication-v86-20260820"),"service-worker cache version is stale");
+ok(sw.includes("moaru-v64.5.48-moa-solo-public-learning-v91-20260820"),"service-worker cache version is stale");
 console.log("PIP_SESSION_IDLE_CACHE_OK");

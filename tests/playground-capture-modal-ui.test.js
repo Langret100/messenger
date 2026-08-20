@@ -25,7 +25,7 @@ ok(html.includes('js/features/tools.js?v=64.5'),'stale cache version for js/feat
 ok(html.includes('js/tools/capture.js?v=64.5.8'),'stale cache version for js/tools/capture.js');
 ok(html.includes('js/chat/linkify.js?v=64.5.8'),'stale cache version for js/chat/linkify.js');
 ok(html.includes('css/chat-link-capture-polish.css?v=64.5.8'),'chat link polish stylesheet is missing');
-ok(sw.includes('moaru-v64.5.48-moa-communication-v86-20260820')&&app.includes('sw.js?v=64.5.48'),'service worker v64.5.14 cache update is missing');
+ok(sw.includes('moaru-v64.5.48-moa-solo-public-learning-v91-20260820')&&app.includes('sw.js?v=64.5.48'),'service worker v64.5.14 cache update is missing');
 ok(shell.includes('modal-close-button')&&css.includes('.modal-close-button::before')&&css.includes('transform:translateY(-1px)'),'common close glyph is not visually centered');
 ok(css.includes('.mine .bubble{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)')&&css.includes('border-color:var(--accent);box-shadow:none'),'outgoing bubble still has a bright transparent ring');
 ok(chats.includes('composer-icon composer-attach-button')&&css.includes('.composer-attach-button::before{content:"+"')&&css.includes('font-size:25px'),'composer attach button is not visibly centered and enlarged');

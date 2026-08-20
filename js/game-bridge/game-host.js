@@ -1,27 +1,31 @@
 /* ============================================================
    GAME HOST ADAPTER
    역할:
-   - 게임 feature와 실제 iframe 사이의 경계를 담당합니다.
-   - 메신저 본체의 Router/Store를 게임 HTML이 직접 건드리지 않게 합니다.
+   - 메신저의 게임 feature와 실제 게임 HTML 사이의 경계를 담당합니다.
+   - 모바일은 기존 전체화면 iframe, PC/웨일북은 별도 큰 팝업 창으로 실행합니다.
    - 게임 닫기, 점수 이벤트, 수학탐험대 결과 이벤트를 한 곳에서 처리합니다.
-
-   제거 방법:
-   1) index.html의 game-host.js 로드 삭제
-   2) js/features/games.js 삭제
-   3) games/ 및 js/game-ghost.js, js/math-explorer-bridge.js 삭제
-
-   주의:
-   - 게임은 원본 토리 HTML을 iframe으로 격리해 가져옵니다.
-   - 부모 메신저와 통신은 postMessage만 사용합니다.
    ============================================================ */
 MiniTalk.GameHost=(()=>{
   let overlay=null, frame=null, titleNode=null, currentGame=null, bgm=null, messageWindow=null;
+  let gamePopup=null, popupClosing=false;
+
+  function detachMessageWindow(){
+    if(!messageWindow)return;
+    try{messageWindow.removeEventListener("message",onMessage)}catch{}
+    messageWindow=null;
+  }
+
+  function attachMessageWindow(win){
+    if(messageWindow===win)return;
+    detachMessageWindow();
+    messageWindow=win||window;
+    messageWindow.addEventListener("message",onMessage);
+  }
 
   function ensure(){
     const D=MiniTalk.UI.Dom;
     const doc=D.doc();
-    if(overlay&&overlay.isConnected&&overlay.ownerDocument===doc)return overlay;
-    if(messageWindow){try{messageWindow.removeEventListener("message",onMessage)}catch{}messageWindow=null}
+    if(overlay&&overlay.isConnected&&overlay.ownerDocument===doc){attachMessageWindow(doc.defaultView||window);return overlay}
     overlay=null;frame=null;titleNode=null;
     overlay=D.el("section",{class:"game-overlay hidden",id:"gameOverlay","aria-label":"게임 실행 화면"});
     const bar=D.el("header",{class:"game-bar"});
@@ -32,8 +36,7 @@ MiniTalk.GameHost=(()=>{
     frame=D.el("iframe",{class:"game-frame",title:"게임",allow:"autoplay; fullscreen",referrerpolicy:"same-origin"});
     overlay.append(bar,frame);
     doc.body.append(overlay);
-    messageWindow=doc.defaultView||window;
-    messageWindow.addEventListener("message",onMessage);
+    attachMessageWindow(doc.defaultView||window);
     return overlay;
   }
 
@@ -52,8 +55,59 @@ MiniTalk.GameHost=(()=>{
     }catch{bgm=null}
   }
 
-  function open(game){
-    if(!game?.url)throw new Error("게임 주소가 없습니다.");
+  function mobileGameMode(){
+    if(MiniTalk.MobileImmersive?.isMobile?.())return true;
+    const ua=navigator.userAgent||"";
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua)&&!/CrOS/i.test(ua);
+  }
+
+  function popupBounds(){
+    const scr=window.screen||{};
+    const availWidth=Math.max(900,Number(scr.availWidth)||1280);
+    const availHeight=Math.max(650,Number(scr.availHeight)||800);
+    const width=Math.max(900,Math.min(1360,Math.round(availWidth*.90)));
+    const height=Math.max(650,Math.min(920,Math.round(availHeight*.90)));
+    const left=Math.round((Number(scr.availLeft)||0)+(availWidth-width)/2);
+    const top=Math.round((Number(scr.availTop)||0)+(availHeight-height)/2);
+    return{width,height,left,top};
+  }
+
+  function popupFeatures(){
+    const b=popupBounds();
+    return `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${b.width},height=${b.height},left=${b.left},top=${b.top}`;
+  }
+
+  function cleanupPopupState(win){
+    if(gamePopup!==win)return;
+    detachMessageWindow();
+    gamePopup=null;frame=null;titleNode=null;
+    stopBgm();
+    currentGame=null;
+  }
+
+  function openDesktop(game){
+    let popup=null;
+    try{popup=window.open("","MoaruMiniGame",popupFeatures())}catch{}
+    if(!popup)return false;
+    gamePopup=popup;popupClosing=false;currentGame=game;
+    const doc=popup.document;
+    const base=String(document.baseURI||location.href).replace(/"/g,"%22");
+    doc.open();
+    doc.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>${String(game.title||"게임").replace(/[<>]/g,"")}</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b10;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.host{height:100%;display:grid;grid-template-rows:48px minmax(0,1fr)}.bar{display:flex;align-items:center;gap:10px;padding:0 12px;background:#0c1119;color:#f5f7fb;border-bottom:1px solid #202936;user-select:none}.close{width:34px;height:34px;border:0;border-radius:10px;background:#171f2b;color:#fff;font-size:22px;cursor:pointer}.title{flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badge{font-size:9px;font-weight:900;letter-spacing:.08em;color:#73e6c0;background:#133529;padding:5px 7px;border-radius:999px}.frame{width:100%;height:100%;border:0;background:#fff}</style></head><body><main class="host"><header class="bar"><button id="gameClose" class="close" type="button" aria-label="게임 닫기">‹</button><strong class="title"></strong><span class="badge">GAME</span></header><iframe id="gameFrame" class="frame" title="게임" allow="autoplay; fullscreen" referrerpolicy="same-origin"></iframe></main></body></html>`);
+    doc.close();
+    titleNode=doc.querySelector(".title");
+    if(titleNode)titleNode.textContent=game.title||"게임";
+    frame=doc.getElementById("gameFrame");
+    doc.getElementById("gameClose")?.addEventListener("click",closeGame);
+    attachMessageWindow(popup);
+    popup.addEventListener("pagehide",()=>{if(!popupClosing)cleanupPopupState(popup)},{once:true});
+    frame.src=game.url;
+    try{popup.focus()}catch{}
+    playBgm(game.bgm);
+    return true;
+  }
+
+  function openInline(game){
     ensure();
     currentGame=game;
     titleNode.textContent=game.title||"게임";
@@ -63,7 +117,21 @@ MiniTalk.GameHost=(()=>{
     playBgm(game.bgm);
   }
 
+  function open(game){
+    if(!game?.url)throw new Error("게임 주소가 없습니다.");
+    if(gamePopup&&!gamePopup.closed){try{gamePopup.focus()}catch{}return}
+    if(!mobileGameMode()&&openDesktop(game))return;
+    openInline(game);
+  }
+
   function closeGame(){
+    if(gamePopup&&!gamePopup.closed){
+      const popup=gamePopup;popupClosing=true;
+      try{frame&&(frame.src="about:blank")}catch{}
+      try{popup.close()}catch{}
+      cleanupPopupState(popup);popupClosing=false;
+      return;
+    }
     if(!overlay)return;
     overlay.classList.add("hidden");
     MiniTalk.UI.Dom.doc().body.classList.remove("game-open");
@@ -72,7 +140,7 @@ MiniTalk.GameHost=(()=>{
     currentGame=null;
   }
 
-  function isOpen(){return !!(overlay&&!overlay.classList.contains("hidden"));}
+  function isOpen(){return Boolean((gamePopup&&!gamePopup.closed)||(overlay&&!overlay.classList.contains("hidden")))}
 
   function sendScore(gameName,score){
     return MiniTalk.Games.ScoreService.submit(gameName,score);
@@ -89,8 +157,6 @@ MiniTalk.GameHost=(()=>{
       if(score>0)sendScore("수학탐험대",score);
       return;
     }
-    // 토리의 캐릭터 감정 이벤트는 이 프로그램에는 캐릭터가 없으므로 무시합니다.
-    // 게임 iframe 안의 자체 말풍선은 그대로 표시됩니다.
   }
 
   return{open,close:closeGame,isOpen,current:()=>currentGame};

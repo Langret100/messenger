@@ -78,6 +78,7 @@ MiniTalk.Features.Shopping = (() => {
     if (inventoryOpen) view.append(inventoryPanel(user, owned, () => { inventoryOpen = false; render(host); }));
     view.append(inventoryButton);
     host.replaceChildren(view);
+    MiniTalk.UI.DragScroll?.bind?.(wrap);
     if (previousScroll > 0) wrap.scrollTop = previousScroll;
   }
 

@@ -11,5 +11,5 @@ ok(game.includes('window.open("","MoaruMiniGame",popupFeatures())'),'desktop gam
 ok(game.includes('width=${b.width},height=${b.height}')&&game.includes('Math.round(availWidth*.90)')&&game.includes('Math.round(availHeight*.90)'),'large popup sizing missing');
 ok(game.includes('attachMessageWindow(popup)')&&game.includes('event.source!==frame.contentWindow'),'popup iframe score/exit message bridge missing');
 ok(game.includes('if(!mobileGameMode()&&openDesktop(game))return;')&&game.includes('openInline(game)'),'mobile fallback / popup blocked fallback missing');
-ok(html.includes('feed-classinfo-weekly.css?v=65.0.18')&&html.includes('js/features/feed.js?v=65.0.17')&&html.includes('js/game-bridge/game-host.js?v=20'),'asset cache versions stale');
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.18')&&html.includes('js/features/feed.js?v=65.0.18')&&html.includes('js/game-bridge/game-host.js?v=20'),'asset cache versions stale');
 console.log('FEED_HEART_DESKTOP_GAMES_OK');

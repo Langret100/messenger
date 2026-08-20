@@ -206,6 +206,21 @@ MiniTalk.AuthApi = (() => {
     async userCommands(userId, ackIds = []) {
       const data = await post({ mode: "user_commands", user_id: userId, ack_ids: (ackIds || []).join(",") });
       return Array.isArray(data.commands) ? data.commands : [];
+    },
+    /* MOA_CHAT_INTEGRATION_START
+       모아 AI 기능 제거 시 이 블록 전체를 삭제합니다. 자세한 순서는 js/features/moa-chat.js 상단 참고. */
+    async moaChat({ userId, text, context = [] }) {
+      return post({ mode: "moa_chat", user_id: userId, text, context_json: JSON.stringify(context || []) });
+    },
+    async moaFeedback({ userId, reaction, candidateId = "", previousUserText = "", previousReply = "", previousSource = "", followup = "" }) {
+      return post({ mode: "moa_feedback", user_id: userId, reaction, candidate_id: candidateId, previous_user_text: previousUserText, previous_reply: previousReply, previous_source: previousSource, followup });
+    },
+    async moaMemoryGet(userId, key) {
+      return post({ mode: "moa_memory_get", user_id: userId, memory_key: key });
+    },
+    async moaMemorySet({ userId, key, value, label = "" }) {
+      return post({ mode: "moa_memory_set", user_id: userId, memory_key: key, value, label });
     }
+    /* MOA_CHAT_INTEGRATION_END */
   };
 })();

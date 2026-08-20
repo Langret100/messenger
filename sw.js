@@ -21,6 +21,8 @@ const CORE = [
   "./css/features/shopping-store.css",
   "./css/features/display-clarity.css",
   "./css/features/feed-classinfo-weekly.css",
+  // MOA_CHAT_INTEGRATION_START - 모아 AI 제거 시 moa-chat.css / moa-chat-engine.js / moa-chat.js 3개 항목 제거
+  "./css/features/moa-chat.css",
   "./js/config.js",
   "./js/core/namespace.js",
   "./js/core/events.js",
@@ -59,6 +61,9 @@ const CORE = [
   "./js/tasks/task-service.js",
   "./js/tasks/task-window.js",
   "./js/features/auth.js",
+  "./js/ai/moa-chat-engine.js",
+  "./js/features/moa-chat.js",
+  // MOA_CHAT_INTEGRATION_END
   "./js/features/chats.js",
   "./js/features/feed.js",
   "./js/features/games.js",

@@ -76,8 +76,11 @@ MiniTalk.Features.Chats=(()=>{
     const view=D.el("section",{class:"view chat-home view-enter","data-filter":"all","data-rooms-ready":roomSnapshotReceived?"1":"0"});
     const top=D.el("div",{class:"chat-home-top"}),searchWrap=D.el("div",{class:"chat-search-wrap"}),search=D.el("input",{class:"search chat-search",placeholder:"대화방이나 메시지 검색","aria-label":"대화방 검색"});searchWrap.append(D.el("span",{class:"search-glyph",text:"⌕","aria-hidden":"true"}),search,D.el("span",{class:"search-hint",text:"검색"}));
     const filters=D.el("div",{class:"chat-filter-tabs","aria-label":"대화 필터"});[["all","전체"],["unread","안읽음"],["favorite","즐겨찾기"],["group","그룹"]].forEach(([mode,label])=>{const button=D.el("button",{class:`chat-filter ${mode==="all"?"active":""}`,type:"button",text:label});button.onclick=()=>{view.dataset.filter=mode;D.all(".chat-filter",filters).forEach(item=>item.classList.toggle("active",item===button));if(mode==="group"){filter(search.value,list,mode,view);MiniTalk.Realtime.startRoomListSubscription?.().then(()=>{if(view.isConnected&&view.dataset.filter==="group")refreshRoomList()}).catch(error=>console.warn("그룹 대화방 목록 갱신 실패",error))}else{MiniTalk.Realtime.stopRoomListSubscription?.();filter(search.value,list,mode,view)}};filters.append(button)});
-    const sectionHead=D.el("div",{class:"conversation-section-head"},[D.el("strong",{text:"최근 대화"}),D.el("span",{class:"conversation-count",text:`${rooms.length}`})]);top.append(searchWrap,filters,sectionHead);
+    /* MOA_CHAT_INTEGRATION_START - 모아 AI 제거 시 aiCount/listItem 관련 블록을 제거. moa-chat.js 상단 참고. */
+    const aiCount=MiniTalk.Features.MoaChat?.listItem?1:0;const sectionHead=D.el("div",{class:"conversation-section-head"},[D.el("strong",{text:"최근 대화"}),D.el("span",{class:"conversation-count",text:`${rooms.length+aiCount}`})]);top.append(searchWrap,filters,sectionHead);
     const list=D.el("div",{class:"conversation-list",id:"conversationList"});search.oninput=e=>filter(e.target.value,list,view.dataset.filter,view);
+    const moaItem=MiniTalk.Features.MoaChat?.listItem?.();if(moaItem)list.append(moaItem);
+    /* MOA_CHAT_INTEGRATION_END */
     allRooms.forEach((room,i)=>{const node=roomItem(room);node.style.setProperty("--stagger",`${Math.min(i,8)*22}ms`);list.append(node)});
     list.append(D.el("div",{class:"empty-state filter-empty hidden","data-filter-empty":"1"},[D.el("span",{text:"●"}),D.el("strong",{text:allRooms.length?"표시할 대화방이 없습니다":"대화방이 없습니다"}),D.el("small",{class:"muted",text:allRooms.length?"그룹 탭에서 참여할 대화방을 찾아보세요.":"오른쪽 위 ＋ 버튼으로 새 대화를 만들 수 있어요."})]));
     view.append(top,list);host.replaceChildren(view);MiniTalk.UI.DragScroll?.bind?.(list);filter("",list,"all",view);markRoomListReady(view)
@@ -87,7 +90,11 @@ MiniTalk.Features.Chats=(()=>{
     const list=D.one("#conversationList",view),search=D.one(".chat-search",view);if(!list)return renderList(host);
     view.dataset.roomsReady=roomSnapshotReceived?"1":"0";
     const mode=view.dataset.filter||"all",query=search?.value||"",scrollTop=list.scrollTop,allRooms=Object.values(MiniTalk.Store.get("rooms")||{}).sort((a,b)=>roomMessageTime(b)-roomMessageTime(a)||String(a.id).localeCompare(String(b.id)));
-    const nodes=allRooms.map(room=>roomItem(room));nodes.push(D.el("div",{class:"empty-state filter-empty hidden","data-filter-empty":"1"},[D.el("span",{text:"●"}),D.el("strong",{text:allRooms.length?"표시할 대화방이 없습니다":"대화방이 없습니다"}),D.el("small",{class:"muted",text:allRooms.length?"그룹 탭에서 참여할 대화방을 찾아보세요.":"오른쪽 위 ＋ 버튼으로 새 대화를 만들 수 있어요."})]));
+    const nodes=[];
+    /* MOA_CHAT_INTEGRATION_START - 모아 AI 제거 시 아래 moaItem 1줄 제거. */
+    const moaItem=MiniTalk.Features.MoaChat?.listItem?.();if(moaItem)nodes.push(moaItem);
+    /* MOA_CHAT_INTEGRATION_END */
+    nodes.push(...allRooms.map(room=>roomItem(room)));nodes.push(D.el("div",{class:"empty-state filter-empty hidden","data-filter-empty":"1"},[D.el("span",{text:"●"}),D.el("strong",{text:allRooms.length?"표시할 대화방이 없습니다":"대화방이 없습니다"}),D.el("small",{class:"muted",text:allRooms.length?"그룹 탭에서 참여할 대화방을 찾아보세요.":"오른쪽 위 ＋ 버튼으로 새 대화를 만들 수 있어요."})]));
     list.replaceChildren(...nodes);filter(query,list,mode,view);list.scrollTop=scrollTop;markRoomListReady(view);
   }
   function roomPreview(room){const D=MiniTalk.UI.Dom,node=D.el("p",{class:"conversation-preview"}),text=String(room?.lastMessage||"");if(text)MiniTalk.Chat.Emoji.appendText(text,node,room?.lastMessageEmoticon||"");else node.textContent="대화를 시작하세요";return node}

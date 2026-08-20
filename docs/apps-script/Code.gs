@@ -239,6 +239,22 @@ function doPost(e) {
       case "game_best_status":
         return gameBestStatus_(data);
   
+      // MOA_CHAT_INTEGRATION_START
+      // 모아 AI 기능 제거 시 이 블록 전체 + MOA_CHAT.gs + MOA_LEARNING.gs를 삭제하고 재배포하세요.
+      // 기존 미나용 `대화` 시트/기존 대화 API와는 독립된 기능입니다.
+      case "moa_chat":
+        return moaChatResponse_(data);
+
+      case "moa_feedback":
+        return moaFeedback_(data);
+
+      case "moa_memory_get":
+        return moaMemoryGet_(data);
+
+      case "moa_memory_set":
+        return moaMemorySet_(data);
+      // MOA_CHAT_INTEGRATION_END
+
       // 🔹 소통 채팅 시트 기록 추가 ★여기 추가
             case "social_chat":
         return handleSocialChatPost_(data);

@@ -23,6 +23,8 @@
   <link rel="stylesheet" href="css/features/shopping-store.css?v=64.5.10">
   <link rel="stylesheet" href="css/features/display-clarity.css?v=64.5.6">
   <link rel="stylesheet" href="css/features/feed-classinfo-weekly.css?v=65.0.18">
+  <!-- MOA_CHAT_INTEGRATION_START: 기능 제거 시 이 CSS와 아래 모아 JS 2개 로드 태그를 삭제 -->
+  <link rel="stylesheet" href="css/features/moa-chat.css?v=1">
 </head>
 <body>
   <!-- 앱의 고정 뼈대. 기능 화면은 각 feature 모듈이 #viewHost에 렌더링합니다. -->
@@ -131,8 +133,13 @@
   <script src="js/tasks/task-service.js?v=64.5.25"></script>
   <script src="js/tasks/task-window.js?v=64.5.8"></script>
 
+  <!-- MOA AI: Firebase와 분리된 로컬/Apps Script 학습형 대화 -->
+  <script src="js/ai/moa-chat-engine.js?v=2"></script>
+
   <!-- FEATURES: 삭제/교체 가능한 독립 기능 -->
   <script src="js/features/auth.js?v=64.5.35"></script>
+  <script src="js/features/moa-chat.js?v=2"></script>
+  <!-- MOA_CHAT_INTEGRATION_END -->
   <script src="js/features/chats.js?v=64.5.19"></script>
   <script src="js/features/feed.js?v=65.0.18"></script>
   <script src="js/features/games.js?v=18"></script>

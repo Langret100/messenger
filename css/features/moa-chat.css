@@ -1,0 +1,13 @@
+/* 모아와 대화하기 - 기존 채팅 UI 위에 필요한 부분만 확장 */
+.moa-chat-list-item{border-color:color-mix(in srgb,var(--accent) 18%,var(--line));background:linear-gradient(135deg,color-mix(in srgb,var(--accent-soft) 52%,var(--surface)),var(--surface))}
+.moa-ai-avatar,.moa-ai-mini-avatar{display:grid;place-items:center;background:linear-gradient(145deg,#5a7dff,#7657e8);color:#fff;font-weight:900;letter-spacing:-.08em;border:0}
+.moa-ai-avatar{font-size:11px}.moa-ai-mini-avatar{font-size:8px}
+.moa-ai-badge{font-size:9px;font-weight:900;color:var(--accent);padding:3px 6px;border-radius:999px;background:var(--accent-soft)}
+.moa-chat-room{background:linear-gradient(180deg,color-mix(in srgb,var(--accent-soft) 22%,var(--surface-2)),var(--surface-2) 20%)}
+.moa-chat-messages{padding-bottom:18px}
+.moa-ai-bubble{white-space:pre-wrap;overflow-wrap:anywhere}
+.moa-learning-hint{font-size:10px;line-height:1.35;color:var(--muted);padding:6px 12px 3px;text-align:center}
+.moa-composer-zone{background:color-mix(in srgb,var(--surface) 96%,transparent)}
+.moa-composer{grid-template-columns:1fr auto}
+.moa-typing .moa-ai-bubble{opacity:.7;font-style:italic}
+@media(max-width:700px){.moa-learning-hint{font-size:9px;padding-inline:8px}.moa-chat-messages{padding-bottom:12px}}

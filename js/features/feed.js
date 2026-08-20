@@ -1,7 +1,7 @@
 /* 학급 피드: 서버 최신 30개만 유지하고 5개씩 페이지 조회합니다. 미디어는 별도 경로에서 지연 로드합니다. */
 MiniTalk.Features.Feed=(()=>{
   const STATE_PATH="moaru/v3/feedState",POSTS_PATH=`${STATE_PATH}/posts`,TOTALS_PATH=`${STATE_PATH}/totals`,MEDIA_PATH="moaru/v3/feedMedia",MAX_POSTS=30,PAGE_SIZE=5,MAX_COMMENTS=20,COMMENT_LIMIT=60,PHOTO_LIMIT=60*1024,PHOTO_BLOB_TARGET=44*1024,VIDEO_LIMIT=700*1024,VIDEO_BLOB_LIMIT=500*1024,VIDEO_THUMB_LIMIT=18*1024,VIDEO_THUMB_BLOB_TARGET=12*1024,VIDEO_SECONDS=7,CLEANUP_KEY="feed.pendingMediaCleanup",POST_CACHE="feed-post",MEDIA_CACHE="feed-media",THUMB_CACHE="feed-thumb";
-  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0;const pendingLocalHeartEffects=new Set(),openCommentComposers=new Set();
+  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0,feedUserKey="";const pendingLocalHeartEffects=new Set(),openCommentComposers=new Set();
   const user=()=>MiniTalk.Store.get("user")||{};
   const safeUserKey=id=>String(id||"").replace(/[.#$\[\]\/]/g,"_");
   function postRows(){return Object.values(state.posts||{}).filter(Boolean).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)||String(b.id).localeCompare(String(a.id)))}
@@ -42,10 +42,18 @@ MiniTalk.Features.Feed=(()=>{
     try{
       const cached=await MiniTalk.DataCache?.list?.(POST_CACHE)||[];
       cachedPostRows=cached.sort((a,b)=>(Number(b.value?.createdAt)||Number(b.sortAt)||0)-(Number(a.value?.createdAt)||Number(a.sortAt)||0)||String(b.key).localeCompare(String(a.key))).slice(0,MAX_POSTS);
-      state.posts={};cachedPostRows.slice(0,PAGE_SIZE).forEach(row=>{if(row.value?.id)state.posts[row.key]=row.value});paintCachedPosts();
+      const hadVisiblePosts=postRows().length>0;
+      cachedPostRows.slice(0,PAGE_SIZE).forEach(row=>{
+        if(!row.value?.id)return;
+        const previous=state.posts[row.key],cachedValue={...row.value,id:row.value.id||row.key};
+        if(!previous||Number(cachedValue.updatedAt||cachedValue.createdAt||0)>=Number(previous.updatedAt||previous.createdAt||0))state.posts[row.key]=cachedValue
+      });
+      /* 재진입 시 이미 보이던 피드를 비웠다가 다시 그리지 않습니다. 첫 진입에만 기기 캐시를 한 번 그립니다. */
+      if(!hadVisiblePosts)paintCachedPosts();
       const latest=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToLast:PAGE_SIZE});
-      latest.forEach(row=>{if(row.value)state.posts[row.key]={...row.value,id:row.value.id||row.key};cachePost(row.key,state.posts[row.key])});
-      paintCachedPosts();hasMorePosts=latest.length===PAGE_SIZE;
+      /* 서버 최신 확인은 목록 전체 replace가 아니라 바뀐 카드만 조용히 반영합니다. */
+      latest.forEach(row=>{if(row.value)applyPost(row.key,{...row.value,id:row.value.id||row.key},state.posts[row.key])});
+      hasMorePosts=latest.length===PAGE_SIZE;
       reconcileFeedCacheAndLimit().catch(error=>console.warn("피드 30개/기기 캐시 동기화 실패",error));
       const latestCreated=latest.reduce((max,row)=>Math.max(max,Number(row.value?.createdAt)||0),0);
       const apply=(id,value)=>{applyPost(id,value);if(serverPostCount)serverPostCount=Math.min(MAX_POSTS,serverPostCount+1)};
@@ -54,7 +62,7 @@ MiniTalk.Features.Feed=(()=>{
       postsUnsub=MiniTalk.Realtime.cloudSubscribeDelta(POSTS_PATH,{added:apply,changed,removed:remove},{orderByChild:"createdAt",startAt:latestCreated?latestCreated+1:1});
     }finally{syncStarting=false}
   }
-  function stopSub(){postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;loadingOlder=false;hasMorePosts=true;pagingArmed=false;totalHeartReady=false;serverPostCount=0;cachedPostRows=[];pendingLocalHeartEffects.clear();openCommentComposers.clear();state={posts:{}}}
+  function stopSub(){postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;loadingOlder=false;hasMorePosts=true;pagingArmed=false;totalHeartReady=false;serverPostCount=0;pendingLocalHeartEffects.clear();openCommentComposers.clear()}
   async function compressImageFile(file,maxSide=960,target=PHOTO_LIMIT){
     if(!file?.type?.startsWith("image/"))throw new Error("사진 파일을 선택해주세요.");
     const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("사진을 읽지 못했습니다."));r.readAsDataURL(file)});
@@ -233,7 +241,7 @@ MiniTalk.Features.Feed=(()=>{
     if(!button)return;animateHeartTarget(button,.42,440);if(on)spawnHeartBurst(button,6,{spread:14,rise:42,size:13,duration:700});if(sound)playHeartSound(on);
   }
   function headerHeartBadge(){const D=MiniTalk.UI.Dom;return D.el("div",{class:"header-heart-inline","aria-label":`받은 하트 ${totalHearts}개`},[D.el("span",{text:"♥"}),D.el("b",{text:String(totalHearts)})])}
-  function render(host){if(!host)return;MiniTalk.UI.Shell.setHeader("소식",[headerHeartBadge()]);const D=MiniTalk.UI.Dom,u=user(),shell=D.el("section",{class:"view feed-shell view-enter"}),scroller=D.el("div",{class:"feed-view"}),list=D.el("div",{class:"feed-list"});postRows().slice(0,PAGE_SIZE).forEach(post=>list.append(postCard(post)));if(!postRows().length)list.append(D.el("div",{class:"empty-state feed-empty-state"},[D.el("span",{text:"♡"}),D.el("strong",{text:"아직 게시물이 없어요"}),D.el("small",{class:"muted",text:"짧은 글과 사진·영상을 올려보세요."})]));scroller.append(list);shell.append(scroller);if(!u.isGuest)shell.append(D.el("button",{class:"feed-fab",type:"button","aria-label":"게시물 올리기",onclick:compose},[D.el("span",{text:"＋"})]));host.replaceChildren(shell);pagingArmed=false;scroller.addEventListener("pointerdown",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("touchmove",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("wheel",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("scroll",()=>{if(pagingArmed&&scroller.scrollTop+scroller.clientHeight>=scroller.scrollHeight-180)loadOlderPosts()},{passive:true});setupLazyMedia(scroller);ensureSub()}
+  function render(host){if(!host)return;const currentFeedUser=safeUserKey(user().user_id||"guest");if(feedUserKey&&feedUserKey!==currentFeedUser){state={posts:{}};cachedPostRows=[];serverPostCount=0}feedUserKey=currentFeedUser;MiniTalk.UI.Shell.setHeader("소식",[headerHeartBadge()]);const D=MiniTalk.UI.Dom,u=user(),shell=D.el("section",{class:"view feed-shell"}),scroller=D.el("div",{class:"feed-view"}),list=D.el("div",{class:"feed-list"});postRows().slice(0,PAGE_SIZE).forEach(post=>list.append(postCard(post)));if(!postRows().length)list.append(D.el("div",{class:"empty-state feed-empty-state"},[D.el("span",{text:"♡"}),D.el("strong",{text:"아직 게시물이 없어요"}),D.el("small",{class:"muted",text:"짧은 글과 사진·영상을 올려보세요."})]));scroller.append(list);shell.append(scroller);if(!u.isGuest)shell.append(D.el("button",{class:"feed-fab",type:"button","aria-label":"게시물 올리기",onclick:compose},[D.el("span",{text:"＋"})]));host.replaceChildren(shell);pagingArmed=false;scroller.addEventListener("pointerdown",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("touchmove",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("wheel",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("scroll",()=>{if(pagingArmed&&scroller.scrollTop+scroller.clientHeight>=scroller.scrollHeight-180)loadOlderPosts()},{passive:true});setupLazyMedia(scroller);ensureSub()}
   function youtubePlayer(text){const D=MiniTalk.UI.Dom,id=MiniTalk.Chat.Linkify?.youtubeId?.(text);if(!id)return null;return D.el("div",{class:"feed-youtube-player"},[D.el("iframe",{src:`https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?playsinline=1&rel=0`,title:"YouTube 영상",loading:"lazy",allow:"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",allowfullscreen:true,referrerpolicy:"strict-origin-when-cross-origin"})])}
   function videoPlayButton(host){
     const button=MiniTalk.UI.Dom.el("button",{class:"feed-video-play",type:"button","aria-label":"영상 재생",text:"▶"});

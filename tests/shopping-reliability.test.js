@@ -18,7 +18,7 @@ if(!service.includes('CATALOG_CACHE_KEY')||!service.includes('refreshCatalog(tru
 if(!service.includes('MiniTalk.AuthApi.shopGift')||!server.includes('function handleShopGift'))throw new Error('server-mediated gift flow is missing');
 if(!service.includes('notifyGift')||!server.includes('giftedAt'))throw new Error('gift receipt notification metadata is missing');
 if(ui.includes('관리자가 상품을 등록하면')||!ui.includes('상점을 준비하고 있어요'))throw new Error('empty shop copy is not clean');
-if(!css.includes('transform: translate(-50%, -50%) rotate(45deg)')||!css.includes('.shop-market-mark { grid-row: 1 / span 2'))throw new Error('shop icons are not centered in their glyph or mobile card');
+if(!css.includes('transform: translate(-50%, -50%) rotate(45deg)')||!css.includes('.shop-market-hero { grid-template-columns: 40px minmax(0, 1fr) auto')||!css.includes('.shop-market-count { justify-self: end; margin: 0;')||!css.includes('.shop-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;')||!css.includes('.shop-product-card { min-height: 0; grid-template-columns: 1fr;'))throw new Error('shop hero icon alignment or compact mobile one-row layout is stale');
 if(!css.includes('.shop-inventory-fab b { flex: 0 0 18px')||!css.includes('margin: 0; padding: 0'))throw new Error('inventory count badge alignment is stale');
 if(!ui.includes('modal-close-button')||!math.includes('icon: "123"')||math.includes('icon: "∑"'))throw new Error('inventory close or elementary math icon polish is missing');
 if(!clarity.includes('grid-template-rows: minmax(0, 1fr) 56px')||!clarity.includes('min-height: 56px'))throw new Error('last-loaded clarity CSS still overrides the compact bottom navigation');
@@ -26,5 +26,5 @@ if(!service.includes('sameValue')||!ui.includes('preserveScroll: true')||!ui.inc
 if(!service.includes('MiniTalk.Realtime.useShopInventory(id,usedAt)'))throw new Error('used state is not synchronized to Firebase inventory with the authoritative timestamp');
 if(!service.includes('MiniTalk.Realtime.removeShopInventory?.(id)')||!service.includes('notifyCommandTargets?.([target.user_id])')||!server.includes('"SHOP_GIFT"'))throw new Error('gift source cleanup or recipient wake-up is missing');
 if(!ui.includes('button?.disabled')||!ui.includes('button.textContent = "처리 중"'))throw new Error('duplicate inventory use clicks are not blocked');
-if(!html.includes('css/features/shopping-store.css?v=64.5.7')||!html.includes('css/features/display-clarity.css?v=64.5.6')||!html.includes('js/features/shopping.js?v=64.5.26')||!html.includes('js/shopping/store-service.js?v=64.5.13')||!html.includes('js/tasks/daily-math-quest.js?v=64.5.5'))throw new Error('shopping or math cache versions are stale');
+if(!html.includes('css/features/shopping-store.css?v=64.5.9')||!html.includes('css/features/display-clarity.css?v=64.5.6')||!html.includes('js/features/shopping.js?v=64.5.26')||!html.includes('js/shopping/store-service.js?v=64.5.13')||!html.includes('js/tasks/daily-math-quest.js?v=64.5.5'))throw new Error('shopping or math cache versions are stale');
 console.log('SHOPPING_RELIABILITY_OK');

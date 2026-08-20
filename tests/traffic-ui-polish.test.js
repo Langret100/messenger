@@ -17,5 +17,5 @@ if(friday.includes('평소에는 잠겨 있어요')||friday.includes('text:info.
 for(const required of ['friday-lock-overlay','주간 미션','다음 주'])if(!friday.includes(required))throw new Error(`Friday mission polish missing: ${required}`);
 for(const required of ['.feed-fab','.feed-heart-total','.friday-lock-overlay','.video-gated'])if(!css.includes(required))throw new Error(`new UI style missing: ${required}`);
 for(const required of ['feed-classinfo-weekly.css?v=65.0.18','realtime.js?v=64.5.37','friday-grade6-mission.js?v=65.0.5','feed.js?v=65.0.18','features/tools.js?v=64.5'])if(!index.includes(required))throw new Error(`cache-busted asset missing: ${required}`);
-if(!sw.includes('moaru-v64.5.46-profile-15kb-20260820')||!app.includes('sw.js?v=64.5.46'))throw new Error('service worker cache bump missing');
+if(!sw.includes('moaru-v64.5.48-moa-holistic-v84-20260820')||!app.includes('sw.js?v=64.5.48'))throw new Error('service worker cache bump missing');
 console.log('TRAFFIC_UI_POLISH_OK');

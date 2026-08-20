@@ -209,11 +209,23 @@ MiniTalk.AuthApi = (() => {
     },
     /* MOA_CHAT_INTEGRATION_START
        모아 AI 기능 제거 시 이 블록 전체를 삭제합니다. 자세한 순서는 js/features/moa-chat.js 상단 참고. */
-    async moaChat({ userId, text, context = [] }) {
-      return post({ mode: "moa_chat", user_id: userId, text, context_json: JSON.stringify(context || []) });
+    async moaChat({ userId, text, context = [], semantic = {} }) {
+      return post({ mode: "moa_chat", user_id: userId, text, context_json: JSON.stringify(context || []), semantic_json: JSON.stringify(semantic || {}) });
     },
-    async moaFeedback({ userId, reaction, candidateId = "", previousUserText = "", previousReply = "", previousSource = "", followup = "" }) {
-      return post({ mode: "moa_feedback", user_id: userId, reaction, candidate_id: candidateId, previous_user_text: previousUserText, previous_reply: previousReply, previous_source: previousSource, followup });
+    async moaSearch({ userId, text, query = "", context = [] }) {
+      return post({ mode: "moa_search", user_id: userId, text, query, context_json: JSON.stringify(context || []) });
+    },
+    async moaFeedback({ userId, reaction, reactionTag = "", candidateId = "", previousUserText = "", previousReply = "", previousSource = "", followup = "" }) {
+      return post({ mode: "moa_feedback", user_id: userId, reaction, reaction_tag: reactionTag, candidate_id: candidateId, previous_user_text: previousUserText, previous_reply: previousReply, previous_source: previousSource, followup });
+    },
+    async moaTopicObserve({ userId, concepts = [], action = "", affect = "neutral", intent = "statement" }) {
+      return post({ mode: "moa_topic_observe", user_id: userId, concepts_json: JSON.stringify((concepts || []).slice(0, 4)), action, affect, intent });
+    },
+    async moaReactionObserve({ userId, expression, suggestedTag = "", confidence = 0, unknownTerms = [], observationMode = "", evidenceKey = "" }) {
+      return post({ mode: "moa_reaction_observe", user_id: userId, expression, suggested_tag: suggestedTag, confidence: String(confidence || 0), unknown_terms: (unknownTerms || []).join(","), observation_mode: observationMode, evidence_key: evidenceKey });
+    },
+    async moaReactionLexicon(userId) {
+      return post({ mode: "moa_reaction_lexicon", user_id: userId });
     },
     async moaMemoryGet(userId, key) {
       return post({ mode: "moa_memory_get", user_id: userId, memory_key: key });

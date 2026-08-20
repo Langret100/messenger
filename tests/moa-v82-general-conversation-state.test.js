@@ -1,0 +1,24 @@
+const fs=require('fs'),vm=require('vm');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const core=fs.readFileSync('js/ai/moa-dialogue-core.js','utf8');
+const engine=fs.readFileSync('js/ai/moa-chat-engine.js','utf8');
+const html=fs.readFileSync('index.html','utf8'),sw=fs.readFileSync('sw.js','utf8');
+ok(html.includes('js/ai/moa-chat-engine.js?v=11'),'v82 engine cache bust missing');
+ok(sw.includes('moaru-v64.5.48-moa-holistic-v84-20260820'),'v82 service worker cache missing');
+let feedback=[];
+const ctx={console,Math,Date,setTimeout,clearTimeout,MiniTalk:{AI:{},Store:{get:k=>k==='user'?{user_id:'u1',nickname:'테스트'}:{}},Persistence:{get:()=>[],set:()=>{},remove:()=>{}},Tools:{},AuthApi:{moaSearch:async()=>({}),moaChat:async()=>({}),moaFeedback:async a=>{feedback.push(a);return{}},moaReactionObserve:async()=>({}),moaReactionLexicon:async()=>({entries:[]}),moaMemoryGet:async()=>({}),moaMemorySet:async()=>({})}}};
+vm.createContext(ctx);vm.runInContext(core,ctx);vm.runInContext(engine,ctx);const E=ctx.MiniTalk.AI.MoaChatEngine;
+(async()=>{
+  let r=await E.reply('오늘 학교에서 농구했어'); ok(r.source==='dialogue_core'&&/농구|그다음|어떻게/.test(r.reply),'basketball statement fell outside dialogue core: '+r.reply);
+  r=await E.reply('친구가 3점슛 넣었어'); ok(r.source==='dialogue_core'&&!/조금만 더 알려줘/.test(r.reply),'third-party sports event not handled: '+r.reply);
+  r=await E.reply('오늘 떡볶이 먹었어'); ok(/떡볶이|맛|먹을/.test(r.reply),'food statement not handled: '+r.reply);
+  r=await E.reply('어제 영화 봤어'); ok(/영화|어땠|볼 만|기억|재밌/.test(r.reply),'movie statement not handled: '+r.reply);
+  await E.reply('농담해줘'); const n=feedback.length;
+  r=await E.reply('ㅋㅋ'); ok(/ㅋㅋ/.test(r.reply),'joke laughter response failed');
+  r=await E.reply('오늘 학교에서 수업했어'); ok(!/농담|실패|약했다/.test(r.reply),'new topic remained in joke mode: '+r.reply);
+  const before=feedback.length; r=await E.reply('수학은 별로야');
+  ok(feedback.length===before,'ordinary dislike was recorded as joke feedback');
+  ok(!/접고|실패|약했다|다른 걸로/.test(r.reply),'ordinary dislike was treated as joke feedback: '+r.reply);
+  r=await E.reply('다른 거 해봐'); ok(!/천도복숭아|킹콩|카놀라유|언덕|원통해/.test(r.reply),'stale joke mode restarted joke after topic change: '+r.reply);
+  console.log('MOA_V82_GENERAL_CONVERSATION_STATE_OK');
+})().catch(e=>{console.error(e);process.exit(1)});

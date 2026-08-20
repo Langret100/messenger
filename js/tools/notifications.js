@@ -72,7 +72,12 @@ MiniTalk.Tools.Notifications = (() => {
   function notifyIncoming(message) {
     const currentMode = mode();
     const user = MiniTalk.Store.get("user");
-    if (!message || message.user_id === user?.user_id) return;
+    if (!message) return;
+    const senderId = String(message.user_id ?? message.userId ?? "");
+    const currentUserId = String(user?.user_id ?? user?.userId ?? "");
+    /* 숫자/문자열 타입 차이까지 포함해 자기 메시지는 항상 차단합니다.
+       발신자 ID가 없는 옛 요약은 상위 새글 감지 단계에서 이미 제외됩니다. */
+    if (senderId && currentUserId && senderId === currentUserId) return;
     const room = MiniTalk.Store.get("rooms")?.[message.roomId], title = room?.title ? `${room.title} · ${message.nickname || "새 메시지"}` : message.nickname || "새 메시지", body = String(message.text || "새 메시지가 도착했어요.").slice(0, 100);
     showInApp("✉", title, body, "chats");
     try {

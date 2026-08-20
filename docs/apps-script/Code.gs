@@ -245,8 +245,20 @@ function doPost(e) {
       case "moa_chat":
         return moaChatResponse_(data);
 
+      case "moa_search":
+        return moaSearchAssist_(data);
+
       case "moa_feedback":
         return moaFeedback_(data);
+
+      case "moa_reaction_observe":
+        return moaReactionObserve_(data);
+
+      case "moa_topic_observe":
+        return moaTopicObserve_(data);
+
+      case "moa_reaction_lexicon":
+        return moaReactionLexicon_(data);
 
       case "moa_memory_get":
         return moaMemoryGet_(data);

@@ -5,7 +5,7 @@ const drag=fs.readFileSync('js/ui/drag-scroll.js','utf8');
 const css=fs.readFileSync('css/app.css','utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 ok(html.includes('js/ui/drag-scroll.js?v=4'),'drag-scroll v4 cache ref missing');
-ok(html.includes('js/features/chats.js?v=64.5.19'),'chats cache ref stale');
+ok(html.includes('js/features/chats.js?v=64.5.20'),'chats cache ref stale');
 ok(chats.includes('DragScroll?.bind?.(list,{keepScrollbar:true})'),'message list drag-scroll binding missing');
 ok(drag.includes('drag-scroll-keep-scrollbar'),'visible scrollbar exception missing');
 ok(drag.includes('event.clientX>=rect.right-gutter'),'native scrollbar gutter protection missing');

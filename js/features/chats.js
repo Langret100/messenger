@@ -50,7 +50,23 @@ MiniTalk.Features.Chats=(()=>{
   function roomMessageTime(room){return Number(room?.lastMessageAt||room?.last_message_at||room?.updatedAt||room?.updated_at||0)}
   function roomHasVisibleActivity(room){return Boolean(String(room?.lastMessage||"").trim())||roomMessageTime(room)>0||Number(room?.messageCount||room?.message_count||room?.messagesCount||0)>0}
   /* 방 목록의 최신 메시지 시각을 비교해, 현재 소속된 방의 새 글만 알립니다. 최초 로드와 탈퇴한 방은 제외됩니다. */
-  function notifyMemberRoomUpdates(rooms,activeRoom){const now=Date.now(),next={};Object.values(rooms||{}).forEach(room=>{if(!room?.id)return;const ts=roomMessageTime(room),previous=Number(roomAlertTimes[room.id]||0);next[room.id]=ts;if(previous>0&&ts>previous&&room.id!==activeRoom&&ts>now-7000)MiniTalk.Features.Tools?.notifyIncoming?.({roomId:room.id,user_id:room.lastMessageUserId||"",nickname:room.lastMessageNickname||room.title||"모아루",text:room.lastMessage||"새 메시지",ts})});roomAlertTimes=next}
+  function notifyMemberRoomUpdates(rooms,activeRoom){
+    const now=Date.now(),next={},currentUserId=String(MiniTalk.Store.get("user")?.user_id||"");
+    Object.values(rooms||{}).forEach(room=>{
+      if(!room?.id)return;
+      /* 알림은 반드시 실제 마지막 메시지 시각만 사용합니다.
+         room.updatedAt은 멤버/비밀번호/마이그레이션 같은 방 메타데이터 변경에도 갱신되므로
+         오래된 lastMessage를 새 글처럼 되살리는 원인이 될 수 있습니다. */
+      const ts=Number(room.lastMessageAt||room.last_message_at||0),previous=Number(roomAlertTimes[room.id]||0),senderId=String(room.lastMessageUserId||room.last_message_user_id||"");
+      next[room.id]=ts;
+      if(previous<=0||ts<=previous||room.id===activeRoom||ts<=now-7000)return;
+      /* 예전 요약처럼 발신자 ID가 없는 데이터는 추측해서 알리지 않습니다.
+         현재 저장되는 정상 요약에는 lastMessageUserId가 항상 있으므로 실제 새 메시지는 유지됩니다. */
+      if(!senderId||senderId===currentUserId)return;
+      MiniTalk.Features.Tools?.notifyIncoming?.({roomId:room.id,user_id:senderId,nickname:room.lastMessageNickname||room.title||"모아루",text:room.lastMessage||"새 메시지",ts});
+    });
+    roomAlertTimes=next;
+  }
   function notifyRoomInvites(rooms){const current=MiniTalk.Store.get("user")||{};if(!current.user_id||current.isGuest)return;const key=`chat.roomInvites.seen.${current.user_id}`,seen=new Set(MiniTalk.Persistence.get(key,[])||[]);let changed=false;Object.values(rooms||{}).forEach(room=>{if(!room?.id||room.id==="global")return;const member=room._membership||room.members?.[current.user_id],invitedAt=Number(member?.invitedAt||0);if(!invitedAt||member?.invitedBy===current.user_id)return;const marker=`${room.id}:${invitedAt}`;if(seen.has(marker))return;seen.add(marker);changed=true;MiniTalk.Features.Tools?.notifyRoomInvite?.(room)});if(changed)MiniTalk.Persistence.set(key,[...seen].slice(-200))}
   function profileForMessage(message){const profiles=MiniTalk.Store.get("profiles")||{},stored=profiles[message.user_id]||profiles[message.nickname]||{},avatar=stored.avatar||message.avatar||message.profileImage||message.profile_image||message.profileImageUrl||message.avatarUrl||message.photoURL||message.photoUrl||"";return{...stored,avatar}}
   /* 방 이미지가 없으면 1:1 상대, 방 제목과 같은 사용자, 마지막 발신자 순으로 프로필을 찾습니다. */

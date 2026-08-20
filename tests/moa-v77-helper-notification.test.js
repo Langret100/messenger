@@ -1,0 +1,32 @@
+const fs=require('fs'),vm=require('vm');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const core=fs.readFileSync('js/ai/moa-dialogue-core.js','utf8');
+const engine=fs.readFileSync('js/ai/moa-chat-engine.js','utf8');
+const chats=fs.readFileSync('js/features/chats.js','utf8');
+const notifications=fs.readFileSync('js/tools/notifications.js','utf8');
+const server=fs.readFileSync('docs/apps-script/MOA_CHAT.gs','utf8');
+const html=fs.readFileSync('index.html','utf8');
+ok(chats.includes('const ts=Number(room.lastMessageAt||room.last_message_at||0)'),'room alert must use real lastMessageAt');
+ok(chats.includes('if(!senderId||senderId===currentUserId)return'),'room alert must reject unknown/self sender');
+ok(!/const ts=roomMessageTime\(room\),previous=Number\(roomAlertTimes/.test(chats),'stale room updatedAt fallback remains in alert path');
+ok(notifications.includes('const senderId = String(message.user_id ?? message.userId ?? "")'),'incoming sender id normalization missing');
+ok(notifications.includes('senderId === currentUserId'),'self notification guard missing');
+ok(engine.includes('timerAssist(raw)||alarmAssist(raw)'),'timer/alarm AI helper missing');
+ok(engine.includes('unitConvert(raw)||randomAssist(raw)'),'unit/random AI helper missing');
+ok(engine.includes('미세먼지')&&engine.includes('유튜브'),'expanded search intent detection missing');
+ok(server.includes('moaAirQualitySearch_')&&server.includes('air-quality-api.open-meteo.com'),'air-quality search missing');
+ok(server.includes('moaCityTimeSearch_')&&server.includes('Utilities.formatDate'),'city-time helper missing');
+ok(server.includes('youtube.com/results?search_query=')&&server.includes('map.naver.com/p/search/'),'search shortcuts missing');
+ok(server.includes('dict.naver.com/dict.search')&&server.includes('tbm=isch'),'dictionary/image shortcuts missing');
+ok(html.includes('css/features/moa-chat.css?v=4')&&html.includes('js/ai/moa-chat-engine.js?v=11')&&html.includes('js/features/moa-chat.js?v=6'),'moa v77 cache bust missing');
+ok(html.includes('js/features/chats.js?v=64.5.20')&&html.includes('js/tools/notifications.js?v=64.5.4'),'notification cache bust missing');
+
+let started=null,alarm=null,searchArgs=null;
+const ctx={console,Math,Date,setTimeout,clearTimeout,MiniTalk:{AI:{},Store:{get:k=>k==='user'?{user_id:'u1',nickname:'테스트'}:{}},Persistence:{get:()=>[],set:()=>{},remove:()=>{}},Tools:{TimerAlarm:{startTimer:(s,l)=>started={s,l},stopTimer:()=>{},setAlarm:(t,l)=>alarm={t,l},clearAlarm:()=>{}}},AuthApi:{moaSearch:async args=>{searchArgs=args;return{reply:'검색됨',source:'test',kind:'general'}},moaChat:async()=>({}),moaFeedback:async()=>({}),moaMemoryGet:async()=>({}),moaMemorySet:async()=>({})}}};
+vm.createContext(ctx);vm.runInContext(core,ctx);vm.runInContext(engine,ctx);
+(async()=>{
+  let r=await ctx.MiniTalk.AI.MoaChatEngine.reply('5분 타이머 맞춰줘');ok(started&&started.s===300,'5 minute timer not started');ok(/타이머 시작/.test(r.reply),'timer response missing');
+  r=await ctx.MiniTalk.AI.MoaChatEngine.reply('2km는 몇 m');ok(/2000m/.test(r.reply),'unit conversion failed');
+  r=await ctx.MiniTalk.AI.MoaChatEngine.reply('100달러 원화로 얼마야');ok(searchArgs&&/달러/.test(searchArgs.text),'currency intent did not reach search assist');ok(r.reply==='검색됨','search assist response missing');
+  console.log('MOA_V77_HELPER_NOTIFICATION_OK');
+})().catch(e=>{console.error(e);process.exit(1)});

@@ -85,9 +85,14 @@ MiniTalk.DataCache=(()=>{
   const getMeta=(key,fallback=null)=>get("meta",metaKey(key),fallback);
   const setMeta=(key,value)=>put("meta",metaKey(key),value);
 
-  async function getMessages(roomId){
-    const prefix=`${String(roomId)}|`,rows=await list("chat-message",{prefix});
-    return rows.sort((a,b)=>(Number(a.sortAt)||0)-(Number(b.sortAt)||0)||String(a.key).localeCompare(String(b.key))).map(row=>row.value).filter(Boolean).slice(-CHAT_MAX)
+  async function getMessages(roomId,limit=CHAT_MAX){
+    const prefix=`${String(roomId)}|`,rows=await list("chat-message",{prefix}),count=Math.max(1,Math.min(CHAT_MAX,Number(limit)||CHAT_MAX));
+    return rows.sort((a,b)=>(Number(a.sortAt)||0)-(Number(b.sortAt)||0)||String(a.key).localeCompare(String(b.key))).map(row=>row.value).filter(Boolean).slice(-count)
+  }
+  async function getMessagesBefore(roomId,beforeTs,beforeId="",limit=25){
+    const prefix=`${String(roomId)}|`,cutoff=Number(beforeTs)||Number.MAX_SAFE_INTEGER,cursorId=String(beforeId||""),count=Math.max(1,Math.min(CHAT_MAX,Number(limit)||25)),rows=await list("chat-message",{prefix});
+    const messageId=row=>String(row.value?.id||String(row.key).slice(prefix.length));
+    return rows.filter(row=>{const ts=Number(row.sortAt)||0;return ts<cutoff||(ts===cutoff&&cursorId&&messageId(row)<cursorId)}).sort((a,b)=>(Number(a.sortAt)||0)-(Number(b.sortAt)||0)||messageId(a).localeCompare(messageId(b))).slice(-count).map(row=>row.value).filter(Boolean)
   }
 
   async function putMessage(roomId,message){
@@ -113,5 +118,5 @@ MiniTalk.DataCache=(()=>{
 
   function start(){cleanup().catch(error=>console.warn("기기 캐시 정리 실패",error))}
 
-  return{get,put,remove,list,touch,getMeta,setMeta,getMessages,putMessage,removeMessageRoom,cleanup,start,MAX_AGE,CHAT_MAX};
+  return{get,put,remove,list,touch,getMeta,setMeta,getMessages,getMessagesBefore,putMessage,removeMessageRoom,cleanup,start,MAX_AGE,CHAT_MAX};
 })();

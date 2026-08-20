@@ -135,22 +135,76 @@ MiniTalk.Features.Shopping = (() => {
     MiniTalk.UI.Shell.modal("구매 확인", body);
   }
 
+  function deliverySummary(item) {
+    const status = String(item.deliveryStatus || (item.usedAt ? "completed" : "owned"));
+    if (status === "requested") return "주문이 접수되어 배달을 준비하고 있어요.";
+    if (status === "shipping") return "모아루가 배달 중이에요.";
+    if (status === "completed") return "배송완료";
+    if (status === "cancelled") return "취소되었습니다.";
+    return item.giftedByNickname ? `${item.giftedByNickname}님이 보낸 선물` : item.description || "배송 요청 가능";
+  }
+
+  function renderDeliveryEffect(item, cue = {}) {
+    const D = MiniTalk.UI.Dom, doc = D.doc();
+    doc.querySelectorAll('.delivery-order-effect').forEach(node => node.remove());
+    const host = D.el('div', { class: 'delivery-order-effect', 'aria-hidden': 'true' });
+    const card = D.el('div', { class: 'delivery-order-card' }, [
+      D.el('div', { class: 'delivery-order-runway' }, [
+        D.el('img', { class: 'delivery-order-mascot', src: 'assets/mascot-mini-talk.png', alt: '모아루 배달 연출' }),
+        D.el('span', { class: 'delivery-order-dust dust-a' }),
+        D.el('span', { class: 'delivery-order-dust dust-b' }),
+        D.el('span', { class: 'delivery-order-dust dust-c' })
+      ]),
+      D.el('strong', { text: '배달의 학급 주문!' }),
+      D.el('p', { text: `${item.name || '상품'} 배달을 준비하고 있어요.` })
+    ]);
+    host.append(card);
+    doc.body.append(host);
+    const choices = Array.isArray(cue.soundUrls) && cue.soundUrls.length ? cue.soundUrls : ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'];
+    const src = choices[Math.floor(Math.random() * choices.length)] || choices[0];
+    try {
+      const audio = new Audio(src);
+      audio.preload = 'auto';
+      audio.play().catch(() => {});
+    } catch (_) {}
+    setTimeout(() => host.classList.add('leaving'), 1800);
+    setTimeout(() => host.remove(), 2350);
+  }
+
   function inventoryCard(item) {
-    const D = MiniTalk.UI.Dom, used = Boolean(item.usedAt);
+    const D = MiniTalk.UI.Dom, used = Boolean(item.usedAt) || item.deliveryStatus === 'completed';
     const actions = D.el("div", { class: "shop-inventory-actions" });
+    const status = String(item.deliveryStatus || (used ? 'completed' : 'owned'));
     if (!used) {
       const giftButton = D.el("button", { class: "button secondary compact-button", type: "button", text: "선물", onclick: () => openGift(item) });
-      const useButton = D.el("button", { class: "button primary compact-button", type: "button", text: "사용" });
-      useButton.onclick = () => useItem(item, useButton);
-      actions.append(giftButton, useButton);
+      const deliveryButtonText = status === 'requested' || status === 'shipping' ? '배송중' : (status === 'cancelled' ? '다시 배송' : '배송');
+      const deliveryButton = D.el("button", { class: "button primary compact-button", type: "button", text: deliveryButtonText, disabled: status === 'requested' || status === 'shipping' });
+      deliveryButton.onclick = () => requestDelivery(item, deliveryButton);
+      actions.append(giftButton, deliveryButton);
     }
-    return D.el("article", { class: `shop-inventory-item${used ? " used" : ""}` }, [
+    return D.el("article", { class: `shop-inventory-item${used ? " used" : ""}${status ? ` status-${status}` : ''}` }, [
       item.imageUrl ? D.el("img", { class: "shop-inventory-image", src: item.imageUrl, alt: "", loading: "lazy" }) : null,
       D.el("div", { class: "shop-inventory-copy" }, [
         D.el("strong", { text: item.name || "상품" }),
-        D.el("small", { class: "muted", text: used ? `사용됨 · ${Service.usedRemainingDays(item)}일 후 사라짐` : item.giftedByNickname ? `${item.giftedByNickname}님이 보낸 선물` : item.description || "사용 가능" })
+        D.el("small", { class: `muted inventory-status inventory-status-${status}`, text: deliverySummary(item) })
       ]), actions
     ].filter(Boolean));
+  }
+
+  async function requestDelivery(item, button) {
+    if (button?.disabled) return;
+    const originalText = button?.textContent || '배송';
+    if (button) { button.disabled = true; button.textContent = '주문 중'; }
+    try {
+      const result = await Service.requestDelivery(item.id);
+      MiniTalk.UI.Shell.toast(`${item.name} 배송을 요청했습니다.`);
+      renderDeliveryEffect(item, { soundUrls: ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'], ...(result?.effect || {}) });
+      refreshVisible();
+    }
+    catch (error) {
+      MiniTalk.UI.Shell.toast(error.message || '배송을 요청하지 못했습니다.');
+      if (button?.isConnected) { button.disabled = false; button.textContent = originalText; }
+    }
   }
 
   async function useItem(item, button) {

@@ -180,7 +180,7 @@ function handleCoinStatus(e) {
   let coin = 0;
   if (userData) {
     const parsed = parseInt(userData.coin, 10);
-    coin = isNaN(parsed) || !isFinite(parsed) || parsed < 0 ? 0 : parsed;
+    coin = isNaN(parsed) || !isFinite(parsed) ? 0 : parsed;
   }
 
   const out = {
@@ -199,12 +199,13 @@ function handleCoinStatus(e) {
  * - Code.gs 의 doPost(e) 또는 doGet(e) 에서 mode=coin_reward 일 때 호출
  * - 프론트에서 보내는 파라미터:
  *    user_id      : 계정 ID (필수)
- *    reward_type  : ATTEND_5D / RANKING_1ST / QUEST_5CLEAR (필수)
+ *    reward_type  : ATTEND_5D / RANKING_1ST / QUEST_5CLEAR / WEEKLY_CHECK_OVER80 (필수)
  *    reward_key   : 주차 키(출석) / 게임 이름(랭킹) / 날짜(퀘스트) 등 (필수)
  * - 보상 규칙:
  *    ATTEND_5D    : +1 코인
  *    RANKING_1ST  : +2 코인
  *    QUEST_5CLEAR : +1 코인
+ *    WEEKLY_CHECK_OVER80 : +3 코인 (금요일 20문항 80점 초과)
  * - 같은 (user_id, reward_type, reward_key) 조합에는 한 번만 지급
  */
 function handleCoinReward(e) {
@@ -238,6 +239,8 @@ function handleCoinReward(e) {
     delta = 2;
   } else if (type === "QUEST_5CLEAR") {
     delta = 1;
+  } else if (type === "WEEKLY_CHECK_OVER80") {
+    delta = 3;
   } else {
     return ContentService
       .createTextOutput(

@@ -11,6 +11,6 @@ ok(rt.includes('lastMessageEmoticon:message.emoticon||null'),'room metadata does
 ok(css.includes('.conversation-preview .chat-emoticon{width:22px!important;height:22px!important'),'room-list emoticon is not compact');
 ok(feedcss.includes('background:color-mix(in srgb,#d5d9e1 48%,transparent)'),'feed FAB is not translucent light gray');
 ok(feedcss.includes('bottom:calc(-20px + 58px'),'feed FAB was not lowered further');
-ok(html.includes('css/app.css?v=64.5.10')&&html.includes('feed-classinfo-weekly.css?v=65.0.12')&&html.includes('realtime.js?v=64.5.33')&&html.includes('features/chats.js?v=64.5.15')&&html.includes('app.js?v=64.5.33'),'v5.22 cache versions stale');
-ok(sw.includes('moaru-v64.5.33-pip-session-idle-cache-20260819')&&app.includes('sw.js?v=64.5.33'),'v5.22 service worker version stale');
+ok(html.includes('css/app.css?v=64.5.10')&&html.includes('feed-classinfo-weekly.css?v=65.0.14')&&html.includes('realtime.js?v=64.5.33')&&html.includes('features/chats.js?v=64.5.15')&&html.includes('app.js?v=64.5.33'),'v5.22 cache versions stale');
+ok(sw.includes('moaru-v64.5.35-pip-auth-feed-youtube-20260820')&&app.includes('sw.js?v=64.5.35'),'v5.22 service worker version stale');
 console.log('LEGACY_ROOM_EMOJI_UI_OK');

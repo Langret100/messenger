@@ -138,6 +138,9 @@ MiniTalk.AuthApi = (() => {
     async shopUse({ userId, inventoryId, item }) {
       return post({ mode: "shop_use", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) });
     },
+    async shopRequestDelivery({ userId, inventoryId, item, requestId }) {
+      return post({ mode: "shop_request_delivery", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" });
+    },
     async adminDispatch({ userId, adminToken, targets, type, payload, requestId }) {
       return post({
         mode: "admin_dispatch",

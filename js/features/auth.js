@@ -19,6 +19,7 @@ MiniTalk.Features.Auth=(()=>{
   }
 
   function render(host){
+    MiniTalk.UI.Shell?.setAuthMode?.(true);
     host.classList.remove("hidden");
     const desktop=!MiniTalk.MobileImmersive?.isMobile?.();
     const keepDefault=MiniTalk.Persistence.get("window.keepOnTopAfterLogin",true)!==false;
@@ -78,6 +79,7 @@ MiniTalk.Features.Auth=(()=>{
     MiniTalk.Store.set("user",null);
     MiniTalk.UI.Shell?.resetWorkspaceSession?.();
     const host=document.getElementById("authHost"),workspace=document.getElementById("workspace");
+    MiniTalk.UI.Shell?.setAuthMode?.(true);
     workspace?.classList.add("hidden");
     host?.classList.remove("hidden");
     if(host)render(host);

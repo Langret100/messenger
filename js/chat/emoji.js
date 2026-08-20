@@ -35,6 +35,16 @@ MiniTalk.Chat.Emoji=(()=>{
     if(last<source.length)container.append((container.ownerDocument||document).createTextNode(source.slice(last)));
   }
   function isOnlyCustom(text,emoticonCode=""){return Boolean(byCode(emoticonCode))||/^\s*:e(?:0?[1-9]|1[0-7]):\s*$/.test(String(text||""))}
-  function isOnlyUnicode(text){const value=String(text||"").trim();if(!value||value.length>24)return false;return !/[A-Za-z0-9가-힣]/.test(value)&&/[^\s]/.test(value)}
+  const unicodeEmojiTokenRe=/(?:\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}\uFE0F?[\u{1F3FB}-\u{1F3FF}]?(?:\u200D\p{Extended_Pictographic}\uFE0F?[\u{1F3FB}-\u{1F3FF}]?)*)/gu;
+  function isOnlyUnicode(text){
+    const value=String(text||"").trim();
+    if(!value||value.length>48)return false;
+    const compact=value.replace(/\s+/g,"");
+    if(!compact)return false;
+    unicodeEmojiTokenRe.lastIndex=0;
+    const matched=unicodeEmojiTokenRe.test(compact);
+    unicodeEmojiTokenRe.lastIndex=0;
+    return matched&&compact.replace(unicodeEmojiTokenRe,"")==="";
+  }
   return{list,byCode,appendText,isOnlyCustom,isOnlyUnicode};
 })();

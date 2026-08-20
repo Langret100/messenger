@@ -8,11 +8,12 @@ MiniTalk.Shopping.StoreService = (() => {
   let catalogPromise = null, catalogLoadedAt = 0, inventoryPromise = null, pollTimer = 0, activeUserId = "", inventoryVersion = 0, shopActive = false, inventoryDirty = true;
   const pendingPurchaseKeys = new Map();
   const pendingGiftKeys = new Map();
+  const pendingDeliveryKeys = new Map();
 
   function user() { return MiniTalk.Store.get("user") || {}; }
   function requireLogin() { const current=user();if(!current.user_id||current.isGuest)throw new Error("로그인 후 이용할 수 있어요.");return current; }
   function normalizeProduct(product={}) { return { id:String(product.id||""),name:String(product.name||"").trim().slice(0,60),description:String(product.description||"").trim().slice(0,160),imageUrl:String(product.imageUrl||product.image_url||"").trim().slice(0,7200),price:Math.max(1,Math.floor(Number(product.price)||0)),updatedAt:Number(product.updatedAt)||0 }; }
-  function normalizeInventory(item={}) { const product=objectValue(MiniTalk.Store.get("shopCatalog"))[item.productId]||{};return{...item,id:String(item.id||""),productId:String(item.productId||""),name:item.name||product.name||"상품",description:item.description||product.description||"",imageUrl:item.imageUrl||product.imageUrl||"",price:Number(item.price||product.price)||0}; }
+  function normalizeInventory(item={}) { const product=objectValue(MiniTalk.Store.get("shopCatalog"))[item.productId]||{};const status=String(item.deliveryStatus||item.delivery_status||"").trim().toLowerCase();return{...item,id:String(item.id||""),productId:String(item.productId||""),name:item.name||product.name||"상품",description:item.description||product.description||"",imageUrl:item.imageUrl||product.imageUrl||"",price:Number(item.price||product.price)||0,deliveryStatus:["owned","requested","shipping","completed","cancelled"].includes(status)?status:(item.usedAt?"completed":"owned"),deliveryRequestedAt:Number(item.deliveryRequestedAt||item.delivery_requested_at)||0,deliveryCompletedAt:Number(item.deliveryCompletedAt||item.delivery_completed_at)||0,deliveryCancelledAt:Number(item.deliveryCancelledAt||item.delivery_cancelled_at)||0,deliveryHandledBy:String(item.deliveryHandledBy||item.delivery_handled_by||"")}; }
 
   function writeCatalog(catalog) { const current=objectValue(MiniTalk.Store.get("shopCatalog"));if(sameValue(current,catalog))return false;MiniTalk.Store.set("shopCatalog",catalog);MiniTalk.Persistence.set(CATALOG_CACHE_KEY,catalog);return true; }
   function hydrateCatalogCache() { const cached=objectValue(MiniTalk.Persistence.get(CATALOG_CACHE_KEY,{}));if(Object.keys(cached).length&&!Object.keys(objectValue(MiniTalk.Store.get("shopCatalog"))).length)MiniTalk.Store.set("shopCatalog",cached); }
@@ -99,7 +100,22 @@ MiniTalk.Shopping.StoreService = (() => {
     const balance=result.newCoin??result.coin??result.balance;if(balance!=null)MiniTalk.Economy.CoinWallet.setLocal(balance,"purchase");else await MiniTalk.Economy.CoinWallet.refresh(true);pendingPurchaseKeys.delete(pendingKey);return result;
   }
   async function use(id) { const current=requireLogin(),item=inventory().find(row=>row.id===id);if(!item||item.usedAt)throw new Error("사용할 수 없는 상품입니다.");const result=await MiniTalk.AuthApi.shopUse({userId:current.user_id,inventoryId:id,item}),usedAt=Number(result.usedAt)||Date.now();try{await MiniTalk.Realtime.useShopInventory(id,usedAt)}catch(error){console.warn("Firebase 보관함 사용 상태 동기화 실패",error)}await refreshInventory(true);return usedAt; }
+  async function requestDelivery(id) {
+    const current=requireLogin(),item=inventory().find(row=>row.id===id);
+    if(!item)throw new Error("배송 요청할 상품을 찾을 수 없습니다.");
+    if(item.usedAt||item.deliveryStatus==="completed")throw new Error("이미 배송이 완료된 상품입니다.");
+    if(item.deliveryStatus==="requested"||item.deliveryStatus==="shipping")throw new Error("이미 배송이 진행 중입니다.");
+    const pendingKey=`${current.user_id}:${id}`,requestId=pendingDeliveryKeys.get(pendingKey)||crypto.randomUUID();
+    pendingDeliveryKeys.set(pendingKey,requestId);
+    try {
+      const result=await MiniTalk.AuthApi.shopRequestDelivery({userId:current.user_id,inventoryId:id,item,requestId});
+      await refreshInventory(true).catch(()=>{});
+      return result;
+    } finally {
+      pendingDeliveryKeys.delete(pendingKey);
+    }
+  }
   async function gift(id,targetId) { const current=requireLogin(),item=inventory().find(row=>row.id===id);if(!item||item.usedAt)throw new Error("선물할 수 없는 상품입니다.");const target=recipients().find(row=>row.user_id===targetId);if(!target)throw new Error("선물할 사용자를 찾을 수 없습니다.");const pendingKey=`${current.user_id}:${id}:${target.user_id}`,requestId=pendingGiftKeys.get(pendingKey)||crypto.randomUUID();pendingGiftKeys.set(pendingKey,requestId);await MiniTalk.AuthApi.shopGift({userId:current.user_id,nickname:current.nickname,targetId:target.user_id,inventoryId:id,item,requestId});pendingGiftKeys.delete(pendingKey);try{await MiniTalk.Realtime.removeShopInventory?.(id)}catch(error){console.warn("Firebase 보관함 선물 항목 제거 실패",error)}const currentItems={...objectValue(MiniTalk.Store.get("shopInventory"))};delete currentItems[id];MiniTalk.Store.set("shopInventory",currentItems);MiniTalk.Persistence.set(inventoryCacheKey(current.user_id),currentItems);MiniTalk.Realtime.notifyCommandTargets?.([target.user_id]);await refreshInventory(true);return{targetId:target.user_id,targetNickname:target.nickname}; }
 
-  return{products,refreshCatalog,refreshInventory,start,enter,leave,saveProduct,deleteProduct,inventory,recipients,purchase,use,gift,normalizeProduct,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
+  return{products,refreshCatalog,refreshInventory,start,enter,leave,saveProduct,deleteProduct,inventory,recipients,purchase,use,requestDelivery,gift,normalizeProduct,normalizeInventory,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
 })();

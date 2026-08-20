@@ -13,5 +13,5 @@ ok(!shell.includes('const transport=await MiniTalk.Realtime.init(user)'),'worksp
 ok(rt.includes('if(JSON.stringify(presenceCache[s.key])===JSON.stringify(next))return'),'presence initial child replay should be deduped');
 ok(rt.includes('JSON.stringify((kind==="legacy"?legacyProfiles:currentProfiles)[key])===JSON.stringify(value)'), 'profile delta replay should be deduped');
 ok(index.includes('realtime.js?v=64.5.33')&&index.includes('app.js?v=64.5.33'),'login-room cache version stale');
-ok(sw.includes('moaru-v64.5.33-pip-session-idle-cache-20260819')&&app.includes('sw.js?v=64.5.33'),'service worker cache version stale');
+ok(sw.includes('moaru-v64.5.35-pip-auth-feed-youtube-20260820')&&app.includes('sw.js?v=64.5.35'),'service worker cache version stale');
 console.log('LOGIN_ROOM_INITIALIZATION_OK');

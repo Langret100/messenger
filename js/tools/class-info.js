@@ -4,7 +4,23 @@ MiniTalk.Tools.ClassInfo=(()=>{
   const TIMETABLE="moaru/v3/classInfo/timetable",LUNCH="moaru/v3/classInfo/lunch";
   const nowDate=()=>new Date(),nowMs=()=>Date.now();
   const readData=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("파일을 읽지 못했습니다."));r.readAsDataURL(file)});
-  const pick=(accept)=>new Promise(resolve=>{const i=document.createElement("input");i.type="file";i.accept=accept;i.onchange=()=>resolve(i.files?.[0]||null);i.click()});
+  // 파일 선택기는 현재 UI가 실제로 떠 있는 문서(PiP/독립창 포함)에 붙여야 브라우저가
+  // 사용자 제스처에서 시작된 파일 선택으로 안정적으로 인정합니다. DOM에 붙이지 않은
+  // 임시 input.click()은 일부 Chromium/PWA 환경에서 아무 반응 없이 무시될 수 있습니다.
+  const pick=(accept)=>new Promise(resolve=>{
+    const doc=MiniTalk.UI.Dom.doc?.()||document,i=doc.createElement("input");
+    let settled=false;
+    const done=file=>{if(settled)return;settled=true;try{i.remove()}catch(_){ }resolve(file||null)};
+    i.type="file";i.accept=accept;i.tabIndex=-1;i.setAttribute("aria-hidden","true");
+    i.style.cssText="position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none";
+    i.addEventListener("change",()=>done(i.files?.[0]||null),{once:true});
+    // Chromium은 취소 시 change를 내지 않는 경우가 있어 창 포커스 복귀 뒤 정리합니다.
+    const win=doc.defaultView||window;
+    const onFocus=()=>setTimeout(()=>{if(!settled&&!i.files?.length)done(null)},250);
+    win.addEventListener("focus",onFocus,{once:true});
+    (doc.body||doc.documentElement).appendChild(i);
+    try{i.click()}catch(error){win.removeEventListener("focus",onFocus);done(null);throw error}
+  });
   async function compressImage(file,target=180*1024){const data=await readData(file),img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error("시간표 이미지를 읽지 못했습니다."));i.src=data}),canvas=document.createElement("canvas"),ctx=canvas.getContext("2d",{alpha:false});let scale=Math.min(1,1100/Math.max(img.naturalWidth,img.naturalHeight));for(let pass=0;pass<5;pass++){canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);for(const q of [.82,.72,.62,.52,.42]){const blob=await new Promise(r=>canvas.toBlob(r,"image/jpeg",q));if(blob?.size<=target)return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=reject;r.readAsDataURL(blob)})}scale*=.82}throw new Error("시간표 이미지 용량을 줄이지 못했습니다.")}
   function safeDate(y,m,d){const yy=Number(y),mm=Number(m),dd=Number(d);if(!yy||mm<1||mm>12||dd<1||dd>31)return"";return`${yy}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`}
   function parseLunch(text){const lines=String(text||"").replace(/\r/g,"").split("\n"),result={},now=nowDate();let current="";for(const raw of lines){const line=raw.trim();if(!line)continue;let m=line.match(/^(20\d{2})[-./년\s]+(\d{1,2})[-./월\s]+(\d{1,2})일?/);if(m)current=safeDate(m[1],m[2],m[3]);else{m=line.match(/^(\d{1,2})\s*월\s*(\d{1,2})\s*일/);if(m)current=safeDate(now.getFullYear(),m[1],m[2]);else{m=line.match(/^(\d{1,2})[./-](\d{1,2})(?:\s|$)/);if(m)current=safeDate(now.getFullYear(),m[1],m[2]);else if(current)(result[current]||(result[current]=[])).push(line)}}}return result}

@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.33-pip-session-idle-cache-20260819";
+const CACHE = "moaru-v64.5.35-pip-auth-feed-youtube-20260820";
 const CORE = [
   "./",
   "./index.html",
@@ -109,7 +109,9 @@ const CORE = [
   "./assets/sounds/games/game2.mp3",
   "./assets/sounds/games/game3.mp3",
   "./assets/sounds/notify.mp3",
-  "./assets/sounds/stamp.mp3"
+  "./assets/sounds/stamp.mp3",
+  "./assets/sounds/delivery-order-1.mp3",
+  "./assets/sounds/delivery-order-2.mp3"
 ];
 
 self.addEventListener("install", event => {

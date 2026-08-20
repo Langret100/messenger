@@ -31,6 +31,7 @@ MiniTalk.UI.Shell=(()=>{
   function navButton(feature){return D().el("button",{class:`nav-button ${MiniTalk.Store.get("route")===feature.id?"active":""}`,type:"button","data-route":feature.id,onclick:()=>MiniTalk.Router.go(feature.id)},[D().el("span",{text:feature.icon||"•"}),D().el("small",{text:feature.title})])}
   function renderNav(){const features=visibleFeatures(),order=normalizedOrder(features);features.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));const side=D().byId("sideRail"),bottom=D().byId("bottomNav");if(side)side.replaceChildren(...features.map(navButton));if(bottom)bottom.replaceChildren(...features.map(navButton))}
   function setActiveNav(id){const navId=id==="games"||id==="links"?"tools":id==="admin"?"settings":id;D().all("[data-route]").forEach(b=>b.classList.toggle("active",b.dataset.route===navId))}
+  function setAuthMode(active=true,doc){const Dom=D(doc),header=Dom.one(".app-header");header?.classList.toggle("hidden",Boolean(active));if(active){Dom.byId("headerActions")?.replaceChildren();Dom.byId("headerProfileButton")?.classList.add("hidden");Dom.byId("backBtn")?.classList.add("hidden")}}
   async function showApp(){document.getElementById("launchView")?.classList.add("hidden");D().byId("appShell")?.classList.remove("hidden");document.documentElement.classList.add("app-visible");if(!started){started=true;MiniTalk.Features.Auth.render(D().byId("authHost"))}const user=MiniTalk.Store.get("user");if(user)await enterWorkspace(user);MiniTalk.MobileImmersive?.afterAppShown?.()}
   function startWorkspaceBackground(user){
     if(activeUserId!==user.user_id)return;
@@ -42,7 +43,7 @@ MiniTalk.UI.Shell=(()=>{
   async function enterWorkspace(user){
     if(entering||activeUserId===user.user_id)return;
     entering=true;activeUserId=user.user_id;
-    D().byId("authHost")?.classList.add("hidden");D().byId("workspace")?.classList.remove("hidden");
+    setAuthMode(false);D().byId("authHost")?.classList.add("hidden");D().byId("workspace")?.classList.remove("hidden");
     const endInitialLoading=beginLoading();let initialLoadingOwned=true;
     try{
       /* 인증 응답 직후에는 첫 대화 화면 DOM을 먼저 완성합니다. */
@@ -63,11 +64,11 @@ MiniTalk.UI.Shell=(()=>{
       requestAnimationFrame(()=>setTimeout(()=>startWorkspaceBackground(user),0));
     }catch(error){
       if(initialLoadingOwned){initialLoadingOwned=false;endInitialLoading()}
-      activeUserId=null;toast(error.message||"화면을 여는 중 오류가 발생했습니다.");D().byId("authHost")?.classList.remove("hidden");D().byId("workspace")?.classList.add("hidden");MiniTalk.Realtime.cleanup?.();
+      activeUserId=null;toast(error.message||"화면을 여는 중 오류가 발생했습니다.");setAuthMode(true);D().byId("authHost")?.classList.remove("hidden");D().byId("workspace")?.classList.add("hidden");MiniTalk.Realtime.cleanup?.();
     }finally{entering=false}
   }
   function resetWorkspaceSession(){activeUserId=null;entering=false;MiniTalk.Store.set("transport","idle")}
   function updateInstallButton(v){document.getElementById("installBtn")?.classList.toggle("hidden",!v)}
   function start(){MiniTalk.Events.on("state:transport",()=>syncConnectionBadge());MiniTalk.Events.on("rt:error",info=>toast(info?.message||"실시간 서버 데이터를 읽지 못했습니다."));MiniTalk.Events.on("rt:connection-wait",renderRealtimeWaitState);MiniTalk.Events.on("auth:success",enterWorkspace);MiniTalk.Events.on("install:available",updateInstallButton);MiniTalk.Events.on("state:admin",renderNav);MiniTalk.Events.on("fullscreen:change",syncImmersiveButton);addEventListener("online",()=>syncConnectionBadge());addEventListener("offline",()=>syncConnectionBadge());addEventListener("keydown",event=>{if(event.key==="Escape"&&!D().byId("modalHost")?.classList.contains("hidden"))closeModal()});updateInstallButton(MiniTalk.WindowMode.canInstall?.()===true);syncConnectionBadge()}
-  return{start,showApp,enterWorkspace,resetWorkspaceSession,toast,notifyBanner,modal,closeModal,setHeader,setActiveNav,renderNav,forDocument,beginLoading,withLoading,syncConnectionBadge};
+  return{start,showApp,enterWorkspace,resetWorkspaceSession,setAuthMode,toast,notifyBanner,modal,closeModal,setHeader,setActiveNav,renderNav,forDocument,beginLoading,withLoading,syncConnectionBadge};
 })();

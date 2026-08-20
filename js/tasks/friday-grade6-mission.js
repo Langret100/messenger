@@ -3,7 +3,7 @@
  */
 MiniTalk.Tasks=MiniTalk.Tasks||{};
 MiniTalk.Tasks.FridayGrade6Mission=(()=>{
-  const OPEN_HOUR=9,TOTAL=20,PATH="moaru/v3/fridayMission";
+  const OPEN_HOUR=9,TOTAL=20,PATH="moaru/v3/fridayMission",REWARD_TYPE="WEEKLY_CHECK_OVER80",REWARD_COIN=3;
   const mathCats=["분수·소수","비와 비율","도형","자료 해석","문장제"];
   const korBank=[
     ["독해","'비가 와서 운동회가 연기되었다.'에서 운동회가 연기된 까닭은?","비가 와서",["비가 와서","날씨가 더워서","학생이 적어서","운동장이 넓어서"]],
@@ -87,7 +87,7 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     if(user().isGuest)return MiniTalk.UI.Shell.toast("로그인 후 참여할 수 있습니다.");
     const gate=windowInfo();if(!gate.open)return MiniTalk.UI.Shell.toast(`금요일 오전 9시까지 ${remainLabel()} 남았습니다.`);
     const questions=makeQuestions(),saved=await MiniTalk.Realtime.cloudGet(path(),null);
-    if(saved?.completed)return showReport(saved);
+    if(saved?.completed){const checked=await ensureWeeklyReward(saved);return showReport(checked||saved)}
     let index=Math.max(0,Math.min(questions.length,Number(saved?.index)||0)),answers=Array.isArray(saved?.answers)?saved.answers:[];
     const D=MiniTalk.UI.Dom,body=D.el("div",{class:"friday-solver modal-stack"});
     function draw(){
@@ -100,13 +100,41 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     async function finish(){
       const report=buildReport(answers),record={week:weekKey(),index:questions.length,answers,completed:true,report,completedAt:nowMs(),updatedAt:nowMs()};
       const savedFinal=await MiniTalk.Realtime.cloudTransaction(path(),current=>current?.completed?current:{...record,answers:Array.isArray(current?.answers)&&current.answers.length>=answers.length?current.answers:answers});
-      MiniTalk.UI.Shell.closeModal();showReport(savedFinal||record)
+      const rewarded=await ensureWeeklyReward(savedFinal||record);
+      MiniTalk.UI.Shell.closeModal();showReport(rewarded||savedFinal||record)
     }
     MiniTalk.UI.Shell.modal("금요일 초6 학습점검",body);draw()
   }
 
+
+  function scorePercent(record){const r=record?.report||buildReport(record?.answers||[]);return r.total?Math.round((Number(r.score)||0)/(Number(r.total)||1)*100):0}
+  function rewardEligible(record){return scorePercent(record)>80}
+  async function ensureWeeklyReward(record){
+    if(!record?.completed||!rewardEligible(record))return record;
+    if(record?.reward?.acknowledged===true)return record;
+    const currentUser=user();if(!currentUser?.user_id||currentUser.isGuest)return record;
+    try{
+      const body=new URLSearchParams({mode:"coin_reward",user_id:String(currentUser.user_id),reward_type:REWARD_TYPE,reward_key:String(record.week||weekKey())});
+      const response=await fetch(MiniTalkConfig.sheetUrl,{method:"POST",body});
+      if(!response.ok)throw new Error(`HTTP ${response.status}`);
+      const result=await response.json();if(!result||result.ok===false)throw new Error(result?.error||"주간 보상 요청 실패");
+      const granted=result.applied!==false&&result.granted!==false;
+      const reward={eligible:true,amount:REWARD_COIN,acknowledged:true,granted,updatedAt:nowMs()};
+      const saved=await MiniTalk.Realtime.cloudTransaction(path(),current=>current?.completed?{...current,reward}:current);
+      const nextCoin=Number(result.newCoin);
+      if(Number.isFinite(nextCoin))MiniTalk.Economy.CoinWallet?.setLocal?.(nextCoin,"friday-weekly-reward");
+      else MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(()=>{});
+      if(granted)MiniTalk.UI.Shell.toast(`금요일 학습점검 보상 · 코인 ${REWARD_COIN}개 적립!`);
+      return saved||{...record,reward};
+    }catch(error){
+      console.warn("금요일 학습점검 코인 보상 실패",error);
+      MiniTalk.UI.Shell.toast("점검 결과는 저장됐지만 코인 보상 확인이 지연되고 있습니다. 다시 열면 재확인합니다.");
+      return record;
+    }
+  }
+
   function buildReport(answers){const groups={};answers.forEach(a=>{const key=`${a.subject} · ${a.category}`,g=groups[key]||(groups[key]={correct:0,total:0});g.total++;if(a.correct)g.correct++});const rows=Object.entries(groups).map(([name,g])=>({name,...g,rate:Math.round(g.correct/g.total*100)})).sort((a,b)=>a.rate-b.rate),score=answers.filter(a=>a.correct).length;return{score,total:answers.length,rows,weak:rows.slice(0,3).map(r=>r.name),strong:[...rows].sort((a,b)=>b.rate-a.rate).slice(0,3).map(r=>r.name)}}
-  function showReport(record){const D=MiniTalk.UI.Dom,r=record.report||buildReport(record.answers||[]),body=D.el("div",{class:"friday-report modal-stack"},[D.el("h3",{text:`이번 주 ${r.score}/${r.total}문항 정답`}),D.el("div",{class:"friday-bars"},r.rows.map(x=>D.el("div",{class:"friday-bar-row"},[D.el("span",{text:x.name}),D.el("i",{style:`--rate:${x.rate}%`}),D.el("b",{text:`${x.rate}%`})]))),D.el("section",{class:"section-card"},[D.el("strong",{text:"잘한 점"}),D.el("p",{text:(r.strong||[]).join(", ")||"영역별 기록을 더 모아보세요."})]),D.el("section",{class:"section-card"},[D.el("strong",{text:"보완하면 좋은 점"}),D.el("p",{text:(r.weak||[]).join(", ")||"특별히 낮은 영역이 없습니다."}),D.el("small",{class:"muted",text:"낮은 영역의 기본 개념을 다시 확인하고 비슷한 문제를 천천히 풀어보세요."})])]);MiniTalk.UI.Shell.modal("이번 주 학습 피드백",body)}
-  function render(){const D=MiniTalk.UI.Dom,info=windowInfo(),card=D.el("section",{class:`friday-mission-card section-card ${info.open?"open":"locked"}`},[D.el("div",{class:"friday-mission-copy"},[D.el("div",{class:"friday-mission-eyebrow",text:"주간 미션"}),D.el("strong",{text:"금요일 초6 학습점검"}),D.el("small",{class:"muted",text:"수학·국어 20문항"}),D.el("b",{class:"friday-countdown",text:info.open?"오늘 자정 전까지 참여 가능":`열리기까지 ${remainLabel()}`})]),info.open?D.el("button",{class:"button primary compact-button friday-start-button",type:"button",text:"시작",disabled:user().isGuest,onclick:open}):D.el("div",{class:"friday-lock-overlay","aria-hidden":"true"},[D.el("span",{text:"🔒"})])]);if(!info.open){const label=card.querySelector(".friday-countdown"),timer=setInterval(()=>{if(!card.isConnected)return clearInterval(timer);const next=windowInfo();if(next.open){clearInterval(timer);if(MiniTalk.Store.get("route")==="tasks")MiniTalk.Features.Tasks.render(MiniTalk.UI.Dom.byId("viewHost"));return}label.textContent=`열리기까지 ${remainLabel()}`},30000)}return card}
-  return{render,open,windowInfo,makeQuestions,buildReport,weekKey};
+  function showReport(record){const D=MiniTalk.UI.Dom,r=record.report||buildReport(record.answers||[]),percent=scorePercent(record),eligible=percent>80,reward=record.reward||{},rewardText=eligible?(reward.acknowledged?`보상 ${REWARD_COIN}코인 · ${reward.granted?"적립 완료":"이미 적립됨"}`:`보상 ${REWARD_COIN}코인 · 적립 확인 중`):`80점을 넘어야 보상 ${REWARD_COIN}코인을 받을 수 있어요`,body=D.el("div",{class:"friday-report modal-stack"},[D.el("h3",{text:`이번 주 ${r.score}/${r.total}문항 정답 · ${percent}점`}),D.el("section",{class:`friday-reward-card section-card ${eligible?"earned":"missed"}`},[D.el("div",{class:"friday-reward-title"},[D.el("img",{src:"assets/ui/notebook-coin.svg",alt:""}),D.el("strong",{text:eligible?`주간 보상 +${REWARD_COIN}`:"주간 보상"})]),D.el("p",{text:rewardText}),D.el("small",{class:"muted",text:"금요일 학습점검은 80점 초과 시 주 1회 보상됩니다."})]),D.el("div",{class:"friday-bars"},r.rows.map(x=>D.el("div",{class:"friday-bar-row"},[D.el("span",{text:x.name}),D.el("i",{style:`--rate:${x.rate}%`}),D.el("b",{text:`${x.rate}%`})]))),D.el("section",{class:"section-card"},[D.el("strong",{text:"잘한 점"}),D.el("p",{text:(r.strong||[]).join(", ")||"영역별 기록을 더 모아보세요."})]),D.el("section",{class:"section-card"},[D.el("strong",{text:"보완하면 좋은 점"}),D.el("p",{text:(r.weak||[]).join(", ")||"특별히 낮은 영역이 없습니다."}),D.el("small",{class:"muted",text:"낮은 영역의 기본 개념을 다시 확인하고 비슷한 문제를 천천히 풀어보세요."})])]);MiniTalk.UI.Shell.modal("이번 주 학습 피드백",body)}
+  function render(){const D=MiniTalk.UI.Dom,info=windowInfo(),card=D.el("section",{class:`friday-mission-card section-card ${info.open?"open":"locked"}`},[D.el("div",{class:"friday-mission-copy"},[D.el("div",{class:"friday-mission-eyebrow",text:"주간 미션"}),D.el("strong",{text:"금요일 초6 학습점검"}),D.el("small",{class:"muted",text:`수학·국어 20문항 · 80점 초과 시 🪙 +${REWARD_COIN}`}),D.el("b",{class:"friday-countdown",text:info.open?"오늘 자정 전까지 참여 가능":`열리기까지 ${remainLabel()}`})]),info.open?D.el("button",{class:"button primary compact-button friday-start-button",type:"button",text:"시작",disabled:user().isGuest,onclick:open}):D.el("div",{class:"friday-lock-overlay","aria-hidden":"true"},[D.el("span",{text:"🔒"})])]);if(!info.open){const label=card.querySelector(".friday-countdown"),timer=setInterval(()=>{if(!card.isConnected)return clearInterval(timer);const next=windowInfo();if(next.open){clearInterval(timer);if(MiniTalk.Store.get("route")==="tasks")MiniTalk.Features.Tasks.render(MiniTalk.UI.Dom.byId("viewHost"));return}label.textContent=`열리기까지 ${remainLabel()}`},30000)}return card}
+  return{render,open,windowInfo,makeQuestions,buildReport,weekKey,scorePercent,rewardEligible,ensureWeeklyReward};
 })();

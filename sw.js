@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.39-game-rank-weekly-20260820";
+const CACHE = "moaru-v64.5.43-feed-heart-state-audio-reward-20260820";
 const CORE = [
   "./",
   "./index.html",

@@ -1,7 +1,7 @@
 /* 학급 피드: 서버 최신 30개만 유지하고 5개씩 페이지 조회합니다. 미디어는 별도 경로에서 지연 로드합니다. */
 MiniTalk.Features.Feed=(()=>{
   const STATE_PATH="moaru/v3/feedState",POSTS_PATH=`${STATE_PATH}/posts`,TOTALS_PATH=`${STATE_PATH}/totals`,MEDIA_PATH="moaru/v3/feedMedia",MAX_POSTS=30,PAGE_SIZE=5,MAX_COMMENTS=20,COMMENT_LIMIT=60,PHOTO_LIMIT=60*1024,PHOTO_BLOB_TARGET=44*1024,VIDEO_LIMIT=700*1024,VIDEO_BLOB_LIMIT=500*1024,VIDEO_THUMB_LIMIT=18*1024,VIDEO_THUMB_BLOB_TARGET=12*1024,VIDEO_SECONDS=7,CLEANUP_KEY="feed.pendingMediaCleanup",POST_CACHE="feed-post",MEDIA_CACHE="feed-media",THUMB_CACHE="feed-thumb";
-  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0;const pendingLocalHeartEffects=new Set();
+  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0;const pendingLocalHeartEffects=new Set(),openCommentComposers=new Set();
   const user=()=>MiniTalk.Store.get("user")||{};
   const safeUserKey=id=>String(id||"").replace(/[.#$\[\]\/]/g,"_");
   function postRows(){return Object.values(state.posts||{}).filter(Boolean).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)||String(b.id).localeCompare(String(a.id)))}
@@ -50,11 +50,11 @@ MiniTalk.Features.Feed=(()=>{
       const latestCreated=latest.reduce((max,row)=>Math.max(max,Number(row.value?.createdAt)||0),0);
       const apply=(id,value)=>{applyPost(id,value);if(serverPostCount)serverPostCount=Math.min(MAX_POSTS,serverPostCount+1)};
       const changed=(id,value)=>{if(!state.posts[id])return;applyPost(id,value,state.posts[id])};
-      const remove=id=>{delete state.posts[id];cachedPostRows=cachedPostRows.filter(row=>String(row.key)!==String(id));MiniTalk.DataCache?.remove?.(POST_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(MEDIA_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(THUMB_CACHE,id).catch(()=>{});serverPostCount=Math.max(0,serverPostCount-1);patchPost(id)};
+      const remove=id=>{delete state.posts[id];openCommentComposers.delete(String(id));cachedPostRows=cachedPostRows.filter(row=>String(row.key)!==String(id));MiniTalk.DataCache?.remove?.(POST_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(MEDIA_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(THUMB_CACHE,id).catch(()=>{});serverPostCount=Math.max(0,serverPostCount-1);patchPost(id)};
       postsUnsub=MiniTalk.Realtime.cloudSubscribeDelta(POSTS_PATH,{added:apply,changed,removed:remove},{orderByChild:"createdAt",startAt:latestCreated?latestCreated+1:1});
     }finally{syncStarting=false}
   }
-  function stopSub(){postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;loadingOlder=false;hasMorePosts=true;pagingArmed=false;totalHeartReady=false;serverPostCount=0;cachedPostRows=[];pendingLocalHeartEffects.clear();state={posts:{}}}
+  function stopSub(){postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;loadingOlder=false;hasMorePosts=true;pagingArmed=false;totalHeartReady=false;serverPostCount=0;cachedPostRows=[];pendingLocalHeartEffects.clear();openCommentComposers.clear();state={posts:{}}}
   async function compressImageFile(file,maxSide=960,target=PHOTO_LIMIT){
     if(!file?.type?.startsWith("image/"))throw new Error("사진 파일을 선택해주세요.");
     const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("사진을 읽지 못했습니다."));r.readAsDataURL(file)});
@@ -179,12 +179,24 @@ MiniTalk.Features.Feed=(()=>{
     finally{if(input.isConnected)input.disabled=false;if(button.isConnected)button.disabled=false}
   }
   function commentsBlock(post){
-    const D=MiniTalk.UI.Dom,wrap=D.el("section",{class:"feed-comments","data-feed-comments":post.id}),rows=commentRows(post),list=D.el("div",{class:"feed-comment-list"});
+    const D=MiniTalk.UI.Dom,open=openCommentComposers.has(String(post.id)),wrap=D.el("section",{class:`feed-comments${open?" compose-open":""}`,"data-feed-comments":post.id}),rows=commentRows(post),list=D.el("div",{class:"feed-comment-list"});
     const visible=rows.slice(-3);visible.forEach(row=>list.append(D.el("div",{class:"feed-comment-row"},[D.el("strong",{text:row.nickname||"사용자"}),D.el("span",{text:row.text})])));
     if(rows.length>3)list.prepend(D.el("small",{class:"feed-comment-more muted",text:`이전 댓글 ${rows.length-3}개 · 최근 댓글만 표시`}));
     wrap.append(list);
-    if(!user().isGuest){const input=D.el("input",{class:"feed-comment-input",type:"text",maxlength:String(COMMENT_LIMIT),placeholder:"짧게 댓글 달기…","aria-label":"짧은 댓글"}),send=D.el("button",{class:"feed-comment-send",type:"button",text:"등록"});const submit=()=>addComment(post,input,send);send.onclick=submit;input.onkeydown=e=>{if(e.key==="Enter"&&!e.isComposing){e.preventDefault();submit()}};wrap.append(D.el("div",{class:"feed-comment-compose"},[input,send]))}
+    if(!user().isGuest){const input=D.el("input",{class:"feed-comment-input",type:"text",maxlength:String(COMMENT_LIMIT),placeholder:"짧게 댓글 달기…","aria-label":"짧은 댓글"}),send=D.el("button",{class:"feed-comment-send",type:"button",text:"등록"}),compose=D.el("div",{class:"feed-comment-compose","aria-hidden":open?"false":"true"},[input,send]);const submit=()=>addComment(post,input,send);send.onclick=submit;input.onkeydown=e=>{if(e.key==="Enter"&&!e.isComposing){e.preventDefault();submit()}};wrap.append(compose)}
     return wrap;
+  }
+  function setCommentComposer(card,open,focus=false){
+    if(!card||user().isGuest)return;const id=String(card.dataset.postId||"");if(!id)return;
+    if(open)openCommentComposers.add(id);else openCommentComposers.delete(id);
+    const comments=card.querySelector("[data-feed-comments]"),compose=comments?.querySelector(".feed-comment-compose");if(!comments||!compose)return;
+    comments.classList.toggle("compose-open",open);compose.setAttribute("aria-hidden",open?"false":"true");
+    if(open&&focus)requestAnimationFrame(()=>compose.querySelector(".feed-comment-input")?.focus({preventScroll:true}));
+  }
+  function toggleCommentComposerFromCard(event,card){
+    if(user().isGuest||event.defaultPrevented||event.button>0)return;const target=event.target;if(!(target instanceof Element))return;
+    if(target.closest("button,input,textarea,a,iframe,video,[contenteditable],.feed-media-placeholder"))return;
+    const comments=card.querySelector("[data-feed-comments]");if(!comments)return;setCommentComposer(card,!comments.classList.contains("compose-open"),true);
   }
   function patchComments(id){if(MiniTalk.Router.current()!=="feed")return;const post=state.posts[id],card=MiniTalk.UI.Dom.one(`.feed-card[data-post-id="${CSS.escape(String(id))}"]`);if(!post||!card)return;const current=card.querySelector("[data-feed-comments]");const next=commentsBlock(post);current?current.replaceWith(next):card.append(next)}
 
@@ -236,7 +248,7 @@ MiniTalk.Features.Feed=(()=>{
       card.append(mediaHost)
     }
     const hasHearts=(Number(post.heartCount)||0)>0,heart=D.el("button",{class:`feed-heart ${(liked||hasHearts)?"active":""}`,type:"button","aria-label":"하트"},[D.el("span",{text:(liked||hasHearts)?"♥":"♡"}),D.el("b",{text:String(Number(post.heartCount)||0)})]);
-    heart.onpointerdown=primeHeartAudio;heart.onclick=()=>toggleHeart(post.id,heart);card.append(D.el("footer",{class:"feed-card-foot"},[heart]),commentsBlock(post));return card
+    heart.onpointerdown=primeHeartAudio;heart.onclick=()=>toggleHeart(post.id,heart);card.append(D.el("footer",{class:"feed-card-foot"},[heart]),commentsBlock(post));card.addEventListener("click",event=>toggleCommentComposerFromCard(event,card));return card
   }
   function setupLazyMedia(root){
     const nodes=[...(root.querySelectorAll?.("[data-media-type]")||[])];

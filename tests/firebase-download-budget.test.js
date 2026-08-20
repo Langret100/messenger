@@ -25,6 +25,6 @@ ok(rules.rules.profiles.$nickname['.validate'].includes('<= 15360')&&rules.rules
 ok(rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 61440')&&rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 716800')&&rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 18432'),'feed media rules must enforce image/video/thumbnail budgets');
 
 ok((rules.rules.moaru.v3.feedState.posts['.indexOn']||[]).includes('createdAt'),'feed createdAt query index missing');
-for(const ref of ['data-cache.js?v=64.5.24','realtime.js?v=64.5.36','attachments.js?v=65.0.1','chats.js?v=64.5.16','feed.js?v=65.0.14','profile-editor.js?v=64.4.2'])ok(html.includes(ref),`cache version missing: ${ref}`);
+for(const ref of ['data-cache.js?v=64.5.24','realtime.js?v=64.5.36','attachments.js?v=65.0.1','chats.js?v=64.5.16','feed.js?v=65.0.15','profile-editor.js?v=64.4.2'])ok(html.includes(ref),`cache version missing: ${ref}`);
 ok(sw.includes('moaru-v64.5.46-profile-15kb-20260820')&&app.includes('sw.js?v=64.5.46'),'service worker version missing');
 console.log('FIREBASE_DOWNLOAD_BUDGET_OK');

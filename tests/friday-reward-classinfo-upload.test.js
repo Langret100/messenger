@@ -13,6 +13,6 @@ ok(friday.includes('금요일 학습점검은 80점 초과 시 주 1회 보상�
 ok(coin.includes('WEEKLY_CHECK_OVER80')&&coin.includes('delta = 3'),'Apps Script weekly reward type is not +3');
 ok(classInfo.includes('MiniTalk.UI.Dom.doc?.()||document')&&classInfo.includes('(doc.body||doc.documentElement).appendChild(i)'),'class-info picker is not attached to active UI document');
 ok(classInfo.includes('win.addEventListener("focus",onFocus,{once:true})')&&classInfo.includes('i.addEventListener("change"'),'class-info picker cancellation/change cleanup missing');
-ok(html.includes('js/tools/class-info.js?v=65.0.3')&&html.includes('js/tasks/friday-grade6-mission.js?v=65.0.4')&&html.includes('css/features/feed-classinfo-weekly.css?v=65.0.17'),'new class-info/Friday cache versions missing');
+ok(html.includes('js/tools/class-info.js?v=65.0.3')&&html.includes('js/tasks/friday-grade6-mission.js?v=65.0.4')&&html.includes('css/features/feed-classinfo-weekly.css?v=65.0.18'),'new class-info/Friday cache versions missing');
 ok(css.includes('.friday-reward-card'),'Friday reward result styling missing');
 console.log('FRIDAY_REWARD_CLASSINFO_UPLOAD_OK');

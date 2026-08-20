@@ -10,6 +10,6 @@ ok(rt.includes('async function getRoom(roomId)')&&chats.includes('if(!room?._det
 ok(rules.includes('"roomSummaries"')&&rules.includes('"userRooms"'),'Firebase rules missing summary/index paths');
 ok(css.includes('min-height:calc(100dvh + 72px);overflow-y:auto')&&css.includes('.app-shell{position:sticky;top:0}'),'mobile root scroll allowance missing');
 ok(mobile.includes('touchStartY-y>22')&&mobile.includes('nudgeBrowserChrome()'),'mobile chrome gesture assist missing');
-ok(html.includes('js/adapters/realtime.js?v=64.5.37')&&html.includes('js/adapters/mobile-immersive.js?v=57')&&html.includes('js/features/chats.js?v=64.5.16')&&html.includes('js/app.js?v=64.5.34'),'v5.24 cache versions stale');
+ok(html.includes('js/adapters/realtime.js?v=64.5.37')&&html.includes('js/adapters/mobile-immersive.js?v=57')&&html.includes('js/features/chats.js?v=64.5.17')&&html.includes('js/app.js?v=64.5.34'),'v5.24 cache versions stale');
 ok(sw.includes('moaru-v64.5.46-profile-15kb-20260820')&&app.includes('sw.js?v=64.5.46'),'v5.24 service worker stale');
 console.log('ROOM_SUMMARY_MOBILE_CHROME_OK');

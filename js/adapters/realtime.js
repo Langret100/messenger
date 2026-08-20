@@ -32,7 +32,9 @@ MiniTalk.Realtime=(()=>{
     if(raw.startsWith("[")){try{const parsed=JSON.parse(raw);if(Array.isArray(parsed))return parsed}catch{}}
     return raw.split(/[,|\n]/).map(item=>item.trim()).filter(Boolean)
   }
-  const isRoomMember=room=>room?.id==="global"||room?._member===true||Boolean(roomMembers(room)[user?.user_id])||String(room?.creator||"")===String(user?.user_id||"");
+  /* 멤버 권한은 닉네임이 아니라 서버의 user_id/내 userRooms 인덱스로만 판정합니다.
+     _member는 방 목록용 summary에서만 신뢰하고, 상세 room에 남은 내부 플래그는 권한 판정에 쓰지 않습니다. */
+  const isRoomMember=room=>room?.id==="global"||(room?._summary===true&&room?._member===true)||Boolean(roomMembers(room)[String(user?.user_id||"")])||String(room?.creator||"")===String(user?.user_id||"");
   const roomSummariesPath=()=>MiniTalkConfig.paths.roomSummaries||"moaru/v3/roomSummaries";
   const ROOM_SUMMARY_CACHE_MAX_IDLE=30*24*60*60*1000;
   const roomSummaryCacheKey=()=>`room.summaryCache.${user?.user_id||"guest"}`;
@@ -76,16 +78,18 @@ MiniTalk.Realtime=(()=>{
     Object.entries(roomMembers(value)).forEach(([key,entry])=>{
       const member=entry&&typeof entry==="object"?entry:{nickname:String(entry||key)};
       const nickname=String(member.nickname||member.name||key).trim();
-      const memberId=nickname===user?.nickname?String(user.user_id):String(member.user_id||member.userId||key);
+      /* 같은 닉네임을 가진 다른 사용자를 현재 사용자로 승격하지 않습니다. */
+      const memberId=String(member.user_id||member.userId||key);
       members[memberId]={...member,user_id:memberId,nickname}
     });
     participants.forEach((entry,index)=>{
       const nickname=String(typeof entry==="string"?entry:(entry?.nickname||entry?.name||"")).trim();if(!nickname)return;
-      const memberId=String((typeof entry==="object"&&(entry.user_id||entry.userId))||(nickname===user?.nickname?user.user_id:`legacy-${index}-${nickname.replace(/[.#$\[\]/]/g,"-")}`));
+      const memberId=String((typeof entry==="object"&&(entry.user_id||entry.userId))||`legacy-${index}-${nickname.replace(/[.#$\[\]/]/g,"-")}`);
       members[memberId]={...(typeof entry==="object"?entry:{}),user_id:memberId,nickname,role:index===0?"owner":"member",joinedAt:Number((typeof entry==="object"&&entry.joinedAt)||0)}
     });
     const creatorRaw=String(value.creator||value.creator_user_id||value.owner||"");
-    const creator=creatorRaw===user?.nickname?String(user.user_id):creatorRaw;
+    /* 방장도 닉네임 일치만으로 현재 사용자라고 간주하지 않습니다. */
+    const creator=creatorRaw;
     const lastMessage=String(value.lastMessage||value.last_message||value.preview||"");
     const explicitLastAt=Number(value.lastMessageAt||value.last_message_at||value.latestMessageAt||value.latest_message_at||0);
     const lastMessageAt=explicitLastAt>0?explicitLastAt:(lastMessage?Number(value.updatedAt||value.updated_at||0):0);

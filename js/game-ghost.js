@@ -1,4 +1,9 @@
-// game-ghost.js v6 - Live2D 연동 (말풍선은 iframe 내부, 캐릭터는 부모 창 Live2D)
+// game-ghost.js v7 - 미니게임 우하단 미나 캐릭터 + 말풍선 연동
+// v7 변경사항:
+//   - 원본 미나 프로그램의 game-ghost 연출을 복원하되 실제 사용하는 15개 경량 이미지로 제한
+//   - 캐릭터는 게임 iframe 내부 우하단에 유지되고, 반응 시 표정/동작 프레임이 5초간 바뀐 뒤 대기로 복귀
+//   - 다마고치는 이 스크립트를 불러오지 않으므로 캐릭터 연출 대상에서 제외
+//   - 320px 폭 최적화 PNG를 사용해 원본 감정 이미지 세트 전체를 싣지 않음
 // v6 변경사항:
 //   - hit(피격), lowHp(저체력), wrong(오답), chest(보물상자) 이벤트 추가
 //   - levelup/reward/boss 대사 각 10개로 확장
@@ -127,18 +132,92 @@
     chest:     "good"        // game-emotion.js 미패치 환경: good으로 fallback
   };
 
+  // 게임용 미나 이미지는 원본 프로그램에서 실제 이 연출에 쓰던 프레임만 추린 경량본입니다.
+  const MINA_BASE = "../assets/game-mina/";
+  const MINA_ASSET_REV = "?v=65";
+  const MINA_FRAMES = {
+    idle:  ["기본대기1.png", "기본대기2.png"],
+    listen:["경청1.png", "경청2.png"],
+    greet: ["인사1.png", "인사2.png"],
+    cheer: ["만세2.png"],
+    joy:   ["기쁨2.png"],
+    fun:   ["신남1.png", "신남2.png"],
+    fail:  ["절망1.png", "절망2.png"],
+    sad:   ["실망2.png"],
+    shy:   ["부끄러움1.png", "부끄러움2.png"]
+  };
+  const EVENT_EMOTIONS = {
+    start:["cheer","listen","greet"],
+    correct:["joy","fun","cheer","greet"],
+    miss:["sad","listen","shy"],
+    wrong:["sad","listen","shy"],
+    hit:["sad","shy"],
+    lowHp:["fail","sad"],
+    gameover:["fail","sad","shy"],
+    boss:["listen","cheer"],
+    levelup:["joy","fun","cheer"],
+    bossClear:["cheer","joy","fun"],
+    reward:["fun","joy","listen"],
+    chest:["fun","joy","listen"]
+  };
+
   let bubbleEl = null;
+  let characterEl = null;
   let hideTimer = null;
+  let frameTimer = null;
+  let emotionResetTimer = null;
+  let currentFrames = MINA_FRAMES.idle;
+  let frameIndex = 0;
 
   function choice(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
+  function setCharacterFrames(frames) {
+    currentFrames = (frames && frames.length) ? frames : MINA_FRAMES.idle;
+    frameIndex = 0;
+    if (characterEl) characterEl.src = MINA_BASE + currentFrames[0] + MINA_ASSET_REV;
+  }
+
+  function pickCharacterEmotion(eventType) {
+    const pool = EVENT_EMOTIONS[eventType] || ["idle"];
+    return choice(pool);
+  }
+
+  function applyCharacterLayout() {
+    if (!characterEl) return;
+    const isMob = window.innerWidth <= 768;
+    const width = isMob
+      ? Math.min(140, Math.max(85, Math.round(window.innerWidth * 0.28)))
+      : Math.min(200, Math.max(120, Math.round(window.innerWidth * 0.14)));
+    const maxHeight = isMob
+      ? Math.min(220, Math.max(140, Math.round(window.innerHeight * 0.26)))
+      : Math.min(300, Math.max(200, Math.round(window.innerHeight * 0.32)));
+    characterEl.style.width = width + "px";
+    characterEl.style.maxHeight = maxHeight + "px";
+    characterEl.style.right = (isMob ? 2 : 6) + "px";
+  }
+
   function ensureDom() {
-    if (bubbleEl) return;
+    if (bubbleEl && characterEl) return;
     const d = document;
     const style = d.createElement("style");
     style.textContent = `
+      .game-ghost-character {
+        position: fixed;
+        right: 6px;
+        bottom: 0;
+        width: 160px;
+        height: auto;
+        max-height: 260px;
+        object-fit: contain;
+        object-position: right bottom;
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,.22));
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-drag: none;
+        z-index: 10001;
+      }
       .game-ghost-bubble {
         position: fixed;
         right: auto;
@@ -176,9 +255,26 @@
       }
     `;
     d.head.appendChild(style);
+
+    characterEl = d.createElement("img");
+    characterEl.className = "game-ghost-character";
+    characterEl.alt = "미나";
+    characterEl.decoding = "async";
+    characterEl.src = MINA_BASE + MINA_FRAMES.idle[0];
+    d.body.appendChild(characterEl);
+
     bubbleEl = d.createElement("div");
     bubbleEl.className = "game-ghost-bubble";
     d.body.appendChild(bubbleEl);
+
+    applyCharacterLayout();
+    window.addEventListener("resize", applyCharacterLayout, { passive: true });
+
+    frameTimer = setInterval(function () {
+      if (!characterEl || currentFrames.length < 2) return;
+      frameIndex = (frameIndex + 1) % currentFrames.length;
+      characterEl.src = MINA_BASE + currentFrames[frameIndex] + MINA_ASSET_REV;
+    }, 3000);
   }
 
   function calcBubblePos() {
@@ -227,8 +323,14 @@
     if (!lines || !lines.length) return;
     const line = choice(lines);
 
-    // 말풍선은 iframe 안에 표시
+    // 말풍선은 iframe 안에 표시하고, 바로 아래 미나 표정/동작도 함께 바꿉니다.
     showBubble(line);
+    const emotionKey = pickCharacterEmotion(eventType);
+    setCharacterFrames(MINA_FRAMES[emotionKey] || MINA_FRAMES.idle);
+    if (emotionResetTimer) clearTimeout(emotionResetTimer);
+    emotionResetTimer = setTimeout(function () {
+      setCharacterFrames(MINA_FRAMES.idle);
+    }, 5000);
 
     // 부모 창으로 감정 이벤트 + 선택된 대사 전달
     // line을 함께 보내면 game-emotion.js v2 이상에서 TTS가 동일한 대사를 읽음

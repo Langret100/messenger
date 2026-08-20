@@ -398,12 +398,17 @@ function runGameWeeklyRankingRewards() {
   const now = new Date();
   const meta = typeof getWeekMeta_ === "function" ? getWeekMeta_(now) : null;
   const weekday = meta && meta.weekday ? Number(meta.weekday) : 0;
-  const hour = Number(Utilities.formatDate(now, "Asia/Seoul", "H"));
 
-  // 예약 실행이 엉뚱한 시각에 호출되는 상황을 방어합니다.
-  if (weekday !== 1 || hour !== 9) {
-    Logger.log("game weekly reward skipped: weekday=" + weekday + ", hour=" + hour);
-    return { ok: true, skipped: true, reason: "NOT_MONDAY_09_KST" };
+  /*
+   * nearMinute(0)은 Apps Script 규격상 목표 분 기준 앞뒤로 실행될 수 있습니다.
+   * 설치 트리거가 MONDAY + atHour(9) + nearMinute(0)으로 예약되어 있으므로
+   * 본체에서 hour===9를 다시 강제하면 08:xx 쪽으로 당겨 실행된 정상 트리거가
+   * 그 주 보상을 통째로 건너뛸 수 있습니다. 여기서는 월요일 여부만 방어하고,
+   * 같은 주 중복 지급은 GAME_RANK_TOP3 로그 키가 담당합니다.
+   */
+  if (weekday !== 1) {
+    Logger.log("game weekly reward skipped: weekday=" + weekday);
+    return { ok: true, skipped: true, reason: "NOT_MONDAY_KST" };
   }
 
   const results = [];
@@ -470,7 +475,7 @@ function installGameWeeklyRankingRewardTrigger() {
  * (내부) 보상로그 시트를 가져오거나 없으면 생성
  */
 function getOrCreateRewardLogSheet_() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = SpreadsheetApp.openById(SHEET_ID);
   let sheet = ss.getSheetByName(REWARD_LOG_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(REWARD_LOG_SHEET);

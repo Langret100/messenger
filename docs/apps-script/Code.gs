@@ -144,10 +144,6 @@ function doGet(e) {
       case "attendance_mark":
         return attendanceMark_(data);
 
-      // 게임 점수 업데이트도 GET으로 테스트할 수 있게 열어둠
-      case "game_update_score":
-        return gameUpdateScore_(data);
-
             // 🔹 FCM 웹 푸시 알림 발송 (js/fcm-push.js, js/social-messenger.js 연동)
       case "fcm_push":
         return handleFcmPush_(e);
@@ -1224,19 +1220,37 @@ function sortGameSheetAndReRank_(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
 
-  const range = sheet.getRange(2, 1, lastRow - 1, 4); // A:D
-  range.sort({ column: 3, ascending: false });
+  /*
+   * 사용자별 행은 하나만 유지합니다. 과거 동시 제출 등으로 중복 행이 생겼다면
+   * 가장 높은 점수를 보존해 병합한 뒤 순위를 다시 매깁니다.
+   */
+  const values = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const users = {};
+  values.forEach(function(row) {
+    const userId = String(row[0] || "").trim();
+    if (!userId) return;
+    const username = String(row[1] || "").trim();
+    const score = Math.max(0, Math.floor(Number(row[2]) || 0));
+    const previous = users[userId];
+    if (!previous || score > previous.score) {
+      users[userId] = { userId: userId, username: username || (previous && previous.username) || "", score: score };
+    } else if (!previous.username && username) {
+      previous.username = username;
+    }
+  });
 
-  const values = range.getValues();
-  const newValues = [];
-  for (var i = 0; i < values.length; i++) {
-    const row = values[i];
-    const score = Number(row[2]) || 0;
-    const rank = i + 1;
-    newValues.push([row[0], row[1], score, rank]);
-  }
+  const rows = Object.keys(users).map(function(userId) { return users[userId]; });
+  rows.sort(function(a, b) {
+    return b.score - a.score || String(a.userId).localeCompare(String(b.userId));
+  });
 
-  range.setValues(newValues);
+  // 기존 데이터 영역을 먼저 비워 중복/삭제된 옛 행이 남지 않게 합니다.
+  sheet.getRange(2, 1, lastRow - 1, 4).clearContent();
+  if (!rows.length) return;
+  const ranked = rows.map(function(row, index) {
+    return [row.userId, row.username, row.score, index + 1];
+  });
+  sheet.getRange(2, 1, ranked.length, 4).setValues(ranked);
 }
 
 function getGameUserRank_(sheet, userId) {
@@ -1269,48 +1283,57 @@ function gameUpdateScore_(data) {
   }
 
   const newScore = Number(scoreRaw);
-  if (isNaN(newScore)) {
-    return jsonResponse_({ ok: false, error: "score가 숫자가 아닙니다." });
+  if (!Number.isFinite(newScore) || newScore < 0 || Math.floor(newScore) !== newScore) {
+    return jsonResponse_({ ok: false, error: "score는 0 이상의 유한한 정수여야 합니다." });
   }
 
-  let sheet;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) {
+    return jsonResponse_({ ok: false, error: "GAME_SCORE_BUSY" });
+  }
   try {
-    sheet = getGameSheetSafe_(gameName);
-  } catch (err) {
-    return jsonResponse_({ ok: false, error: String(err) });
-  }
+    let sheet;
+    try {
+      sheet = getGameSheetSafe_(gameName);
+    } catch (err) {
+      return jsonResponse_({ ok: false, error: String(err) });
+    }
 
-  const lastRow = sheet.getLastRow();
-  let rowIndex = -1;
+    // 기존 중복 행이 있으면 먼저 사용자별 최고점수 한 행으로 정리합니다.
+    sortGameSheetAndReRank_(sheet);
 
-  if (lastRow >= 2) {
-    const range = sheet.getRange(2, 1, lastRow - 1, 4);
-    const values = range.getValues();
-    for (var i = 0; i < values.length; i++) {
-      const row = values[i];
-      const rowUserId = (row[0] || "").toString().trim();
-      if (rowUserId === userId) {
-        rowIndex = 2 + i;
-        break;
+    const lastRow = sheet.getLastRow();
+    let rowIndex = -1;
+
+    if (lastRow >= 2) {
+      const range = sheet.getRange(2, 1, lastRow - 1, 4);
+      const values = range.getValues();
+      for (var i = 0; i < values.length; i++) {
+        const row = values[i];
+        const rowUserId = (row[0] || "").toString().trim();
+        if (rowUserId === userId) {
+          rowIndex = 2 + i;
+          break;
+        }
       }
     }
-  }
 
-  if (rowIndex === -1) {
-    rowIndex = sheet.getLastRow() + 1;
-    sheet.getRange(rowIndex, 1).setValue(userId);
-    sheet.getRange(rowIndex, 2).setValue(username || "");
-    sheet.getRange(rowIndex, 3).setValue(newScore);
-  } else {
-    const currentScore = Number(sheet.getRange(rowIndex, 3).getValue()) || 0;
-    if (newScore > currentScore) {
-      sheet.getRange(rowIndex, 3).setValue(newScore);
+    if (rowIndex === -1) {
+      rowIndex = sheet.getLastRow() + 1;
+      sheet.getRange(rowIndex, 1, 1, 3).setValues([[userId, username || "", newScore]]);
+    } else {
+      const currentScore = Number(sheet.getRange(rowIndex, 3).getValue()) || 0;
+      if (newScore > currentScore) {
+        sheet.getRange(rowIndex, 3).setValue(newScore);
+      }
+      if (username) sheet.getRange(rowIndex, 2).setValue(username);
     }
+
+    sortGameSheetAndReRank_(sheet);
+    return jsonResponse_({ ok: true });
+  } finally {
+    lock.releaseLock();
   }
-
-  sortGameSheetAndReRank_(sheet);
-
-  return jsonResponse_({ ok: true });
 }
 
 function gameRanking_(param) {

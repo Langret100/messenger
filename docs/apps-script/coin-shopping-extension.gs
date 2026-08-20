@@ -10,7 +10,11 @@
 const SHOP_CATALOG_LEGACY_PROPERTY = "SHOP_CATALOG_JSON";
 const SHOP_PRODUCT_PROPERTY_PREFIX = "SHOP_PRODUCT_";
 const SHOP_ADMIN_CODE_PROPERTY = "MINITALK_ADMIN_CODE";
+const SHOP_MANAGER_CODE_PROPERTY = "MINITALK_SHOP_MANAGER_CODE";
+const SHOP_ADMIN_SESSION_PREFIX = "shop-admin:";
 const SHOP_PURCHASE_LOG_SHEET = "구매로그";
+const MOARU_SHOP_INVENTORY_SHEET = "모아루_쇼핑보관함";
+const MOARU_SHOP_INVENTORY_HEADERS = ["inventory_id","owner_id","product_id","name","description","price","purchase_key","purchased_at","created_at","gifted_by","gifted_by_nickname","gifted_at","delivery_status","delivery_requested_at","delivery_shipping_at","delivery_completed_at","delivery_cancelled_at","delivery_handled_by","used_at"];
 const SHOP_ADMIN_TOKEN_SECONDS = 21600; // 6시간
 const SHOP_PRODUCT_MAX_BYTES = 8500;
 const SHOP_IMAGE_MAX_CHARS = 7200;
@@ -18,10 +22,14 @@ const SHOP_INVENTORY_PROPERTY_PREFIX = "MOARU_SHOP_INV_";
 const MOARU_COMMAND_PROPERTY_PREFIX = "MOARU_COMMANDS_";
 const SHOP_PURCHASE_OWNER_PROPERTY_PREFIX = "MOARU_PURCHASE_OWNER_";
 const MOARU_COMMAND_LIMIT = 30;
+const MOARU_COMMAND_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30일 지난 전달 대기 명령 정리
+const MOARU_SHOP_COMPLETED_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 배송완료 상품은 사용자 화면 보존기간과 맞춰 7일 후 정리
+const MOARU_SHOP_RECEIPT_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 선물/배송 중복방지 영수증은 48시간 보존
 const MOARU_TASK_PROPERTY_PREFIX = "MOARU_TASK_";
 const MOARU_TASK_ASSIGN_REQUEST_PREFIX = "MOARU_TASK_ASSIGN_REQUEST_";
 const MOARU_ADMIN_COIN_REQUEST_PREFIX = "MOARU_ADMIN_COIN_REQUEST_";
 const MOARU_SHOP_GIFT_REQUEST_PREFIX = "MOARU_SHOP_GIFT_REQUEST_";
+const MOARU_SHOP_DELIVERY_REQUEST_PREFIX = "MOARU_SHOP_DELIVERY_REQUEST_";
 const MOARU_TASK_BACKUP_SHEET = "모아루_과제백업";
 const MOARU_TASK_IMAGE_MAX_CHARS = 6500;
 const MOARU_TASK_COMPLETED_TTL_MS = 2 * 24 * 60 * 60 * 1000;
@@ -60,7 +68,7 @@ function ensureMoaruCoinAccount_(account) {
   const userId = String(account && account.userId || "").trim(), username = String(account && account.username || "").trim(), nickname = String(account && account.nickname || "").trim();
   if (!userId || isMoaruGuestIdentity_(userId, username, nickname) || !username) return { ok: false, error: "INVALID_REWARD_USER" };
   const existing = getRewardUserData_(userId);
-  if (existing) return { ok: true, created: false, coin: Math.max(0, parseInt(existing.coin, 10) || 0) };
+  if (existing) return { ok: true, created: false, coin: parseInt(existing.coin, 10) || 0 };
   const sheet = getSheet_(REWARD_SHEET), headers = sheet.getRange(1, 1, 1, 4).getValues()[0].map(String);
   if (headers[0] !== "user_id" || headers[1] !== "username" || headers[2] !== "coin" || headers[3] !== "url") return { ok: false, error: "REWARD_SHEET_SCHEMA_UNSUPPORTED" };
   const url = MANUAL_WEB_APP_URL ? MANUAL_WEB_APP_URL + "?user_id=" + encodeURIComponent(userId) : "";
@@ -143,30 +151,49 @@ function secureTextEquals_(left, right) {
   return mismatch === 0 ? { ok: true } : { ok: false, error: "ADMIN_AUTH_FAILED" };
 }
 
-function requireShopAdminToken_(userId, token) {
+function readShopAdminSession_(userId, token) {
   const id = String(userId || "").trim();
   const value = String(token || "").trim();
   if (!id || !value) return { ok: false, error: "ADMIN_AUTH_REQUIRED" };
-  const cachedUserId = CacheService.getScriptCache().get("shop-admin:" + value);
-  return cachedUserId === id ? { ok: true } : { ok: false, error: "ADMIN_SESSION_EXPIRED" };
+  const raw = CacheService.getScriptCache().get(SHOP_ADMIN_SESSION_PREFIX + value);
+  if (!raw) return { ok: false, error: "ADMIN_SESSION_EXPIRED" };
+  // v5.18 이전 세션(값이 userId 문자열뿐인 형식)은 ADMIN으로만 호환합니다.
+  if (raw === id) return { ok: true, role: "ADMIN" };
+  try {
+    const session = JSON.parse(raw);
+    if (!session || String(session.userId || "") !== id) return { ok: false, error: "ADMIN_SESSION_EXPIRED" };
+    const role = String(session.role || "ADMIN").toUpperCase();
+    return role === "ADMIN" || role === "SHOP_MANAGER" ? { ok: true, role: role } : { ok: false, error: "ADMIN_ROLE_INVALID" };
+  } catch (error) { return { ok: false, error: "ADMIN_SESSION_EXPIRED" }; }
 }
+function requireAdminToken_(userId, token) {
+  const auth = readShopAdminSession_(userId, token);
+  return auth.ok && auth.role === "ADMIN" ? auth : { ok: false, error: auth.ok ? "ADMIN_PERMISSION_REQUIRED" : auth.error };
+}
+function requireShopManagerToken_(userId, token) {
+  const auth = readShopAdminSession_(userId, token);
+  return auth.ok && (auth.role === "ADMIN" || auth.role === "SHOP_MANAGER") ? auth : { ok: false, error: auth.ok ? "SHOP_MANAGER_PERMISSION_REQUIRED" : auth.error };
+}
+// 기존 내부 호출 호환: 이름상 admin 토큰은 ADMIN 전용으로 유지합니다.
+function requireShopAdminToken_(userId, token) { return requireAdminToken_(userId, token); }
 
-/** POST mode=admin_unlock: 로그인 사용자에게 6시간 관리자 토큰을 발급합니다. */
+/** POST mode=admin_unlock: ADMIN 또는 SHOP_MANAGER 코드를 검증해 6시간 역할 토큰을 발급합니다. */
 function handleAdminUnlock(e) {
   const p = (e && e.parameter) || {};
   const userId = String(p.user_id || "").trim();
   const code = String(p.admin_code || "");
-  if (!requireKnownMoaruUser_(userId)) {
-    return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
-  }
-  const savedCode = PropertiesService.getScriptProperties().getProperty(SHOP_ADMIN_CODE_PROPERTY) || "";
-  if (!savedCode) return shopJson_({ ok: false, error: "ADMIN_CODE_NOT_CONFIGURED" });
-  const verified = secureTextEquals_(savedCode, code);
-  if (!verified.ok) return shopJson_(verified);
-
+  if (!requireKnownMoaruUser_(userId)) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  const props = PropertiesService.getScriptProperties();
+  const adminCode = props.getProperty(SHOP_ADMIN_CODE_PROPERTY) || "";
+  const shopCode = props.getProperty(SHOP_MANAGER_CODE_PROPERTY) || "";
+  if (!adminCode && !shopCode) return shopJson_({ ok: false, error: "ADMIN_CODE_NOT_CONFIGURED" });
+  let role = "";
+  if (adminCode && secureTextEquals_(adminCode, code).ok) role = "ADMIN";
+  else if (shopCode && secureTextEquals_(shopCode, code).ok) role = "SHOP_MANAGER";
+  if (!role) return shopJson_({ ok: false, error: "ADMIN_AUTH_FAILED" });
   const token = Utilities.getUuid() + Utilities.getUuid();
-  CacheService.getScriptCache().put("shop-admin:" + token, userId, SHOP_ADMIN_TOKEN_SECONDS);
-  return shopJson_({ ok: true, admin: true, admin_token: token, expires_in: SHOP_ADMIN_TOKEN_SECONDS });
+  CacheService.getScriptCache().put(SHOP_ADMIN_SESSION_PREFIX + token, JSON.stringify({ userId: userId, role: role }), SHOP_ADMIN_TOKEN_SECONDS);
+  return shopJson_({ ok: true, admin: role === "ADMIN", shop_manager: role === "SHOP_MANAGER", role: role, admin_token: token, expires_in: SHOP_ADMIN_TOKEN_SECONDS });
 }
 
 /** POST/GET mode=shop_catalog */
@@ -209,7 +236,7 @@ function handleUserDirectory(e) {
 /** POST mode=shop_product_save (관리자 전용) */
 function handleShopProductSave(e) {
   const p = (e && e.parameter) || {};
-  const auth = requireShopAdminToken_(p.user_id, p.admin_token);
+  const auth = requireShopManagerToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
   const imageData = String(p.image_data || "").trim();
   if (imageData.length > SHOP_IMAGE_MAX_CHARS) return shopJson_({ ok: false, error: "PRODUCT_IMAGE_TOO_LARGE" });
@@ -244,7 +271,7 @@ function handleShopProductSave(e) {
 /** POST mode=shop_product_delete (관리자 전용) */
 function handleShopProductDelete(e) {
   const p = (e && e.parameter) || {};
-  const auth = requireShopAdminToken_(p.user_id, p.admin_token);
+  const auth = requireShopManagerToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
   const productId = String(p.product_id || "").trim();
   if (!productId) return shopJson_({ ok: false, error: "MISSING_PRODUCT_ID" });
@@ -353,14 +380,75 @@ function purchaseOwnerKey_(purchaseKey) {
   return SHOP_PURCHASE_OWNER_PROPERTY_PREFIX + digest.slice(0, 12).map(function (value) { return (value & 255).toString(16).padStart(2, "0"); }).join("");
 }
 
+function getOrCreateShopInventorySheet_() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let sheet = ss.getSheetByName(MOARU_SHOP_INVENTORY_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(MOARU_SHOP_INVENTORY_SHEET);
+    sheet.getRange(1, 1, 1, MOARU_SHOP_INVENTORY_HEADERS.length).setValues([MOARU_SHOP_INVENTORY_HEADERS]);
+    sheet.setFrozenRows(1);
+  } else {
+    const width = Math.max(sheet.getLastColumn(), MOARU_SHOP_INVENTORY_HEADERS.length);
+    const current = sheet.getRange(1, 1, 1, width).getValues()[0].slice(0, MOARU_SHOP_INVENTORY_HEADERS.length).map(String);
+    if (current.join("\u0001") !== MOARU_SHOP_INVENTORY_HEADERS.join("\u0001")) {
+      if (sheet.getLastRow() <= 1) sheet.getRange(1, 1, 1, MOARU_SHOP_INVENTORY_HEADERS.length).setValues([MOARU_SHOP_INVENTORY_HEADERS]);
+      else throw new Error("MOARU_SHOP_INVENTORY_SCHEMA_MISMATCH");
+    }
+  }
+  return sheet;
+}
+
+function shopInventoryRowToItem_(row) {
+  const value = row || [];
+  return {
+    id: String(value[0] || ""), ownerId: String(value[1] || ""), productId: String(value[2] || ""),
+    name: String(value[3] || ""), description: String(value[4] || ""), price: Number(value[5]) || 0,
+    purchaseKey: String(value[6] || ""), purchasedAt: Number(value[7]) || 0, createdAt: Number(value[8]) || 0,
+    giftedBy: String(value[9] || ""), giftedByNickname: String(value[10] || ""), giftedAt: Number(value[11]) || 0,
+    deliveryStatus: String(value[12] || "") || "owned", deliveryRequestedAt: Number(value[13]) || 0,
+    deliveryShippingAt: Number(value[14]) || 0, deliveryCompletedAt: Number(value[15]) || 0,
+    deliveryCancelledAt: Number(value[16]) || 0, deliveryHandledBy: String(value[17] || ""), usedAt: Number(value[18]) || 0
+  };
+}
+
+function shopInventoryItemToRow_(item) {
+  const value = item || {};
+  return [
+    String(value.id || ""), String(value.ownerId || ""), String(value.productId || ""), String(value.name || ""),
+    String(value.description || ""), Number(value.price) || 0, String(value.purchaseKey || ""), Number(value.purchasedAt) || 0,
+    Number(value.createdAt) || 0, String(value.giftedBy || ""), String(value.giftedByNickname || ""), Number(value.giftedAt) || 0,
+    String(value.deliveryStatus || (value.usedAt ? "completed" : "owned")), Number(value.deliveryRequestedAt) || 0,
+    Number(value.deliveryShippingAt) || 0, Number(value.deliveryCompletedAt) || 0, Number(value.deliveryCancelledAt) || 0,
+    String(value.deliveryHandledBy || ""), Number(value.usedAt) || 0
+  ];
+}
+
+function readShopInventorySheetItems_() {
+  const sheet = getOrCreateShopInventorySheet_(), lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  return sheet.getRange(2, 1, lastRow - 1, MOARU_SHOP_INVENTORY_HEADERS.length).getValues().map(shopInventoryRowToItem_).filter(function (item) { return item.id && item.ownerId; });
+}
+
+function findShopInventorySheetRow_(sheet, inventoryId) {
+  const id = String(inventoryId || "");
+  if (!id || sheet.getLastRow() < 2) return 0;
+  const match = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
+  return match ? match.getRow() : 0;
+}
+
 function setPurchaseOwner_(purchaseKey, ownerId, inventoryId) {
-  if (!purchaseKey) return;
-  PropertiesService.getScriptProperties().setProperty(purchaseOwnerKey_(purchaseKey), JSON.stringify({ ownerId: ownerId, inventoryId: inventoryId }));
+  // 신규 구조에서는 구매 소유권을 별도 Script Property로 만들지 않습니다.
+  // purchaseKey가 보관함 시트 행 안에 저장되어 중복 구매/선물 검증에 사용됩니다.
+  return { ownerId: ownerId, inventoryId: inventoryId };
 }
 
 function getPurchaseOwner_(purchaseKey) {
-  if (!purchaseKey) return null;
-  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(purchaseOwnerKey_(purchaseKey)) || "null"); } catch (error) { return null; }
+  const key = String(purchaseKey || "");
+  if (!key) return null;
+  const item = readShopInventorySheetItems_().filter(function (row) { return row.purchaseKey === key; })[0];
+  if (item) return { ownerId: item.ownerId, inventoryId: item.id };
+  // 마이그레이션 전 구형 포인터는 읽기 호환만 유지합니다.
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(purchaseOwnerKey_(key)) || "null"); } catch (error) { return null; }
 }
 
 function hydrateShopInventoryItem_(item, catalog) {
@@ -369,26 +457,47 @@ function hydrateShopInventoryItem_(item, catalog) {
     name: value.name || product.name || "상품",
     description: value.description || product.description || "",
     imageUrl: value.imageUrl || product.imageUrl || "",
-    price: Number(value.price || product.price) || 0
+    price: Number(value.price || product.price) || 0,
+    deliveryStatus: value.deliveryStatus || (value.usedAt ? "completed" : "owned")
   });
 }
 
+function shopInventoryCacheKey_(userId) { return "moaru-shop-inv-v3-" + moaruSafeKey_(userId); }
+function clearShopInventoryCache_(userId) { try { CacheService.getScriptCache().remove(shopInventoryCacheKey_(userId)); } catch (error) {} }
+function readShopInventoryRowsForUser_(userId) {
+  const id = String(userId || ""), sheet = getOrCreateShopInventorySheet_(), lastRow = sheet.getLastRow();
+  if (!id || lastRow < 2) return [];
+  // 100명 규모에서도 사용자 상품마다 getRange()를 반복하지 않고 한 번의 시트 읽기로 필터링합니다.
+  return sheet.getRange(2, 1, lastRow - 1, MOARU_SHOP_INVENTORY_HEADERS.length).getValues()
+    .map(shopInventoryRowToItem_)
+    .filter(function (item) { return item.id && item.ownerId === id; });
+}
 function readShopInventory_(userId) {
-  const properties = PropertiesService.getScriptProperties().getProperties();
-  const prefix = shopInventoryPrefix_(userId), catalog = readShopCatalog_(), items = [];
-  Object.keys(properties).forEach(function (key) {
-    if (key.indexOf(prefix) !== 0) return;
-    try { const item = JSON.parse(properties[key]);if (item && item.id) items.push(hydrateShopInventoryItem_(item, catalog)); }
-    catch (error) { console.error("INVALID_SHOP_INVENTORY", key, error); }
-  });
-  return items.sort(function (a, b) { return Number(b.createdAt || b.giftedAt || 0) - Number(a.createdAt || a.giftedAt || 0); });
+  const id = String(userId || ""), cache = CacheService.getScriptCache(), cacheKey = shopInventoryCacheKey_(id);
+  if (!id) return [];
+  try { const cached = cache.get(cacheKey);if (cached) { const parsed = JSON.parse(cached);if (Array.isArray(parsed)) return parsed; } } catch (error) {}
+  const catalog = readShopCatalog_(), items = readShopInventoryRowsForUser_(id).map(function (item) { return hydrateShopInventoryItem_(item, catalog); }).sort(function (a, b) { return Number(b.createdAt || b.giftedAt || 0) - Number(a.createdAt || a.giftedAt || 0); });
+  try { cache.put(cacheKey, JSON.stringify(items), 45); } catch (error) {}
+  return items;
 }
 
 function writeShopInventoryItem_(userId, item) {
-  const compact = Object.assign({}, item);
-  delete compact.imageUrl; // 이미지는 상품 카탈로그에서 결합해 속성 용량을 줄입니다.
-  PropertiesService.getScriptProperties().setProperty(shopInventoryKey_(userId, compact.id), JSON.stringify(compact));
+  const compact = Object.assign({}, item, { ownerId: String(userId || item.ownerId || "") });
+  delete compact.imageUrl;
+  if (!compact.id || !compact.ownerId) throw new Error("INVALID_SHOP_INVENTORY_ITEM");
+  const sheet = getOrCreateShopInventorySheet_(), row = findShopInventorySheetRow_(sheet, compact.id), values = shopInventoryItemToRow_(compact);
+  if (row) sheet.getRange(row, 1, 1, values.length).setValues([values]);
+  else sheet.appendRow(values);
+  clearShopInventoryCache_(compact.ownerId);
   return hydrateShopInventoryItem_(compact, readShopCatalog_());
+}
+
+function deleteShopInventoryItem_(userId, inventoryId) {
+  const sheet = getOrCreateShopInventorySheet_(), row = findShopInventorySheetRow_(sheet, inventoryId);
+  if (!row) return false;
+  const owner = String(sheet.getRange(row, 2).getValue() || "");
+  if (owner !== String(userId || "")) return false;
+  sheet.deleteRow(row);clearShopInventoryCache_(owner);return true;
 }
 
 function createPurchasedInventory_(userId, product, purchaseKey) {
@@ -397,11 +506,33 @@ function createPurchasedInventory_(userId, product, purchaseKey) {
   const now = Date.now(), item = {
     id: "inv-" + Utilities.getUuid(), ownerId: userId, productId: product.id,
     name: product.name, description: product.description || "", price: product.price,
-    purchaseKey: purchaseKey, purchasedAt: now, createdAt: now
+    purchaseKey: purchaseKey, purchasedAt: now, createdAt: now, deliveryStatus: "owned"
   };
-  const saved = writeShopInventoryItem_(userId, item);
-  setPurchaseOwner_(purchaseKey, userId, saved.id);
-  return saved;
+  return writeShopInventoryItem_(userId, item);
+}
+
+/** 구형 상품별 Script Properties를 새 보관함 시트로 안전하게 옮깁니다. */
+function migrateLegacyShopInventoryToSheetOnce() {
+  const lock = LockService.getScriptLock();if (!lock.tryLock(10000)) throw new Error("SHOP_BUSY");
+  try {
+    const properties = PropertiesService.getScriptProperties(), all = properties.getProperties(), legacyKeys = Object.keys(all).filter(function (key) { return key.indexOf(SHOP_INVENTORY_PROPERTY_PREFIX) === 0; });
+    const existingById = {};readShopInventorySheetItems_().forEach(function (row) { existingById[row.id] = row; });
+    let migrated = 0, skipped = 0, invalid = 0;
+    legacyKeys.forEach(function (key) {
+      let item;
+      try { item = JSON.parse(all[key] || "null"); } catch (error) { invalid++;return; }
+      if (!item || !item.id || !item.ownerId) { invalid++;return; }
+      let existing = existingById[String(item.id)];
+      if (!existing) { existing = writeShopInventoryItem_(item.ownerId, item);existingById[String(item.id)] = existing;migrated++; }
+      else skipped++;
+      if (existing && String(existing.ownerId) === String(item.ownerId)) properties.deleteProperty(key);
+    });
+    // 새 구조에서 더 이상 쓰지 않는 구매 소유권 포인터는 시트 이전 검증 후 제거합니다.
+    const leftovers = properties.getProperties();
+    Object.keys(leftovers).filter(function (key) { return key.indexOf(SHOP_PURCHASE_OWNER_PROPERTY_PREFIX) === 0; }).forEach(function (key) { properties.deleteProperty(key); });
+    const result = { scanned: legacyKeys.length, migrated: migrated, skipped: skipped, invalid: invalid };
+    console.log("MOARU_SHOP_INVENTORY_SHEET_MIGRATION", JSON.stringify(result));return result;
+  } finally { lock.releaseLock(); }
 }
 
 function requireKnownMoaruUser_(userId, registeredUsers) {
@@ -446,32 +577,195 @@ function handleShopGift(e) {
       } catch (error) { console.error("LEGACY_GIFT_IMPORT_FAILED", error); }
     }
     if (!source && receipt && receipt.source) source = receipt.source;
-    if (!source || source.usedAt) return shopJson_({ ok: false, error: "GIFT_ITEM_NOT_AVAILABLE" });
+    if (!source || source.usedAt || (source.deliveryStatus && source.deliveryStatus !== "owned")) return shopJson_({ ok: false, error: "GIFT_ITEM_NOT_AVAILABLE" });
     const giftId = requestId ? "gift-" + requestId : "gift-" + Utilities.getUuid(), now = Number(receipt && receipt.createdAt) || Date.now();
     if (receiptKey && !receipt) { receipt = { status: "pending", userId: userId, targetId: targetId, inventoryId: inventoryId, giftId: giftId, source: source, createdAt: now };receipts.setProperty(receiptKey, JSON.stringify(receipt)); }
     const gift = Object.assign({}, source, { id: giftId, ownerId: targetId, giftedBy: userId, giftedByNickname: String(p.nickname || "").trim().slice(0, 30), giftedAt: now, createdAt: now });
-    delete gift.usedAt;
+    delete gift.usedAt;gift.deliveryStatus = "owned";delete gift.deliveryRequestedAt;delete gift.deliveryCompletedAt;delete gift.deliveryCancelledAt;delete gift.deliveryHandledBy;
     const savedGift = writeShopInventoryItem_(targetId, gift);
-    PropertiesService.getScriptProperties().deleteProperty(shopInventoryKey_(userId, inventoryId));
+    deleteShopInventoryItem_(userId, inventoryId);
     setPurchaseOwner_(gift.purchaseKey, targetId, giftId);
     enqueueMoaruCommand_(targetId, "SHOP_GIFT", { itemId: savedGift.id, name: savedGift.name, giftedByNickname: savedGift.giftedByNickname }, userId, requestId ? "shop-gift-" + requestId : "");
     const result = { ok: true, item: savedGift, target_user_id: targetId };if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify({ status: "done", userId: userId, targetId: targetId, inventoryId: inventoryId, createdAt: now, result: result }));return shopJson_(result);
   } finally { lock.releaseLock(); }
 }
 
-/** POST mode=shop_use */
-function handleShopUse(e) {
-  const p = (e && e.parameter) || {}, userId = requireRegisteredShopUser_(p.user_id), inventoryId = String(p.inventory_id || "").trim();
+function normalizeDeliveryStatus_(item) { return String(item && item.deliveryStatus || (item && item.usedAt ? "completed" : "owned")); }
+function publicDeliveryItem_(item, users) {
+  const value = item || {}, ownerId = String(value.ownerId || "");
+  return { id: value.id, ownerId: ownerId, nickname: users && users[ownerId] || ownerId, productId: value.productId, name: value.name || "상품", status: normalizeDeliveryStatus_(value), requestedAt: Number(value.deliveryRequestedAt) || 0, shippingAt: Number(value.deliveryShippingAt) || 0, completedAt: Number(value.deliveryCompletedAt) || 0, cancelledAt: Number(value.deliveryCancelledAt) || 0, handledBy: String(value.deliveryHandledBy || "") };
+}
+/** POST mode=shop_request_delivery: 소유자만 배송 요청 가능. */
+function handleShopRequestDelivery(e) {
+  const p = (e && e.parameter) || {}, users = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), userId = requireRegisteredShopUser_(p.user_id, users), inventoryId = String(p.inventory_id || "").trim(), requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100);
   if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
-  const item = readShopInventory_(userId).filter(function (row) { return row.id === inventoryId; })[0];
-  if (!item) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
-  if (item.usedAt) return shopJson_({ ok: true, usedAt: item.usedAt, alreadyUsed: true });
-  item.usedAt = Date.now();writeShopInventoryItem_(userId, item);return shopJson_({ ok: true, usedAt: item.usedAt });
+  if (!inventoryId) return shopJson_({ ok: false, error: "MISSING_INVENTORY_ID" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  try {
+    const item = readShopInventory_(userId).filter(function (row) { return row.id === inventoryId; })[0];
+    if (!item || String(item.ownerId || userId) !== userId) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+    const status = normalizeDeliveryStatus_(item);
+    if (status === "requested" || status === "shipping") return shopJson_({ ok: true, alreadyRequested: true, item: item, deliveryStatus: status });
+    if (status === "completed") return shopJson_({ ok: true, alreadyCompleted: true, item: item, deliveryStatus: status });
+    if (status !== "owned" && status !== "cancelled") return shopJson_({ ok: false, error: "DELIVERY_STATE_INVALID" });
+    const now = Date.now();item.deliveryStatus = "requested";item.deliveryRequestedAt = now;delete item.deliveryShippingAt;delete item.deliveryCompletedAt;delete item.deliveryCancelledAt;delete item.deliveryHandledBy;delete item.usedAt;
+    const saved = writeShopInventoryItem_(userId, item);
+    if (requestId) PropertiesService.getScriptProperties().setProperty(MOARU_SHOP_DELIVERY_REQUEST_PREFIX + requestId, JSON.stringify({ userId: userId, inventoryId: inventoryId, requestedAt: now }));
+    return shopJson_({ ok: true, item: saved, deliveryStatus: "requested", deliveryRequestedAt: now, cue: { sound: "delivery-class-order", animation: "running-student" } });
+  } finally { lock.releaseLock(); }
+}
+/** POST mode=shop_delivery_list: ADMIN/SHOP_MANAGER 배송 목록. */
+function handleShopDeliveryList(e) {
+  const p = (e && e.parameter) || {}, auth = requireShopManagerToken_(p.user_id, p.admin_token);if (!auth.ok) return shopJson_(auth);
+  const users = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), catalog = readShopCatalog_(), rows = [];
+  readShopInventorySheetItems_().forEach(function (raw) {
+    const item = hydrateShopInventoryItem_(raw, catalog), status = normalizeDeliveryStatus_(item);
+    if (status === "requested" || status === "shipping") rows.push(publicDeliveryItem_(item, users));
+  });
+  rows.sort(function (a,b) { return Number(a.requestedAt || 0) - Number(b.requestedAt || 0); });
+  return shopJson_({ ok: true, role: auth.role, deliveries: rows });
+}
+function updateShopDeliveryByManager_(e, nextStatus) {
+  const p = (e && e.parameter) || {}, auth = requireShopManagerToken_(p.user_id, p.admin_token);if (!auth.ok) return shopJson_(auth);
+  const ownerId = String(p.owner_id || p.target_user_id || "").trim(), inventoryId = String(p.inventory_id || "").trim();
+  if (!ownerId || !inventoryId) return shopJson_({ ok: false, error: "INVALID_DELIVERY_TARGET" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  try {
+    const item = readShopInventory_(ownerId).filter(function (row) { return row.id === inventoryId; })[0];if (!item) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+    const current = normalizeDeliveryStatus_(item), now = Date.now();
+    if (current === nextStatus) return shopJson_({ ok: true, alreadyApplied: true, item: item, deliveryStatus: current });
+    if (nextStatus === "shipping" && current !== "requested") return shopJson_({ ok: false, error: "DELIVERY_STATE_INVALID", status: current });
+    if ((nextStatus === "completed" || nextStatus === "cancelled") && current !== "requested" && current !== "shipping") return shopJson_({ ok: false, error: "DELIVERY_STATE_INVALID", status: current });
+    item.deliveryStatus = nextStatus;item.deliveryHandledBy = String(p.user_id || "");
+    if (nextStatus === "shipping") item.deliveryShippingAt = now;
+    if (nextStatus === "completed") { item.deliveryCompletedAt = now;item.usedAt = now; }
+    if (nextStatus === "cancelled") { item.deliveryCancelledAt = now;delete item.usedAt; }
+    const saved = writeShopInventoryItem_(ownerId, item);
+    enqueueMoaruCommand_(ownerId, nextStatus === "completed" ? "SHOP_DELIVERY_COMPLETED" : nextStatus === "cancelled" ? "SHOP_DELIVERY_CANCELLED" : "SHOP_DELIVERY_SHIPPING", { itemId: saved.id, name: saved.name, deliveryStatus: nextStatus }, p.user_id);
+    return shopJson_({ ok: true, item: saved, deliveryStatus: nextStatus });
+  } finally { lock.releaseLock(); }
+}
+function handleShopDeliveryShipping(e) { return updateShopDeliveryByManager_(e, "shipping"); }
+function handleShopDeliveryComplete(e) { return updateShopDeliveryByManager_(e, "completed"); }
+function handleShopDeliveryCancel(e) { return updateShopDeliveryByManager_(e, "cancelled"); }
+
+/** POST mode=shop_use: 구버전 클라이언트 호환용. 이제 실제 사용 대신 배송 요청으로 처리합니다. */
+function handleShopUse(e) {
+  return handleShopRequestDelivery(e);
 }
 
 function moaruCommandKey_(userId) { return MOARU_COMMAND_PROPERTY_PREFIX + moaruSafeKey_(userId); }
-function readMoaruCommands_(userId) { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(moaruCommandKey_(userId)) || "[]"); } catch (error) { return []; } }
-function writeMoaruCommands_(userId, commands) { PropertiesService.getScriptProperties().setProperty(moaruCommandKey_(userId), JSON.stringify((commands || []).slice(-MOARU_COMMAND_LIMIT))); }
+function pruneMoaruCommands_(commands, now) {
+  const current = Number(now) || Date.now();
+  return (Array.isArray(commands) ? commands : []).filter(function (command) {
+    if (!command || typeof command !== "object" || !command.id) return false;
+    const createdAt = Number(command.createdAt) || 0;
+    // createdAt이 없는 구버전 명령은 임의 삭제하지 않습니다.
+    return !createdAt || current - createdAt <= MOARU_COMMAND_TTL_MS;
+  }).slice(-MOARU_COMMAND_LIMIT);
+}
+function writeMoaruCommands_(userId, commands) {
+  const properties = PropertiesService.getScriptProperties(), key = moaruCommandKey_(userId), queue = pruneMoaruCommands_(commands);
+  if (!queue.length) { properties.deleteProperty(key);return []; }
+  properties.setProperty(key, JSON.stringify(queue));
+  return queue;
+}
+function readMoaruCommands_(userId) {
+  const properties = PropertiesService.getScriptProperties(), key = moaruCommandKey_(userId), raw = properties.getProperty(key);
+  if (!raw) return [];
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch (error) { properties.deleteProperty(key);return []; }
+  const queue = pruneMoaruCommands_(parsed);
+  if (!queue.length) { properties.deleteProperty(key);return []; }
+  if (!Array.isArray(parsed) || queue.length !== parsed.length || JSON.stringify(queue) !== raw) properties.setProperty(key, JSON.stringify(queue));
+  return queue;
+}
+
+/**
+ * 기존 Script Properties에 쌓인 빈 MOARU_COMMANDS_* 항목을 한 번 정리할 때 직접 실행합니다.
+ * - 빈 배열/깨진 값: 삭제
+ * - createdAt이 있고 30일 지난 명령: 제거
+ * - 아직 전달되지 않은 정상 명령: 보존
+ */
+function cleanupMoaruCommandPropertiesOnce() {
+  const properties = PropertiesService.getScriptProperties(), all = properties.getProperties(), now = Date.now();
+  let scanned = 0, deleted = 0, compacted = 0, kept = 0;
+  Object.keys(all).forEach(function (key) {
+    if (key.indexOf(MOARU_COMMAND_PROPERTY_PREFIX) !== 0) return;
+    scanned++;
+    let parsed;
+    try { parsed = JSON.parse(all[key] || "[]"); }
+    catch (error) { properties.deleteProperty(key);deleted++;return; }
+    const queue = pruneMoaruCommands_(parsed, now);
+    if (!queue.length) { properties.deleteProperty(key);deleted++;return; }
+    const next = JSON.stringify(queue);
+    if (next !== all[key]) { properties.setProperty(key, next);compacted++; }
+    kept++;
+  });
+  const result = { scanned: scanned, deleted: deleted, compacted: compacted, kept: kept };
+  console.log("MOARU_COMMAND_PROPERTIES_CLEANUP", JSON.stringify(result));
+  return result;
+}
+
+/**
+ * 쇼핑 Script Properties 정리.
+ * - 실제 보유/배송요청/배송중/취소 상품은 유지
+ * - 배송완료 후 7일 지난 보관함 항목만 삭제
+ * - 48시간 지난 선물/배송 요청 영수증 삭제
+ * - 실제 보관함 항목이 이미 없는 구매 소유권 포인터 삭제
+ */
+function cleanupMoaruShopProperties_() {
+  const properties = PropertiesService.getScriptProperties(), all = properties.getProperties(), now = Date.now();
+  const completedCutoff = now - MOARU_SHOP_COMPLETED_TTL_MS, receiptCutoff = now - MOARU_SHOP_RECEIPT_TTL_MS;
+  const removed = { inventoryRows: 0, giftReceipts: 0, deliveryReceipts: 0, legacyInventory: 0, purchaseOwners: 0 };
+
+  // 시트의 배송완료 상품은 사용자 화면 보존기간과 맞춰 7일 뒤 실제 행을 삭제합니다.
+  const sheet = getOrCreateShopInventorySheet_(), lastRow = sheet.getLastRow(), deleteRows = [], affectedOwners = {};
+  if (lastRow >= 2) {
+    sheet.getRange(2, 1, lastRow - 1, MOARU_SHOP_INVENTORY_HEADERS.length).getValues().forEach(function (row, index) {
+      const item = shopInventoryRowToItem_(row), status = normalizeDeliveryStatus_(item), completedAt = Number(item.deliveryCompletedAt || item.usedAt) || 0;
+      if (status === "completed" && completedAt > 0 && completedAt <= completedCutoff) { deleteRows.push(index + 2);affectedOwners[item.ownerId] = true; }
+    });
+    deleteRows.sort(function (a,b) { return b-a; }).forEach(function (row) { sheet.deleteRow(row);removed.inventoryRows++; });
+    Object.keys(affectedOwners).forEach(clearShopInventoryCache_);
+  }
+
+  // 선물/배송 재시도 영수증은 48시간 뒤 제거합니다.
+  Object.keys(all).forEach(function (key) {
+    let bucket = "", timestamp = 0;
+    if (key.indexOf(MOARU_SHOP_GIFT_REQUEST_PREFIX) === 0) bucket = "giftReceipts";
+    else if (key.indexOf(MOARU_SHOP_DELIVERY_REQUEST_PREFIX) === 0) bucket = "deliveryReceipts";
+    else return;
+    try { const value = JSON.parse(all[key] || "{}");timestamp = Number(value.createdAt || value.requestedAt) || 0; } catch (error) {}
+    if (timestamp > receiptCutoff) return;
+    properties.deleteProperty(key);removed[bucket]++;
+  });
+
+  // 마이그레이션이 완료된 구형 상품별 Property와 구매 포인터는 더 이상 유지하지 않습니다.
+  const currentIds = {};
+  readShopInventorySheetItems_().forEach(function (item) { currentIds[item.id] = item.ownerId; });
+  Object.keys(all).forEach(function (key) {
+    if (key.indexOf(SHOP_INVENTORY_PROPERTY_PREFIX) === 0) {
+      try { const item = JSON.parse(all[key] || "null");if (item && item.id && currentIds[item.id] === String(item.ownerId || "")) { properties.deleteProperty(key);removed.legacyInventory++; } } catch (error) {}
+    } else if (key.indexOf(SHOP_PURCHASE_OWNER_PROPERTY_PREFIX) === 0) {
+      properties.deleteProperty(key);removed.purchaseOwners++;
+    }
+  });
+  return removed;
+}
+
+/**
+ * 기존에 쌓인 빈 명령 큐 + 오래된 쇼핑 속성을 한 번에 안전 정리합니다.
+ * Apps Script 편집기에서 필요할 때 직접 실행해도 됩니다.
+ */
+function cleanupMoaruPropertiesOnce() {
+  const migration = migrateLegacyShopInventoryToSheetOnce();
+  const commandResult = cleanupMoaruCommandPropertiesOnce();
+  const shopResult = cleanupMoaruShopProperties_();
+  return { migration: migration, commands: commandResult, shop: shopResult };
+}
+
 function moaruSpreadsheetRetry_(action) {
   let lastError = null;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -487,25 +781,42 @@ function moaruSpreadsheetRetry_(action) {
   throw new Error("COIN_SHEET_TEMPORARY_ERROR");
 }
 function moaruCoinChangeGuarded_(userId, action, amount) {
-  const before = moaruSpreadsheetRetry_(function () { return getRewardUserData_(userId); }), beforeCoin = Math.max(0, parseInt(before && before.coin, 10) || 0), delta = Math.abs(parseInt(amount, 10) || 0), expectedCoin = action === "add" ? beforeCoin + delta : beforeCoin - delta;
+  const before = moaruSpreadsheetRetry_(function () { return getRewardUserData_(userId); }), beforeCoin = parseInt(before && before.coin, 10) || 0, delta = Math.abs(parseInt(amount, 10) || 0), expectedCoin = action === "add" ? beforeCoin + delta : beforeCoin - delta;
   try { return processCoinChangeUnlocked_(userId, action, amount); }
   catch (error) {
     const message = String(error && error.message || error || "");
     if (/(?:Spreadsheet service|Service Spreadsheets|스프레드시트 서비스|문서에 액세스)/i.test(message)) {
-      const after = moaruSpreadsheetRetry_(function () { return getRewardUserData_(userId); }), afterCoin = Math.max(0, parseInt(after && after.coin, 10) || 0);
+      const after = moaruSpreadsheetRetry_(function () { return getRewardUserData_(userId); }), afterCoin = parseInt(after && after.coin, 10) || 0;
       if (expectedCoin >= 0 && afterCoin === expectedCoin) return { success: true, newCoin: afterCoin, recovered: true };
       throw new Error("COIN_SHEET_TEMPORARY_ERROR");
     }
     throw error;
   }
 }
+function moaruAdminCoinChangeGuarded_(userId, signedAmount) {
+  // handleAdminCoinReward가 이미 ScriptLock을 보유한 상태에서 호출됩니다. 중첩 lock 금지.
+  const delta = parseInt(signedAmount, 10) || 0;
+  if (!delta) return { success: false, error: "INVALID_COIN_AMOUNT" };
+  const sheet = getSheet_(REWARD_SHEET), lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { success: false, error: "USER_NOT_FOUND" };
+  const values = sheet.getRange(2, 1, lastRow - 1, Math.max(COL_REWARD_COIN, COL_REWARD_USER_ID)).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (String(values[i][COL_REWARD_USER_ID - 1] || "").trim() !== String(userId || "").trim()) continue;
+    const beforeCoin = parseInt(values[i][COL_REWARD_COIN - 1], 10) || 0;
+    const newCoin = beforeCoin + delta;
+    sheet.getRange(i + 2, COL_REWARD_COIN).setValue(newCoin);
+    return { success: true, newCoin: newCoin, beforeCoin: beforeCoin };
+  }
+  return { success: false, error: "USER_NOT_FOUND" };
+}
+
 function moaruRewardCoinMap_() {
   return moaruSpreadsheetRetry_(function () {
     const sheet = getSheet_(REWARD_SHEET), lastRow = sheet.getLastRow(), result = {};
     if (lastRow < 2) return result;
     sheet.getRange(2, 1, lastRow - 1, 3).getValues().forEach(function (row) {
       const userId = String(row[COL_REWARD_USER_ID - 1] || "").trim();
-      if (userId) result[userId] = Math.max(0, parseInt(row[COL_REWARD_COIN - 1], 10) || 0);
+      if (userId) result[userId] = parseInt(row[COL_REWARD_COIN - 1], 10) || 0;
     });
     return result;
   });
@@ -569,10 +880,9 @@ function handleAdminCoinReward(e) {
         let state = states[target];
         if (state && state.status === "done") { rewarded.push({ user_id: target, newCoin: Number(state.newCoin) || 0 });return; }
         if (!state) { const before = Number(rewardCoins[target]) || 0;state = states[target] = { status: "pending", beforeCoin: before, expectedCoin: amount > 0 ? before + amount : before - Math.abs(amount) };receipt.targetStates = states;if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify(receipt)); }
-        if (state.expectedCoin < 0) throw new Error("INSUFFICIENT_COIN");
-        const current = moaruSpreadsheetRetry_(function () { return getRewardUserData_(target); }), currentCoin = Math.max(0, parseInt(current && current.coin, 10) || 0);let result;
+        const current = moaruSpreadsheetRetry_(function () { return getRewardUserData_(target); }), currentCoin = parseInt(current && current.coin, 10) || 0;let result;
         if (currentCoin === Number(state.expectedCoin)) result = { success: true, newCoin: currentCoin, recovered: true };
-        else if (currentCoin === Number(state.beforeCoin)) result = moaruCoinChangeGuarded_(target, amount > 0 ? "add" : "remove", Math.abs(amount));
+        else if (currentCoin === Number(state.beforeCoin)) result = moaruAdminCoinChangeGuarded_(target, amount);
         else throw new Error("COIN_REWARD_STATE_CONFLICT");
         if (result && result.success) {
           const newCoin = Number(result.newCoin) || 0;
@@ -663,7 +973,13 @@ function cleanupMoaruTaskAssignReceipts_() {
 /** 시간 기반 트리거 또는 과제 API에서 호출됩니다. 완료 48시간 뒤 서버 원본만 삭제하고 백업 시트는 유지합니다. */
 function cleanupCompletedMoaruTasks() {
   const lock = LockService.getScriptLock();if (!lock.tryLock(5000)) return 0;
-  try { const removed = cleanupCompletedMoaruTasks_();cleanupMoaruTaskAssignReceipts_();return removed; } finally { lock.releaseLock(); }
+  try {
+    const removed = cleanupCompletedMoaruTasks_();
+    cleanupMoaruTaskAssignReceipts_();
+    cleanupMoaruCommandPropertiesOnce();
+    cleanupMoaruShopProperties_();
+    return removed;
+  } finally { lock.releaseLock(); }
 }
 function setupMoaruTaskCleanupTrigger() {
   ScriptApp.getProjectTriggers().filter(function (trigger) { return trigger.getHandlerFunction() === "cleanupCompletedMoaruTasks"; }).forEach(function (trigger) { ScriptApp.deleteTrigger(trigger); });
@@ -773,10 +1089,10 @@ function reviewMoaruTaskUnlocked_(taskId, action, feedback, actor) {
     return { ok: true, task_id: task.id, user_id: task.userId, task: publicMoaruTask_(task) };
   }
   if (!task.rewardPending) {
-    const before = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), beforeCoin = Math.max(0, parseInt(before && before.coin, 10) || 0);
+    const before = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), beforeCoin = parseInt(before && before.coin, 10) || 0;
     task.rewardPending = { beforeCoin: beforeCoin, expectedCoin: beforeCoin + task.rewardCoin, amount: task.rewardCoin, createdAt: now };writeMoaruTask_(task);
   }
-  const currentReward = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), currentCoin = Math.max(0, parseInt(currentReward && currentReward.coin, 10) || 0), pending = task.rewardPending;
+  const currentReward = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), currentCoin = parseInt(currentReward && currentReward.coin, 10) || 0, pending = task.rewardPending;
   let result;
   if (currentCoin === Number(pending.expectedCoin)) result = { success: true, newCoin: currentCoin, recovered: true };
   else if (currentCoin === Number(pending.beforeCoin)) result = moaruCoinChangeGuarded_(task.userId, "add", task.rewardCoin);

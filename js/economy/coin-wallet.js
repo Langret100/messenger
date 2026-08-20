@@ -15,7 +15,7 @@ MiniTalk.Economy.CoinWallet = (() => {
   }
 
   function value() {
-    return Math.max(0, Math.floor(Number(MiniTalk.Store.get("coins")) || 0));
+    return Math.floor(Number(MiniTalk.Store.get("coins")) || 0);
   }
 
   function requiresLogin() {
@@ -24,7 +24,7 @@ MiniTalk.Economy.CoinWallet = (() => {
   }
 
   function setLocal(amount, source = "local") {
-    const next = Math.max(0, Math.floor(Number(amount) || 0));
+    const next = Math.floor(Number(amount) || 0);
     const userId = MiniTalk.Store.get("user")?.user_id || "guest";
     MiniTalk.Store.set("coins", next);
     MiniTalk.Persistence.set(CACHE_KEY, { userId, value: next, source, fetchedAt: Date.now() });

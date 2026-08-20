@@ -294,7 +294,46 @@ MiniTalk.Features.Shopping = (() => {
     body.append(D.el("p", { text: `${product.name} 상품을 삭제할까요?` }), D.el("small", { class: "muted", text: "이미 구매한 사용자의 보관함 상품은 유지됩니다." }), remove);Shell.modal("상품 삭제", body);
   }
 
+  function deliveryAdminPanel(context = {}) {
+    const D = context.Dom || MiniTalk.UI.Dom, Shell = context.Shell || MiniTalk.UI.Shell;
+    const panel = D.el("section", { class: "tool-card admin-delivery-panel" });
+    const head = D.el("div", { class: "admin-shop-head" }), title = D.el("div", {}, [D.el("strong", { text: "배송 요청 관리" }), D.el("small", { class: "muted", text: "학생이 요청한 상품의 배송 상태를 처리합니다." })]);
+    const refresh = D.el("button", { class: "mini-action", type: "button", text: "새로고침" }), list = D.el("div", { class: "admin-delivery-list" });
+    head.append(title, refresh);panel.append(head, list);
+    let loading = false;
+    const load = async () => {
+      if (loading) return;loading = true;refresh.disabled = true;list.replaceChildren(D.el("p", { class: "muted", text: "배송 요청을 불러오는 중입니다." }));
+      try {
+        const current = MiniTalk.Store.get("user") || {}, rows = await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP"));
+        list.replaceChildren();
+        if (!rows.length) list.append(empty("대기 중인 배송이 없어요", "새 배송 요청이 들어오면 여기에 표시됩니다."));
+        rows.forEach(row => {
+          const status = String(row.deliveryStatus || row.status || "requested"), item = D.el("article", { class: `admin-delivery-row status-${status}` });
+          const copy = D.el("div", { class: "admin-delivery-copy" }, [D.el("strong", { text: row.name || "상품" }), D.el("span", { text: row.nickname || row.ownerNickname || row.owner_id || row.ownerId || "학생" }), D.el("small", { class: "muted", text: status === "shipping" ? "배송중" : "배송 요청" })]);
+          const buttons = D.el("div", { class: "button-row compact-row" });
+          const action = async (kind, button) => {
+            if (button.disabled) return;button.disabled = true;
+            try {
+              const payload = { userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("SHOP"), ownerId: row.ownerId || row.owner_id, inventoryId: row.id || row.inventoryId || row.inventory_id };
+              if (kind === "shipping") await MiniTalk.AuthApi.shopDeliveryShipping(payload);
+              else if (kind === "completed") await MiniTalk.AuthApi.shopDeliveryComplete(payload);
+              else await MiniTalk.AuthApi.shopDeliveryCancel(payload);
+              MiniTalk.Realtime.notifyCommandTargets?.([payload.ownerId]);
+              Shell.toast(kind === "completed" ? "배송완료로 처리했습니다." : kind === "cancelled" ? "배송을 취소했습니다." : "배송중으로 변경했습니다.");
+              await load();
+            } catch (error) { Shell.toast(error.message || "배송 상태를 변경하지 못했습니다.");button.disabled = false; }
+          };
+          if (status === "requested") { const shipping = D.el("button", { class: "button secondary compact-button", type: "button", text: "배송 시작" });shipping.onclick = () => action("shipping", shipping);buttons.append(shipping); }
+          const complete = D.el("button", { class: "button primary compact-button", type: "button", text: "배송완료" }), cancel = D.el("button", { class: "button secondary compact-button", type: "button", text: "취소" });
+          complete.onclick = () => action("completed", complete);cancel.onclick = () => action("cancelled", cancel);buttons.append(complete, cancel);item.append(copy, buttons);list.append(item);
+        });
+      } catch (error) { list.replaceChildren(D.el("p", { class: "muted", text: error.message || "배송 요청을 불러오지 못했습니다." })); }
+      finally { loading = false;refresh.disabled = false; }
+    };
+    refresh.onclick = load;load();return panel;
+  }
+
   function leave(){inventoryOpen=false;clearTimeout(refreshTimer);refreshTimer=0;Service.leave?.()}
-  return { id: "shopping", title: "쇼핑", icon: "▤", render, leave, adminPanel };
+  return { id: "shopping", title: "쇼핑", icon: "▤", render, leave, adminPanel, deliveryAdminPanel };
 })();
 MiniTalk.Registry.register(MiniTalk.Features.Shopping);

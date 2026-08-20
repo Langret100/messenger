@@ -313,6 +313,21 @@ function doPost(e) {
       case "shop_use":
         return handleShopUse(e);
 
+      case "shop_request_delivery":
+        return handleShopRequestDelivery(e);
+
+      case "shop_delivery_list":
+        return handleShopDeliveryList(e);
+
+      case "shop_delivery_shipping":
+        return handleShopDeliveryShipping(e);
+
+      case "shop_delivery_complete":
+        return handleShopDeliveryComplete(e);
+
+      case "shop_delivery_cancel":
+        return handleShopDeliveryCancel(e);
+
       case "admin_dispatch":
         return handleAdminDispatch(e);
 

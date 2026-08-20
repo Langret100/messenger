@@ -194,7 +194,11 @@ MiniTalk.Features.Feed=(()=>{
     if(open&&focus)requestAnimationFrame(()=>compose.querySelector(".feed-comment-input")?.focus({preventScroll:true}));
   }
   function toggleCommentComposerFromCard(event,card){
-    if(user().isGuest||event.defaultPrevented||event.button>0)return;const target=event.target;if(!(target instanceof Element))return;
+    if(user().isGuest||event.defaultPrevented||event.button>0)return;
+    const target=event.target;
+    // Document PiP lives in a different window realm, so cross-window instanceof checks are unreliable.
+    // Feature-detect closest() instead.
+    if(!target||typeof target.closest!=="function")return;
     if(target.closest("button,input,textarea,a,iframe,video,[contenteditable],.feed-media-placeholder"))return;
     const comments=card.querySelector("[data-feed-comments]");if(!comments)return;setCommentComposer(card,!comments.classList.contains("compose-open"),true);
   }

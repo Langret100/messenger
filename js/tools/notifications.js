@@ -47,7 +47,7 @@ MiniTalk.Tools.Notifications = (() => {
     if (onlyWhenHidden && document.visibilityState === "visible") return;
     new Notification(title, {
       body,
-      icon: "assets/icons/moaru-app-192-v6451.png"
+      icon: "assets/icons/moaru-app-192.png"
     });
   }
 

@@ -2,9 +2,25 @@
    터치 기기는 브라우저의 기본 스와이프를 그대로 사용하고, 실제 클릭/입력은 방해하지 않습니다. */
 MiniTalk.UI.DragScroll=(()=>{
   const bound=new WeakSet();
+  let styleReady=false;
+  function ensureStyle(doc=document){
+    if(styleReady||!doc?.head)return;
+    styleReady=true;
+    const style=doc.createElement("style");
+    style.id="dragScrollSurfaceStyle";
+    style.textContent=`
+      .drag-scroll-surface{scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain}
+      .drag-scroll-surface::-webkit-scrollbar{display:none;width:0;height:0}
+      .drag-scroll-surface.drag-scroll-ready{cursor:grab}
+      .drag-scroll-surface.drag-scrolling{cursor:grabbing;user-select:none}
+    `;
+    doc.head.appendChild(style);
+  }
   const BLOCKED="input,textarea,select,a,iframe,video,[contenteditable='true'],[data-no-drag-scroll],.feed-heart,.feed-comment-send,.feed-comment-input,.feed-video-play,.feed-fab,.shop-inventory-fab,.shop-inventory-panel button";
   function bind(scroller){
     if(!scroller||bound.has(scroller))return scroller;
+    ensureStyle(scroller.ownerDocument||document);
+    scroller.classList.add("drag-scroll-surface");
     bound.add(scroller);
     let active=false,moved=false,startY=0,startX=0,startTop=0,pointerId=null,suppressClick=false;
     const canStart=event=>{

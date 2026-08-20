@@ -114,13 +114,15 @@ MiniTalk.Games.Board = (() => {
 
     async function load() {
       reload.disabled = true;
+      status.hidden = false;
       status.textContent = "게시판을 불러오는 중...";
       try {
         const result = await list();
         posts = result.posts;
         page = 1;
         renderPage();
-        status.textContent = result.online ? "토리 게임 게시판" : "연결할 수 없어 이 기기에 저장된 글을 표시합니다.";
+        status.textContent = result.online ? "" : "연결할 수 없어 이 기기에 저장된 글을 표시합니다.";
+        status.hidden = Boolean(result.online);
       } finally {
         reload.disabled = false;
       }

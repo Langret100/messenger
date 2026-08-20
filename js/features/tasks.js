@@ -16,7 +16,7 @@ MiniTalk.Features.Tasks = (() => {
     rows.forEach(task => assignedList.append(taskCard(task, host)));
     if (!rows.length) assignedList.append(D.el("div", { class: "empty-state compact-empty" }, [D.el("span", { text: "✓" }), D.el("strong", { text: guest ? "게스트는 과제를 볼 수만 있어요" : "받은 과제가 없어요" }), D.el("small", { class: "muted", text: guest ? "로그인하면 일일 퀘스트와 지정 과제에 참여할 수 있습니다." : "오늘의 수학·국어 퀘스트부터 도전해 보세요." })]));
     assigned.append(D.el("div", { class: "section-label" }, [D.el("strong", { text: "관리자 지정 과제" }), D.el("small", { class: "muted", text: `${rows.length}개 · 직접 제출하는 과제` })]), assignedList);
-    list.append(MiniTalk.Tasks.FridayGrade6Mission.render(), MiniTalk.Tasks.DailyMathQuest.render(() => render(host)), MiniTalk.Tasks.DailyKoreanQuest.render(() => render(host)), assigned);view.append(list);host.replaceChildren(view);
+    list.append(MiniTalk.Tasks.FridayGrade6Mission.render(), MiniTalk.Tasks.DailyMathQuest.render(() => render(host)), MiniTalk.Tasks.DailyKoreanQuest.render(() => render(host)), assigned);view.append(list);host.replaceChildren(view);MiniTalk.UI.DragScroll?.bind?.(list);
   }
 
   const statusOrder = status => ({ retry: 0, open: 1, submitted: 2, completed: 3 }[status] ?? 4);

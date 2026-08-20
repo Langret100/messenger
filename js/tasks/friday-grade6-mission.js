@@ -1,9 +1,10 @@
-/* 금요일 09:00~23:59에만 열리는 초6 수학·국어 통합 20문항 주간 미션.
+/* 금요일 09:00~23:59에만 열리는 초6 격주 과목 20문항 주간 미션.
+ * 2026-08-17 주간을 수학 시작점으로 삼아 수학 20문항 ↔ 국어 20문항을 매주 교대합니다.
  * 시간 판단과 카운트다운은 사용 중인 기기의 로컬 시간을 기준으로 합니다.
  */
 MiniTalk.Tasks=MiniTalk.Tasks||{};
 MiniTalk.Tasks.FridayGrade6Mission=(()=>{
-  const OPEN_HOUR=9,TOTAL=20,PATH="moaru/v3/fridayMission",REWARD_TYPE="WEEKLY_CHECK_OVER80",REWARD_COIN=3;
+  const OPEN_HOUR=9,TOTAL=20,PATH="moaru/v3/fridayMission",REWARD_TYPE="WEEKLY_CHECK_OVER80",REWARD_COIN=3,ALT_ANCHOR_WEEK="2026-08-17";
   const mathCats=["분수·소수","비와 비율","도형","자료 해석","문장제"];
   const korBank=[
     ["독해","'비가 와서 운동회가 연기되었다.'에서 운동회가 연기된 까닭은?","비가 와서",["비가 와서","날씨가 더워서","학생이 적어서","운동장이 넓어서"]],
@@ -31,6 +32,11 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
   const nowMs=()=>Date.now();
   const nowDate=()=>new Date();
   function weekKey(d=nowDate()){const x=new Date(d);const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);return`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`}
+  function weekNumberFromAnchor(d=nowDate()){
+    const current=new Date(`${weekKey(d)}T00:00:00`),anchor=new Date(`${ALT_ANCHOR_WEEK}T00:00:00`);
+    return Math.floor((current-anchor)/604800000);
+  }
+  function missionSubject(d=nowDate()){return Math.abs(weekNumberFromAnchor(d)%2)===0?"수학":"국어"}
   function user(){return MiniTalk.Store.get("user")||{}}
   function path(){return`${PATH}/${String(user().user_id||"guest").replace(/[.#$\[\]\/]/g,"_")}/${weekKey()}`}
   function windowInfo(now=nowDate()){
@@ -47,27 +53,30 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
   function q(subject,category,text,answer,choices,r){const unique=[...new Set(choices.map(String))];while(unique.length<4)unique.push(`${answer} ${unique.length}`);return{subject,category,text,answer:String(answer),choices:shuffle(unique.slice(0,4),r)}}
 
   function makeQuestions(){
-    const r=rng(hash(`${weekKey()}|${user().user_id||"guest"}|grade6-v2`)),rows=[];
-    for(let i=0;i<10;i++){
-      const cat=mathCats[i%mathCats.length];
-      if(cat==="분수·소수"){
-        const a=between(r,12,95)/10,b=between(r,1,9)/10,ans=(a+b).toFixed(1);
-        rows.push(q("수학",cat,`${a.toFixed(1)} + ${b.toFixed(1)} = ?`,ans,[ans,(a+b+.1).toFixed(1),(a+b-.1).toFixed(1),Math.max(0,a-b).toFixed(1)],r));
-      }else if(cat==="비와 비율"){
-        const d=between(r,4,10),n=between(r,1,d-1),ans=`${Math.round(n/d*100)}%`;
-        rows.push(q("수학",cat,`${d}명 중 ${n}명은 약 몇 %인가요?`,ans,[ans,`${n*10}%`,`${d*10}%`,`${Math.round(d/n*100)}%`],r));
-      }else if(cat==="도형"){
-        const w=between(r,3,12),h=between(r,3,12),ans=String(w*h);
-        rows.push(q("수학",cat,`가로 ${w}cm, 세로 ${h}cm인 직사각형의 넓이는?`,ans,[ans,String(w+h),String(2*(w+h)),String(w*h+1)],r));
-      }else if(cat==="자료 해석"){
-        let vals=[between(r,20,90),between(r,20,90),between(r,20,90)];while(new Set(vals).size<3)vals=[between(r,20,90),between(r,20,90),between(r,20,90)];
-        const ans=String(Math.max(...vals));rows.push(q("수학",cat,`세 반의 모은 책 수가 ${vals.join(", ")}권입니다. 가장 많은 반의 책 수는?`,ans,vals.map(String).concat(String(Math.min(...vals)-1)),r));
-      }else{
-        const price=between(r,2,9)*100,count=between(r,2,6),ans=String(price*count);
-        rows.push(q("수학",cat,`${price}원짜리 공책 ${count}권의 값은?`,ans,[ans,String(price+count),String(price*(count-1)),String(price*count+100)],r));
+    const subject=missionSubject(),r=rng(hash(`${weekKey()}|${user().user_id||"guest"}|grade6-alt-v3|${subject}`)),rows=[];
+    if(subject==="수학"){
+      for(let i=0;i<TOTAL;i++){
+        const cat=mathCats[i%mathCats.length];
+        if(cat==="분수·소수"){
+          const a=between(r,12,95)/10,b=between(r,1,9)/10,ans=(a+b).toFixed(1);
+          rows.push(q("수학",cat,`${a.toFixed(1)} + ${b.toFixed(1)} = ?`,ans,[ans,(a+b+.1).toFixed(1),(a+b-.1).toFixed(1),Math.max(0,a-b).toFixed(1)],r));
+        }else if(cat==="비와 비율"){
+          const d=between(r,4,10),n=between(r,1,d-1),ans=`${Math.round(n/d*100)}%`;
+          rows.push(q("수학",cat,`${d}명 중 ${n}명은 약 몇 %인가요?`,ans,[ans,`${n*10}%`,`${d*10}%`,`${Math.round(d/n*100)}%`],r));
+        }else if(cat==="도형"){
+          const w=between(r,3,12),h=between(r,3,12),ans=String(w*h);
+          rows.push(q("수학",cat,`가로 ${w}cm, 세로 ${h}cm인 직사각형의 넓이는?`,ans,[ans,String(w+h),String(2*(w+h)),String(w*h+1)],r));
+        }else if(cat==="자료 해석"){
+          let vals=[between(r,20,90),between(r,20,90),between(r,20,90)];while(new Set(vals).size<3)vals=[between(r,20,90),between(r,20,90),between(r,20,90)];
+          const ans=String(Math.max(...vals));rows.push(q("수학",cat,`세 반의 모은 책 수가 ${vals.join(", ")}권입니다. 가장 많은 반의 책 수는?`,ans,vals.map(String).concat(String(Math.min(...vals)-1)),r));
+        }else{
+          const price=between(r,2,9)*100,count=between(r,2,6),ans=String(price*count);
+          rows.push(q("수학",cat,`${price}원짜리 공책 ${count}권의 값은?`,ans,[ans,String(price+count),String(price*(count-1)),String(price*count+100)],r));
+        }
       }
+    }else{
+      shuffle(korBank,r).slice(0,TOTAL).forEach(([cat,text,ans,choices])=>rows.push(q("국어",cat,text,ans,choices,r)));
     }
-    shuffle(korBank,r).slice(0,10).forEach(([cat,text,ans,choices])=>rows.push(q("국어",cat,text,ans,choices,r)));
     return shuffle(rows,r).slice(0,TOTAL).map((x,i)=>({...x,id:`q${i+1}`}));
   }
 
@@ -77,9 +86,9 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
       if(current?.completed)return current;
       const existing=Array.isArray(current?.answers)?current.answers:[];
       const index=Math.max(0,Math.min(questions.length,Number(current?.index)||0));
-      if(index!==expectedIndex)return current||{week:weekKey(),index:0,answers:[],completed:false};
+      if(index!==expectedIndex)return current||{week:weekKey(),subject:missionSubject(),index:0,answers:[],completed:false};
       const nextAnswers=existing.concat(answer);
-      return{week:weekKey(),index:index+1,answers:nextAnswers,completed:false,updatedAt:nowMs()};
+      return{week:weekKey(),subject:missionSubject(),index:index+1,answers:nextAnswers,completed:false,updatedAt:nowMs()};
     });
   }
 
@@ -98,7 +107,7 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
       body.append(D.el("div",{class:"quest-solver-progress"},[D.el("span",{text:`${cur.subject} · ${cur.category}`}),D.el("strong",{text:`${index+1} / ${questions.length}`})]),D.el("div",{class:"quest-question",text:cur.text}),grid)
     }
     async function finish(){
-      const report=buildReport(answers),record={week:weekKey(),index:questions.length,answers,completed:true,report,completedAt:nowMs(),updatedAt:nowMs()};
+      const report=buildReport(answers),record={week:weekKey(),subject:missionSubject(),index:questions.length,answers,completed:true,report,completedAt:nowMs(),updatedAt:nowMs()};
       const savedFinal=await MiniTalk.Realtime.cloudTransaction(path(),current=>current?.completed?current:{...record,answers:Array.isArray(current?.answers)&&current.answers.length>=answers.length?current.answers:answers});
       const rewarded=await ensureWeeklyReward(savedFinal||record);
       MiniTalk.UI.Shell.closeModal();showReport(rewarded||savedFinal||record)
@@ -134,7 +143,7 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
   }
 
   function buildReport(answers){const groups={};answers.forEach(a=>{const key=`${a.subject} · ${a.category}`,g=groups[key]||(groups[key]={correct:0,total:0});g.total++;if(a.correct)g.correct++});const rows=Object.entries(groups).map(([name,g])=>({name,...g,rate:Math.round(g.correct/g.total*100)})).sort((a,b)=>a.rate-b.rate),score=answers.filter(a=>a.correct).length;return{score,total:answers.length,rows,weak:rows.slice(0,3).map(r=>r.name),strong:[...rows].sort((a,b)=>b.rate-a.rate).slice(0,3).map(r=>r.name)}}
-  function showReport(record){const D=MiniTalk.UI.Dom,r=record.report||buildReport(record.answers||[]),percent=scorePercent(record),eligible=percent>80,reward=record.reward||{},rewardText=eligible?(reward.acknowledged?`보상 ${REWARD_COIN}코인 · ${reward.granted?"적립 완료":"이미 적립됨"}`:`보상 ${REWARD_COIN}코인 · 적립 확인 중`):`80점을 넘어야 보상 ${REWARD_COIN}코인을 받을 수 있어요`,body=D.el("div",{class:"friday-report modal-stack"},[D.el("h3",{text:`이번 주 ${r.score}/${r.total}문항 정답 · ${percent}점`}),D.el("section",{class:`friday-reward-card section-card ${eligible?"earned":"missed"}`},[D.el("div",{class:"friday-reward-title"},[D.el("img",{src:"assets/ui/notebook-coin.svg",alt:""}),D.el("strong",{text:eligible?`주간 보상 +${REWARD_COIN}`:"주간 보상"})]),D.el("p",{text:rewardText}),D.el("small",{class:"muted",text:"금요일 학습점검은 80점 초과 시 주 1회 보상됩니다."})]),D.el("div",{class:"friday-bars"},r.rows.map(x=>D.el("div",{class:"friday-bar-row"},[D.el("span",{text:x.name}),D.el("i",{style:`--rate:${x.rate}%`}),D.el("b",{text:`${x.rate}%`})]))),D.el("section",{class:"section-card"},[D.el("strong",{text:"잘한 점"}),D.el("p",{text:(r.strong||[]).join(", ")||"영역별 기록을 더 모아보세요."})]),D.el("section",{class:"section-card"},[D.el("strong",{text:"보완하면 좋은 점"}),D.el("p",{text:(r.weak||[]).join(", ")||"특별히 낮은 영역이 없습니다."}),D.el("small",{class:"muted",text:"낮은 영역의 기본 개념을 다시 확인하고 비슷한 문제를 천천히 풀어보세요."})])]);MiniTalk.UI.Shell.modal("이번 주 학습 피드백",body)}
-  function render(){const D=MiniTalk.UI.Dom,info=windowInfo(),card=D.el("section",{class:`friday-mission-card section-card ${info.open?"open":"locked"}`},[D.el("div",{class:"friday-mission-copy"},[D.el("div",{class:"friday-mission-eyebrow",text:"주간 미션"}),D.el("strong",{text:"금요일 초6 학습점검"}),D.el("small",{class:"muted",text:`수학·국어 20문항 · 80점 초과 시 🪙 +${REWARD_COIN}`}),D.el("b",{class:"friday-countdown",text:info.open?"오늘 자정 전까지 참여 가능":`열리기까지 ${remainLabel()}`})]),info.open?D.el("button",{class:"button primary compact-button friday-start-button",type:"button",text:"시작",disabled:user().isGuest,onclick:open}):D.el("div",{class:"friday-lock-overlay","aria-hidden":"true"},[D.el("span",{text:"🔒"})])]);if(!info.open){const label=card.querySelector(".friday-countdown"),timer=setInterval(()=>{if(!card.isConnected)return clearInterval(timer);const next=windowInfo();if(next.open){clearInterval(timer);if(MiniTalk.Store.get("route")==="tasks")MiniTalk.Features.Tasks.render(MiniTalk.UI.Dom.byId("viewHost"));return}label.textContent=`열리기까지 ${remainLabel()}`},30000)}return card}
-  return{render,open,windowInfo,makeQuestions,buildReport,weekKey,scorePercent,rewardEligible,ensureWeeklyReward};
+  function showReport(record){const D=MiniTalk.UI.Dom,r=record.report||buildReport(record.answers||[]),percent=scorePercent(record),eligible=percent>80,reward=record.reward||{},rewardText=eligible?(reward.acknowledged?`보상 ${REWARD_COIN}코인 · ${reward.granted?"적립 완료":"이미 적립됨"}`:`보상 ${REWARD_COIN}코인 · 적립 확인 중`):`80점을 넘어야 보상 ${REWARD_COIN}코인을 받을 수 있어요`,body=D.el("div",{class:"friday-report modal-stack"},[D.el("h3",{text:`이번 주 ${record.subject||missionSubject()} · ${r.score}/${r.total}문항 정답 · ${percent}점`}),D.el("section",{class:`friday-reward-card section-card ${eligible?"earned":"missed"}`},[D.el("div",{class:"friday-reward-title"},[D.el("img",{src:"assets/ui/notebook-coin.svg",alt:""}),D.el("strong",{text:eligible?`주간 보상 +${REWARD_COIN}`:"주간 보상"})]),D.el("p",{text:rewardText}),D.el("small",{class:"muted",text:"금요일 학습점검은 80점 초과 시 주 1회 보상됩니다."})]),D.el("div",{class:"friday-bars"},r.rows.map(x=>D.el("div",{class:"friday-bar-row"},[D.el("span",{text:x.name}),D.el("i",{style:`--rate:${x.rate}%`}),D.el("b",{text:`${x.rate}%`})]))),D.el("section",{class:"section-card"},[D.el("strong",{text:"잘한 점"}),D.el("p",{text:(r.strong||[]).join(", ")||"영역별 기록을 더 모아보세요."})]),D.el("section",{class:"section-card"},[D.el("strong",{text:"보완하면 좋은 점"}),D.el("p",{text:(r.weak||[]).join(", ")||"특별히 낮은 영역이 없습니다."}),D.el("small",{class:"muted",text:"낮은 영역의 기본 개념을 다시 확인하고 비슷한 문제를 천천히 풀어보세요."})])]);MiniTalk.UI.Shell.modal("이번 주 학습 피드백",body)}
+  function render(){const D=MiniTalk.UI.Dom,info=windowInfo(),subject=missionSubject(),card=D.el("section",{class:`friday-mission-card section-card ${info.open?"open":"locked"}`},[D.el("div",{class:"friday-mission-copy"},[D.el("div",{class:"friday-mission-eyebrow",text:"주간 미션"}),D.el("strong",{text:`금요일 초6 ${subject} 학습점검`}),D.el("small",{class:"muted",text:`${subject} 20문항 · 다음 주 ${subject==="수학"?"국어":"수학"} · 80점 초과 시 🪙 +${REWARD_COIN}`}),D.el("b",{class:"friday-countdown",text:info.open?"오늘 자정 전까지 참여 가능":`열리기까지 ${remainLabel()}`})]),info.open?D.el("button",{class:"button primary compact-button friday-start-button",type:"button",text:"시작",disabled:user().isGuest,onclick:open}):D.el("div",{class:"friday-lock-overlay","aria-hidden":"true"},[D.el("span",{text:"🔒"})])]);if(!info.open){const label=card.querySelector(".friday-countdown"),timer=setInterval(()=>{if(!card.isConnected)return clearInterval(timer);const next=windowInfo();if(next.open){clearInterval(timer);if(MiniTalk.Store.get("route")==="tasks")MiniTalk.Features.Tasks.render(MiniTalk.UI.Dom.byId("viewHost"));return}label.textContent=`열리기까지 ${remainLabel()}`},30000)}return card}
+  return{render,open,windowInfo,makeQuestions,buildReport,weekKey,missionSubject,scorePercent,rewardEligible,ensureWeeklyReward};
 })();

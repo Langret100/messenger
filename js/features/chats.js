@@ -80,7 +80,7 @@ MiniTalk.Features.Chats=(()=>{
     const list=D.el("div",{class:"conversation-list",id:"conversationList"});search.oninput=e=>filter(e.target.value,list,view.dataset.filter,view);
     allRooms.forEach((room,i)=>{const node=roomItem(room);node.style.setProperty("--stagger",`${Math.min(i,8)*22}ms`);list.append(node)});
     list.append(D.el("div",{class:"empty-state filter-empty hidden","data-filter-empty":"1"},[D.el("span",{text:"●"}),D.el("strong",{text:allRooms.length?"표시할 대화방이 없습니다":"대화방이 없습니다"}),D.el("small",{class:"muted",text:allRooms.length?"그룹 탭에서 참여할 대화방을 찾아보세요.":"오른쪽 위 ＋ 버튼으로 새 대화를 만들 수 있어요."})]));
-    view.append(top,list);host.replaceChildren(view);filter("",list,"all",view);markRoomListReady(view)
+    view.append(top,list);host.replaceChildren(view);MiniTalk.UI.DragScroll?.bind?.(list);filter("",list,"all",view);markRoomListReady(view)
   }
   function refreshRoomList(){
     const D=MiniTalk.UI.Dom,host=D.byId("viewHost"),view=D.one(".chat-home",host);if(!view){renderList(host);return}

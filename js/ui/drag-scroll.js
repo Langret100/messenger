@@ -9,18 +9,21 @@ MiniTalk.UI.DragScroll=(()=>{
     const style=doc.createElement("style");
     style.id="dragScrollSurfaceStyle";
     style.textContent=`
-      .drag-scroll-surface{scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain}
-      .drag-scroll-surface::-webkit-scrollbar{display:none;width:0;height:0}
+      .drag-scroll-surface{overscroll-behavior:contain}
+      .drag-scroll-surface:not(.drag-scroll-keep-scrollbar){scrollbar-width:none;-ms-overflow-style:none}
+      .drag-scroll-surface:not(.drag-scroll-keep-scrollbar)::-webkit-scrollbar{display:none;width:0;height:0}
       .drag-scroll-surface.drag-scroll-ready{cursor:grab}
       .drag-scroll-surface.drag-scrolling{cursor:grabbing;user-select:none}
     `;
     doc.head.appendChild(style);
   }
-  const BLOCKED="input,textarea,select,a,iframe,video,[contenteditable='true'],[data-no-drag-scroll],.feed-heart,.feed-comment-send,.feed-comment-input,.feed-video-play,.feed-fab,.shop-inventory-fab,.shop-inventory-panel button";
-  function bind(scroller){
+  const BLOCKED="input,textarea,select,a,iframe,video,[contenteditable='true'],[data-no-drag-scroll],.feed-heart,.feed-comment-send,.feed-comment-input,.feed-video-play,.feed-fab,.shop-inventory-fab,.shop-inventory-panel button,.quest-accordion-toggle";
+  function bind(scroller,options={}){
     if(!scroller||bound.has(scroller))return scroller;
     ensureStyle(scroller.ownerDocument||document);
+    const keepScrollbar=options?.keepScrollbar===true;
     scroller.classList.add("drag-scroll-surface");
+    if(keepScrollbar)scroller.classList.add("drag-scroll-keep-scrollbar");
     bound.add(scroller);
     let active=false,moved=false,startY=0,startX=0,startTop=0,pointerId=null,suppressClick=false;
     const canStart=event=>{
@@ -28,6 +31,15 @@ MiniTalk.UI.DragScroll=(()=>{
       if(event.button!=null&&event.button!==0)return false;
       const target=event.target;
       if(!target?.closest)return false;
+      // 대화방처럼 네이티브 스크롤바를 유지하는 표면은 오른쪽 scrollbar gutter에서
+      // 커스텀 pointer capture를 시작하지 않아 thumb/track 직접 조작을 보장합니다.
+      if(keepScrollbar){
+        const rect=scroller.getBoundingClientRect?.();
+        if(rect){
+          const gutter=Math.max(12,(scroller.offsetWidth||0)-(scroller.clientWidth||0));
+          if(event.clientX>=rect.right-gutter)return false;
+        }
+      }
       const blocked=target.closest(BLOCKED);
       if(blocked&&!blocked.matches?.(".shop-product-card"))return false;
       return scroller.scrollHeight>scroller.clientHeight+1;

@@ -131,6 +131,10 @@ MiniTalk.Features.Chats=(()=>{
     if(existingList){refreshMessageList(roomId,existingList);return}
     const view=D.el("section",{class:"view chat-room view-enter","data-room-id":roomId}),list=D.el("div",{class:"message-list",id:"messageList"});
     fillMessageList(roomId,list,true);
+    // 대화방은 기존의 보이는 스크롤바/휠/모바일 터치를 유지하면서 PC/PiP에서
+    // 메시지 영역을 잡아 위아래로 끌어도 스크롤되게 합니다.
+    // keepScrollbar는 thumb/track 직접 조작을 커스텀 드래그가 가로채지 않게 합니다.
+    MiniTalk.UI.DragScroll?.bind?.(list,{keepScrollbar:true});
     list.addEventListener("scroll",()=>{if(list.scrollTop<=72)loadOlderMessages(roomId,list).catch(error=>console.warn("이전 대화 불러오기 실패",error))},{passive:true});
     const composer=buildComposer(roomId);view.append(list,composer.root);host.replaceChildren(view);scrollToLatest(list)
   }

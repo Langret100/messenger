@@ -8,6 +8,7 @@ MiniTalk.Tasks.QuestAccordion = (() => {
     const toggle = D.el("button", {
       class: "quest-accordion-toggle",
       type: "button",
+      "data-no-drag-scroll": "true",
       "aria-expanded": "false",
       "aria-controls": panelId
     }, [
@@ -32,7 +33,7 @@ MiniTalk.Tasks.QuestAccordion = (() => {
       section.classList.toggle("expanded", opening);
       toggle.setAttribute("aria-expanded", String(opening));
       panel.classList.toggle("hidden", !opening);
-      if (opening) requestAnimationFrame(() => section.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+      if (opening) requestAnimationFrame(() => section.scrollIntoView({ block: "nearest", behavior: "auto" }));
     };
 
     section.append(toggle, panel);

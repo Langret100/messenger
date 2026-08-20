@@ -47,21 +47,7 @@ MiniTalk.Games.Board = (() => {
     }
   }
 
-  async function write(title, content) {
-    const user = MiniTalk.Store.get("user") || {};
-    if (!user.user_id || user.isGuest) throw new Error("게스트는 게시글을 볼 수만 있습니다.");
-    const cleanTitle = String(title || "").trim();
-    const cleanContent = String(content || "").trim();
-    if (!cleanTitle) throw new Error("제목을 입력하세요.");
-    if (!cleanContent) throw new Error("내용을 입력하세요.");
-    const post = {
-      id: crypto.randomUUID(),
-      title: cleanTitle.slice(0, 80),
-      author: user.nickname || user.username || "게스트",
-      content: cleanContent.slice(0, 1200),
-      createdAt: new Date().toLocaleString("ko-KR")
-    };
-
+  async function persistPost(post) {
     try {
       const body = new URLSearchParams({
         mode: "board_write",
@@ -79,6 +65,32 @@ MiniTalk.Games.Board = (() => {
       saveLocal(post);
       return { online: false };
     }
+  }
+
+  function makePost(title, content, author) {
+    const cleanTitle = String(title || "").trim();
+    const cleanContent = String(content || "").trim();
+    if (!cleanTitle) throw new Error("제목을 입력하세요.");
+    if (!cleanContent) throw new Error("내용을 입력하세요.");
+    return {
+      id: crypto.randomUUID(),
+      title: cleanTitle.slice(0, 80),
+      author: String(author || "사용자").trim().slice(0, 40) || "사용자",
+      content: cleanContent.slice(0, 1200),
+      createdAt: new Date().toLocaleString("ko-KR")
+    };
+  }
+
+  async function write(title, content) {
+    const user = MiniTalk.Store.get("user") || {};
+    if (!user.user_id || user.isGuest) throw new Error("게스트는 게시글을 볼 수만 있습니다.");
+    return persistPost(makePost(title, content, user.nickname || user.username || "게스트"));
+  }
+
+  async function writeAuto(title, content, author = "[게임자동기록]") {
+    const user = MiniTalk.Store.get("user") || {};
+    if (!user.user_id || user.isGuest) return { online: false, skipped: true };
+    return persistPost(makePost(title, content, author));
   }
 
   function open() {
@@ -189,5 +201,5 @@ MiniTalk.Games.Board = (() => {
     setTimeout(() => title.focus(), 30);
   }
 
-  return { open, list, write };
+  return { open, list, write, writeAuto };
 })();

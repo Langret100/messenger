@@ -146,6 +146,44 @@ MiniTalk.GameHost=(()=>{
     return MiniTalk.Games.ScoreService.submit(gameName,score);
   }
 
+  let lastExplorerReportKey="";
+  function explorerCharacterName(data){
+    const named=String(data?.characterName||"").trim();
+    if(named)return named;
+    const type=String(data?.characterType||"").trim();
+    return ({warrior:"전사",archer:"궁수",mage:"마법사",valkyrie:"발키리"})[type]||type||"고스트";
+  }
+
+  function formatExplorerEndedAt(value){
+    const d=new Date(Number(value)||Date.now());
+    const pad=n=>String(n).padStart(2,"0");
+    return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 ${pad(d.getHours())}시 ${pad(d.getMinutes())}분`;
+  }
+
+  async function reportExplorerBoard(data,rawScore){
+    if(rawScore<5000)return;
+    const user=MiniTalk.Store.get("user")||{};
+    if(!user.user_id||user.isGuest)return;
+    const endedAt=Number(data?.endedAt)||Date.now();
+    const stage=Math.max(1,Math.floor(Number(data?.stage)||1));
+    const hard=Boolean(data?.hardMode);
+    const charName=explorerCharacterName(data);
+    const key=[user.user_id,rawScore,stage,hard?1:0,endedAt].join(":");
+    if(lastExplorerReportKey===key)return;
+    lastExplorerReportKey=key;
+    const nickname=user.nickname||user.username||"누군가";
+    const mode=hard?"하드 모드":"일반 모드";
+    const title=`${nickname}께서 수학 탐험대 (${mode})에서 '${charName}'로 ${rawScore}점을 달성하셨습니다. 축하드립니다.`;
+    const content=[
+      `기록 시각: ${formatExplorerEndedAt(endedAt)}`,
+      `도달 라운드: ${stage} 라운드`,
+      `최종 점수: ${rawScore}점`,
+      `플레이 모드: ${mode}`,
+      `사용 캐릭터: ${charName}`
+    ].join("\n");
+    try{await MiniTalk.Games.Board?.writeAuto?.(title,content,"[게임자동기록]")}catch(error){console.warn("수학탐험대 게시판 자동 기록 실패",error)}
+  }
+
   function onMessage(event){
     if(!frame||event.source!==frame.contentWindow)return;
     const data=event.data;
@@ -157,6 +195,7 @@ MiniTalk.GameHost=(()=>{
       const supplied=Math.max(0,Math.floor(Number(data.rankingScore)||0));
       const score=supplied||Math.floor(rawScore*(data.hardMode?1.2:1));
       if(score>0)sendScore("수학탐험대",score);
+      reportExplorerBoard(data,rawScore);
       return;
     }
   }

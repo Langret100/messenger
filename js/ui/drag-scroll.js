@@ -23,28 +23,72 @@ MiniTalk.UI.DragScroll=(()=>{
     ensureStyle(scroller.ownerDocument||document);
     const keepScrollbar=options?.keepScrollbar===true;
     const allowInteractive=String(options?.allowInteractive||"").trim();
+    const documentMouseDrag=options?.documentMouseDrag===true;
     scroller.classList.add("drag-scroll-surface");
     if(keepScrollbar)scroller.classList.add("drag-scroll-keep-scrollbar");
     bound.add(scroller);
+
+    const scrollbarHit=event=>{
+      if(!keepScrollbar)return false;
+      const rect=scroller.getBoundingClientRect?.();
+      if(!rect)return false;
+      const gutter=Math.max(12,(scroller.offsetWidth||0)-(scroller.clientWidth||0));
+      return event.clientX>=rect.right-gutter;
+    };
+    const interactiveBlocked=target=>{
+      if(!target?.closest)return true;
+      const blocked=target.closest(BLOCKED);
+      const explicitlyAllowed=Boolean(allowInteractive&&target.closest?.(allowInteractive));
+      return Boolean(blocked&&!blocked.matches?.(".shop-product-card")&&!explicitlyAllowed);
+    };
+    const hasOverflow=()=>scroller.scrollHeight>scroller.clientHeight+1;
+
+    /* v101: 도구탭처럼 화면 대부분이 버튼/링크인 표면은 pointer capture 대신
+       문서 단위 mousemove를 사용합니다. 버튼 위에서 시작해도 세로 이동이 5px을
+       넘으면 스크롤로 전환하고, 거의 움직이지 않으면 원래 click을 그대로 보냅니다. */
+    if(documentMouseDrag){
+      const doc=scroller.ownerDocument||document;
+      let active=false,moved=false,startY=0,startX=0,startTop=0,suppressClick=false,startTarget=null;
+      const down=event=>{
+        if(event.button!==0||scrollbarHit(event)||interactiveBlocked(event.target)||!hasOverflow())return;
+        active=true;moved=false;startY=event.clientY;startX=event.clientX;startTop=scroller.scrollTop;startTarget=event.target;
+        scroller.classList.add("drag-scroll-ready");
+      };
+      const move=event=>{
+        if(!active)return;
+        const dx=event.clientX-startX,dy=event.clientY-startY;
+        if(!moved){
+          if(Math.hypot(dx,dy)<5)return;
+          if(Math.abs(dx)>Math.abs(dy)*1.35){active=false;startTarget=null;scroller.classList.remove("drag-scroll-ready","drag-scrolling");return}
+          moved=true;scroller.classList.add("drag-scrolling");
+        }
+        event.preventDefault();
+        scroller.scrollTop=startTop-dy;
+      };
+      const up=()=>{
+        if(!active&&!moved)return;
+        if(moved){suppressClick=true;setTimeout(()=>{suppressClick=false},180)}
+        active=false;moved=false;startTarget=null;scroller.classList.remove("drag-scroll-ready","drag-scrolling");
+      };
+      scroller.addEventListener("mousedown",down);
+      doc.addEventListener("mousemove",move,{passive:false});
+      doc.addEventListener("mouseup",up);
+      scroller.addEventListener("dragstart",event=>{if(active){event.preventDefault()}},true);
+      scroller.addEventListener("click",event=>{
+        if(!suppressClick)return;
+        event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();
+        suppressClick=false;
+      },true);
+      return scroller;
+    }
+
     let active=false,moved=false,startY=0,startX=0,startTop=0,pointerId=null,suppressClick=false;
     const canStart=event=>{
       if(event.pointerType&&event.pointerType!=="mouse")return false;
       if(event.button!=null&&event.button!==0)return false;
-      const target=event.target;
-      if(!target?.closest)return false;
-      // 대화방처럼 네이티브 스크롤바를 유지하는 표면은 오른쪽 scrollbar gutter에서
-      // 커스텀 pointer capture를 시작하지 않아 thumb/track 직접 조작을 보장합니다.
-      if(keepScrollbar){
-        const rect=scroller.getBoundingClientRect?.();
-        if(rect){
-          const gutter=Math.max(12,(scroller.offsetWidth||0)-(scroller.clientWidth||0));
-          if(event.clientX>=rect.right-gutter)return false;
-        }
-      }
-      const blocked=target.closest(BLOCKED);
-      const explicitlyAllowed=Boolean(allowInteractive&&target.closest?.(allowInteractive));
-      if(blocked&&!blocked.matches?.(".shop-product-card")&&!explicitlyAllowed)return false;
-      return scroller.scrollHeight>scroller.clientHeight+1;
+      if(scrollbarHit(event))return false;
+      if(interactiveBlocked(event.target))return false;
+      return hasOverflow();
     };
     scroller.addEventListener("pointerdown",event=>{
       if(!canStart(event))return;

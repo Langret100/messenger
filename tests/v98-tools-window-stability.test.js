@@ -8,10 +8,10 @@ const sw=fs.readFileSync('sw.js','utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 
 ok(html.includes('css/features/tools.css?v=20'),'tools css v98 cache ref missing');
-ok(html.includes('js/ui/drag-scroll.js?v=8'),'drag-scroll v98 cache ref missing');
-ok(html.includes('js/features/tools.js?v=64.5.2'),'tools v98 cache ref missing');
-ok(html.includes('js/adapters/window-mode.js?v=64.5.37'),'window-mode v98 cache ref missing');
-ok(sw.includes('moaru-v64.5.59-admin-delivery-reliability-v100-20260821'),'v98 service-worker cache missing');
+ok(html.includes('js/ui/drag-scroll.js?v=9'),'drag-scroll v98 cache ref missing');
+ok(html.includes('js/features/tools.js?v=64.5.3'),'tools v98 cache ref missing');
+ok(html.includes('js/adapters/window-mode.js?v=64.5.38'),'window-mode v98 cache ref missing');
+ok(sw.includes('moaru-v64.5.60-tools-pip-real-fix-v101-20260821'),'v98 service-worker cache missing');
 
 ok(tools.includes('allowInteractive:".profile-summary,.modern-tool,.shortcut-row"'),'tools interactive drag allowance missing');
 ok(drag.includes('const allowInteractive=String(options?.allowInteractive||"").trim()'),'drag allowInteractive option missing');

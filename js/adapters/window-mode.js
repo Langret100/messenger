@@ -185,7 +185,10 @@ MiniTalk.WindowMode=(()=>{
   async function openPiP(){
     if(!window.documentPictureInPicture)return false;
     if(pipWindow&&!pipWindow.closed){pipWindow.focus();return true}
-    pipWindow=await documentPictureInPicture.requestWindow({...PIP_BOUNDS,disallowReturnToOpener:true});
+    pipWindow=await documentPictureInPicture.requestWindow({...PIP_BOUNDS,preferInitialWindowPlacement:true,disallowReturnToOpener:true});
+    /* v101: Chromium이 이전 PiP 크기를 재사용하는 경우를 막기 위해 생성 직후 한 번만 보정합니다.
+       지연 timer 재보정은 사용 중 폭 축소를 만들 수 있으므로 절대 사용하지 않습니다. */
+    try{pipWindow.resizeTo?.(PIP_BOUNDS.width,PIP_BOUNDS.height)}catch(_){}
     const doc=pipWindow.document,meta=doc.createElement("meta"),base=doc.createElement("base");
     meta.name="viewport";meta.content="width=device-width,initial-scale=1,viewport-fit=cover";base.href=document.baseURI;
     doc.head.append(meta,base);doc.title=MiniTalkConfig.appName;

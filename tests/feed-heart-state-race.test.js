@@ -11,5 +11,5 @@ ok(feed.includes('heartAudioCtx=new Ctx()')&&feed.includes('ctx.resume()'),'hear
 ok(feed.includes('target.ownerDocument||MiniTalk.UI.Dom.doc()'),'heart burst must use the target document (normal/PiP-safe)');
 ok(feed.indexOf('MiniTalk.UI.Shell.setHeader("소식",[headerHeartBadge()])')>=0&&feed.indexOf('MiniTalk.UI.Shell.setHeader("소식",[headerHeartBadge()])')<feed.lastIndexOf('ensureSub()}'),'feed header must exist before total-heart subscription starts');
 ok(html.includes('js/features/feed.js?v=65.0.21'),'feed cache version stale');
-ok(app.includes('sw.js?v=64.5.49')&&sw.includes('moaru-v64.5.59-admin-delivery-reliability-v100-20260821'),'service worker cache version stale');
+ok(app.includes('sw.js?v=64.5.49')&&sw.includes('moaru-v64.5.60-tools-pip-real-fix-v101-20260821'),'service worker cache version stale');
 console.log('FEED_HEART_STATE_RACE_OK');

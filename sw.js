@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.59-admin-delivery-reliability-v100-20260821";
+const CACHE = "moaru-v64.5.60-tools-pip-real-fix-v101-20260821";
 const CORE = [
   "./",
   "./index.html",

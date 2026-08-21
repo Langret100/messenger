@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.63-task-tools-ui-20260821";
+const CACHE = "moaru-tools-scroll-layout";
 const CORE = [
   "./",
   "./index.html",

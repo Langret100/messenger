@@ -1,3 +1,3 @@
-// v87 supersedes the v86 implementation. Keep this filename so older chained CI tests
-// continue to verify the current MOA engine instead of asserting obsolete v86 routes.
+// Current communication-engine compatibility wrapper.
+// Chained tests verify the current adaptive local-first engine through this stable filename.
 require('./moa-adaptive-local-first.test.js');

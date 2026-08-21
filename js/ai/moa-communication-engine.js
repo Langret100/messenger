@@ -264,8 +264,18 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
   function dateTime(raw){
     const c=compact(raw),now=new Date();
-    if(/^(몇시야|지금몇시|현재시간|지금시간)$/.test(c))return `지금은 ${now.getHours()}시 ${String(now.getMinutes()).padStart(2,"0")}분이야.`;
-    if(/^(오늘며칠|오늘몇일|오늘날짜|현재날짜)$/.test(c))return `오늘은 ${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일이야.`;
+    const hour=now.getHours(),minute=now.getMinutes();
+    const ampm=hour<12?"오전":"오후",hour12=hour%12||12;
+    const timeReply=`지금은 ${ampm} ${hour12}시 ${String(minute).padStart(2,"0")}분이야.`;
+    const dateReply=`오늘은 ${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일이야.`;
+    const weekdays=["일요일","월요일","화요일","수요일","목요일","금요일","토요일"];
+    const dayReply=`오늘은 ${weekdays[now.getDay()]}이야.`;
+
+    // 서버 검색이 필요 없는 가장 기본적인 생활 질문은 표현이 조금 달라도
+    // 일반 대화 fallback으로 흘리지 않고 기기 시간 기준으로 바로 답한다.
+    if(/^(?:지금|현재)?(?:몇시(?:야|지|니|인가|예요|에요)?|시간(?:이)?(?:몇시(?:야|지|니)?|뭐야|알려줘)?|현재시간(?:이)?(?:뭐야|몇시야)?|지금시간(?:이)?(?:뭐야|몇시야)?)$/.test(c))return timeReply;
+    if(/^(?:오늘|현재)?(?:며칠(?:이야|이지|이니)?|몇일(?:이야|이지|이니)?|날짜(?:가|는)?(?:뭐야|며칠이야|알려줘)?|몇월며칠(?:이야|이지|이니)?)$/.test(c))return dateReply;
+    if(/^(?:오늘|현재)?(?:무슨요일(?:이야|이지|이니)?|몇요일(?:이야|이지|이니)?|요일(?:이)?(?:뭐야|어떻게돼|알려줘)?)$/.test(c))return dayReply;
     return "";
   }
   function math(raw){
@@ -614,7 +624,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
   function qualityGate(answer,frame,source,strategy){
     let out=clean(answer);if(!out)return out;
-    if(!String(source||"").startsWith("local"))return out;
+    if(!String(source||"").startsWith("local")||source==="local-utility")return out;
     const recent=recentAssistantTurns(5),shape=normalizedReplyShape(out),qStreak=recentQuestionStreak();
     const repeated=recent.some(v=>normalizedReplyShape(v.text||"")===shape);
     const neutralShort=!frame.question&&!frame.event&&!frame.plan&&!frame.preference&&frame.affect==="neutral"&&frame.text.length<=12;
@@ -792,7 +802,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="";
 
     const dt=dateTime(text),calc=math(text),game=rps(text),social=frame.decisionCue?"":socialReactionReply(frame),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),knowledge=localKnowledgeReply(text);
-    if(dt)answer=dt;else if(calc)answer=calc;else if(game)answer=game;else if(social){answer=social;source="local";strategy="social";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc)answer=calc;else if(game)answer=game;else if(social){answer=social;source="local";strategy="social";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
     const memQ=memoryQuestion(text);

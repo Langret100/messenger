@@ -1,0 +1,26 @@
+const fs=require('fs'),vm=require('vm');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const engine=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
+const html=fs.readFileSync('index.html','utf8');
+ok(html.includes('js/ai/moa-communication-engine.js?v=15'),'MOA engine cache bust v14 missing');
+ok(engine.includes('function conversationalPenalty(frame,c)'),'conversation penalty missing');
+ok(engine.includes('function qualityGate(answer,frame,source,strategy)'),'final quality gate missing');
+ok(engine.includes('function recentQuestionStreak()'),'question streak guard missing');
+const store={};const fakeMath=Object.create(Math);fakeMath.random=()=>0.01;
+const sandbox={console,Date,Math:fakeMath,setTimeout:()=>1,clearTimeout:()=>{},MiniTalk:{AI:{},Store:{get:()=>({user_id:'quality-u',isGuest:false})},Persistence:{get:(k,d)=>k in store?store[k]:d,set:(k,v)=>store[k]=v,remove:k=>delete store[k]},AuthApi:{moaSync:async()=>({ok:true}),moaSearch:async()=>({}),moaCommit:async()=>({ok:true})}}};
+vm.createContext(sandbox);vm.runInContext(engine,sandbox);
+(async()=>{
+ const e=sandbox.MiniTalk.AI.MoaCommunicationEngine;
+ let r=await e.reply('넌 멍청해');
+ ok(r.strategy==='social'&&!/질문을 다시|어떤 느낌/.test(r.reply),'insult path regressed: '+r.reply);
+ r=await e.reply('오늘 점심 뭐 먹지');
+ ok(/점심|제육|돈까스|김밥|국수|볶음밥|덮밥|냉면/.test(r.reply),'decision request lost: '+r.reply);
+ await e.reply('오늘 학교에서 축구했어');
+ const a=await e.reply('그냥 그랬어');
+ const b=await e.reply('응');
+ ok(!/어떤 느낌|어떻게 느꼈|기분이 어땠|왜 그렇게 생각했/.test(a.reply+b.reply),'therapy-style questioning leaked: '+a.reply+' / '+b.reply);
+ const snap=e.debugSnapshot();
+ const asst=snap.context.filter(v=>v.role==='assistant').slice(-4).map(v=>v.text);
+ ok(new Set(asst).size>=3,'assistant repeated itself too aggressively: '+JSON.stringify(asst));
+ console.log('MOA_CLIENT_CONVERSATION_QUALITY_V106_OK');
+})().catch(e=>{console.error(e);process.exit(1)});

@@ -123,6 +123,10 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/^(아니|아니뭘|아니뭔데|아니뭐)$/.test(c))return "correction";
     if(/(잘하네|잘했|똑똑|천재|대단|최고)/.test(c))return "praise";
     if(/(심심|할거없|노잼)/.test(c))return "bored";
+    if(/^(뭐해|뭐하고있어|뭐하는중|모아뭐해)$/.test(c))return "whatdoing";
+    if(/(배고파|배고픔|배고프다|뭐먹지)/.test(c)&&c.length<18)return "hungry";
+    if(/(긴장돼|긴장된다|떨려|떨린다|걱정돼|걱정된다)/.test(c)&&c.length<22)return "nervous";
+    if(/(모르겠어|모르겠다|헷갈려|헷갈린다|이해안돼|이해가안돼)/.test(c)&&c.length<24)return "confused";
     if(/(피곤|졸려|지쳤)/.test(c))return "tired";
     if(/(속상|슬퍼|우울|짜증|화나|열받|서운)/.test(c))return "sad";
     if(/(기뻐|신나|좋았|재밌었|행복|개좋)/.test(c))return "happy";
@@ -300,6 +304,34 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
 
 
+
+  const COMMON_KNOWLEDGE={
+    "피카츄":"피카츄는 포켓몬스터에 등장하는 전기타입 포켓몬이야. 노란 몸, 길고 뾰족한 귀, 번개 모양 꼬리가 특징이고 포켓몬 시리즈를 대표하는 캐릭터 중 하나야.",
+    "포켓몬":"포켓몬은 사람과 함께 살아가거나 배틀을 하는 여러 종류의 생물을 중심으로 한 게임·애니메이션 시리즈야. 정식 이름은 포켓몬스터야.",
+    "세종대왕":"세종대왕은 조선의 제4대 왕이야. 훈민정음 창제를 이끌었고 과학·문화·농업 같은 여러 분야의 발전을 지원한 왕으로 잘 알려져 있어.",
+    "이순신":"이순신은 조선 시대의 장군이야. 임진왜란 때 수군을 이끌며 여러 해전에서 활약한 인물로 알려져 있어.",
+    "지구":"지구는 우리가 살고 있는 태양계의 세 번째 행성이야. 표면에 액체 상태의 물이 넓게 존재하고 현재까지 생명체가 사는 것으로 확인된 행성이야.",
+    "태양":"태양은 태양계 중심에 있는 별이야. 지구를 포함한 행성들이 태양 주위를 돌고, 태양의 빛과 열은 지구 생명과 기후에 아주 큰 영향을 줘.",
+    "달":"달은 지구 주위를 도는 자연위성이야. 스스로 빛을 내는 게 아니라 태양빛을 반사해서 밝게 보여.",
+    "공룡":"공룡은 아주 오래전 중생대에 살았던 파충류 무리야. 종류가 매우 다양했고, 새는 공룡의 한 갈래에서 이어진 것으로 봐.",
+    "고양이":"고양이는 사람과 함께 사는 대표적인 반려동물 중 하나야. 청각과 균형감각이 뛰어나고 독립적인 행동을 많이 보여.",
+    "강아지":"강아지는 개의 어린 개체를 뜻하고, 일상에서는 반려견을 귀엽게 부르는 말로도 자주 써. 개는 사람과 오랫동안 함께 살아온 동물이야.",
+    "대한민국":"대한민국은 동아시아 한반도 남부에 있는 나라야. 수도는 서울이고 한국어를 주로 사용해.",
+    "한글":"한글은 한국어를 적는 문자 체계야. 훈민정음을 바탕으로 발전했고 자음과 모음을 조합해서 글자를 만드는 방식이야.",
+    "무지개":"무지개는 공기 중의 물방울에서 햇빛이 굴절되고 반사되면서 여러 색으로 나뉘어 보이는 현상이야.",
+    "번개":"번개는 구름 안이나 구름과 지면 사이에서 큰 전기 방전이 일어날 때 생기는 강한 빛이야. 천둥은 그때 공기가 급격히 팽창하면서 생기는 소리야.",
+    "화산":"화산은 지하의 마그마와 가스가 지표로 올라오는 통로와 그 주변에 만들어진 지형이야.",
+    "블랙홀":"블랙홀은 중력이 아주 강해서 일정 경계 안에서는 빛조차 빠져나오기 어려운 천체야."
+  };
+  function localKnowledgeReply(raw){
+    const text=clean(raw),c=compact(text);
+    if(/(생김새|어떻게생겼|사진|이미지|모습보여|얼굴보여)/.test(c))return "";
+    if(!/(뭐야|누구야|무엇이야|설명해줘|알려줘)$/.test(c))return "";
+    let q=text.replace(/[?？.!]+$/g,"").replace(/\s*(?:뭐야|누구야|무엇이야|설명해줘|알려줘)$/g,"").trim();
+    q=q.replace(/(\S{2,})(?:은|는|이|가)$/,"$1").trim();
+    return COMMON_KNOWLEDGE[q]||"";
+  }
+
   function practicalDecisionReply(raw){
     const text=clean(raw),c=compact(text);
     const meal=/(점심|저녁|아침|야식|밥|먹지|먹을까|먹을거)/.test(c)&&( /(뭐먹|뭘먹|메뉴|먹지|먹을까)/.test(c) );
@@ -367,20 +399,24 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
 
   const BASE={
-    greeting:["안녕! 편하게 얘기해.","오 안녕 ㅋㅋ 뭐 하다 왔어?","안녕! 오늘은 어땠어?"],
-    bye:["응, 다음에 또 얘기하자!","잘 가! 나중에 또 와 ㅋㅋ","오케이. 다음에 보자!"],
-    thanks:["뭘 ㅋㅋ 도움이 됐다면 다행이지.","응! 필요하면 또 말해.","별말을 ㅋㅋ"],
-    laughter:["ㅋㅋㅋ 왜 웃겨","아 ㅋㅋ 그 반응 뭐야","ㅋㅋ 나도 웃기네"],
-    agreement:["그치 ㅋㅋ","응, 맞아.","맞아. 딱 그 얘기였어."],
-    correction:["아, 내가 잘못 알아들었네. 다시 맞춰볼게.","오케이, 그건 내가 잘못 짚었어.","아니었구나. 그 부분은 다시 볼게."],
-    insult:["내 답이 이상했네. 방금 말은 취소할게.","응, 내가 맥락을 잘못 잡았어.","맞아. 방금 답은 제대로 못 알아들은 거야."],
-    frustration:["아, 내가 답답하게 말했네. 앞 얘기 기준으로 다시 맞춰볼게.","응, 방금 흐름을 놓쳤어. 엉뚱하게 받아치지 않을게."],
-    praise:["오 ㅋㅋ 갑자기 칭찬받으니까 좋네.","고마워 ㅋㅋ 계속 잘해볼게.","오, 그 말은 기분 좋다 ㅋㅋ"],
-    bored:["그럼 아무 얘기나 해보자 ㅋㅋ","심심하면 같이 떠들자.","나랑 잡담하자 ㅋㅋ 게임 얘기든 학교 얘기든 아무거나."],
-    tired:["아이고, 오늘 좀 빡셌나 보다.","피곤했구나. 좀 쉬어도 되겠다.","오늘 많이 바빴나 보네."],
-    sad:["아 그건 기분 별로였겠다.","속상했겠네.","그런 일 있으면 기분 확 가라앉지."],
-    happy:["오 좋네 ㅋㅋ","그거 괜찮다! 기분 좋았겠네.","오호 ㅋㅋ 좋은 일 있었네."],
-    surprise:["헐 진짜?","오, 그건 좀 놀랍네.","와 ㅋㅋ 그건 예상 못 했는데."]
+    greeting:["안녕! 편하게 얘기해.","오 안녕 ㅋㅋ 뭐 하다 왔어?","안녕! 오늘은 어땠어?","오 왔네 ㅋㅋ 무슨 얘기부터 할까?","반가워. 궁금한 거 물어봐도 되고 그냥 수다 떨어도 돼.","안녕 ㅋㅋ 오늘 있었던 일 하나만 던져봐."],
+    bye:["응, 다음에 또 얘기하자!","잘 가! 나중에 또 와 ㅋㅋ","오케이. 다음에 보자!","응, 들어가 ㅋㅋ 다음에 이어서 얘기하자.","잘 가! 오늘 얘기 재밌었어.","오케이, 다음에 또 보자."],
+    thanks:["뭘 ㅋㅋ 도움이 됐다면 다행이지.","응! 필요하면 또 말해.","별말을 ㅋㅋ","오케이 ㅋㅋ 도움 됐으면 됐지.","응응. 또 궁금한 거 생기면 바로 물어봐.","천만에 ㅋㅋ"],
+    laughter:["ㅋㅋㅋ 왜 웃겨","아 ㅋㅋ 그 반응 뭐야","ㅋㅋ 나도 웃기네","ㅋㅋㅋㅋ 그건 인정","아 상황 생각하니까 웃기네 ㅋㅋ","ㅋㅋ 갑자기 분위기 뭐야"],
+    agreement:["그치 ㅋㅋ","응, 맞아.","맞아. 딱 그 얘기였어.","ㅇㅇ 나도 그렇게 봐.","응, 그 포인트가 맞아.","그렇지. 그 얘기야."],
+    correction:["아, 내가 잘못 알아들었네. 다시 맞춰볼게.","오케이, 그건 내가 잘못 짚었어.","아니었구나. 그 부분은 다시 볼게.","아 그 뜻이 아니었네. 지금 말한 기준으로 다시 볼게.","응, 내가 앞부분을 엉뚱하게 잡았어.","오케이 수정. 네 말 기준으로 이어갈게."],
+    insult:["내 답이 이상했네. 방금 말은 취소할게.","응, 내가 맥락을 잘못 잡았어.","맞아. 방금 답은 제대로 못 알아들은 거야.","그 답은 별로였네. 질문에 바로 맞춰서 다시 갈게.","응, 방금은 내가 헛다리 짚었어."],
+    frustration:["아, 내가 답답하게 말했네. 앞 얘기 기준으로 다시 맞춰볼게.","응, 방금 흐름을 놓쳤어. 엉뚱하게 받아치지 않을게.","오케이, 같은 말 돌리지 말고 핵심부터 다시 볼게.","내가 자꾸 빗나갔네. 지금 질문만 정확히 잡아서 답할게."],
+    praise:["오 ㅋㅋ 갑자기 칭찬받으니까 좋네.","고마워 ㅋㅋ 계속 잘해볼게.","오, 그 말은 기분 좋다 ㅋㅋ","오 인정받았다 ㅋㅋ","고마워. 다음 답도 제대로 해볼게.","ㅋㅋ 칭찬 접수"],
+    bored:["그럼 아무 얘기나 해보자 ㅋㅋ","심심하면 같이 떠들자.","나랑 잡담하자 ㅋㅋ 게임 얘기든 학교 얘기든 아무거나.","그럼 주제 랜덤으로 하나 던질까? 요즘 제일 자주 하는 거 뭐야?","심심할 땐 별거 아닌 얘기가 제일 재밌지 ㅋㅋ 오늘 웃긴 일 없었어?","오케이 내가 상대해줄게 ㅋㅋ 게임, 음식, 학교 중 하나 골라."],
+    tired:["아이고, 오늘 좀 빡셌나 보다.","피곤했구나. 좀 쉬어도 되겠다.","오늘 많이 바빴나 보네.","아 피곤하면 말하기도 귀찮지. 짧게 얘기해도 돼.","오늘 에너지 다 썼나 보다.","졸리면 무리해서 버티지 말고 좀 쉬자."],
+    sad:["아 그건 기분 별로였겠다.","속상했겠네.","그런 일 있으면 기분 확 가라앉지.","아 그건 좀 마음 쓰였겠다.","그 상황이면 기분 상할 만하네.","응, 그건 쉽게 넘길 일은 아니었겠다."],
+    happy:["오 좋네 ㅋㅋ","그거 괜찮다! 기분 좋았겠네.","오호 ㅋㅋ 좋은 일 있었네.","오 그건 자랑할 만한데 ㅋㅋ","좋았겠다. 듣는 나도 기분 괜찮네.","오 오늘 건 성공이네 ㅋㅋ"],
+    surprise:["헐 진짜?","오, 그건 좀 놀랍네.","와 ㅋㅋ 그건 예상 못 했는데.","엥 진짜로?","와 그건 갑자기네 ㅋㅋ","오 그런 일이 있었어?","헉, 그건 예상 밖인데.","와 잠깐 ㅋㅋ 진짜 그런 거야?"],
+    whatdoing:["나? 여기서 네 얘기 들을 준비 중 ㅋㅋ","지금은 너랑 얘기하는 중이지 ㅋㅋ","딱히 바쁜 건 없어. 네가 말 걸어서 대화 중!","나는 여기 있어 ㅋㅋ 뭐 하고 있었어?","지금 너한테 답하는 중. 아무 얘기나 던져봐."],
+    hungry:["배고프구나 ㅋㅋ 지금 딱 먹고 싶은 거 있어?","아 배고플 때 음식 생각밖에 안 나지 ㅋㅋ","뭐라도 간단히 먹고 싶겠다. 밥 쪽이야 간식 쪽이야?","배고프면 괜히 예민해지기도 하지 ㅋㅋ 먹을 거 생각해보자."],
+    nervous:["긴장되는구나. 너무 앞까지 생각하지 말고 바로 다음 한 가지만 보면 좀 낫더라.","아 그럴 때 괜히 심장 빨리 뛰지. 준비한 것부터 하나씩 하면 돼.","걱정되는 일이 있구나. 뭐 때문에 제일 신경 쓰이는지 말해도 돼.","떨리는 건 이해돼. 지금 할 수 있는 것 하나만 먼저 챙겨보자."],
+    confused:["헷갈리는구나. 어디부터 꼬였는지 한 부분만 말해주면 같이 정리해볼게.","아 이해가 안 붙는 부분이 있네. 문장이나 문제를 그대로 말해줘도 돼.","모르겠을 땐 한 번에 다 보지 말고 제일 막히는 부분부터 보면 돼.","오케이, 그럼 아는 부분이랑 모르는 부분을 나눠서 같이 보자."]
   };
 
   function strategyHistory(){return state().strategyHistory||[];}
@@ -446,7 +482,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const add=(family,rows,base=strategy)=>rows.forEach((t,i)=>out.push(candidate(t,`${family}:${i}`,base,76-i)));
     if(strategy==="clarify"){
       if(ref.ambiguous)add("clarify.ref",["아까 말한 대상을 말하는 거야?","그게 누구를 말하는 건지 한 번만 알려줘.","아까 얘기한 것 중 어느 걸 말하는 거야?"]);
-      else add("clarify.general",["어느 부분을 말하는지 조금만 더 알려줘.","그 상황을 한마디만 더 붙여주면 제대로 이어갈게."]);
+      else add("clarify.general",["어느 부분을 말하는지 조금만 더 알려줘.","그 상황을 한마디만 더 붙여주면 제대로 이어갈게.","누구나 어떤 일을 말하는지만 짚어주면 바로 이어서 답할게.","한 단어만 더 붙여줘도 돼. 그걸 기준으로 맞춰볼게."]);
     }
     if(strategy==="empathy"){
       if(frame.affect==="negative")add("empathy.neg",["아 그건 좀 힘들었겠다.","아이고, 기분 좀 상했겠네.","그건 꽤 신경 쓰였겠다."]);
@@ -458,7 +494,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else if(frame.plan)add("ack.plan",["오, 그렇게 하기로 했구나.","좋네 ㅋㅋ 다음 계획까지 잡았네.","오케이. 다음엔 그걸 해보는 거구나."]);
       else if(frame.preference)add("ack.pref",frame.affect==="negative"?["아, 그건 취향에 안 맞는구나.","오, 넌 그쪽은 별로구나."]:["오 그거 좋아하는구나 ㅋㅋ","그쪽 취향이구나.","오, 그건 기억해둘 만하네."]);
       else if(frame.topic&&frame.text.length>8)add("ack.topic",[`아, ${frame.topic} 얘기구나.`,`응, ${frame.topic} 얘기였구나.`]);
-      else add("ack.general",["응. 조금 더 말해줘.","응, 이어서 말해도 돼."]);
+      else add("ack.general",["응. 조금 더 말해줘.","응, 이어서 말해도 돼.","응응, 듣고 있어.","오케이. 그 얘기 계속해봐.","그래, 무슨 말인지 따라가고 있어."]);
     }
     if(strategy==="playful")add("playful",["오 ㅋㅋ 그건 좀 웃기네.","아 ㅋㅋ 상황이 그려진다.","ㅋㅋㅋ 그랬구나."]);
     if(strategy==="continue"){
@@ -468,7 +504,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(strategy==="explore"){
       if(frame.affect==="negative")add("explore.neg",["그중에 뭐가 제일 힘들었어?","그때 기분이 어땠어?","무슨 일이 있었는데?"]);
       else if(frame.event)add("explore.event",["그다음엔 어떻게 됐어?","뭐가 제일 기억나?","같이 한 사람도 있었어?"]);
-      else add("explore.general",["넌 그중에 뭐가 제일 좋았어?","그건 왜 그렇게 생각했어?","조금 더 얘기해봐 ㅋㅋ"]);
+      else add("explore.general",["넌 그중에 뭐가 제일 좋았어?","그건 왜 그렇게 생각했어?","조금 더 얘기해봐 ㅋㅋ","그중에서 제일 기억나는 건 뭐야?","너는 그걸 어떻게 느꼈어?","그 얘기 들으니까 뒤가 궁금하네 ㅋㅋ"]);
     }
     if(strategy==="direct"){
       if(frame.act==="question"&&!frame.knowledgeCue)add("direct.question",s.lastStatement?["앞 얘기랑 이어지는 질문이네. 지금 말한 상황 기준으로 보면 한 가지로 딱 잘라 말하긴 어려워.","앞 얘기 기준으로 답하려면 조건이 하나만 더 있으면 좋겠어."]:["그건 상황에 따라 달라질 수 있어. 어떤 상황인지 한 줄만 더 말해줘.","조건에 따라 답이 달라져. 지금 상황을 조금만 더 알려줘."]);
@@ -476,11 +512,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else if(frame.plan&&frame.topic)add("direct.plan",[`그럼 다음엔 ${frame.topic} 쪽으로 해보려는 거네.`,`오케이, ${frame.topic} 계획까지 잡아둔 거구나.`]);
       else if(frame.preference&&frame.topic)add("direct.preference",frame.affect==="negative"?[`${frame.topic} 쪽은 취향이 아닌 거네.`]:[`${frame.topic} 쪽을 좋아하는구나. 그건 기억해둘게.`]);
       else if(frame.topic&&frame.text.length>8&&frame.text.length<=24)add("direct.topic",[`응, ${frame.topic} 얘기였구나.`,`아, ${frame.topic} 쪽이구나.`]);
-      else add("direct.general",["조금 더 말해줘. 지금 문장만으로는 뜻을 단정하지 않을게.","한마디만 더 붙여주면 거기에 맞춰 답할게."]);
+      else add("direct.general",["조금 더 말해줘. 지금 문장만으로는 뜻을 단정하지 않을게.","한마디만 더 붙여주면 거기에 맞춰 답할게.","응, 지금 말만 보고 넘겨짚진 않을게. 맥락을 조금만 더 줘.","무슨 쪽 얘긴지는 알겠는데 한 조각만 더 있으면 정확히 답할 수 있어."]);
     }
     if(!out.length){
       if(frame.topic&&frame.text.length>8)add("fallback.topic",[`응, ${frame.topic} 얘기였구나.`,`아, ${frame.topic} 쪽이구나.`],"direct");
-      else add("fallback",["조금 더 말해줘. 짧은 말만 보고 뜻을 지어내진 않을게.","한마디만 더 붙여줘. 그걸 기준으로 답할게."],"clarify");
+      else add("fallback",["조금 더 말해줘. 짧은 말만 보고 뜻을 지어내진 않을게.","한마디만 더 붙여줘. 그걸 기준으로 답할게.","응, 듣고 있어. 무슨 얘긴지 한 조각만 더 말해줘.","짧게 말해도 돼. 대상을 하나만 알려주면 바로 이어갈게."],"clarify");
     }
     return out;
   }
@@ -667,10 +703,10 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const text=clean(raw);if(!text)return {reply:"응?",source:"local"};
     const frame=analyze(text);observePreviousTurn(frame);updateDialogueState(frame);remember("user",text,{intent:frame.act,affect:frame.affect,topic:frame.topic});
     const ref=resolveReference(frame);const searchMode=searchPolicy(frame,ref);
-    let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame);
+    let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="";
 
-    const dt=dateTime(text),calc=math(text),game=rps(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text);
-    if(dt)answer=dt;else if(calc)answer=calc;else if(game)answer=game;else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}
+    const dt=dateTime(text),calc=math(text),game=rps(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),knowledge=localKnowledgeReply(text);
+    if(dt)answer=dt;else if(calc)answer=calc;else if(game)answer=game;else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
     const memQ=memoryQuestion(text);
@@ -681,7 +717,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else {
         const q=searchQuery(frame,ref);
         if(!q){answer="뭘 찾아볼까? 궁금한 대상이나 주제를 말해줘.";source="local";strategy="clarify";}
-        else try{const d=await MiniTalk.AuthApi.moaSearch({userId:userKey(),text,query:q,context:context().slice(-8)});if(d?.reply){answer=d.reply;source=d.source||"search";candidateId=`search:${d.kind||"general"}`;strategy="search";}}catch(e){console.warn("모아 검색 실패",e);}
+        else try{const d=await MiniTalk.AuthApi.moaSearch({userId:userKey(),text,query:q,context:context().slice(-8)});if(d?.reply){answer=d.reply;source=d.source||"search";candidateId=`search:${d.kind||"general"}`;strategy="search";imageUrl=String(d.image_url||"");imageSearchUrl=String(d.image_search_url||"");sourceUrl=String(d.source_url||"");}}catch(e){console.warn("모아 검색 실패",e);}
       }
     }
 
@@ -697,7 +733,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/[?？]$/.test(answer))s.initiative.assistantQuestions=Number(s.initiative.assistantQuestions||0)+1;
     saveState();
     remember("assistant",answer,{source,candidateId,intent:frame.act,affect:frame.affect,strategy,policyKey:policyKeyValue,question:/[?？]$/.test(answer)});
-    return {reply:answer,source,candidateId,strategy,searchMode,referenceConfidence:ref.confidence,profile:{...profile()}};
+    return {reply:answer,source,candidateId,strategy,searchMode,referenceConfidence:ref.confidence,imageUrl,imageSearchUrl,sourceUrl,profile:{...profile()}};
   }
 
   function clearContext(){

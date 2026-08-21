@@ -24,3 +24,7 @@
 .moa-proactive-unread{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--accent);color:#fff;font-size:9px;font-weight:900;line-height:1}
 .moa-chat-list-item[data-unread="0"] .conversation-preview{color:var(--muted)}
 .moa-chat-list-item:not([data-unread="0"]) .conversation-preview{color:var(--text);font-weight:750}
+/* v93: 생김새/사진 질문의 안전한 이미지 미리보기 카드 */
+.moa-image-result{margin-top:8px;border-radius:12px;overflow:hidden;background:var(--surface-2);border:1px solid color-mix(in srgb,var(--accent) 12%,var(--line));max-width:260px}
+.moa-image-result-img{display:block;width:100%;max-height:220px;object-fit:contain;cursor:zoom-in;background:#fff}
+.moa-image-more{margin-top:7px}

@@ -99,6 +99,34 @@ function moaWikiExact_(query){
   var rows=[];Object.keys(pages).forEach(function(k){var v=pages[k]||{};if(Number(k)<0||!v.title||!v.extract)return;rows.push({title:v.title,snippet:moaTrimAnswer_(v.extract,420),url:v.fullurl||("https://ko.wikipedia.org/wiki/"+encodeURIComponent(String(v.title).replace(/ /g,"_"))),exact:true})});
   return rows;
 }
+
+function moaWikiSummary_(query){
+  var q=String(query||"").trim();if(!q)return null;
+  try{
+    var url="https://ko.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(q.replace(/ /g,"_"));
+    var data=moaFetchJson_(url);if(!data||data.type==="https://mediawiki.org/wiki/HyperSwitch/errors/not_found"||!data.extract)return null;
+    var pageUrl=data.content_urls&&data.content_urls.desktop&&data.content_urls.desktop.page||"";
+    var thumb=data.thumbnail&&data.thumbnail.source||data.originalimage&&data.originalimage.source||"";
+    return {title:String(data.title||q),snippet:moaTrimAnswer_(data.extract,520),url:pageUrl,exact:true,thumbnail:thumb};
+  }catch(e){return null;}
+}
+function moaImageKnowledge_(text,query){
+  var raw=String(text||""),q=moaCleanKnowledgeQuery_(query,raw);
+  var imageIntent=/(생김새|생긴\s*모습|어떻게\s*생겼|모습\s*(?:보여|알려)|사진\s*(?:보여|찾)|이미지\s*(?:보여|찾|검색)|얼굴\s*(?:보여|사진)|사진$|이미지$)/.test(raw);
+  if(!imageIntent||!q)return null;
+  var row=moaWikiSummary_(q);
+  if(!row){
+    var exact=moaWikiExact_(q);if(exact.length)row=exact[0];
+  }
+  if(!row){
+    var searched=moaWikiSearch_(q);if(searched.length)row=searched[0];
+  }
+  var google="https://www.google.com/search?safe=active&tbm=isch&q="+encodeURIComponent(q);
+  if(row&&row.thumbnail){
+    return {reply:q+" 모습은 이쪽이야. 아래 이미지를 눌러 크게 볼 수 있어.",source:"image-answer",kind:"image",image_url:row.thumbnail,image_search_url:google,source_url:row.url||""};
+  }
+  return {reply:q+" 사진을 바로 찾을 수 있게 이미지 검색을 열어둘게.",source:"image-search",kind:"image",image_search_url:google};
+}
 function moaResultQuality_(row,query,index){
   var title=moaNormalize_(row&&row.title||""),snippet=moaNormalize_(row&&row.snippet||""),q=moaNormalize_(query),words=moaSearchWords_(query),score=Math.max(0,30-index*3);
   if(title===q)score+=55;else if(title.indexOf(q)>=0||q.indexOf(title)>=0)score+=28;
@@ -296,10 +324,13 @@ function moaGeneralSearch_(query,text){
   if(/추천|골라|뭐가\s*좋/.test(raw)&&!/추천/.test(lookup))lookup=q+" 추천";
   else if(/비교|차이|장단점/.test(raw)&&!/(비교|차이)/.test(lookup))lookup=q+" 비교 차이";
   else if(/최신|최근|요즘/.test(raw)&&!/(최신|최근)/.test(lookup))lookup=q+" 최신";
-  var cache=CacheService.getScriptCache(),key="moa.search.v3."+Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,lookup+"|"+raw.slice(0,80))).slice(0,28),hit=cache.get(key);if(hit){try{return JSON.parse(hit)}catch(e){}}
+  var cache=CacheService.getScriptCache(),key="moa.search.v4."+Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,lookup+"|"+raw.slice(0,80))).slice(0,28),hit=cache.get(key);if(hit){try{return JSON.parse(hit)}catch(e){}}
   var factual=/누구|뭐야|무엇|뜻|정의|어떤\s*(?:사람|것|캐릭터|동물|곳)|설명/.test(raw)&&!/(최신|최근|뉴스|추천|비교|차이|장단점|검색)/.test(raw);
   var results=[];
-  if(factual)moaWikiExact_(q).forEach(function(v){results.push(v)});
+  if(factual){
+    var summaryRow=moaWikiSummary_(q);if(summaryRow)results.push(summaryRow);
+    moaWikiExact_(q).forEach(function(v){results.push(v)});
+  }
   if(/추천|골라|비교|차이|장단점/.test(raw))moaDuckHtmlSearch_(lookup).forEach(function(v){if(results.length<5)results.push(v)});
   moaWikiSearch_(lookup).forEach(function(v){if(results.length<5)results.push(v)});
   if(results.length<4){
@@ -315,7 +346,7 @@ function moaGeneralSearch_(query,text){
   }else if(results.length&&Number(results[0]._quality||0)>=18){
     var first=results[0];out={reply:moaTrimAnswer_(first.snippet,420)+(factual?"":"\n\n참고 자료\n"+first.url),source:factual?"knowledge-answer":"web-answer",kind:"answer"};
   }else{
-    out={reply:"지금 확인된 자료만으로는 확실하게 답하기 어려워. 이름이나 대상을 조금 더 구체적으로 말해주면 엉뚱한 내용으로 추측하지 않고 다시 확인할게.",source:"web-answer",kind:"answer"};
+    out={reply:q+"에 대한 설명을 바로 가져오지 못했어. 다른 공개 자료로 한 번 더 찾거나, 이름을 조금 더 붙여주면 바로 이어서 확인할게.",source:"web-answer",kind:"answer"};
   }
   cache.put(key,JSON.stringify(out),600);return out;
 }
@@ -323,7 +354,8 @@ function moaSearchAssist_(data){
   var text=String(data.text||"").trim(),query=String(data.query||text).trim();if(!query)return jsonResponse_({ok:false,error:"MOA_SEARCH_QUERY_REQUIRED"});
   var cleaned=moaCleanKnowledgeQuery_(query,text);
   if((!cleaned||moaQueryLooksGeneric_(cleaned))&&data){var anchor=moaContextAnchor_(data);if(anchor)query=anchor+" "+query;}
-  var shortcut=moaSearchShortcut_(text||query,query);if(shortcut)return jsonResponse_({ok:true,reply:shortcut.reply,source:shortcut.source,kind:shortcut.kind});
+  var image=moaImageKnowledge_(text||query,query);if(image)return jsonResponse_({ok:true,reply:image.reply,source:image.source,kind:image.kind,image_url:image.image_url||"",image_search_url:image.image_search_url||"",source_url:image.source_url||""});
+  var shortcut=moaSearchShortcut_(text||query,query);if(shortcut)return jsonResponse_({ok:true,reply:shortcut.reply,source:shortcut.source,kind:shortcut.kind,image_url:shortcut.image_url||"",image_search_url:shortcut.image_search_url||"",source_url:shortcut.source_url||""});
   var air=moaAirQualitySearch_(text||query);if(air)return jsonResponse_({ok:true,reply:air.reply,source:air.source,kind:air.kind});
   var cityTime=moaCityTimeSearch_(text||query);if(cityTime)return jsonResponse_({ok:true,reply:cityTime.reply,source:cityTime.source,kind:cityTime.kind});
   var weather=moaWeatherSearch_(text||query);if(weather)return jsonResponse_({ok:true,reply:weather.reply,source:weather.source,kind:weather.kind});

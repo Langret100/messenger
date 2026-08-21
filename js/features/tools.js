@@ -57,6 +57,9 @@ MiniTalk.Features.Tools = (() => {
     );
     view.append(list);
     host.replaceChildren(view);
+    // PC/PiP: 도구 목록의 빈 영역을 위아래로 잡아 끌어 스크롤합니다.
+    // 버튼/링크/프로필 카드는 DragScroll의 BLOCKED 대상이라 기존 클릭 동작을 가로채지 않습니다.
+    MiniTalk.UI.DragScroll?.bind?.(list);
   }
 
   function sectionLabel(title, description, extraClass = "") {

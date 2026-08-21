@@ -6,8 +6,8 @@
  */
 MiniTalk.Tasks=MiniTalk.Tasks||{};
 MiniTalk.Tasks.FridayGrade6Mission=(()=>{
-  const OPEN_HOUR=9,TOTAL=20,PATH="moaru/v3/fridayMission",REWARD_TYPE="WEEKLY_CHECK_OVER80",REWARD_COIN=3,ALT_ANCHOR_WEEK="2026-08-17";
-  const mathCats=["분수·소수","비와 비율","도형","자료 해석","문장제"];
+  const OPEN_HOUR=9,TOTAL=20,PATH="moaru/v3/fridayMission",REWARD_TYPE="WEEKLY_CHECK_OVER80",REWARD_COIN=5,ALT_ANCHOR_WEEK="2026-08-17";
+  const QUESTION_SET_VERSION="v5",mathCats=["분수·소수","비와 비율","도형","자료 해석","문장제"];
   const korBank=[
     ["독해","'비가 와서 운동회가 연기되었다.'에서 운동회가 연기된 까닭은?","비가 와서",["비가 와서","날씨가 더워서","학생이 적어서","운동장이 넓어서"]],
     ["독해","글에서 반복되거나 강조되는 내용을 살펴보는 주된 까닭은?","중심 생각을 찾기 위해",["중심 생각을 찾기 위해","글자 수를 세기 위해","문장부호를 찾기 위해","종이 크기를 알기 위해"]],
@@ -65,7 +65,7 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     return{subject,category,text,answer:String(answer),choices:shuffle(unique.slice(0,4),r),format}
   }
   function percentChoices(answer,r){const values=new Set([answer]);for(const add of [-20,-10,10,20,25]){const v=Math.max(0,Math.min(100,Number(answer.replace("%",""))+add));values.add(`${v}%`);if(values.size>=4)break}return shuffle([...values].slice(0,4),r)}
-  function makeMathQuestion(cat,r){
+  function makeMathQuestionV4(cat,r){
     if(cat==="분수·소수"){
       if(r()<.55){const a=between(r,8,48)/10,b=between(r,2,19)/10,ans=(a+b).toFixed(1);return q("수학",cat,`주스가 ${a.toFixed(1)}L 있었는데 ${b.toFixed(1)}L를 더 부었습니다. 지금 주스는 모두 몇 L인가요?`,ans,[ans,(a+b+.1).toFixed(1),(Math.max(0,a+b-.1)).toFixed(1),(Math.max(0,a-b)).toFixed(1)],r,"word")}
       const d=between(r,4,10),n=between(r,1,d-1),extra=between(r,1,d-n),ans=`${n+extra}/${d}`;return q("수학",cat,`한 판을 ${d}등분한 피자에서 처음 ${n}조각, 나중에 ${extra}조각을 먹었습니다. 먹은 양을 분수로 나타내면?`,ans,[ans,`${n}/${d}`,`${extra}/${d}`,`${d}/${n+extra}`],r,"word")
@@ -91,30 +91,101 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     const distance=between(r,3,8)*120,time=between(r,2,4),ans=String(distance/time);return q("수학",cat,`자전거를 타고 ${time}시간 동안 ${distance}km를 같은 빠르기로 이동했습니다. 한 시간에 몇 km씩 이동한 셈인가요?`,ans,[ans,String(distance),String(distance-time),String(distance/time+10)],r,"word")
   }
 
-  function makeQuestions(){
-    const subject=missionSubject(),r=rng(hash(`${weekKey()}|${user().user_id||"guest"}|grade6-worksheet-v4|${subject}`)),rows=[];
+
+  const korExtra=[
+    ["독해","다음 글에서 알 수 있는 사실은? '지민이는 아침마다 창문을 열어 날씨를 확인한 뒤 기온에 맞는 옷을 골라 입는다.'","지민이는 날씨를 확인하고 옷을 고른다",["지민이는 날씨를 확인하고 옷을 고른다","지민이는 매일 같은 옷을 입는다","지민이는 창문을 열지 않는다","지민이는 밤에만 날씨를 확인한다"]],
+    ["독해","다음 글의 중심 내용으로 가장 알맞은 것은? '우리 동네에서는 토요일마다 주민들이 공원에 모여 쓰레기를 줍고 화단을 돌본다. 덕분에 공원이 한결 깨끗해졌다.'","주민들이 함께 공원을 깨끗하게 가꾼다",["주민들이 함께 공원을 깨끗하게 가꾼다","토요일에는 공원에 갈 수 없다","화단에는 꽃이 피지 않는다","주민들은 공원에서 운동만 한다"]],
+    ["독해","안내문을 읽을 때 가장 먼저 확인하면 좋은 것은?","무엇을 언제 어떻게 해야 하는지",["무엇을 언제 어떻게 해야 하는지","글자 수가 몇 개인지","종이의 색이 무엇인지","쓴 사람의 글씨체가 어떤지"]],
+    ["독해","이야기에서 사건의 순서를 파악하는 데 가장 도움이 되는 말은?","먼저, 그다음, 마지막으로",["먼저, 그다음, 마지막으로","매우, 아주, 정말","크다, 작다, 길다","나, 너, 우리"]],
+    ["어휘","'신중하다'의 뜻으로 가장 알맞은 것은?","조심스럽게 깊이 생각하다",["조심스럽게 깊이 생각하다","아무 생각 없이 서두르다","큰 소리로 말하다","쉽게 포기하다"]],
+    ["어휘","'공감하다'의 뜻으로 가장 알맞은 것은?","다른 사람의 생각이나 감정을 이해하고 함께 느끼다",["다른 사람의 생각이나 감정을 이해하고 함께 느끼다","상대의 말을 일부러 무시하다","혼자서만 결정하다","모든 일을 빠르게 끝내다"]],
+    ["어휘","'원인'과 뜻의 관계가 가장 가까운 말은?","어떤 일이 생긴 까닭",["어떤 일이 생긴 까닭","어떤 일이 끝난 결과","글의 첫 문장","사람의 이름"]],
+    ["어휘","'효율적이다'의 뜻으로 가장 알맞은 것은?","적은 노력으로 좋은 결과를 얻는다",["적은 노력으로 좋은 결과를 얻는다","시간을 오래 끌기만 한다","같은 일을 계속 반복한다","계획 없이 시작한다"]],
+    ["문법","'동생이 운동장에서 신나게 달린다.'에서 서술어는?","달린다",["동생이","운동장에서","신나게","달린다"]],
+    ["문법","'나는 숙제를 끝냈지만 동생은 아직 공부하고 있다.'에서 두 내용을 이어 주는 말은?","-지만",["-지만","나는","아직","공부하고"]],
+    ["문법","다음 중 시간의 흐름에 맞게 이어 주는 표현은?","먼저 손을 씻고, 그다음 식사를 했다.",["먼저 손을 씻고, 그다음 식사를 했다.","먼저 식사를 했지만, 그래서 손을 씻었다.","그러나 손을 씻고, 예를 들면 식사를 했다.","한편 먼저, 하지만 그다음이다."]],
+    ["문법","'새빨간 사과가 바구니에 놓여 있다.'에서 '사과'를 꾸며 주는 말은?","새빨간",["새빨간","사과가","바구니에","놓여 있다"]],
+    ["맞춤법","다음 중 바르게 쓴 문장은?","웬일로 일찍 왔니?",["웬일로 일찍 왔니?","왠일로 일찍 왔니?","웬 일로 일찍왔니?","왠 일로 일찍 왔니?"]],
+    ["맞춤법","다음 중 바르게 쓴 것은?","돼요",["돼요","되요","됬어요","됬다"]],
+    ["맞춤법","띄어쓰기가 바른 문장은?","한 번 더 생각해 보자.",["한 번 더 생각해 보자.","한번 더 생각해보자.","한 번더 생각해 보자.","한번더 생각해보자."]],
+    ["맞춤법","다음 중 바르게 쓴 낱말은?","어떻게",["어떻게","어떡해로","어떻해","어떡게"]],
+    ["추론","교실 불은 켜져 있고 책상 위에 펼친 공책과 연필이 있다. 가장 자연스러운 짐작은?","누군가 공부하다가 잠시 자리를 비웠다",["누군가 공부하다가 잠시 자리를 비웠다","교실을 아무도 사용하지 않았다","공책은 새것이라 한 번도 펼치지 않았다","교실에는 책상이 없다"]],
+    ["추론","친구가 우산을 접으며 옷에 묻은 물을 털고 들어왔다. 밖의 날씨로 가장 알맞은 것은?","비가 오고 있거나 조금 전까지 왔다",["비가 오고 있거나 조금 전까지 왔다","눈이 많이 쌓였다","하늘이 하루 종일 맑았다","바람이 전혀 불지 않았다"]],
+    ["추론","운동장에 물웅덩이가 많고 체육 수업이 강당으로 바뀌었다. 그 까닭으로 가장 알맞은 것은?","비 때문에 운동장 사용이 어려워졌다",["비 때문에 운동장 사용이 어려워졌다","운동장이 새로 생겼다","학생들이 모두 집에 갔다","강당을 철거하기로 했다"]],
+    ["추론","민호가 시험지를 받은 뒤 어려운 문제에 표시를 하고 쉬운 문제부터 풀었다. 민호의 행동에서 알 수 있는 점은?","시간을 효율적으로 쓰려고 한다",["시간을 효율적으로 쓰려고 한다","시험을 포기하려고 한다","문제를 읽지 않으려고 한다","답을 모두 알고 있다"]],
+    ["요약","다음 글의 요약으로 가장 알맞은 것은? '반 친구들은 역할을 나누어 교실을 청소했다. 창문을 닦는 친구, 바닥을 쓰는 친구, 책상을 정리하는 친구가 힘을 합치자 금방 깨끗해졌다.'","역할을 나누어 함께 청소하면 일을 효율적으로 할 수 있다",["역할을 나누어 함께 청소하면 일을 효율적으로 할 수 있다","청소는 혼자 해야 가장 빠르다","창문 청소만 하면 교실이 깨끗해진다","책상은 정리할 필요가 없다"]],
+    ["요약","다음 글의 핵심 내용은? '물을 아껴 쓰려면 양치할 때 컵을 사용하고, 비누칠하는 동안에는 수도꼭지를 잠그는 습관이 필요하다.'","생활 속 작은 습관으로 물을 절약할 수 있다",["생활 속 작은 습관으로 물을 절약할 수 있다","양치할 때 물을 계속 틀어야 한다","비누칠할 때 물을 더 많이 써야 한다","물 절약은 생활과 관계없다"]],
+    ["요약","다음 내용의 요약으로 알맞은 것은? '도서관에서는 책을 조용히 읽고, 빌린 책은 정해진 날짜 안에 돌려주며, 다른 사람이 읽을 수 있도록 깨끗하게 사용해야 한다.'","도서관 책을 이용할 때 지켜야 할 예절이 있다",["도서관 책을 이용할 때 지켜야 할 예절이 있다","도서관에서는 책을 살 수만 있다","책은 빌린 뒤 돌려주지 않아도 된다","도서관에서는 큰 소리로 읽어야 한다"]],
+    ["요약","다음 글의 중심 내용을 한 문장으로 줄이면? '충분히 잠을 자면 몸의 피로가 풀리고 다음 날 집중하는 데 도움이 된다. 일정한 시간에 자고 일어나는 습관도 중요하다.'","규칙적으로 충분히 자는 것은 건강과 집중에 도움이 된다",["규칙적으로 충분히 자는 것은 건강과 집중에 도움이 된다","잠은 적게 잘수록 집중이 잘된다","잠자는 시간은 매일 달라야 한다","피곤할수록 늦게 자는 것이 좋다"]]
+  ];
+
+  function makeMathQuestion(cat,r,variant=null){
+    if(cat==="분수·소수"){
+      const mode=variant==null?between(r,0,4):(variant+Math.abs(weekNumberFromAnchor()))%5;
+      if(mode===0){const a=between(r,8,48)/10,b=between(r,2,19)/10,ans=(a+b).toFixed(1);return q("수학",cat,`주스가 ${a.toFixed(1)}L 있었는데 ${b.toFixed(1)}L를 더 부었습니다. 지금 주스는 모두 몇 L인가요?`,ans,[ans,(a+b+.1).toFixed(1),(Math.max(0,a+b-.1)).toFixed(1),(Math.max(0,a-b)).toFixed(1)],r,"word")}
+      if(mode===1){const a=between(r,25,90)/10,b=between(r,5,Math.max(5,Math.floor(a*10)-5))/10,ans=(a-b).toFixed(1);return q("수학",cat,`${a.toFixed(1)}kg의 밀가루 중 ${b.toFixed(1)}kg을 사용했습니다. 남은 밀가루는 몇 kg인가요?`,ans,[ans,(a+b).toFixed(1),(Math.max(0,a-b+.1)).toFixed(1),(Math.max(0,a-b-.1)).toFixed(1)],r,"word")}
+      if(mode===2){const d=between(r,4,10),n=between(r,1,d-2),extra=between(r,1,d-n),ans=`${n+extra}/${d}`;return q("수학",cat,`한 판을 ${d}등분한 피자에서 처음 ${n}조각, 나중에 ${extra}조각을 먹었습니다. 먹은 양을 분수로 나타내면?`,ans,[ans,`${n}/${d}`,`${extra}/${d}`,`${d}/${n+extra}`],r,"word")}
+      if(mode===3){const d=[4,5,10][between(r,0,2)],n=between(r,1,d-1),ans=(n/d).toFixed(d===10?1:2).replace(/0+$/,'').replace(/\.$/,'');return q("수학",cat,`분수 ${n}/${d}를 소수로 나타내면?`,ans,[ans,(n/d+.1).toFixed(2).replace(/0+$/,'').replace(/\.$/,''),String(n*d),`${d}/${n}`],r)}
+      const whole=between(r,2,7),d=between(r,3,8),n=between(r,1,d-1),ans=`${whole} ${n}/${d}`;return q("수학",cat,`${whole*d+n}/${d}를 대분수로 나타내면?`,ans,[ans,`${whole+1} ${n}/${d}`,`${whole} ${d-n}/${d}`,`${n} ${whole}/${d}`],r)
+    }
+    if(cat==="비와 비율"){
+      const mode=variant==null?between(r,0,3):(variant+Math.abs(weekNumberFromAnchor()))%4;
+      if(mode===0){const totals=[20,40,50,80],total=totals[between(r,0,totals.length-1)],rates=[20,25,40,50,60,75,80],rate=rates[between(r,0,rates.length-1)],part=total*rate/100,ans=`${rate}%`;return q("수학",cat,`동아리 학생 ${total}명 중 ${part}명이 발표에 참여했습니다. 참여한 학생의 비율은 몇 %인가요?`,ans,percentChoices(ans,r),r,"word")}
+      if(mode===1){const total=[20,40,50,100][between(r,0,3)],rate=[10,20,25,30,40,50,60][between(r,0,6)],ans=String(total*rate/100);return q("수학",cat,`${total}개의 구슬 중 ${rate}%가 파란색입니다. 파란 구슬은 몇 개인가요?`,ans,[ans,String(total-rate),String(rate),String(total*rate/100+5)],r,"word")}
+      if(mode===2){const pairs=[[2,3],[2,5],[3,4],[3,5],[4,5],[5,6]],pair=pairs[between(r,0,pairs.length-1)],a=pair[0],b=pair[1],k=between(r,2,5),ans=`${a}:${b}`;return q("수학",cat,`빨간 블록 ${a*k}개와 파란 블록 ${b*k}개의 수를 가장 간단한 비로 나타내면?`,ans,[ans,`${a*k}:${b*k}`,`${b}:${a}`,`${a+b}:${b}`],r,"word")}
+      const original=between(r,4,9)*1000,discount=[10,20,25][between(r,0,2)],ans=String(original*(100-discount)/100);return q("수학",cat,`${original}원인 물건을 ${discount}% 할인합니다. 할인된 가격은 얼마인가요?`,ans,[ans,String(original*discount/100),String(original-discount),String(original*(100-discount)/100+500)],r,"word")
+    }
+    if(cat==="도형"){
+      const mode=variant==null?between(r,0,4):(variant+Math.abs(weekNumberFromAnchor()))%5,w=between(r,4,15),h=between(r,3,12);
+      if(mode===0){const ans=String(w*h);return q("수학",cat,`가로 ${w}cm, 세로 ${h}cm인 직사각형 모양 종이의 넓이는 몇 ㎠인가요?`,ans,[ans,String(2*(w+h)),String(w+h),String(w*h+h)],r,"word")}
+      if(mode===1){const ans=String(2*(w+h));return q("수학",cat,`가로 ${w}m, 세로 ${h}m인 직사각형 화단 둘레에 끈을 한 바퀴 두르려고 합니다. 필요한 끈의 길이는 몇 m인가요?`,ans,[ans,String(w*h),String(w+h),String(2*w+h)],r,"word")}
+      if(mode===2){const side=between(r,4,14),ans=String(side*side);return q("수학",cat,`한 변의 길이가 ${side}cm인 정사각형의 넓이는 몇 ㎠인가요?`,ans,[ans,String(side*4),String(side*2),String(side*side+side)],r,"word")}
+      if(mode===3){const base=between(r,4,16)*2,height=between(r,3,10),ans=String(base*height/2);return q("수학",cat,`밑변 ${base}cm, 높이 ${height}cm인 삼각형의 넓이는 몇 ㎠인가요?`,ans,[ans,String(base*height),String(base+height),String(base*height/2+height)],r,"word")}
+      const side=between(r,3,10),count=between(r,2,5),ans=String(side*count);return q("수학",cat,`한 변이 ${side}cm인 정사각형 ${count}개를 겹치지 않게 한 줄로 이어 붙였습니다. 전체 가로 길이는 몇 cm인가요?`,ans,[ans,String(side+count),String(side*count*2),String(side*side)],r,"word")
+    }
+    if(cat==="자료 해석"){
+      let vals=[between(r,20,95),between(r,20,95),between(r,20,95),between(r,20,95)];while(new Set(vals).size<4)vals=[between(r,20,95),between(r,20,95),between(r,20,95),between(r,20,95)];
+      const mode=variant==null?between(r,0,3):(variant+Math.abs(weekNumberFromAnchor()))%4,max=Math.max(...vals),min=Math.min(...vals),sum=vals.reduce((a,b)=>a+b,0);
+      if(mode===0){const ans=String(vals.indexOf(max)+1);return q("수학",cat,`1~4모둠의 재활용품 수가 차례로 ${vals.join(", ")}개입니다. 가장 많이 모은 모둠은 몇 모둠인가요?`,ans,["1","2","3","4"],r,"word")}
+      if(mode===1){const ans=String(max-min);return q("수학",cat,`네 모둠의 독서 기록이 ${vals.join(", ")}권입니다. 가장 많은 기록과 가장 적은 기록의 차이는 몇 권인가요?`,ans,[ans,String(max),String(min),String(max-min+5)],r,"word")}
+      if(mode===2){const ans=String(sum);return q("수학",cat,`월~목요일에 모은 우유갑 수가 각각 ${vals.join(", ")}개입니다. 나흘 동안 모두 몇 개를 모았나요?`,ans,[ans,String(max),String(sum-min),String(sum+10)],r,"word")}
+      const even=[20,30,40,50,60,70,80,90],data=shuffle(even,r).slice(0,4),avg=data.reduce((a,b)=>a+b,0)/4,ans=String(avg);return q("수학",cat,`네 번의 기록이 ${data.join(", ")}점입니다. 평균은 몇 점인가요?`,ans,[ans,String(Math.max(...data)),String(Math.min(...data)),String(avg+5)],r,"word")
+    }
+    const mode=variant==null?between(r,0,6):(variant+Math.abs(weekNumberFromAnchor()))%7;
+    if(mode===0){const price=between(r,2,9)*500,count=between(r,2,6),paid=Math.ceil(price*count/5000)*5000,ans=String(paid-price*count);return q("수학",cat,`${price}원짜리 공책 ${count}권을 사고 ${paid}원을 냈습니다. 거스름돈은 얼마인가요?`,ans,[ans,String(price*count),String(paid-price),String(Math.max(0,paid-price*count-500))],r,"word")}
+    if(mode===1){const per=between(r,3,8),boxes=between(r,2,6),used=between(r,1,per*boxes-1),ans=String(per*boxes-used);return q("수학",cat,`한 상자에 귤이 ${per}개씩 든 상자가 ${boxes}개 있습니다. 그중 ${used}개를 먹었다면 남은 귤은 몇 개인가요?`,ans,[ans,String(per*boxes),String(used),String(per+boxes-used)],r,"word")}
+    if(mode===2){const each=between(r,4,9)*100,people=between(r,3,7),ans=String(each*people);return q("수학",cat,`한 사람에게 ${each}원씩 간식비를 나누어 주려고 합니다. ${people}명에게 필요한 돈은 모두 얼마인가요?`,ans,[ans,String(each+people),String(each*(people-1)),String(each*people+100)],r,"word")}
+    if(mode===3){const speed=between(r,3,8)*10,time=between(r,2,4),distance=speed*time,ans=String(speed);return q("수학",cat,`자전거를 타고 ${time}시간 동안 ${distance}km를 같은 빠르기로 이동했습니다. 한 시간에 몇 km씩 이동한 셈인가요?`,ans,[ans,String(distance),String(distance-time),String(speed+10)],r,"word")}
+    if(mode===4){const total=between(r,5,12)*6,groups=[2,3,4,6][between(r,0,3)],ans=String(total/groups);return q("수학",cat,`학생 ${total}명을 ${groups}개 모둠에 똑같이 나누면 한 모둠은 몇 명인가요?`,ans,[ans,String(total-groups),String(total/groups+groups),String(groups)],r,"word")}
+    if(mode===5){const start=between(r,7,10),duration=between(r,25,55),hourAdd=Math.floor((duration)/60),minute=(duration)%60,ans=`${start+hourAdd}시 ${String(minute).padStart(2,'0')}분`;return q("수학",cat,`오전 ${start}시 00분에 시작한 활동을 ${duration}분 동안 했습니다. 끝난 시각은?`,ans,[ans,`${start}시 ${String(duration).padStart(2,'0')}분`,`${start+1}시 00분`,`${start}시 ${String(Math.max(0,duration-10)).padStart(2,'0')}분`],r,"word")}
+    const packs=between(r,2,5),per=between(r,6,12),give=between(r,2,Math.min(8,packs*per-1)),ans=String(packs*per-give);return q("수학",cat,`색종이가 한 묶음에 ${per}장씩 ${packs}묶음 있습니다. 친구에게 ${give}장을 주면 몇 장이 남나요?`,ans,[ans,String(packs*per),String(give),String(packs+per-give)],r,"word")
+  }
+
+  function makeQuestions(version=QUESTION_SET_VERSION){
+    const subject=missionSubject(),legacy=version==="v4",r=rng(hash(`${weekKey()}|${user().user_id||"guest"}|grade6-worksheet-${legacy?"v4":"v5"}|${subject}`)),rows=[];
     if(subject==="수학"){
-      const cats=[];for(const cat of mathCats)for(let i=0;i<4;i++)cats.push(cat);
-      shuffle(cats,r).forEach(cat=>rows.push(makeMathQuestion(cat,r)));
+      const cats=[];for(const cat of mathCats)for(let i=0;i<4;i++)cats.push({cat,variant:i});
+      shuffle(cats,r).forEach(item=>rows.push(legacy?makeMathQuestionV4(item.cat,r):makeMathQuestion(item.cat,r,item.variant)));
     }else{
-      shuffle(korBank,r).slice(0,TOTAL).forEach(([cat,text,ans,choices])=>rows.push(q("국어",cat,text,ans,choices,r,/다음 글|다음 내용|다음 문장|짐작|요약/.test(text)?"passage":"short")));
+      const bank=legacy?korBank:korBank.concat(korExtra);
+      shuffle(bank,r).slice(0,TOTAL).forEach(([cat,text,ans,choices])=>rows.push(q("국어",cat,text,ans,choices,r,/다음 글|다음 내용|다음 문장|짐작|요약|안내문/.test(text)?"passage":"short")));
     }
     return rows.slice(0,TOTAL).map((x,i)=>({...x,id:`q${i+1}`}));
   }
 
   function answerMap(saved){const map={};for(const item of Array.isArray(saved?.answers)?saved.answers:[]){if(item?.id&&item.answer!=null)map[item.id]=String(item.answer)}return map}
-  function serializeAnswers(questions,selections){return questions.filter(item=>selections[item.id]!=null).map(item=>({id:item.id,subject:item.subject,category:item.category,correct:String(selections[item.id])===String(item.answer),answer:String(selections[item.id])}))}
-  async function saveDraft(questions,selections){
+  function serializeAnswers(questions,selections){return questions.filter(item=>selections[item.id]!=null).map(item=>({id:item.id,subject:item.subject,category:item.category,correct:String(selections[item.id])===String(item.answer),answer:String(selections[item.id]),correctAnswer:String(item.answer),question:String(item.text||""),format:item.format||"short"}))}
+  async function saveDraft(questions,selections,setVersion=QUESTION_SET_VERSION){
     const answers=serializeAnswers(questions,selections),key=path();
     return MiniTalk.Realtime.cloudTransaction(key,current=>{
       if(current?.completed)return current;
-      return{week:weekKey(),subject:missionSubject(),index:answers.length,answers,completed:false,updatedAt:nowMs()}
+      return{week:weekKey(),subject:missionSubject(),questionSetVersion:setVersion,index:answers.length,answers,completed:false,updatedAt:nowMs()}
     })
   }
-  function scheduleDraftSave(questions,selections){
-    clearTimeout(draftTimer);draftTimer=setTimeout(()=>{draftPromise=saveDraft(questions,selections).catch(error=>console.warn("주간 미션 임시저장 실패",error))},350)
+  function scheduleDraftSave(questions,selections,setVersion=QUESTION_SET_VERSION){
+    clearTimeout(draftTimer);draftTimer=setTimeout(()=>{draftPromise=saveDraft(questions,selections,setVersion).catch(error=>console.warn("주간 미션 임시저장 실패",error))},350)
   }
-  async function flushDraft(questions,selections){clearTimeout(draftTimer);draftTimer=0;await draftPromise.catch(()=>{});return saveDraft(questions,selections)}
+  async function flushDraft(questions,selections,setVersion=QUESTION_SET_VERSION){clearTimeout(draftTimer);draftTimer=0;await draftPromise.catch(()=>{});return saveDraft(questions,selections,setVersion)}
 
   function node(doc,tag,attrs={},children=[]){
     const el=doc.createElement(tag);
@@ -146,12 +217,12 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     let win=null;try{win=window.open("","MoaruWeeklyWorksheet",popupFeatures())}catch{}
     if(!win)return null;worksheetWindow=win;enforcePopupBounds(win);
     const base=new URL("./",location.href).href,doc=win.document;
-    doc.open();doc.write(`<!doctype html><html lang="ko" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>모아루 주간 학습점검</title><link rel="stylesheet" href="css/tokens.css?v=7"><link rel="stylesheet" href="css/app.css?v=64.5.11"><link rel="stylesheet" href="css/features/math-quest.css?v=23"><link rel="stylesheet" href="css/features/feed-classinfo-weekly.css?v=65.0.21"></head><body class="weekly-exam-popup"><main id="weeklyExamRoot" class="weekly-exam-root"></main></body></html>`);doc.close();enforcePopupBounds(win);
+    doc.open();doc.write(`<!doctype html><html lang="ko" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>모아루 주간 학습점검</title><link rel="stylesheet" href="css/tokens.css?v=7"><link rel="stylesheet" href="css/app.css?v=64.5.11"><link rel="stylesheet" href="css/features/math-quest.css?v=23"><link rel="stylesheet" href="css/features/feed-classinfo-weekly.css?v=65.0.25"></head><body class="weekly-exam-popup"><main id="weeklyExamRoot" class="weekly-exam-root"></main></body></html>`);doc.close();enforcePopupBounds(win);
     win.addEventListener("pagehide",()=>{if(worksheetWindow===win)worksheetWindow=null},{once:true});try{win.focus()}catch{}return win
   }
   function closeWorksheet(){try{if(worksheetWindow&&!worksheetWindow.closed)worksheetWindow.close()}catch{}worksheetWindow=null;try{window.focus()}catch{}}
 
-  function renderWorksheet(doc,host,questions,selections,onSubmit){
+  function renderWorksheet(doc,host,questions,selections,onSubmit,setVersion=QUESTION_SET_VERSION){
     const subject=missionSubject(),answered=()=>Object.keys(selections).filter(id=>selections[id]!=null).length;
     const count=node(doc,"strong",{class:"weekly-exam-count",text:`${answered()} / ${TOTAL} 답변`});
     const status=node(doc,"span",{class:"weekly-exam-save muted",text:"선택한 답은 자동 저장됩니다."});
@@ -162,7 +233,7 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
       const choices=node(doc,"div",{class:"weekly-exam-choices",role:"group","aria-label":`${index+1}번 보기`});
       item.choices.forEach((choice,choiceIndex)=>{
         const button=node(doc,"button",{class:`weekly-exam-choice${selections[item.id]===choice?" selected":""}`,type:"button","aria-pressed":selections[item.id]===choice?"true":"false",onclick:()=>{
-          selections[item.id]=choice;choices.querySelectorAll(".weekly-exam-choice").forEach(x=>{const yes=x.dataset.value===choice;x.classList.toggle("selected",yes);x.setAttribute("aria-pressed",yes?"true":"false")});card.classList.remove("missing");updateCount();status.textContent="저장 중…";scheduleDraftSave(questions,selections);setTimeout(()=>{if(status.isConnected)status.textContent="선택한 답은 자동 저장됩니다."},650)
+          selections[item.id]=choice;choices.querySelectorAll(".weekly-exam-choice").forEach(x=>{const yes=x.dataset.value===choice;x.classList.toggle("selected",yes);x.setAttribute("aria-pressed",yes?"true":"false")});card.classList.remove("missing");updateCount();status.textContent="저장 중…";scheduleDraftSave(questions,selections,setVersion);setTimeout(()=>{if(status.isConnected)status.textContent="선택한 답은 자동 저장됩니다."},650)
         }},[node(doc,"span",{class:"weekly-choice-letter",text:["①","②","③","④"][choiceIndex]}),node(doc,"span",{text:choice})]);
         button.dataset.value=choice;choices.append(button)
       });
@@ -171,7 +242,7 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     const submit=node(doc,"button",{class:"button primary weekly-exam-submit",type:"button",text:"답안 제출하기",onclick:async()=>{
       const missing=questions.filter(q=>selections[q.id]==null);host.querySelectorAll(".weekly-exam-question.missing").forEach(x=>x.classList.remove("missing"));
       if(missing.length){for(const q of missing)host.querySelector(`#weekly-${q.id}`)?.classList.add("missing");const first=host.querySelector(`#weekly-${missing[0].id}`);first?.scrollIntoView?.({behavior:"smooth",block:"center"});status.textContent=`아직 ${missing.length}문제가 남아 있어요.`;return}
-      submit.disabled=true;submit.textContent="제출 중…";try{await flushDraft(questions,selections);await onSubmit(serializeAnswers(questions,selections))}catch(error){console.warn("주간 미션 제출 실패",error);submit.disabled=false;submit.textContent="답안 제출하기";status.textContent="제출하지 못했습니다. 다시 눌러주세요."}
+      submit.disabled=true;submit.textContent="제출 중…";try{await flushDraft(questions,selections,setVersion);await onSubmit(serializeAnswers(questions,selections))}catch(error){console.warn("주간 미션 제출 실패",error);submit.disabled=false;submit.textContent="답안 제출하기";status.textContent="제출하지 못했습니다. 다시 눌러주세요."}
     }});
     host.replaceChildren(node(doc,"header",{class:"weekly-exam-header"},[node(doc,"div",{},[node(doc,"div",{class:"friday-mission-eyebrow",text:"주간 미션 · 시험지형"}),node(doc,"h1",{text:`초6 ${subject} 학습점검`}),node(doc,"p",{class:"muted",text:`20문항을 모두 펼쳐 보고 풀 수 있어요. 80점 이상이면 주 1회 🪙 +${REWARD_COIN}`})]),node(doc,"div",{class:"weekly-exam-meta"},[count,status])]),sheet,node(doc,"footer",{class:"weekly-exam-footer"},[node(doc,"div",{class:"weekly-exam-footer-copy"},[node(doc,"strong",{text:"답안을 확인한 뒤 제출하세요."}),node(doc,"span",{class:"muted",text:"제출 전에는 언제든 답을 바꿀 수 있어요."})]),submit]));
   }
@@ -186,21 +257,20 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     else if(wantsPopup)MiniTalk.UI.Shell.toast("별도 창을 열 수 없어 현재 창에서 문제를 보여드려요.");
 
     let saved;
-    const questions=makeQuestions();
     try{saved=await MiniTalk.Realtime.cloudGet(path(),null)}catch(error){closeWorksheet();MiniTalk.UI.Shell.toast("저장된 주간 미션을 불러오지 못했습니다. 다시 시도해주세요.");throw error}
     if(saved?.completed){closeWorksheet();const checked=await ensureWeeklyReward(saved);return showReport(checked||saved)}
-    const selections=answerMap(saved);
+    const setVersion=saved?.questionSetVersion||(Array.isArray(saved?.answers)&&saved.answers.length?"v4":QUESTION_SET_VERSION),questions=makeQuestions(setVersion),selections=answerMap(saved);
     async function finish(answers){
       if(!windowInfo().open){MiniTalk.UI.Shell.toast("이번 주 학습점검 시간이 끝났습니다.");closeWorksheet();return}
-      const report=buildReport(answers),record={week:weekKey(),subject:missionSubject(),index:questions.length,answers,completed:true,report,completedAt:nowMs(),updatedAt:nowMs()};
+      const report=buildReport(answers,setVersion),record={week:weekKey(),subject:missionSubject(),questionSetVersion:setVersion,index:questions.length,answers,completed:true,report,completedAt:nowMs(),updatedAt:nowMs()};
       const savedFinal=await MiniTalk.Realtime.cloudTransaction(path(),current=>current?.completed?current:{...record,answers});
       const rewarded=await ensureWeeklyReward(savedFinal||record);MiniTalk.UI.Shell.closeModal();closeWorksheet();showReport(rewarded||savedFinal||record)
     }
-    if(popup&&!popup.closed){const host=popup.document.getElementById("weeklyExamRoot");renderWorksheet(popup.document,host,questions,selections,finish);try{popup.focus()}catch{}return}
-    const D=MiniTalk.UI.Dom,body=D.el("div",{class:"weekly-exam-modal"});MiniTalk.UI.Shell.modal("금요일 초6 학습점검",body);renderWorksheet(MiniTalk.UI.Dom.doc(),body,questions,selections,finish)
+    if(popup&&!popup.closed){const host=popup.document.getElementById("weeklyExamRoot");renderWorksheet(popup.document,host,questions,selections,finish,setVersion);try{popup.focus()}catch{}return}
+    const D=MiniTalk.UI.Dom,body=D.el("div",{class:"weekly-exam-modal"});MiniTalk.UI.Shell.modal("금요일 초6 학습점검",body);renderWorksheet(MiniTalk.UI.Dom.doc(),body,questions,selections,finish,setVersion)
   }
 
-  function scorePercent(record){const r=record?.report||buildReport(record?.answers||[]);return r.total?Math.round((Number(r.score)||0)/(Number(r.total)||1)*100):0}
+  function scorePercent(record){const r=record?.report||buildReport(record?.answers||[],record?.questionSetVersion||"v4");return r.total?Math.round((Number(r.score)||0)/(Number(r.total)||1)*100):0}
   function rewardEligible(record){return scorePercent(record)>=80}
   async function ensureWeeklyReward(record){
     if(!record?.completed||!rewardEligible(record))return record;
@@ -222,8 +292,57 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     console.warn("금요일 학습점검 코인 보상 실패",lastError);MiniTalk.UI.Shell.toast("점검 결과는 저장됐지만 코인 보상 확인이 지연되고 있습니다. 다시 열면 재확인합니다.");return record
   }
 
-  function buildReport(answers){const groups={};answers.forEach(a=>{const key=`${a.subject} · ${a.category}`,g=groups[key]||(groups[key]={correct:0,total:0});g.total++;if(a.correct)g.correct++});const rows=Object.entries(groups).map(([name,g])=>({name,...g,rate:Math.round(g.correct/g.total*100)})).sort((a,b)=>a.rate-b.rate),score=answers.filter(a=>a.correct).length;return{score,total:answers.length,rows,weak:rows.slice(0,3).map(r=>r.name),strong:[...rows].sort((a,b)=>b.rate-a.rate).slice(0,3).map(r=>r.name)}}
-  function showReport(record){const D=MiniTalk.UI.Dom,r=record.report||buildReport(record.answers||[]),percent=scorePercent(record),eligible=percent>=80,reward=record.reward||{},rewardText=eligible?(reward.acknowledged?`보상 ${REWARD_COIN}코인 · ${reward.granted?"적립 완료":"이미 적립됨"}`:`보상 ${REWARD_COIN}코인 · 적립 확인 중`):`80점 이상이면 보상 ${REWARD_COIN}코인을 받을 수 있어요`,body=D.el("div",{class:"friday-report modal-stack"},[D.el("div",{class:"friday-complete-mark"},[D.el("img",{class:"quest-complete-stamp",src:"assets/ui/quest-stamp.png",alt:"주간 미션 완료 도장"}),D.el("div",{},[D.el("strong",{text:"이번 주 학습점검 완료"}),D.el("small",{class:"muted",text:"20문항 제출이 완료되어 도장을 받았어요."})])]),D.el("h3",{text:`이번 주 ${record.subject||missionSubject()} · ${r.score}/${r.total}문항 정답 · ${percent}점`}),D.el("section",{class:`friday-reward-card section-card ${eligible?"earned":"missed"}`},[D.el("div",{class:"friday-reward-title"},[D.el("img",{src:"assets/ui/notebook-coin.svg",alt:""}),D.el("strong",{text:eligible?`주간 보상 +${REWARD_COIN}`:"주간 보상"})]),D.el("p",{text:rewardText}),D.el("small",{class:"muted",text:"금요일 학습점검은 80점 이상이면 주 1회 보상됩니다."})]),D.el("div",{class:"friday-bars"},r.rows.map(x=>D.el("div",{class:"friday-bar-row"},[D.el("span",{text:x.name}),D.el("i",{style:`--rate:${x.rate}%`}),D.el("b",{text:`${x.rate}%`})]))),D.el("section",{class:"section-card"},[D.el("strong",{text:"잘한 점"}),D.el("p",{text:(r.strong||[]).join(", ")||"영역별 기록을 더 모아보세요."})]),D.el("section",{class:"section-card"},[D.el("strong",{text:"보완하면 좋은 점"}),D.el("p",{text:(r.weak||[]).join(", ")||"특별히 낮은 영역이 없습니다."}),D.el("small",{class:"muted",text:"낮은 영역의 기본 개념을 다시 확인하고 비슷한 문제를 천천히 풀어보세요."})])]);MiniTalk.UI.Shell.modal("이번 주 학습 피드백",body)}
-  function render(){const D=MiniTalk.UI.Dom,info=windowInfo(),subject=missionSubject(),desktop=desktopWorksheet(),accordion=MiniTalk.Tasks.QuestAccordion,compact=Boolean(accordion?.active?.()&&accordion.active()!=="weekly");const restore=D.el("button",{class:"friday-mission-compact-toggle",type:"button","data-no-drag-scroll":"true","aria-label":`주간 미션 펼치기 · 금요일 초6 ${subject} 학습점검`,onclick:event=>{event.preventDefault();event.stopPropagation();accordion?.activate?.("weekly")}},[D.el("span",{class:"friday-compact-badge",text:"주간"}),D.el("span",{class:"friday-compact-copy"},[D.el("strong",{text:`금요일 초6 ${subject} 학습점검`}),D.el("small",{text:info.open?"시험지형 20문항 · 80점 이상 +3코인":`금요일 ${OPEN_HOUR}시부터 열려요`})]),D.el("span",{class:"friday-compact-arrow",text:"⌄","aria-hidden":"true"})]);const card=D.el("section",{class:`friday-mission-card section-card ${info.open?"open":"locked"}${compact?" quest-compact":""}`,"data-quest-key":"weekly"},[restore,D.el("div",{class:"friday-mission-copy"},[D.el("div",{class:"friday-mission-eyebrow",text:"주간 미션"}),D.el("strong",{text:`금요일 초6 ${subject} 학습점검`}),D.el("small",{class:"muted",text:`${subject} 20문항 · 시험지형 · ${desktop?"큰 별도 창":"한 화면에 전체 문제"} · 다음 주 ${subject==="수학"?"국어":"수학"} · 80점 이상 시 🪙 +${REWARD_COIN}`}),D.el("b",{class:"friday-countdown",text:info.open?"오늘 자정 전까지 참여 가능":`열리기까지 ${remainLabel()}`})]),info.open?D.el("button",{class:"button primary compact-button friday-start-button",type:"button",text:desktop?"시험지 열기":"시작",disabled:user().isGuest,onclick:open}):D.el("div",{class:"friday-lock-overlay","aria-hidden":"true"},[D.el("span",{text:"🔒"})])]);if(!info.open){const label=card.querySelector(".friday-countdown"),timer=setInterval(()=>{if(!card.isConnected)return clearInterval(timer);const next=windowInfo();if(next.open){clearInterval(timer);if(MiniTalk.Store.get("route")==="tasks")MiniTalk.Features.Tasks.render(MiniTalk.UI.Dom.byId("viewHost"));return}label.textContent=`열리기까지 ${remainLabel()}`},30000)}return card}
+  const REPORT_GUIDE={
+    "수학 · 분수·소수":{skill:"분수와 소수의 양을 읽고 계산하는 힘",review:"계산 전에 단위를 확인하고, 소수점 자리와 분모가 같은지 차근차근 확인해보세요."},
+    "수학 · 비와 비율":{skill:"전체와 부분의 관계를 비율로 바꾸는 힘",review:"전체가 몇인지 먼저 표시한 뒤 ‘부분 ÷ 전체 × 100’을 떠올리면 실수가 줄어요."},
+    "수학 · 도형":{skill:"넓이와 둘레에 맞는 식을 구분하는 힘",review:"문제에서 ‘넓이’인지 ‘둘레’인지 먼저 동그라미 치고 공식을 고르세요."},
+    "수학 · 자료 해석":{skill:"표나 수치를 비교해 필요한 정보를 찾는 힘",review:"가장 큰 값·가장 작은 값·차이를 문제에서 무엇을 묻는지 먼저 표시하고 계산해보세요."},
+    "수학 · 문장제":{skill:"문장 속 조건을 식으로 바꾸는 힘",review:"주어진 수, 해야 할 계산, 마지막에 묻는 것을 세 줄로 나눠 적으면 훨씬 쉬워져요."},
+    "국어 · 독해":{skill:"글의 중심 내용과 근거를 찾는 힘",review:"문단마다 ‘누가/무엇을/왜’만 짧게 표시하고 마지막에 공통 내용을 묶어보세요."},
+    "국어 · 어휘":{skill:"낱말의 뜻을 문맥에 맞게 구별하는 힘",review:"뜻만 외우기보다 짧은 예문 하나와 반대말·비슷한 말을 같이 묶어 익혀보세요."},
+    "국어 · 문법":{skill:"문장 성분과 표현의 역할을 구별하는 힘",review:"누가/무엇을/어찌하다 순서로 문장을 나눠 보고 꾸며 주는 말을 따로 표시해보세요."},
+    "국어 · 맞춤법":{skill:"맞춤법과 띄어쓰기를 정확히 적용하는 힘",review:"틀린 표현만 따로 모아 바른 표현과 한 쌍으로 읽고 직접 한 문장씩 써보세요."},
+    "국어 · 추론":{skill:"글에 직접 쓰이지 않은 상황을 근거로 짐작하는 힘",review:"짐작하기 전에 글 속 단서 두 개를 먼저 찾고, 그 단서로 설명되는 선택지를 고르세요."},
+    "국어 · 요약":{skill:"여러 문장을 핵심 한 문장으로 줄이는 힘",review:"반복되는 핵심 낱말을 찾고 예시·꾸밈말을 빼서 한 문장으로 다시 말해보세요."}
+  };
+  function answerDetails(answers,version=QUESTION_SET_VERSION){
+    const qmap=new Map(makeQuestions(version).map((q,i)=>[q.id,{...q,number:i+1}]));
+    return (Array.isArray(answers)?answers:[]).map((a,i)=>{const q=qmap.get(a.id)||{};return{...a,number:q.number||i+1,question:a.question||q.text||"문제 내용을 다시 열어 확인해보세요.",correctAnswer:a.correctAnswer!=null?String(a.correctAnswer):String(q.answer??""),answer:a.answer!=null?String(a.answer):"",subject:a.subject||q.subject||missionSubject(),category:a.category||q.category||"기타"}})
+  }
+  function buildReport(answers,version=QUESTION_SET_VERSION){
+    const details=answerDetails(answers,version),groups={};
+    details.forEach(a=>{const key=`${a.subject} · ${a.category}`,g=groups[key]||(groups[key]={correct:0,total:0,wrong:[]});g.total++;if(a.correct)g.correct++;else g.wrong.push(a)});
+    const rows=Object.entries(groups).map(([name,g])=>({name,...g,rate:Math.round(g.correct/g.total*100),guide:REPORT_GUIDE[name]||{skill:"해당 영역의 핵심 개념을 적용하는 힘",review:"틀린 문제를 다시 풀며 어떤 조건을 놓쳤는지 확인해보세요."}})).sort((a,b)=>a.rate-b.rate||a.name.localeCompare(b.name)),score=details.filter(a=>a.correct).length;
+    const strong=[...rows].filter(x=>x.rate>=75).sort((a,b)=>b.rate-a.rate).slice(0,3);
+    const weak=[...rows].filter(x=>x.rate<100).sort((a,b)=>a.rate-b.rate).slice(0,3);
+    return{score,total:details.length,rows,strong,weak,wrong:details.filter(a=>!a.correct)}
+  }
+  function feedbackLine(row,strong=false){
+    const label=row.name.replace(/^수학 · |^국어 · /,"");
+    if(strong){if(row.rate===100)return`${label}: ${row.total}문제를 모두 맞혔어요. ${row.guide.skill}이 안정적이에요.`;if(row.rate>=75)return`${label}: ${row.correct}/${row.total}문제를 맞혔어요. ${row.guide.skill}이 잘 잡혀 있어요.`;return`${label}: 이번 점검에서 상대적으로 가장 잘한 영역이에요. ${row.correct}/${row.total}문제를 맞혔고, 틀린 문제를 한 번 더 확인하면 좋아요.`}
+    return`${label}: ${row.wrong.length}문제를 틀렸어요. ${row.guide.review}`
+  }
+  function wrongReviewCard(D,item){
+    const detail=D.el("div",{class:"friday-wrong-detail"},[
+      D.el("p",{class:"friday-wrong-question",text:item.question}),
+      D.el("div",{class:"friday-answer-compare"},[
+        D.el("div",{class:"friday-answer-box mine"},[D.el("span",{text:"내 답"}),D.el("b",{text:item.answer||"답 없음"})]),
+        D.el("div",{class:"friday-answer-box correct"},[D.el("span",{text:"정답"}),D.el("b",{text:item.correctAnswer||"확인 필요"})])
+      ]),
+      D.el("p",{class:"friday-wrong-tip",text:(REPORT_GUIDE[`${item.subject} · ${item.category}`]||{}).review||"문제에서 묻는 조건을 다시 표시한 뒤 같은 유형을 한 번 더 풀어보세요."})
+    ]);
+    const button=D.el("button",{class:"friday-wrong-toggle",type:"button","aria-expanded":"false","data-no-drag-scroll":"true",onclick:()=>{const open=button.getAttribute("aria-expanded")==="true";button.setAttribute("aria-expanded",open?"false":"true");detail.hidden=open;button.querySelector("i").textContent=open?"⌄":"⌃"}},[D.el("span",{},[D.el("b",{text:`${item.number}번 · ${item.category}`}),D.el("small",{class:"muted",text:`내 답 ${item.answer||"답 없음"}`})]),D.el("i",{text:"⌄","aria-hidden":"true"})]);
+    detail.hidden=true;return D.el("article",{class:"friday-wrong-item"},[button,detail])
+  }
+  function showReport(record){
+    const D=MiniTalk.UI.Dom,r=buildReport(record.answers||[],record.questionSetVersion||"v4"),percent=r.total?Math.round(r.score/r.total*100):0,eligible=percent>=80,reward=record.reward||{},rewardText=eligible?(reward.acknowledged?`보상 ${REWARD_COIN}코인 · ${reward.granted?"적립 완료":"이미 적립됨"}`:`보상 ${REWARD_COIN}코인 · 적립 확인 중`):`80점 이상이면 보상 ${REWARD_COIN}코인을 받을 수 있어요`;
+    const strongRows=r.strong.length?r.strong:r.rows.slice().sort((a,b)=>b.rate-a.rate).slice(0,1),weakRows=r.weak;
+    const strongBox=D.el("section",{class:"section-card friday-feedback-card"},[D.el("strong",{text:"잘한 점"}),D.el("div",{class:"friday-feedback-list"},strongRows.map(x=>D.el("p",{text:feedbackLine(x,true)})))]);
+    const weakBox=D.el("section",{class:"section-card friday-feedback-card"},[D.el("strong",{text:"보완하면 좋은 점"}),weakRows.length?D.el("div",{class:"friday-feedback-list"},weakRows.map(x=>D.el("p",{text:feedbackLine(x,false)}))):D.el("p",{text:"이번 점검에서는 모든 영역을 100% 맞혔어요. 다음에는 풀이 속도와 실수 없이 설명하는 연습까지 해보면 좋아요."})]);
+    const wrongBox=D.el("section",{class:"section-card friday-wrong-review"},[D.el("div",{class:"friday-review-title"},[D.el("strong",{text:"오답 확인"}),D.el("span",{class:"friday-wrong-count",text:`${r.wrong.length}문제`})]),r.wrong.length?D.el("div",{class:"friday-wrong-list"},r.wrong.map(x=>wrongReviewCard(D,x))):D.el("p",{class:"muted",text:"틀린 문제가 없어요. 전부 맞혔습니다!"})]);
+    const body=D.el("div",{class:"friday-report modal-stack"},[D.el("div",{class:"friday-complete-mark"},[D.el("img",{class:"quest-complete-stamp",src:"assets/ui/quest-stamp.png",alt:"주간 미션 완료 도장"}),D.el("div",{},[D.el("strong",{text:"이번 주 학습점검 완료"}),D.el("small",{class:"muted",text:"20문항 제출이 완료되어 도장을 받았어요."})])]),D.el("h3",{text:`이번 주 ${record.subject||missionSubject()} · ${r.score}/${r.total}문항 정답 · ${percent}점`}),D.el("section",{class:`friday-reward-card section-card ${eligible?"earned":"missed"}`},[D.el("div",{class:"friday-reward-title"},[D.el("img",{src:"assets/ui/notebook-coin.svg",alt:""}),D.el("strong",{text:eligible?`주간 보상 +${REWARD_COIN}`:"주간 보상"})]),D.el("p",{text:rewardText}),D.el("small",{class:"muted",text:"금요일 학습점검은 80점 이상이면 주 1회 보상됩니다."})]),D.el("div",{class:"friday-bars"},r.rows.map(x=>D.el("div",{class:"friday-bar-row"},[D.el("span",{text:x.name}),D.el("i",{style:`--rate:${x.rate}%`}),D.el("b",{text:`${x.correct}/${x.total}`})]))),strongBox,weakBox,wrongBox]);
+    MiniTalk.UI.Shell.modal("이번 주 학습 피드백",body)
+  }
+  function render(){const D=MiniTalk.UI.Dom,info=windowInfo(),subject=missionSubject(),desktop=desktopWorksheet(),accordion=MiniTalk.Tasks.QuestAccordion,compact=Boolean(accordion?.active?.()&&accordion.active()!=="weekly");const restore=D.el("button",{class:"friday-mission-compact-toggle",type:"button","data-no-drag-scroll":"true","aria-label":`주간 미션 펼치기 · 금요일 초6 ${subject} 학습점검`,onclick:event=>{event.preventDefault();event.stopPropagation();accordion?.activate?.("weekly")}},[D.el("span",{class:"friday-compact-badge",text:"주간"}),D.el("span",{class:"friday-compact-copy"},[D.el("strong",{text:`금요일 초6 ${subject} 학습점검`}),D.el("small",{text:info.open?`시험지형 20문항 · 80점 이상 +${REWARD_COIN}코인`:`금요일 ${OPEN_HOUR}시부터 열려요`})]),D.el("span",{class:"friday-compact-arrow",text:"⌄","aria-hidden":"true"})]);const card=D.el("section",{class:`friday-mission-card section-card ${info.open?"open":"locked"}${compact?" quest-compact":""}`,"data-quest-key":"weekly"},[restore,D.el("div",{class:"friday-mission-copy"},[D.el("div",{class:"friday-mission-eyebrow",text:"주간 미션"}),D.el("strong",{text:`금요일 초6 ${subject} 학습점검`}),D.el("small",{class:"muted",text:`${subject} 20문항 · 시험지형 · ${desktop?"큰 별도 창":"한 화면에 전체 문제"} · 다음 주 ${subject==="수학"?"국어":"수학"} · 80점 이상 시 🪙 +${REWARD_COIN}`}),D.el("b",{class:"friday-countdown",text:info.open?"오늘 자정 전까지 참여 가능":`열리기까지 ${remainLabel()}`})]),info.open?D.el("button",{class:"button primary compact-button friday-start-button",type:"button",text:desktop?"시험지 열기":"시작",disabled:user().isGuest,onclick:open}):D.el("div",{class:"friday-lock-overlay","aria-hidden":"true"},[D.el("span",{text:"🔒"})])]);if(!info.open){const label=card.querySelector(".friday-countdown"),timer=setInterval(()=>{if(!card.isConnected)return clearInterval(timer);const next=windowInfo();if(next.open){clearInterval(timer);if(MiniTalk.Store.get("route")==="tasks")MiniTalk.Features.Tasks.render(MiniTalk.UI.Dom.byId("viewHost"));return}label.textContent=`열리기까지 ${remainLabel()}`},30000)}return card}
   return{render,open,windowInfo,makeQuestions,buildReport,weekKey,missionSubject,scorePercent,rewardEligible,ensureWeeklyReward,desktopWorksheet,serializeAnswers};
 })();

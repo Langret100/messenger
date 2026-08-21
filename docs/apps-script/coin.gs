@@ -205,7 +205,7 @@ function handleCoinStatus(e) {
  *    ATTEND_5D    : +1 코인
  *    RANKING_1ST  : +2 코인
  *    QUEST_5CLEAR : +1 코인
- *    WEEKLY_CHECK_OVER80 : +3 코인 (금요일 20문항 80점 이상; legacy type name 유지)
+ *    WEEKLY_CHECK_OVER80 : +5 코인 (금요일 20문항 80점 이상; legacy type name 유지)
  * - 같은 (user_id, reward_type, reward_key) 조합에는 한 번만 지급
  */
 function handleCoinReward(e) {
@@ -247,7 +247,7 @@ function handleCoinReward(e) {
         .createTextOutput(JSON.stringify({ ok: false, error: "WEEKLY_SCORE_NOT_ELIGIBLE", minimum: 80 }))
         .setMimeType(ContentService.MimeType.JSON);
     }
-    delta = 3;
+    delta = 5;
   } else {
     return ContentService
       .createTextOutput(

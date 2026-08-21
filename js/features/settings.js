@@ -16,7 +16,7 @@ MiniTalk.Features.Settings=(()=>{
   }
   function openAdminUnlock(){
     const D=MiniTalk.UI.Dom,body=D.el("div",{class:"modal-stack"}),input=D.el("input",{type:"password",maxlength:"80",autocomplete:"off",placeholder:"관리자 또는 쇼핑몰 관리자 코드"}),submit=D.el("button",{class:"button primary",type:"button",text:"권한 인증"});
-    submit.onclick=async()=>{submit.disabled=true;try{const role=await MiniTalk.AdminSession.unlock(input.value);MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.renderNav();MiniTalk.UI.Shell.toast(role==="SHOP_MANAGER"?"쇼핑몰 관리자 권한이 활성화되었습니다.":"전체 관리자 권한이 활성화되었습니다.");await MiniTalk.Router.go("admin")}catch(error){MiniTalk.UI.Shell.toast(error.message||"관리자 인증에 실패했습니다.");input.select();submit.disabled=false}};
+    submit.onclick=async()=>{submit.disabled=true;const reserved=MiniTalk.Features.Admin?.reservePopup?.(MiniTalk.UI.Dom.byId("viewHost"))===true;try{const role=await MiniTalk.AdminSession.unlock(input.value);MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.renderNav();MiniTalk.UI.Shell.toast(role==="SHOP_MANAGER"?"쇼핑몰 관리자 권한이 활성화되었습니다.":"전체 관리자 권한이 활성화되었습니다.");await MiniTalk.Router.go("admin")}catch(error){if(reserved)MiniTalk.Features.Admin?.closePopup?.();MiniTalk.UI.Shell.toast(error.message||"관리자 인증에 실패했습니다.");input.select();submit.disabled=false}};
     input.onkeydown=event=>{if(event.key==="Enter"){event.preventDefault();submit.click()}};
     body.append(D.el("p",{class:"muted modal-note",text:"로그인한 계정에서 관리자 고유 코드를 확인합니다. 코드는 앱에 저장되지 않습니다."}),D.el("label",{class:"field"},[D.el("span",{text:"고유 코드"}),input]),submit);MiniTalk.UI.Shell.modal("관리자 권한",body);setTimeout(()=>input.focus(),30)
   }

@@ -11,6 +11,6 @@ ok(rt.includes('base.limitToLast(CHAT_PAGE_SIZE)')&&rt.includes('base.startAt(la
 ok(chats.includes('"data-has-message":roomHasVisibleActivity(room)?"1":"0"')&&chats.includes('mode==="group"&&item.dataset.roomType==="group"&&hasMessage'),"empty room UI fallback filter missing");
 ok(chats.includes('class:"room-summary-icon profile-image"')&&chats.includes('class:"room-member-avatar profile-image"'),"room information profile images missing");
 ok(appcss.includes('.room-summary-icon{')&&appcss.includes('object-fit:cover'),"room profile image crop style missing");
-ok(html.includes('feed-classinfo-weekly.css?v=65.0.23')&&html.includes('realtime.js?v=64.5.37')&&html.includes('features/chats.js?v=64.5.21')&&html.includes('features/feed.js?v=65.0.19')&&html.includes('app.js?v=64.5.36'),"delta patch cache versions stale");
-ok(sw.includes('moaru-v64.5.50-interaction-weather-popup-v91-20260821')&&app.includes('sw.js?v=64.5.48'),"service worker cache bump missing");
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.24')&&html.includes('realtime.js?v=64.5.37')&&html.includes('features/chats.js?v=64.5.21')&&html.includes('features/feed.js?v=65.0.20')&&html.includes('app.js?v=64.5.36'),"delta patch cache versions stale");
+ok(sw.includes('moaru-v64.5.52-v92-combined-pip-feed-20260821')&&app.includes('sw.js?v=64.5.48'),"service worker cache bump missing");
 console.log("FEED_ROOM_DELTA_OK");

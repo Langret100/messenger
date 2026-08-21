@@ -201,18 +201,13 @@ MiniTalk.WindowMode=(()=>{
     MiniTalk.UI.Shell?.resetWorkspaceSession?.();
     setTimeout(()=>MiniTalk.Features.Auth?.returnToLogin?.(),0);
   }
-  function enforcePiPBounds(win){
-    const apply=()=>{
-      try{win.resizeTo(PIP_BOUNDS.width,PIP_BOUNDS.height)}catch{}
-    };
-    apply();
-    [80,260,700].forEach(delay=>setTimeout(apply,delay));
-  }
+  /* Document PiP 크기는 requestWindow()에서 한 번만 요청합니다.
+     열린 뒤 resizeTo()를 지연 반복하면 사용 중 레이아웃이 갑자기 줄어드는 것처럼
+     보일 수 있으므로 런타임 강제 리사이즈는 하지 않습니다. */
   async function openPiP(){
     if(!window.documentPictureInPicture)return false;
     if(pipWindow&&!pipWindow.closed){pipWindow.focus();return true}
     pipWindow=await documentPictureInPicture.requestWindow({...PIP_BOUNDS,disallowReturnToOpener:true});
-    enforcePiPBounds(pipWindow);
     const doc=pipWindow.document,meta=doc.createElement("meta"),base=doc.createElement("base");
     meta.name="viewport";meta.content="width=device-width,initial-scale=1,viewport-fit=cover";base.href=document.baseURI;
     doc.head.append(meta,base);doc.title=MiniTalkConfig.appName;

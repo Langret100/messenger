@@ -5,7 +5,7 @@ const engine=read('js/ai/moa-communication-engine.js'),gs=read('docs/apps-script
 ok(html.includes('moa-communication-engine.js?v=9'),'smart foundation engine cache bust missing');
 ok(!chat.includes('moa-suggestion-row')&&!chat.includes('moa-suggestion-chip'),'removed quick buttons returned');
 for(const token of ['knowledgeCue','previousSearchAnchor','뭘 찾아볼까? 궁금한 대상이나 주제를 말해줘.','frame.knowledgeCue&&frame.question'])ok(engine.includes(token),'smart client foundation missing '+token);
-for(const token of ['moaSynthesizeSearch_','moaSentenceScore_','참고한 공개 자료','moa.search.v2.'])ok(gs.includes(token),'answer-first search backend missing '+token);
+for(const token of ['moaSynthesizeSearch_','moaSentenceScore_','참고한 공개 자료','moa.search.v3.'])ok(gs.includes(token),'answer-first search backend missing '+token);
 const general=gs.slice(gs.indexOf('function moaGeneralSearch_'),gs.indexOf('function moaSearchAssist_'));
 ok(!general.includes('더 찾아보기')&&!general.includes('직접 더 찾아보기'),'general search still falls back to link dumping');
 

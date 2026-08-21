@@ -68,6 +68,59 @@ function moaDuckHtmlSearch_(query){
   return rows;
 }
 
+
+function moaSearchContext_(data){
+  var rows=[];try{rows=JSON.parse(String(data&&data.context_json||"[]"))||[]}catch(e){rows=[]}
+  return Array.isArray(rows)?rows.slice(-10):[];
+}
+function moaContextAnchor_(data){
+  var rows=moaSearchContext_(data);
+  for(var i=rows.length-1;i>=0;i--){
+    var row=rows[i]||{};if(String(row.role||"")!=="user")continue;
+    var t=String(row.text||"").trim();if(!t)continue;
+    var c=moaCompact_(t);
+    if(/^(그거|그게|그건|그걸|걔|그사람|거기|왜|어떻게|뭐야|누구야|알려줘|더알려줘|자세히알려줘|찾아줘|검색해줘)$/.test(c))continue;
+    return t.replace(/[?？]+$/g,"").slice(0,120);
+  }
+  return "";
+}
+function moaCleanKnowledgeQuery_(query,text){
+  var q=String(query||text||"").trim().replace(/[?？]+$/g,"");
+  q=q.replace(/^(오늘|지금|현재)\s+/g,"");
+  q=q.replace(/(?:좀\s*)?(?:검색해줘|검색해|찾아줘|찾아봐|알아봐줘|알아봐|확인해줘|설명해줘|알려줘|정리해줘|더\s*자세히\s*알려줘|자세히\s*알려줘)$/g,"").trim();
+  q=q.replace(/\s*(?:누구야|누구인지|뭐야|무엇이야|무슨뜻이야|뜻이야|어디야|언제야|왜그래|왜야)$/g,"").trim();
+  q=q.replace(/(\S{2,})(?:은|는|이|가)$/,"$1").trim();
+  return q;
+}
+function moaWikiExact_(query){
+  var q=String(query||"").trim();if(!q)return [];
+  var url="https://ko.wikipedia.org/w/api.php?action=query&titles="+encodeURIComponent(q)+"&prop=extracts|info&exintro=1&explaintext=1&inprop=url&redirects=1&format=json&origin=*";
+  var data=moaFetchJson_(url),pages=data&&data.query&&data.query.pages?data.query.pages:null;if(!pages)return [];
+  var rows=[];Object.keys(pages).forEach(function(k){var v=pages[k]||{};if(Number(k)<0||!v.title||!v.extract)return;rows.push({title:v.title,snippet:moaTrimAnswer_(v.extract,420),url:v.fullurl||("https://ko.wikipedia.org/wiki/"+encodeURIComponent(String(v.title).replace(/ /g,"_"))),exact:true})});
+  return rows;
+}
+function moaResultQuality_(row,query,index){
+  var title=moaNormalize_(row&&row.title||""),snippet=moaNormalize_(row&&row.snippet||""),q=moaNormalize_(query),words=moaSearchWords_(query),score=Math.max(0,30-index*3);
+  if(title===q)score+=55;else if(title.indexOf(q)>=0||q.indexOf(title)>=0)score+=28;
+  words.forEach(function(w){if(title.indexOf(w)>=0)score+=10;if(snippet.indexOf(w)>=0)score+=5});
+  if(row&&row.exact)score+=18;
+  if(/동음이의어|목록|분류:|위키미디어/.test(title+" "+snippet))score-=35;
+  if(!snippet||snippet.length<24)score-=18;
+  return score;
+}
+function moaRankResults_(rows,query){
+  var seen={},out=[];(rows||[]).forEach(function(row,i){if(!row||!row.snippet)return;var key=String(row.url||row.title||"").toLowerCase();if(key&&seen[key])return;if(key)seen[key]=1;out.push({row:row,score:moaResultQuality_(row,query,i)})});
+  out.sort(function(a,b){return b.score-a.score});return out.map(function(v){v.row._quality=v.score;return v.row});
+}
+function moaFactualAnswer_(query,results){
+  var ranked=moaRankResults_(results,query);if(!ranked.length||Number(ranked[0]._quality||0)<24)return "";
+  var first=ranked[0],parts=moaSentenceParts_(first.snippet).filter(function(v){return !/^(이 문서는|동음이의어|분류:)/.test(moaNormalize_(v))});
+  if(!parts.length)return moaTrimAnswer_(first.snippet,420);
+  var best=parts.map(function(v,i){return {text:v,score:moaSentenceScore_(v,query,i)}}).sort(function(a,b){return b.score-a.score}).slice(0,2).map(function(v){return moaTrimAnswer_(v.text,240)});
+  return moaTrimAnswer_(best.join(" "),460);
+}
+function moaQueryLooksGeneric_(q){return /^(이거|그거|그게|그건|그걸|그사람|걔|거기|왜|어떻게|뭐야|누구야|알려줘|더알려줘|자세히알려줘)?$/.test(moaCompact_(q));}
+
 function moaTrimAnswer_(text,max){
   var s=String(text||"").replace(/\s+/g," ").trim(), n=Number(max||420);if(s.length<=n)return s;return s.slice(0,n-1).replace(/\s+\S*$/g,"")+"…";
 }
@@ -114,15 +167,26 @@ function moaWeatherSearch_(text){
 function moaGeoPlace_(place){
   var q=String(place||"").trim();if(!q)return null;
   var known=moaKnownPlace_(q);if(known)return known;
-  var cityQ=q.replace(/\s+/g,"").replace(/(?:특별시|광역시|특별자치시|특별자치도)$/,"");
-  known=moaKnownPlace_(cityQ);if(known)return known;
-  if(/시$/.test(cityQ)){known=moaKnownPlace_(cityQ.slice(0,-1));if(known)return known;}
-  var geo=moaFetchJson_("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(q)+"&count=1&language=ko&format=json");
-  var loc=geo&&geo.results&&geo.results[0];if(loc)return loc;
-  var aliases={"서울":"Seoul","부산":"Busan","대구":"Daegu","인천":"Incheon","광주":"Gwangju","대전":"Daejeon","울산":"Ulsan","세종":"Sejong","제주":"Jeju"};
-  var fallback=aliases[q];if(!fallback)return null;
-  geo=moaFetchJson_("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(fallback)+"&count=1&language=ko&format=json");
-  return geo&&geo.results&&geo.results[0]||null;
+  var compact=q.replace(/\s+/g,"").replace(/(?:특별시|광역시|특별자치시|특별자치도)$/g,"");
+  known=moaKnownPlace_(compact);if(known)return known;
+  if(/시$/.test(compact)){known=moaKnownPlace_(compact.slice(0,-1));if(known)return known;}
+  var variants=[q];
+  if(!/(시|군|구|도)$/.test(q))variants.push(q+"시");
+  if(/시$/.test(q))variants.push(q.slice(0,-1));
+  var loc=null;
+  for(var i=0;i<variants.length&&!loc;i++){
+    var geo=moaFetchJson_("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(variants[i])+"&count=5&language=ko&format=json");
+    var rows=geo&&geo.results||[];
+    if(rows.length){
+      rows.sort(function(a,b){var ak=String(a.country_code||"")==="KR"?1:0,bk=String(b.country_code||"")==="KR"?1:0;return bk-ak});
+      loc=rows[0]||null;
+    }
+  }
+  if(loc)return loc;
+  var aliases={"서울":"Seoul","부산":"Busan","대구":"Daegu","인천":"Incheon","광주":"Gwangju","대전":"Daejeon","울산":"Ulsan","세종":"Sejong","제주":"Jeju","군산":"Gunsan","수원":"Suwon","전주":"Jeonju","청주":"Cheongju","천안":"Cheonan","포항":"Pohang","창원":"Changwon","춘천":"Chuncheon","강릉":"Gangneung","목포":"Mokpo","여수":"Yeosu"};
+  var fallback=aliases[compact.replace(/시$/,"")];if(!fallback)return null;
+  var geo2=moaFetchJson_("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(fallback)+"&count=3&language=ko&format=json");
+  var rows2=geo2&&geo2.results||[];return rows2.filter(function(v){return String(v.country_code||"")==="KR"})[0]||rows2[0]||null;
 }
 function moaAirQualitySearch_(text){
   var raw=String(text||"");if(!/(미세먼지|초미세먼지|공기질|대기질|pm\s*2\.5|pm\s*10)/i.test(raw))return null;
@@ -227,38 +291,38 @@ function moaSynthesizeSearch_(query,results){
   return moaTrimAnswer_(answer,620);
 }
 function moaGeneralSearch_(query,text){
-  var q=String(query||"").trim();if(!q)return null;
-  var raw=String(text||"");
+  var raw=String(text||""),q=moaCleanKnowledgeQuery_(query,raw);if(!q)return null;
   var lookup=q;
   if(/추천|골라|뭐가\s*좋/.test(raw)&&!/추천/.test(lookup))lookup=q+" 추천";
   else if(/비교|차이|장단점/.test(raw)&&!/(비교|차이)/.test(lookup))lookup=q+" 비교 차이";
   else if(/최신|최근|요즘/.test(raw)&&!/(최신|최근)/.test(lookup))lookup=q+" 최신";
-  var cache=CacheService.getScriptCache(), key="moa.search.v2."+Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,lookup)).slice(0,28), hit=cache.get(key);if(hit){try{return JSON.parse(hit)}catch(e){}}
-  var results=[], intentWeb=/(추천|골라|비교|차이|장단점)/.test(raw);
-  if(intentWeb){moaDuckHtmlSearch_(lookup).forEach(function(v){if(results.length<4)results.push(v)});}
-  var wiki=moaWikiSearch_(lookup);
-  wiki.forEach(function(v){if(results.length<4&&!results.some(function(x){return x.url&&x.url===v.url}))results.push(v)});
-  if(results.length<3){
+  var cache=CacheService.getScriptCache(),key="moa.search.v3."+Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,lookup+"|"+raw.slice(0,80))).slice(0,28),hit=cache.get(key);if(hit){try{return JSON.parse(hit)}catch(e){}}
+  var factual=/누구|뭐야|무엇|뜻|정의|어떤\s*(?:사람|것|캐릭터|동물|곳)|설명/.test(raw)&&!/(최신|최근|뉴스|추천|비교|차이|장단점|검색)/.test(raw);
+  var results=[];
+  if(factual)moaWikiExact_(q).forEach(function(v){results.push(v)});
+  if(/추천|골라|비교|차이|장단점/.test(raw))moaDuckHtmlSearch_(lookup).forEach(function(v){if(results.length<5)results.push(v)});
+  moaWikiSearch_(lookup).forEach(function(v){if(results.length<5)results.push(v)});
+  if(results.length<4){
     var ddgJson=moaFetchJson_("https://api.duckduckgo.com/?q="+encodeURIComponent(lookup)+"&format=json&no_html=1&no_redirect=1&skip_disambig=1");
-    if(ddgJson&&(ddgJson.Answer||ddgJson.AbstractText))results.push({title:ddgJson.Heading||q,snippet:moaTrimAnswer_(ddgJson.Answer||ddgJson.AbstractText,360),url:ddgJson.AbstractURL||""});
+    if(ddgJson&&(ddgJson.Answer||ddgJson.AbstractText))results.push({title:ddgJson.Heading||q,snippet:moaTrimAnswer_(ddgJson.Answer||ddgJson.AbstractText,420),url:ddgJson.AbstractURL||""});
   }
-  if(results.length<3){
-    moaDuckHtmlSearch_(lookup).forEach(function(v){if(results.length<4&&!results.some(function(x){return x.url&&x.url===v.url}))results.push(v)});
-  }
-  var out,summary=moaSynthesizeSearch_(lookup,results);
+  if(results.length<4)moaDuckHtmlSearch_(lookup).forEach(function(v){if(results.length<5)results.push(v)});
+  results=moaRankResults_(results,lookup);
+  var out,summary=factual?moaFactualAnswer_(q,results):moaSynthesizeSearch_(lookup,results);
   if(results.length&&summary){
-    var factual=/누구|뭐야|무엇|뜻|정의|어떤\s*(?:사람|것|캐릭터|동물)/.test(raw)&&!/(최신|최근|뉴스|추천|비교|차이|장단점|검색)/.test(raw);
-    var refs=factual?[]:results.filter(function(v){return v.url&&v.snippet}).slice(0,2).map(function(v){return "• "+moaTrimAnswer_(v.title,70)+"\n"+v.url});
+    var refs=factual?[]:results.filter(function(v){return v.url&&v.snippet&&Number(v._quality||0)>=18}).slice(0,2).map(function(v){return "• "+moaTrimAnswer_(v.title,70)+"\n"+v.url});
     out={reply:summary+(refs.length?"\n\n참고한 공개 자료\n"+refs.join("\n"):""),source:factual?"knowledge-answer":(results[0].url&&/wikipedia\.org/.test(results[0].url)?"wikipedia-answer":"web-answer"),kind:"answer"};
-  }else if(results.length){
-    var first=results[0];out={reply:"관련 자료는 찾았는데 지금 가져온 내용만으로는 확실하게 요약하기 어려워. 검색어를 조금 더 구체적으로 말해주면 다시 확인해볼게."+(first.url?"\n\n참고 자료\n"+first.url:""),source:"web-answer",kind:"answer"};
+  }else if(results.length&&Number(results[0]._quality||0)>=18){
+    var first=results[0];out={reply:moaTrimAnswer_(first.snippet,420)+(factual?"":"\n\n참고 자료\n"+first.url),source:factual?"knowledge-answer":"web-answer",kind:"answer"};
   }else{
-    out={reply:"공개 자료에서 믿고 바로 답할 만한 내용을 찾지 못했어. 이름이나 표현을 조금 더 구체적으로 말해주면 다시 찾아볼게.",source:"web-answer",kind:"answer"};
+    out={reply:"지금 확인된 자료만으로는 확실하게 답하기 어려워. 이름이나 대상을 조금 더 구체적으로 말해주면 엉뚱한 내용으로 추측하지 않고 다시 확인할게.",source:"web-answer",kind:"answer"};
   }
   cache.put(key,JSON.stringify(out),600);return out;
 }
 function moaSearchAssist_(data){
-  var text=String(data.text||"").trim(), query=String(data.query||text).trim();if(!query)return jsonResponse_({ok:false,error:"MOA_SEARCH_QUERY_REQUIRED"});
+  var text=String(data.text||"").trim(),query=String(data.query||text).trim();if(!query)return jsonResponse_({ok:false,error:"MOA_SEARCH_QUERY_REQUIRED"});
+  var cleaned=moaCleanKnowledgeQuery_(query,text);
+  if((!cleaned||moaQueryLooksGeneric_(cleaned))&&data){var anchor=moaContextAnchor_(data);if(anchor)query=anchor+" "+query;}
   var shortcut=moaSearchShortcut_(text||query,query);if(shortcut)return jsonResponse_({ok:true,reply:shortcut.reply,source:shortcut.source,kind:shortcut.kind});
   var air=moaAirQualitySearch_(text||query);if(air)return jsonResponse_({ok:true,reply:air.reply,source:air.source,kind:air.kind});
   var cityTime=moaCityTimeSearch_(text||query);if(cityTime)return jsonResponse_({ok:true,reply:cityTime.reply,source:cityTime.source,kind:cityTime.kind});
@@ -267,7 +331,6 @@ function moaSearchAssist_(data){
   var news=moaNewsSearch_(text||query,query);if(news)return jsonResponse_({ok:true,reply:news.reply,source:news.source,kind:news.kind});
   var general=moaGeneralSearch_(query,text);return jsonResponse_({ok:true,reply:general.reply,source:general.source,kind:general.kind});
 }
-
 
 
 function moaUserHash_(userId){return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,String(userId||""))).slice(0,18);}

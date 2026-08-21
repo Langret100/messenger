@@ -9,7 +9,7 @@ MiniTalk.UI.DragScroll=(()=>{
     const style=doc.createElement("style");
     style.id="dragScrollSurfaceStyle";
     style.textContent=`
-      .drag-scroll-surface{overscroll-behavior:contain}
+      .drag-scroll-surface{overscroll-behavior:none;overscroll-behavior-y:none}
       .drag-scroll-surface:not(.drag-scroll-keep-scrollbar){scrollbar-width:none;-ms-overflow-style:none}
       .drag-scroll-surface:not(.drag-scroll-keep-scrollbar)::-webkit-scrollbar{display:none;width:0;height:0}
       .drag-scroll-surface.drag-scroll-ready{cursor:grab}
@@ -55,7 +55,10 @@ MiniTalk.UI.DragScroll=(()=>{
       const dx=event.clientX-startX,dy=event.clientY-startY;
       if(!moved){
         if(Math.hypot(dx,dy)<5)return;
-        if(Math.abs(dx)>Math.abs(dy)*1.35){active=false;scroller.classList.remove("drag-scroll-ready");return}
+        if(Math.abs(dx)>Math.abs(dy)*1.35){
+          try{if(pointerId!=null&&scroller.hasPointerCapture?.(pointerId))scroller.releasePointerCapture(pointerId)}catch(_){ }
+          active=false;moved=false;pointerId=null;scroller.classList.remove("drag-scroll-ready","drag-scrolling");return
+        }
         moved=true;scroller.classList.add("drag-scrolling");
       }
       event.preventDefault();

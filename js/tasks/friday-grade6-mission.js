@@ -127,9 +127,11 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
   }
   function desktopWorksheet(){return !(MiniTalk.MobileImmersive?.isMobile?.())&&(window.innerWidth>=760||window.matchMedia?.("(pointer:fine)")?.matches)}
   function popupBounds(){
-    const scr=window.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availW=Math.max(640,Number(scr.availWidth)||1200),availH=Math.max(520,Number(scr.availHeight)||850);
-    const messengerLeft=Number(window.screenX??window.screenLeft)||availLeft,messengerTop=Number(window.screenY??window.screenTop)||availTop,messengerW=Math.max(320,Number(window.outerWidth)||Math.min(520,availW*.42)),messengerH=Math.max(420,Number(window.outerHeight)||availH*.8);
-    const gap=14,rightStart=Math.min(availLeft+availW,messengerLeft+messengerW+gap),rightSpace=Math.max(0,(availLeft+availW)-rightStart),leftSpace=Math.max(0,messengerLeft-gap-availLeft),bottomStart=Math.min(availTop+availH,messengerTop+messengerH+gap),bottomSpace=Math.max(0,(availTop+availH)-bottomStart),topSpace=Math.max(0,messengerTop-gap-availTop);
+    // PiP/팝업 안에서 실행 중이면 현재 메신저가 실제로 떠 있는 창을 기준으로 계산한다.
+    // 원래 탭 window 좌표를 쓰면 주간미션 시험지가 메신저 옆에 달라붙거나 겹칠 수 있다.
+    const sourceView=MiniTalk.UI.Dom.doc()?.defaultView||window,scr=sourceView.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availW=Math.max(640,Number(scr.availWidth)||1200),availH=Math.max(520,Number(scr.availHeight)||850);
+    const messengerLeft=Number(sourceView.screenX??sourceView.screenLeft)||availLeft,messengerTop=Number(sourceView.screenY??sourceView.screenTop)||availTop,messengerW=Math.max(320,Number(sourceView.outerWidth)||Math.min(520,availW*.42)),messengerH=Math.max(420,Number(sourceView.outerHeight)||availH*.8);
+    const gap=42,rightStart=Math.min(availLeft+availW,messengerLeft+messengerW+gap),rightSpace=Math.max(0,(availLeft+availW)-rightStart),leftSpace=Math.max(0,messengerLeft-gap-availLeft),bottomStart=Math.min(availTop+availH,messengerTop+messengerH+gap),bottomSpace=Math.max(0,(availTop+availH)-bottomStart),topSpace=Math.max(0,messengerTop-gap-availTop);
     const desiredW=Math.min(1180,Math.max(720,Math.round(availW*.66))),desiredH=Math.min(900,Math.max(600,Math.round(availH*.86))),minSideW=Math.min(620,Math.max(480,Math.round(availW*.34)));
     let width,height,left,top;
     if(Math.max(rightSpace,leftSpace)>=minSideW){const useRight=rightSpace>=leftSpace;const sideSpace=useRight?rightSpace:leftSpace;width=Math.min(desiredW,sideSpace);height=Math.min(desiredH,availH-24);left=useRight?rightStart:messengerLeft-gap-width;top=Math.max(availTop+8,Math.min(messengerTop,availTop+availH-height-8));}

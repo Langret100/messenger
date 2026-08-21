@@ -6,7 +6,7 @@ const dispatch=block('handleAdminDispatch','handleAdminUserBalances');
 const userCommands=block('handleUserCommands','moaruTaskStore_');
 const snapshot=block('readMoaruCommandsSnapshot_','readMoaruCommands_');
 assert(!/moaruRegisteredUserMap_\s*\(/.test(dispatch),'admin dispatch still reads full login sheet');
-assert(/requireShopAdminToken_/.test(dispatch),'admin token validation removed');
+assert(/requireAdminToken_/.test(dispatch),'admin token validation removed');
 assert(/requireKnownMoaruUserCached_\s*\(p\.user_id\)/.test(userCommands),'user command polling does not use cached known-user fast path');
 assert(/readMoaruCommandsSnapshot_\s*\(userId\)/.test(userCommands),'read-only command polling snapshot missing');
 assert(!/setProperty|deleteProperty/.test(snapshot),'read-only snapshot mutates PropertiesService');

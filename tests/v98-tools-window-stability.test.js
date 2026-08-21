@@ -11,7 +11,7 @@ ok(html.includes('css/features/tools.css?v=20'),'tools css v98 cache ref missing
 ok(html.includes('js/ui/drag-scroll.js?v=10'),'drag-scroll v98 cache ref missing');
 ok(html.includes('js/features/tools.js?v=64.5.4'),'tools v98 cache ref missing');
 ok(html.includes('js/adapters/window-mode.js?v=64.5.38'),'window-mode v98 cache ref missing');
-ok(sw.includes('moaru-v64.5.61-dragscroll-cleanup-v102-20260821'),'v98 service-worker cache missing');
+ok(sw.includes('moaru-v64.5.62-admin-fastpath-v104-20260821'),'v98 service-worker cache missing');
 
 ok(tools.includes('allowInteractive:".profile-summary,.modern-tool,.shortcut-row"'),'tools interactive drag allowance missing');
 ok(drag.includes('const allowInteractive=String(options?.allowInteractive||"").trim()'),'drag allowInteractive option missing');

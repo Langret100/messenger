@@ -52,10 +52,10 @@ MiniTalk.Tasks.TaskService = (() => {
   function start(current = user()) {
     if (!current.user_id || current.isGuest) { refreshVersion++;clearInterval(pollTimer);pollTimer = 0;activeUserId = "";inFlight = null;publish([]);return; }
     if (activeUserId !== current.user_id) { refreshVersion++;clearInterval(pollTimer);pollTimer = 0;activeUserId = current.user_id;inFlight = null; }
-    /* Firebase TASK_* wakeup 신호는 즉시 반응용으로 유지하고,
-     * Apps Script 과제 목록은 기존처럼 12초마다 확인해 신호 누락에도 상태를 빠르게 복구합니다. */
+    /* Firebase TASK_* wakeup 신호가 즉시 갱신을 담당합니다.
+     * Apps Script 목록 폴링은 신호 누락/절전 복구용 30초 fallback만 유지해 서버 부하를 줄입니다. */
     refresh(true).catch(error => console.warn("과제 목록을 불러오지 못했습니다.", error));
-    if (!pollTimer) pollTimer = setInterval(() => refresh(true).catch(() => {}), 12000);
+    if (!pollTimer) pollTimer = setInterval(() => refresh(true).catch(() => {}), 30000);
   }
   async function enter(){
     const current=user();
@@ -77,7 +77,7 @@ MiniTalk.Tasks.TaskService = (() => {
 
   async function assign(targets, task) {
     const current = user(), ids = [...new Set((targets || []).map(String))].sort(), signature = JSON.stringify([current.user_id, ids, task.title, task.description, task.rewardCoin]), requestId = pendingAssignments.get(signature) || crypto.randomUUID();pendingAssignments.set(signature, requestId);
-    const result = await MiniTalk.AuthApi.adminTaskAssign({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken(), targets: ids, title: task.title, description: task.description, rewardCoin: task.rewardCoin, requestId });
+    const result = await MiniTalk.AuthApi.adminTaskAssign({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("ADMIN"), targets: ids, title: task.title, description: task.description, rewardCoin: task.rewardCoin, requestId });
     pendingAssignments.delete(signature);
     MiniTalk.Realtime.notifyCommandTargets?.(targets);
     return result;
@@ -87,7 +87,7 @@ MiniTalk.Tasks.TaskService = (() => {
     const current = user();
     if (adminInFlight && !force) return adminInFlight;
     const version = ++adminRefreshVersion;
-    const request = MiniTalk.AuthApi.adminTaskList(current.user_id, MiniTalk.AdminSession.requireToken()).then(rows => ({ version, rows: rows.map(normalize).filter(task => visible(task)) }));
+    const request = MiniTalk.AuthApi.adminTaskList(current.user_id, MiniTalk.AdminSession.requireToken("ADMIN")).then(rows => ({ version, rows: rows.map(normalize).filter(task => visible(task)) }));
     adminInFlight = request.finally(() => { if (version === adminRefreshVersion) adminInFlight = null; });
     const result = await adminInFlight;
     return result.rows;
@@ -95,7 +95,7 @@ MiniTalk.Tasks.TaskService = (() => {
 
   async function review(taskId, action, feedback = "") {
     const current = user();
-    const result = await MiniTalk.AuthApi.adminTaskReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken(), taskId, action, feedback });
+    const result = await MiniTalk.AuthApi.adminTaskReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("ADMIN"), taskId, action, feedback });
     const task = normalize(result.task || {});
     if (task.userId) MiniTalk.Realtime.notifyCommandTargets?.([task.userId]);
     return task;
@@ -104,7 +104,7 @@ MiniTalk.Tasks.TaskService = (() => {
   async function bulkReview(taskIds, action = "complete", feedback = "") {
     const current = user(), ids = [...new Set((taskIds || []).map(String).filter(Boolean))];
     if (!ids.length) throw new Error("과제를 선택하세요.");
-    const result = await MiniTalk.AuthApi.adminTaskBulkReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken(), taskIds: ids, action, feedback });
+    const result = await MiniTalk.AuthApi.adminTaskBulkReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("ADMIN"), taskIds: ids, action, feedback });
     const targets = (result.results || []).filter(row => row?.ok && row.user_id).map(row => row.user_id);
     if (targets.length) MiniTalk.Realtime.notifyCommandTargets?.([...new Set(targets)]);
     return result;
@@ -113,7 +113,7 @@ MiniTalk.Tasks.TaskService = (() => {
   async function bulkDelete(taskIds) {
     const current = user(), ids = [...new Set((taskIds || []).map(String).filter(Boolean))];
     if (!ids.length) throw new Error("과제를 선택하세요.");
-    const result = await MiniTalk.AuthApi.adminTaskBulkDelete({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken(), taskIds: ids });
+    const result = await MiniTalk.AuthApi.adminTaskBulkDelete({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("ADMIN"), taskIds: ids });
     const targets = (result.results || []).filter(row => row?.ok && row.user_id).map(row => row.user_id);
     if (targets.length) MiniTalk.Realtime.notifyCommandTargets?.([...new Set(targets)]);
     return result;

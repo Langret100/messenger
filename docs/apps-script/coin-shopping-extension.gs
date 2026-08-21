@@ -946,7 +946,7 @@ function enqueueMoaruCommand_(userId, type, payload, issuedBy, commandId) {
 
 /** POST mode=admin_dispatch: 관리자 토큰을 서버에서 확인한 뒤 사용자 큐에 기록 */
 function handleAdminDispatch(e) {
-  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token);
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
   let targets = [], payload = {};
   try { targets = JSON.parse(p.targets_json || "[]");payload = JSON.parse(p.payload_json || "{}"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" }); }
@@ -964,7 +964,7 @@ function handleAdminDispatch(e) {
 
 /** POST mode=admin_user_balances: 관리자 대상 명단에 표시할 현재 코인 잔액 */
 function handleAdminUserBalances(e) {
-  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token);
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
   const users = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), coins = moaruRewardCoinMap_(), rows = Object.keys(users).map(function (userId) {
     return { user_id: userId, nickname: users[userId], coin: coins[userId] || 0 };
@@ -974,7 +974,7 @@ function handleAdminUserBalances(e) {
 
 /** POST mode=admin_coin_reward: 관리자 토큰 확인 후 등록 사용자의 코인을 증감합니다. */
 function handleAdminCoinReward(e) {
-  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token);
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
   const amount = Number(p.amount);
   if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 100000) return shopJson_({ ok: false, error: "INVALID_COIN_AMOUNT" });
@@ -1121,7 +1121,7 @@ function moaruRegisteredUserMap_() {
 
 /** POST mode=admin_task_assign */
 function handleAdminTaskAssign(e) {
-  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token);
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
   const title = String(p.title || "").trim().slice(0, 80), descriptionRaw = String(p.description || ""), rewardCoin = Number(p.reward_coin);
   if (!title) return shopJson_({ ok: false, error: "INVALID_TASK_TITLE" });
@@ -1148,7 +1148,7 @@ function handleAdminTaskAssign(e) {
 
 /** POST mode=user_task_list */
 function handleUserTaskList(e) {
-  const p = (e && e.parameter) || {}, userId = requireKnownMoaruUser_(p.user_id);
+  const p = (e && e.parameter) || {}, userId = requireKnownMoaruUserCached_(p.user_id);
   if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   cleanupCompletedMoaruTasks_();
   const tasks = readMoaruTasks_().filter(function (task) { return task.userId === userId; }).sort(function (a, b) { return b.createdAt - a.createdAt; }).slice(0, 100).map(publicMoaruTask_);
@@ -1157,7 +1157,7 @@ function handleUserTaskList(e) {
 
 /** POST mode=user_task_submit */
 function handleUserTaskSubmit(e) {
-  const p = (e && e.parameter) || {}, userId = requireKnownMoaruUser_(p.user_id), taskId = String(p.task_id || "").trim();
+  const p = (e && e.parameter) || {}, userId = requireKnownMoaruUserCached_(p.user_id), taskId = String(p.task_id || "").trim();
   if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   const answer = String(p.answer || ""), imageData = String(p.image_data || "").trim();
   if (answer.length > 1000) return shopJson_({ ok: false, error: "TASK_ANSWER_TOO_LONG" });
@@ -1178,7 +1178,7 @@ function handleUserTaskSubmit(e) {
 
 /** POST mode=admin_task_list */
 function handleAdminTaskList(e) {
-  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token);
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
   cleanupCompletedMoaruTasks_();
   const tasks = readMoaruTasks_().sort(function (a, b) { return b.updatedAt - a.updatedAt; }).slice(0, 200).map(publicMoaruTask_);
@@ -1223,7 +1223,7 @@ function reviewMoaruTaskUnlocked_(taskId, action, feedback, actor) {
 
 /** POST mode=admin_task_review */
 function handleAdminTaskReview(e) {
-  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token), taskId = String(p.task_id || "").trim(), action = String(p.action || "").trim(), feedback = String(p.feedback || "").trim();
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token), taskId = String(p.task_id || "").trim(), action = String(p.action || "").trim(), feedback = String(p.feedback || "").trim();
   if (!auth.ok) return shopJson_(auth);
   if (["complete", "retry"].indexOf(action) < 0) return shopJson_({ ok: false, error: "INVALID_TASK_REVIEW" });
   if (feedback.length > 100) return shopJson_({ ok: false, error: "TASK_FEEDBACK_TOO_LONG" });
@@ -1235,7 +1235,7 @@ function handleAdminTaskReview(e) {
 
 /** POST mode=admin_task_bulk_review - 선택 과제를 같은 액션/피드백으로 일괄 검토합니다. */
 function handleAdminTaskBulkReview(e) {
-  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token), action = String(p.action || "complete").trim(), feedback = String(p.feedback || "").trim(), taskIds = parseMoaruTaskIds_(p.task_ids_json);
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token), action = String(p.action || "complete").trim(), feedback = String(p.feedback || "").trim(), taskIds = parseMoaruTaskIds_(p.task_ids_json);
   if (!auth.ok) return shopJson_(auth);
   if (!taskIds) return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" });
   if (!taskIds.length) return shopJson_({ ok: false, error: "NO_TASKS_SELECTED" });
@@ -1252,7 +1252,7 @@ function handleAdminTaskBulkReview(e) {
 
 /** POST mode=admin_task_bulk_delete - 코인을 지급/차감하지 않고 선택 과제를 삭제합니다. */
 function handleAdminTaskBulkDelete(e) {
-  const p = (e && e.parameter) || {}, auth = requireShopAdminToken_(p.user_id, p.admin_token), taskIds = parseMoaruTaskIds_(p.task_ids_json);
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token), taskIds = parseMoaruTaskIds_(p.task_ids_json);
   if (!auth.ok) return shopJson_(auth);
   if (!taskIds) return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" });
   if (!taskIds.length) return shopJson_({ ok: false, error: "NO_TASKS_SELECTED" });

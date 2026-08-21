@@ -62,22 +62,19 @@ MiniTalk.GameHost=(()=>{
   }
 
   function popupBounds(){
-    const scr=window.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0;
-    const availWidth=Math.max(900,Number(scr.availWidth)||1280),availHeight=Math.max(650,Number(scr.availHeight)||800);
-    const messengerLeft=Number(window.screenX??window.screenLeft)||availLeft,messengerTop=Number(window.screenY??window.screenTop)||availTop,messengerW=Math.max(0,Number(window.outerWidth)||0);
-    const gap=14,rightStart=Math.max(availLeft,messengerLeft+messengerW+gap),rightSpace=(availLeft+availWidth)-rightStart,leftSpace=Math.max(0,messengerLeft-gap-availLeft);
-    const targetWidth=Math.max(900,Math.min(1360,Math.round(availWidth*.82))),height=Math.max(650,Math.min(920,Math.round(availHeight*.90)));
-    let width=Math.min(targetWidth,Math.max(760,rightSpace)),left=rightStart;
-    if(rightSpace<820&&leftSpace>rightSpace){width=Math.min(targetWidth,Math.max(760,leftSpace));left=Math.max(availLeft,messengerLeft-gap-width)}
-    if(Math.max(rightSpace,leftSpace)<760){width=Math.max(900,Math.min(1280,Math.round(availWidth*.86)));left=availLeft+Math.max(0,Math.round((availWidth-width)/2))}
-    const top=Math.max(availTop,Math.min(messengerTop,availTop+availHeight-height));
-    return{width:Math.round(width),height:Math.round(height),left:Math.round(left),top:Math.round(top)};
+    const scr=window.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availWidth=Math.max(640,Number(scr.availWidth)||1280),availHeight=Math.max(520,Number(scr.availHeight)||800);
+    const messengerLeft=Number(window.screenX??window.screenLeft)||availLeft,messengerTop=Number(window.screenY??window.screenTop)||availTop,messengerW=Math.max(320,Number(window.outerWidth)||Math.min(520,availWidth*.42)),messengerH=Math.max(420,Number(window.outerHeight)||availHeight*.8),gap=14;
+    const rightStart=Math.min(availLeft+availWidth,messengerLeft+messengerW+gap),rightSpace=Math.max(0,availLeft+availWidth-rightStart),leftSpace=Math.max(0,messengerLeft-gap-availLeft),bottomStart=Math.min(availTop+availHeight,messengerTop+messengerH+gap),bottomSpace=Math.max(0,availTop+availHeight-bottomStart),topSpace=Math.max(0,messengerTop-gap-availTop);
+    const desiredWidth=Math.min(1280,Math.max(760,Math.round(availWidth*.7))),desiredHeight=Math.min(900,Math.max(620,Math.round(availHeight*.88))),minSideWidth=Math.min(640,Math.max(500,Math.round(availWidth*.34)));
+    let width,height,left,top;
+    if(Math.max(rightSpace,leftSpace)>=minSideWidth){const useRight=rightSpace>=leftSpace,space=useRight?rightSpace:leftSpace;width=Math.min(desiredWidth,space);height=Math.min(desiredHeight,availHeight-24);left=useRight?rightStart:messengerLeft-gap-width;top=Math.max(availTop+8,Math.min(messengerTop,availTop+availHeight-height-8));}
+    else if(Math.max(bottomSpace,topSpace)>=440){const useBottom=bottomSpace>=topSpace;width=Math.min(desiredWidth,availWidth-24);height=Math.min(desiredHeight,useBottom?bottomSpace:topSpace);left=Math.max(availLeft+8,Math.min(messengerLeft,availLeft+availWidth-width-8));top=useBottom?bottomStart:messengerTop-gap-height;}
+    else{width=Math.min(Math.max(640,Math.round(availWidth*.60)),availWidth-24);height=Math.min(desiredHeight,availHeight-24);const messengerCenter=messengerLeft+messengerW/2,screenCenter=availLeft+availWidth/2;left=messengerCenter<=screenCenter?availLeft+availWidth-width-8:availLeft+8;top=Math.max(availTop+8,Math.min(messengerTop,availTop+availHeight-height-8));}
+    return{width:Math.round(Math.max(500,width)),height:Math.round(Math.max(540,height)),left:Math.round(left),top:Math.round(top)};
   }
 
-  function popupFeatures(){
-    const b=popupBounds();
-    return `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${b.width},height=${b.height},left=${b.left},top=${b.top}`;
-  }
+  function popupFeatures(){const b=popupBounds();return `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${b.width},height=${b.height},left=${b.left},top=${b.top}`;}
+  function enforcePopupBounds(win){const b=popupBounds(),apply=()=>{try{win.resizeTo(b.width,b.height);win.moveTo(b.left,b.top)}catch{}};apply();setTimeout(apply,80);setTimeout(apply,260);}
 
   function cleanupPopupState(win){
     if(gamePopup!==win)return;
@@ -91,12 +88,13 @@ MiniTalk.GameHost=(()=>{
     let popup=null;
     try{popup=window.open("","MoaruMiniGame",popupFeatures())}catch{}
     if(!popup)return false;
+    enforcePopupBounds(popup);
     gamePopup=popup;popupClosing=false;currentGame=game;
     const doc=popup.document;
     const base=String(document.baseURI||location.href).replace(/"/g,"%22");
     doc.open();
     doc.write(`<!doctype html><html lang="ko" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>${String(game.title||"게임").replace(/[<>]/g,"")}</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f7f9fc;color:#18212f;color-scheme:light;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.host{height:100%;display:grid;grid-template-rows:48px minmax(0,1fr)}.bar{display:flex;align-items:center;gap:10px;padding:0 12px;background:#fff;color:#18212f;border-bottom:1px solid #dfe5ee;box-shadow:0 2px 10px rgba(22,33,50,.06);user-select:none}.close{width:34px;height:34px;border:1px solid #dfe5ee;border-radius:10px;background:#f5f7fb;color:#253246;font-size:22px;cursor:pointer}.title{flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badge{font-size:9px;font-weight:900;letter-spacing:.08em;color:#16745b;background:#e3f7f0;padding:5px 7px;border-radius:999px}.frame{width:100%;height:100%;border:0;background:#fff}</style></head><body><main class="host"><header class="bar"><button id="gameClose" class="close" type="button" aria-label="게임 닫기">‹</button><strong class="title"></strong><span class="badge">GAME</span></header><iframe id="gameFrame" class="frame" title="게임" allow="autoplay; fullscreen" referrerpolicy="same-origin"></iframe></main></body></html>`);
-    doc.close();
+    doc.close();enforcePopupBounds(popup);
     titleNode=doc.querySelector(".title");
     if(titleNode)titleNode.textContent=game.title||"게임";
     frame=doc.getElementById("gameFrame");

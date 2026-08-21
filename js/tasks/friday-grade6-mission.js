@@ -126,23 +126,25 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     return el
   }
   function desktopWorksheet(){return !(MiniTalk.MobileImmersive?.isMobile?.())&&(window.innerWidth>=760||window.matchMedia?.("(pointer:fine)")?.matches)}
-  function popupFeatures(){
-    const scr=window.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availW=Number(scr.availWidth)||1200,availH=Number(scr.availHeight)||850;
-    const messengerLeft=Number(window.screenX??window.screenLeft)||availLeft,messengerTop=Number(window.screenY??window.screenTop)||availTop,messengerW=Math.max(0,Number(window.outerWidth)||0);
-    const gap=14,rightStart=Math.max(availLeft,messengerLeft+messengerW+gap),rightSpace=(availLeft+availW)-rightStart,leftSpace=Math.max(0,messengerLeft-gap-availLeft);
-    const targetW=Math.max(900,Math.min(1240,availW-56)),height=Math.max(680,Math.min(920,availH-50));
-    let width=Math.min(targetW,Math.max(760,rightSpace)),left=rightStart;
-    if(rightSpace<820&&leftSpace>rightSpace){width=Math.min(targetW,Math.max(760,leftSpace));left=Math.max(availLeft,messengerLeft-gap-width)}
-    if(Math.max(rightSpace,leftSpace)<760){width=Math.max(820,Math.min(1180,availW-56));left=availLeft+Math.max(0,Math.round((availW-width)/2))}
-    const top=Math.max(availTop,Math.min(messengerTop,availTop+availH-height));
-    return`popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=yes,resizable=yes,width=${Math.round(width)},height=${Math.round(height)},left=${Math.round(left)},top=${Math.round(top)}`
+  function popupBounds(){
+    const scr=window.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availW=Math.max(640,Number(scr.availWidth)||1200),availH=Math.max(520,Number(scr.availHeight)||850);
+    const messengerLeft=Number(window.screenX??window.screenLeft)||availLeft,messengerTop=Number(window.screenY??window.screenTop)||availTop,messengerW=Math.max(320,Number(window.outerWidth)||Math.min(520,availW*.42)),messengerH=Math.max(420,Number(window.outerHeight)||availH*.8);
+    const gap=14,rightStart=Math.min(availLeft+availW,messengerLeft+messengerW+gap),rightSpace=Math.max(0,(availLeft+availW)-rightStart),leftSpace=Math.max(0,messengerLeft-gap-availLeft),bottomStart=Math.min(availTop+availH,messengerTop+messengerH+gap),bottomSpace=Math.max(0,(availTop+availH)-bottomStart),topSpace=Math.max(0,messengerTop-gap-availTop);
+    const desiredW=Math.min(1180,Math.max(720,Math.round(availW*.66))),desiredH=Math.min(900,Math.max(600,Math.round(availH*.86))),minSideW=Math.min(620,Math.max(480,Math.round(availW*.34)));
+    let width,height,left,top;
+    if(Math.max(rightSpace,leftSpace)>=minSideW){const useRight=rightSpace>=leftSpace;const sideSpace=useRight?rightSpace:leftSpace;width=Math.min(desiredW,sideSpace);height=Math.min(desiredH,availH-24);left=useRight?rightStart:messengerLeft-gap-width;top=Math.max(availTop+8,Math.min(messengerTop,availTop+availH-height-8));}
+    else if(Math.max(bottomSpace,topSpace)>=420){const useBottom=bottomSpace>=topSpace;width=Math.min(desiredW,availW-24);height=Math.min(desiredH,useBottom?bottomSpace:topSpace);left=Math.max(availLeft+8,Math.min(messengerLeft,availLeft+availW-width-8));top=useBottom?bottomStart:messengerTop-gap-height;}
+    else{width=Math.min(Math.max(620,Math.round(availW*.58)),availW-24);height=Math.min(desiredH,availH-24);const messengerCenter=messengerLeft+messengerW/2,screenCenter=availLeft+availW/2;left=messengerCenter<=screenCenter?availLeft+availW-width-8:availLeft+8;top=Math.max(availTop+8,Math.min(messengerTop,availTop+availH-height-8));}
+    return{width:Math.round(Math.max(480,width)),height:Math.round(Math.max(520,height)),left:Math.round(left),top:Math.round(top)}
   }
+  function popupFeatures(){const b=popupBounds();return`popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=yes,resizable=yes,width=${b.width},height=${b.height},left=${b.left},top=${b.top}`}
+  function enforcePopupBounds(win){const b=popupBounds(),apply=()=>{try{win.resizeTo(b.width,b.height);win.moveTo(b.left,b.top)}catch{}};apply();setTimeout(apply,80);setTimeout(apply,260)}
   function preparePopup(){
     try{if(worksheetWindow&&!worksheetWindow.closed){worksheetWindow.focus();return worksheetWindow}}catch{worksheetWindow=null}
     let win=null;try{win=window.open("","MoaruWeeklyWorksheet",popupFeatures())}catch{}
-    if(!win)return null;worksheetWindow=win;
+    if(!win)return null;worksheetWindow=win;enforcePopupBounds(win);
     const base=new URL("./",location.href).href,doc=win.document;
-    doc.open();doc.write(`<!doctype html><html lang="ko" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>모아루 주간 학습점검</title><link rel="stylesheet" href="css/tokens.css?v=7"><link rel="stylesheet" href="css/app.css?v=64.5.11"><link rel="stylesheet" href="css/features/math-quest.css?v=23"><link rel="stylesheet" href="css/features/feed-classinfo-weekly.css?v=65.0.21"></head><body class="weekly-exam-popup"><main id="weeklyExamRoot" class="weekly-exam-root"></main></body></html>`);doc.close();
+    doc.open();doc.write(`<!doctype html><html lang="ko" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>모아루 주간 학습점검</title><link rel="stylesheet" href="css/tokens.css?v=7"><link rel="stylesheet" href="css/app.css?v=64.5.11"><link rel="stylesheet" href="css/features/math-quest.css?v=23"><link rel="stylesheet" href="css/features/feed-classinfo-weekly.css?v=65.0.21"></head><body class="weekly-exam-popup"><main id="weeklyExamRoot" class="weekly-exam-root"></main></body></html>`);doc.close();enforcePopupBounds(win);
     win.addEventListener("pagehide",()=>{if(worksheetWindow===win)worksheetWindow=null},{once:true});try{win.focus()}catch{}return win
   }
   function closeWorksheet(){try{if(worksheetWindow&&!worksheetWindow.closed)worksheetWindow.close()}catch{}worksheetWindow=null;try{window.focus()}catch{}}

@@ -34,6 +34,7 @@ MiniTalk.Tools.FaceToy = (() => {
   let effectDragCleanup = null;
   let activeDoc = null;
   let separateWindow = false;
+  let lifecycleId = 0;
 
   function audio() {
     try {
@@ -247,6 +248,7 @@ MiniTalk.Tools.FaceToy = (() => {
   }
 
   function dispose() {
+    lifecycleId += 1;
     effectDragCleanup?.();
     effectDragCleanup = null;
     stopCamera();
@@ -254,6 +256,32 @@ MiniTalk.Tools.FaceToy = (() => {
     manualResolve = null;
     manualNeeded = 0;
     warpStart = null;
+
+    /* 개인정보/메모리 정리: 닫는 즉시 편집 사진 픽셀과 히스토리 참조를 폐기한다. */
+    for (const target of [sourceImage, canvas]) {
+      if (!target) continue;
+      try {
+        const ctx = target.getContext?.("2d");
+        ctx?.clearRect?.(0, 0, target.width || 1, target.height || 1);
+        target.width = 1;
+        target.height = 1;
+      } catch {}
+    }
+    sourceImage = null;
+    history = [];
+    faces = [];
+    mode = "camera";
+    lastRandom = "";
+    canvas = null;
+    video = null;
+    stage = null;
+    statusNode = null;
+    effectsNode = null;
+    shutter = null;
+    switchButton = null;
+    picker = null;
+    resultActions = null;
+
     if (view && !separateWindow) shell().closeModal?.();
     view = null;
     activeDoc = null;
@@ -314,16 +342,21 @@ MiniTalk.Tools.FaceToy = (() => {
   }
 
   async function enterEdit(source) {
+    const token = lifecycleId;
+    const editCanvas = canvas;
+    if (!editCanvas) return;
     sourceImage = cloneCanvas(source);
-    canvas.width = source.width; canvas.height = source.height;
-    canvas.getContext("2d", { alpha: false }).drawImage(source, 0, 0);
+    editCanvas.width = source.width; editCanvas.height = source.height;
+    editCanvas.getContext("2d", { alpha: false }).drawImage(source, 0, 0);
     history = [];
     faces = [];
     mode = "edit";
     syncMode();
     fitCanvasAspect();
     setStatus("얼굴 찾는 중…");
-    faces = await detectFaces(canvas);
+    const detected = await detectFaces(editCanvas);
+    if (token !== lifecycleId || canvas !== editCanvas || mode !== "edit") return;
+    faces = detected;
     if (faces.length) setStatus(faces.length > 1 ? `${faces.length}명 찾았어. 이제 제대로 망가뜨려봐 😵` : "얼굴 찾았어. 효과를 골라봐 😵");
     else setStatus("자동 얼굴 찾기가 안 되면 효과를 누른 뒤 얼굴 중심을 찍어줘.");
   }
@@ -361,18 +394,18 @@ MiniTalk.Tools.FaceToy = (() => {
         const found = await detector.detect(target);
         return found.map(item => {
           const b = item.boundingBox;
-          return normalizeFace({ x: b.x, y: b.y, w: b.width, h: b.height });
+          return normalizeFace({ x: b.x, y: b.y, w: b.width, h: b.height }, target);
         }).filter(Boolean).sort((a, b) => b.w * b.h - a.w * a.h);
       } catch (error) { console.warn("내장 얼굴 감지 실패", error); }
     }
     return [];
   }
 
-  function normalizeFace(face) {
-    if (!face) return null;
+  function normalizeFace(face, target = canvas) {
+    if (!face || !target?.width || !target?.height) return null;
     const padX = face.w * .10, padTop = face.h * .18, padBottom = face.h * .06;
-    const x = clamp(face.x - padX, 0, canvas.width - 1), y = clamp(face.y - padTop, 0, canvas.height - 1);
-    const right = clamp(face.x + face.w + padX, x + 2, canvas.width), bottom = clamp(face.y + face.h + padBottom, y + 2, canvas.height);
+    const x = clamp(face.x - padX, 0, target.width - 1), y = clamp(face.y - padTop, 0, target.height - 1);
+    const right = clamp(face.x + face.w + padX, x + 2, target.width), bottom = clamp(face.y + face.h + padBottom, y + 2, target.height);
     return { x, y, w: right - x, h: bottom - y };
   }
 

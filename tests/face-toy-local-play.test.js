@@ -9,8 +9,8 @@ const face=read('js/tools/face-toy.js'),tools=read('js/features/tools.js'),confi
 ok(tools.includes('id: "face-toy"')&&tools.includes('openCameraTool(MiniTalk.Tools.FaceToy, \"페이스 체인지\")'),'face toy tool entry missing');
 ok(!tools.includes('id: "motion-math"'),'motion game must leave main tools grid');
 ok(config.includes('{name:"동작 인식 게임",url:"https://langret100.github.io/Math-in-Math/"}'),'motion game related link missing');
-ok(html.includes('css/features/face-toy.css?v=4')&&html.includes('js/tools/face-toy.js?v=4'),'face toy assets not loaded');
-ok(html.indexOf('js/tools/face-toy.js?v=4')<html.indexOf('js/tools/lookalike-play.js?v=3')&&html.indexOf('js/tools/lookalike-play.js?v=3')<html.indexOf('js/features/tools.js?v=64.5.10'),'face toy module must load before tools feature');
+ok(html.includes('css/features/face-toy.css?v=4')&&html.includes('js/tools/face-toy.js?v=5'),'face toy assets not loaded');
+ok(html.indexOf('js/tools/face-toy.js?v=5')<html.indexOf('js/tools/lookalike-play.js?v=3')&&html.indexOf('js/tools/lookalike-play.js?v=3')<html.indexOf('js/features/tools.js?v=64.5.10'),'face toy module must load before tools feature');
 ok(sw.includes('./css/features/face-toy.css')&&sw.includes('./js/tools/face-toy.js'),'face toy offline assets missing');
 
 // 로컬 전용: 자체 fetch/API/Firebase 경로가 없어야 하며, 공유 시 기존 Realtime.sendMessage만 재사용한다.
@@ -43,6 +43,11 @@ ok(css.includes('@media(max-width:340px)'),'290px/PiP responsive rules missing')
 ok(face.includes('window.AudioContext || window.webkitAudioContext'),'face toy local audio synth missing');
 ok(face.includes('sound("shutter")')&&face.includes('sound("effect")')&&face.includes('sound("warp")')&&face.includes('sound("done")'),'face toy sound cues missing');
 ok(!/new Audio\(|assets\/sounds\//.test(face),'face toy should not add downloadable sound assets');
+
+// 종료 시 사진 픽셀/히스토리/얼굴 좌표를 즉시 폐기하고, 비동기 얼굴 감지가 닫힌 뒤 상태를 되살리지 않아야 한다.
+ok(face.includes('for (const target of [sourceImage, canvas])')&&face.includes('ctx?.clearRect?.(0, 0, target.width || 1, target.height || 1)')&&face.includes('target.width = 1')&&face.includes('target.height = 1'),'face toy dispose must wipe image canvases');
+ok(face.includes('sourceImage = null')&&face.includes('history = []')&&face.includes('faces = []')&&face.includes('canvas = null')&&face.includes('video = null'),'face toy dispose must release photo/history references');
+ok(face.includes('let lifecycleId = 0')&&face.includes('token !== lifecycleId || canvas !== editCanvas || mode !== "edit"'),'async face detection must not restore disposed photo state');
 
 // FaceDetector가 없을 때도 직접 얼굴 중심 선택으로 기능을 계속 쓸 수 있어야 한다.
 ok(face.includes('selectFacesManually')&&face.includes('manual-face-pick'),'manual face fallback missing');

@@ -136,15 +136,15 @@
   const MINA_BASE = "../assets/game-mina/";
   const MINA_ASSET_REV = "?v=65";
   const MINA_FRAMES = {
-    idle:  ["기본대기1.png", "기본대기2.png"],
-    listen:["경청1.png", "경청2.png"],
-    greet: ["인사1.png", "인사2.png"],
-    cheer: ["만세2.png"],
-    joy:   ["기쁨2.png"],
-    fun:   ["신남1.png", "신남2.png"],
-    fail:  ["절망1.png", "절망2.png"],
-    sad:   ["실망2.png"],
-    shy:   ["부끄러움1.png", "부끄러움2.png"]
+    idle:  ["idle1.png", "idle2.png"],
+    listen:["listen1.png", "listen2.png"],
+    greet: ["greet1.png", "greet2.png"],
+    cheer: ["cheer.png"],
+    joy:   ["joy.png"],
+    fun:   ["fun1.png", "fun2.png"],
+    fail:  ["fail1.png", "fail2.png"],
+    sad:   ["sad.png"],
+    shy:   ["shy1.png", "shy2.png"]
   };
   const EVENT_EMOTIONS = {
     start:["cheer","listen","greet"],

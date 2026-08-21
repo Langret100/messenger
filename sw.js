@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-v64.5.48-moa-solo-public-learning-v91-20260820";
+const CACHE = "moaru-v64.5.49-task-reward-shopping-audit-v91-20260821";
 const CORE = [
   "./",
   "./index.html",

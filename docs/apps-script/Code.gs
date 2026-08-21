@@ -180,7 +180,8 @@ function doPost(e) {
   const data = req.data;
   const mode = req.mode;
 
-  Logger.log("doPost mode=" + mode + ", data=" + JSON.stringify(data));
+  // 요청 본문에는 로그인 비밀번호·과제 내용·이미지 데이터가 들어올 수 있으므로 실행 로그에 남기지 않습니다.
+  Logger.log("doPost mode=" + mode);
 
   try {
     if (!mode) {

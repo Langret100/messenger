@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..');
 const feed=fs.readFileSync(path.join(root,'js/features/feed.js'),'utf8');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 function ok(v,m){if(!v)throw new Error(m)}
-ok(html.includes('js/features/feed.js?v=65.0.18'),'feed cache version stale');
+ok(html.includes('js/features/feed.js?v=65.0.19'),'feed cache version stale');
 ok(feed.includes('class:"view feed-shell"')&&!feed.includes('class:"view feed-shell view-enter"'),'feed entry animation still enabled');
 ok(/function stopSub\(\)[\s\S]*?openCommentComposers\.clear\(\)[\s\S]*?\}/.test(feed),'feed leave cleanup missing');
 const stop=(feed.match(/function stopSub\(\)\{([^}]*)\}/)||[])[1]||'';

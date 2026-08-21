@@ -87,7 +87,9 @@ function moaKnownPlace_(place){
     "울산":{name:"울산",admin1:"울산광역시",latitude:35.5384,longitude:129.3114,timezone:"Asia/Seoul"},
     "세종":{name:"세종",admin1:"세종특별자치시",latitude:36.4800,longitude:127.2890,timezone:"Asia/Seoul"},
     "제주":{name:"제주",admin1:"제주특별자치도",latitude:33.4996,longitude:126.5312,timezone:"Asia/Seoul"},
-    "제주시":{name:"제주",admin1:"제주특별자치도",latitude:33.4996,longitude:126.5312,timezone:"Asia/Seoul"}
+    "제주시":{name:"제주",admin1:"제주특별자치도",latitude:33.4996,longitude:126.5312,timezone:"Asia/Seoul"},
+    "군산":{name:"군산",admin1:"전북특별자치도",latitude:35.9677,longitude:126.7366,timezone:"Asia/Seoul"},
+    "군산시":{name:"군산",admin1:"전북특별자치도",latitude:35.9677,longitude:126.7366,timezone:"Asia/Seoul"}
   };
   return map[q]||null;
 }
@@ -112,6 +114,9 @@ function moaWeatherSearch_(text){
 function moaGeoPlace_(place){
   var q=String(place||"").trim();if(!q)return null;
   var known=moaKnownPlace_(q);if(known)return known;
+  var cityQ=q.replace(/\s+/g,"").replace(/(?:특별시|광역시|특별자치시|특별자치도)$/,"");
+  known=moaKnownPlace_(cityQ);if(known)return known;
+  if(/시$/.test(cityQ)){known=moaKnownPlace_(cityQ.slice(0,-1));if(known)return known;}
   var geo=moaFetchJson_("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(q)+"&count=1&language=ko&format=json");
   var loc=geo&&geo.results&&geo.results[0];if(loc)return loc;
   var aliases={"서울":"Seoul","부산":"Busan","대구":"Daegu","인천":"Incheon","광주":"Gwangju","대전":"Daejeon","울산":"Ulsan","세종":"Sejong","제주":"Jeju"};
@@ -242,8 +247,9 @@ function moaGeneralSearch_(query,text){
   }
   var out,summary=moaSynthesizeSearch_(lookup,results);
   if(results.length&&summary){
-    var refs=results.filter(function(v){return v.url&&v.snippet}).slice(0,2).map(function(v){return "• "+moaTrimAnswer_(v.title,70)+"\n"+v.url});
-    out={reply:summary+(refs.length?"\n\n참고한 공개 자료\n"+refs.join("\n"):""),source:results[0].url&&/wikipedia\.org/.test(results[0].url)?"wikipedia-answer":"web-answer",kind:"answer"};
+    var factual=/누구|뭐야|무엇|뜻|정의|어떤\s*(?:사람|것|캐릭터|동물)/.test(raw)&&!/(최신|최근|뉴스|추천|비교|차이|장단점|검색)/.test(raw);
+    var refs=factual?[]:results.filter(function(v){return v.url&&v.snippet}).slice(0,2).map(function(v){return "• "+moaTrimAnswer_(v.title,70)+"\n"+v.url});
+    out={reply:summary+(refs.length?"\n\n참고한 공개 자료\n"+refs.join("\n"):""),source:factual?"knowledge-answer":(results[0].url&&/wikipedia\.org/.test(results[0].url)?"wikipedia-answer":"web-answer"),kind:"answer"};
   }else if(results.length){
     var first=results[0];out={reply:"관련 자료는 찾았는데 지금 가져온 내용만으로는 확실하게 요약하기 어려워. 검색어를 조금 더 구체적으로 말해주면 다시 확인해볼게."+(first.url?"\n\n참고 자료\n"+first.url:""),source:"web-answer",kind:"answer"};
   }else{

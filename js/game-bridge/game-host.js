@@ -62,8 +62,8 @@ MiniTalk.GameHost=(()=>{
   }
 
   function popupBounds(){
-    const scr=window.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availWidth=Math.max(640,Number(scr.availWidth)||1280),availHeight=Math.max(520,Number(scr.availHeight)||800);
-    const messengerLeft=Number(window.screenX??window.screenLeft)||availLeft,messengerTop=Number(window.screenY??window.screenTop)||availTop,messengerW=Math.max(320,Number(window.outerWidth)||Math.min(520,availWidth*.42)),messengerH=Math.max(420,Number(window.outerHeight)||availHeight*.8),gap=14;
+    const sourceView=MiniTalk.UI.Dom.doc()?.defaultView||window,scr=sourceView.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availWidth=Math.max(640,Number(scr.availWidth)||1280),availHeight=Math.max(520,Number(scr.availHeight)||800);
+    const messengerLeft=Number(sourceView.screenX??sourceView.screenLeft)||availLeft,messengerTop=Number(sourceView.screenY??sourceView.screenTop)||availTop,messengerW=Math.max(320,Number(sourceView.outerWidth)||Math.min(520,availWidth*.42)),messengerH=Math.max(420,Number(sourceView.outerHeight)||availHeight*.8),gap=42;
     const rightStart=Math.min(availLeft+availWidth,messengerLeft+messengerW+gap),rightSpace=Math.max(0,availLeft+availWidth-rightStart),leftSpace=Math.max(0,messengerLeft-gap-availLeft),bottomStart=Math.min(availTop+availHeight,messengerTop+messengerH+gap),bottomSpace=Math.max(0,availTop+availHeight-bottomStart),topSpace=Math.max(0,messengerTop-gap-availTop);
     const desiredWidth=Math.min(1280,Math.max(760,Math.round(availWidth*.7))),desiredHeight=Math.min(900,Math.max(620,Math.round(availHeight*.88))),minSideWidth=Math.min(640,Math.max(500,Math.round(availWidth*.34)));
     let width,height,left,top;

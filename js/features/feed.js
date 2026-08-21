@@ -259,8 +259,10 @@ MiniTalk.Features.Feed=(()=>{
       else mediaHost.append(D.el("span",{text:"사진 불러오는 중…"}));
       card.append(mediaHost)
     }
-    const hasHearts=(Number(post.heartCount)||0)>0,heart=D.el("button",{class:`feed-heart ${(liked||hasHearts)?"active":""}`,type:"button","aria-label":"하트"},[D.el("span",{text:(liked||hasHearts)?"♥":"♡"}),D.el("b",{text:String(Number(post.heartCount)||0)})]);
-    heart.onpointerdown=primeHeartAudio;heart.onclick=()=>toggleHeart(post.id,heart);card.append(D.el("footer",{class:"feed-card-foot"},[heart]),commentsBlock(post));card.addEventListener("click",event=>toggleCommentComposerFromCard(event,card));return card
+    const hasHearts=(Number(post.heartCount)||0)>0,heart=D.el("button",{class:`feed-heart ${(liked||hasHearts)?"active":""}`,type:"button","aria-label":"하트"},[D.el("span",{text:(liked||hasHearts)?"♥":"♡"}),D.el("b",{text:String(Number(post.heartCount)||0)})]),commentTrigger=!u.isGuest?D.el("button",{class:"feed-comment-trigger",type:"button",text:"댓글 쓰기","aria-label":"댓글 입력 열기","data-no-drag-scroll":""}):null;
+    heart.onpointerdown=primeHeartAudio;heart.onclick=()=>toggleHeart(post.id,heart);
+    if(commentTrigger)commentTrigger.onclick=event=>{event.preventDefault();event.stopPropagation();setCommentComposer(card,!card.querySelector("[data-feed-comments]")?.classList.contains("compose-open"),true)};
+    card.append(D.el("footer",{class:"feed-card-foot"},[heart,commentTrigger]),commentsBlock(post));card.addEventListener("click",event=>toggleCommentComposerFromCard(event,card));return card
   }
   function setupLazyMedia(root){
     const nodes=[...(root.querySelectorAll?.("[data-media-type]")||[])];

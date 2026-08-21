@@ -207,11 +207,11 @@ MiniTalk.Features.Chats=(()=>{
   async function sendPayload(roomId,payload){await MiniTalk.Realtime.sendMessage(roomId,payload)}
   function messageNode(message){
     const D=MiniTalk.UI.Dom,current=MiniTalk.Store.get("user")||{},mine=message.user_id===current.user_id||(!message.user_id&&message.nickname&&message.nickname===current.nickname),row=D.el("article",{class:`message-row ${mine?"mine":""}`}),profile=profileForMessage(message);
-    if(!mine){const avatar=D.el("img",{class:"message-avatar profile-image",src:profile.avatar||"assets/mascot-avatar.png",alt:`${message.nickname||"사용자"} 프로필`});avatar.onerror=()=>{avatar.onerror=null;avatar.src="assets/mascot-avatar.png"};avatar.onclick=()=>openUserProfile(message,profile);row.append(avatar)}
+    if(!mine){const avatar=D.el("img",{class:"message-avatar profile-image",src:profile.avatar||"assets/mascot-avatar.png",alt:`${message.nickname||"사용자"} 프로필`});avatar.onerror=()=>{avatar.onerror=null;avatar.src="assets/mascot-avatar.png"};avatar.setAttribute("role","button");avatar.tabIndex=0;avatar.setAttribute("data-no-drag-scroll","");avatar.onclick=event=>{event.preventDefault();event.stopPropagation();openUserProfile(message,profile)};avatar.onkeydown=event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();openUserProfile(message,profile)}};row.append(avatar)}
     const content=D.el("div",{class:"message-content"});if(!mine)content.append(D.el("small",{class:"sender-name",text:message.nickname||"익명"}));
     const bubble=D.el("div",{class:"bubble"});const type=message.type||(message.fileUrl?"file":(message.image||message.imageUrl?"image":"text"));
     if(type==="image"){
-      const src=message.imageUrl||message.image;if(src){bubble.classList.add("media-bubble");const img=D.el("img",{src,alt:"공유 이미지",loading:"lazy"});img.onerror=()=>{img.replaceWith(D.el("span",{class:"image-load-error",text:"이미지를 불러오지 못했습니다."}))};img.onclick=()=>openImage(src);bubble.append(img)}
+      const src=message.imageUrl||message.image;if(src){bubble.classList.add("media-bubble");const img=D.el("img",{src,alt:"공유 이미지",loading:"lazy"});img.onerror=()=>{img.replaceWith(D.el("span",{class:"image-load-error",text:"이미지를 불러오지 못했습니다."}))};img.setAttribute("data-no-drag-scroll","");img.onclick=event=>{event.preventDefault();event.stopPropagation();openImage(src)};bubble.append(img)}
     }else if(type==="file"){
       bubble.classList.add("file-bubble");const a=D.el("a",{href:message.fileUrl||"#",target:"_blank",rel:"noopener noreferrer",class:"file-card"},[D.el("span",{text:"⌁"}),D.el("span",{},[D.el("strong",{text:message.fileName||"첨부 파일"}),D.el("small",{text:"파일 열기"})])]);bubble.append(a)
     }else{

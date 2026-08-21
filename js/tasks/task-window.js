@@ -10,7 +10,7 @@ MiniTalk.Tasks.TaskWindow = (() => {
   const el = (doc, tag, attrs = {}, children = []) => { const node = doc.createElement(tag);Object.entries(attrs).forEach(([key, value]) => { if (key === "class") node.className = value;else if (key === "text") node.textContent = value;else if (key === "value") node.value = value;else if (value != null) node.setAttribute(key, value); });[].concat(children).filter(Boolean).forEach(child => node.append(child));return node; };
 
   function popupBounds(sourceView, desiredW=920, desiredH=780) {
-    const scr=sourceView.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availW=Math.max(640,Number(scr.availWidth)||1280),availH=Math.max(520,Number(scr.availHeight)||800),gap=14;
+    const scr=sourceView.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availW=Math.max(640,Number(scr.availWidth)||1280),availH=Math.max(520,Number(scr.availHeight)||800),gap=42;
     const srcLeft=Number(sourceView.screenX??sourceView.screenLeft)||availLeft,srcTop=Number(sourceView.screenY??sourceView.screenTop)||availTop,srcW=Math.max(320,Number(sourceView.outerWidth)||Math.min(520,availW*.42)),srcH=Math.max(420,Number(sourceView.outerHeight)||availH*.8);
     const rightStart=Math.min(availLeft+availW,srcLeft+srcW+gap),rightSpace=Math.max(0,availLeft+availW-rightStart),leftSpace=Math.max(0,srcLeft-gap-availLeft);let width=Math.min(desiredW,Math.max(rightSpace,leftSpace)),left=rightSpace>=leftSpace?rightStart:srcLeft-gap-width;
     if(Math.max(rightSpace,leftSpace)<520){width=Math.min(Math.max(560,Math.round(availW*.56)),availW-24);left=(srcLeft+srcW/2)<=availLeft+availW/2?availLeft+availW-width-8:availLeft+8;}

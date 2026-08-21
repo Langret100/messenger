@@ -97,7 +97,7 @@ MiniTalk.UI.DragScroll=(()=>{
       return scroller;
     }
 
-    let active=false,moved=false,startY=0,startX=0,startTop=0,pointerId=null,suppressClick=false;
+    let active=false,moved=false,startY=0,startX=0,startTop=0,pointerId=null,suppressClick=false,deferCapture=false;
     const canStart=event=>{
       if(event.pointerType&&event.pointerType!=="mouse")return false;
       if(event.button!=null&&event.button!==0)return false;
@@ -108,8 +108,9 @@ MiniTalk.UI.DragScroll=(()=>{
     scroller.addEventListener("pointerdown",event=>{
       if(!canStart(event))return;
       active=true;moved=false;pointerId=event.pointerId;startY=event.clientY;startX=event.clientX;startTop=scroller.scrollTop;
+      deferCapture=Boolean(event.target?.closest?.(".shop-product-card"));
       scroller.classList.add("drag-scroll-ready");
-      try{scroller.setPointerCapture?.(pointerId)}catch(_){ }
+      if(!deferCapture){try{scroller.setPointerCapture?.(pointerId)}catch(_){ }}
     });
     scroller.addEventListener("pointermove",event=>{
       if(!active||event.pointerId!==pointerId)return;
@@ -118,9 +119,11 @@ MiniTalk.UI.DragScroll=(()=>{
         if(Math.hypot(dx,dy)<5)return;
         if(Math.abs(dx)>Math.abs(dy)*1.35){
           try{if(pointerId!=null&&scroller.hasPointerCapture?.(pointerId))scroller.releasePointerCapture(pointerId)}catch(_){ }
-          active=false;moved=false;pointerId=null;scroller.classList.remove("drag-scroll-ready","drag-scrolling");return
+          active=false;moved=false;pointerId=null;deferCapture=false;scroller.classList.remove("drag-scroll-ready","drag-scrolling");return
         }
-        moved=true;scroller.classList.add("drag-scrolling");
+        moved=true;
+        if(deferCapture){try{scroller.setPointerCapture?.(pointerId)}catch(_){ }}
+        scroller.classList.add("drag-scrolling");
       }
       event.preventDefault();
       scroller.scrollTop=startTop-dy;
@@ -129,7 +132,7 @@ MiniTalk.UI.DragScroll=(()=>{
       if(!active&&event?.pointerId!==pointerId)return;
       if(moved){suppressClick=true;setTimeout(()=>{suppressClick=false},120)}
       try{if(pointerId!=null&&scroller.hasPointerCapture?.(pointerId))scroller.releasePointerCapture(pointerId)}catch(_){ }
-      active=false;moved=false;pointerId=null;scroller.classList.remove("drag-scroll-ready","drag-scrolling");
+      active=false;moved=false;pointerId=null;deferCapture=false;scroller.classList.remove("drag-scroll-ready","drag-scrolling");
     };
     scroller.addEventListener("pointerup",finish);
     scroller.addEventListener("pointercancel",finish);

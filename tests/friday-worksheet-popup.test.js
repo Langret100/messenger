@@ -1,0 +1,16 @@
+const fs=require('fs'),path=require('path'),vm=require('vm');
+const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+const src=read('js/tasks/friday-grade6-mission.js'),css=read('css/features/feed-classinfo-weekly.css'),html=read('index.html'),gs=read('docs/apps-script/MOA_AI.gs'),install=read('docs/apps-script/MOA_AI_INSTALL.md');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(src.includes('weekly-exam-sheet')&&src.includes('weekly-exam-question')&&src.includes('답안 제출하기'),'20-question worksheet UI missing');
+ok(src.includes('window.open("","MoaruWeeklyWorksheet"')&&src.includes('popup=yes')&&src.includes('desktopWorksheet()'),'desktop/WhaleBook large popup flow missing');
+ok(src.indexOf('wantsPopup?preparePopup():null')<src.indexOf('await MiniTalk.Realtime.cloudGet(path(),null)'),'popup must be opened synchronously before the first awaited data load');
+ok(src.includes('questions.filter(q=>selections[q.id]==null)')&&src.includes('제출 전에는 언제든 답을 바꿀 수 있어요.'),'worksheet all-answer submit guard/edit-before-submit missing');
+ok(src.includes('saveDraft(questions,selections,setVersion')&&src.includes('scheduleDraftSave'),'worksheet draft autosave missing');
+ok(src.includes('grade6-worksheet-${legacy?"v4":"v5"}')&&src.includes('shuffle(cats,r)'),'weekly randomized worksheet generator missing');
+ok(src.includes('const korBank=[')&&src.includes('다음 글을 읽고 중심 생각')&&src.includes('거스름돈은 얼마인가요?'),'sentence/passage question bank missing');
+ok(css.includes('.weekly-exam-sheet')&&css.includes('.weekly-exam-choices')&&css.includes('.weekly-exam-popup'),'worksheet popup styling missing');
+ok(html.includes('friday-grade6-mission.js?v=65.0.14')&&html.includes('feed-classinfo-weekly.css?v=65.0.25'),'worksheet cache bust missing');
+ok(gs.includes('function moaCleanupLegacySheets()')&&!gs.includes('moaCleanupLegacySheets_'),'clean single MOA cleanup function missing');
+ok(!gs.includes('moaV91CleanupLegacySheets')&&!install.includes('moaV91CleanupLegacySheets'),'versioned MOA cleanup function name remains');
+console.log('FRIDAY_WORKSHEET_POPUP_OK');

@@ -1,0 +1,16 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const host=read('js/game-bridge/game-host.js');
+const board=read('js/games/board.js');
+const html=read('index.html');
+ok(host.includes('MATH_EXPLORER_RESULT'),'math explorer result handler missing');
+ok(host.includes('reportExplorerBoard(data,rawScore)'),'math explorer board report hook missing');
+ok(host.includes('if(rawScore<5000)return'),'5000 score board threshold missing');
+ok(host.includes('"[게임자동기록]"'),'automatic game board author missing');
+ok(host.includes('lastExplorerReportKey===key'),'duplicate board report guard missing');
+ok(host.includes('도달 라운드:')&&host.includes('플레이 모드:')&&host.includes('사용 캐릭터:'),'math explorer board detail lines missing');
+ok(board.includes('async function writeAuto(')&&board.includes('persistPost(makePost(title, content, author))'),'board automatic write API missing');
+ok(html.includes('js/games/board.js?v=64.5')&&html.includes('js/game-bridge/game-host.js?v=24'),'math explorer board cache versions stale');
+console.log('MATH_EXPLORER_BOARD_REPORT_OK');

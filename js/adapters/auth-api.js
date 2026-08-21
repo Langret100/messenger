@@ -121,15 +121,16 @@ MiniTalk.AuthApi = (() => {
      * 서버는 상품 ID·가격을 다시 검증하고 코인 차감과 구매 키 중복 검사를
      * 한 트랜잭션으로 처리해야 합니다. 미지원 서버에서는 명확한 오류를 반환합니다.
      */
-    async shopPurchase({ userId, product, purchaseKey }) {
+    async shopPurchase({ userId, product, purchaseKey, randomPurchase = false, price = 0 }) {
       return post({
         mode: "shop_purchase",
         user_id: userId,
-        product_id: product.id,
-        price: product.price,
-        expected_name: product.name,
-        expected_description: product.description || "",
-        expected_updated_at: product.updatedAt || 0,
+        random_purchase: randomPurchase ? "1" : "",
+        product_id: product?.id || "",
+        price: randomPurchase ? Number(price || 3) : product?.price,
+        expected_name: product?.name || "",
+        expected_description: product?.description || "",
+        expected_updated_at: product?.updatedAt || 0,
         purchase_key: purchaseKey
       });
     },

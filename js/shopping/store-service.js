@@ -98,6 +98,36 @@ MiniTalk.Shopping.StoreService = (() => {
     await MiniTalk.Realtime.addShopInventory(current.user_id,stored);await refreshInventory(true).catch(()=>{});
     const balance=result.newCoin??result.coin??result.balance;if(balance!=null)MiniTalk.Economy.CoinWallet.setLocal(balance,"purchase");else await MiniTalk.Economy.CoinWallet.refresh(true);pendingPurchaseKeys.delete(pendingKey);return result;
   }
+  async function randomPurchase() {
+    const current=requireLogin();
+    const available=products();
+    if(!available.length)throw new Error("추첨할 상품이 아직 없습니다.");
+    const pendingKey=`${current.user_id}:random`,purchaseKey=pendingPurchaseKeys.get(pendingKey)||`${pendingKey}:${crypto.randomUUID()}`;
+    pendingPurchaseKeys.set(pendingKey,purchaseKey);
+    let result;
+    try {
+      result=await MiniTalk.AuthApi.shopPurchase({userId:current.user_id,product:null,purchaseKey,randomPurchase:true,price:3});
+    } catch(error) {
+      if(["PRODUCT_NOT_AVAILABLE","NO_RANDOM_PRODUCTS"].includes(error?.code))await refreshCatalog(true).catch(()=>{});
+      if(error?.code!=="REQUEST_TIMEOUT")pendingPurchaseKeys.delete(pendingKey);
+      throw error;
+    }
+    const won=normalizeProduct({
+      id:result.product_id||result.item?.productId,
+      name:result.product_name||result.item?.name,
+      description:result.product_description||result.item?.description||"",
+      imageUrl:result.product_image_url||result.item?.imageUrl||"",
+      price:result.original_price||result.item?.originalPrice||result.item?.price||3,
+      updatedAt:result.product_updated_at||0
+    });
+    const stored=result.item||{productId:won.id,name:won.name,description:won.description,imageUrl:won.imageUrl,price:3,purchaseKey,purchasedAt:Date.now(),createdAt:Date.now()};
+    await MiniTalk.Realtime.addShopInventory(current.user_id,stored);
+    await refreshInventory(true).catch(()=>{});
+    const balance=result.newCoin??result.coin??result.balance;
+    if(balance!=null)MiniTalk.Economy.CoinWallet.setLocal(balance,"random-purchase");else await MiniTalk.Economy.CoinWallet.refresh(true);
+    pendingPurchaseKeys.delete(pendingKey);
+    return {...result,product:won,item:stored};
+  }
   async function use(id) { const current=requireLogin(),item=inventory().find(row=>row.id===id);if(!item||item.usedAt)throw new Error("사용할 수 없는 상품입니다.");const result=await MiniTalk.AuthApi.shopUse({userId:current.user_id,inventoryId:id,item}),usedAt=Number(result.usedAt)||Date.now();try{await MiniTalk.Realtime.useShopInventory(id,usedAt)}catch(error){console.warn("Firebase 보관함 사용 상태 동기화 실패",error)}await refreshInventory(true);return usedAt; }
   async function requestDelivery(id) {
     const current=requireLogin(),item=inventory().find(row=>row.id===id);
@@ -117,5 +147,5 @@ MiniTalk.Shopping.StoreService = (() => {
   }
   async function gift(id,targetId) { const current=requireLogin(),item=inventory().find(row=>row.id===id);if(!item||item.usedAt)throw new Error("선물할 수 없는 상품입니다.");const target=recipients().find(row=>row.user_id===targetId);if(!target)throw new Error("선물할 사용자를 찾을 수 없습니다.");const pendingKey=`${current.user_id}:${id}:${target.user_id}`,requestId=pendingGiftKeys.get(pendingKey)||crypto.randomUUID();pendingGiftKeys.set(pendingKey,requestId);await MiniTalk.AuthApi.shopGift({userId:current.user_id,nickname:current.nickname,targetId:target.user_id,inventoryId:id,item,requestId});pendingGiftKeys.delete(pendingKey);try{await MiniTalk.Realtime.removeShopInventory?.(id)}catch(error){console.warn("Firebase 보관함 선물 항목 제거 실패",error)}const currentItems={...objectValue(MiniTalk.Store.get("shopInventory"))};delete currentItems[id];MiniTalk.Store.set("shopInventory",currentItems);MiniTalk.Persistence.set(inventoryCacheKey(current.user_id),currentItems);MiniTalk.Realtime.notifyCommandTargets?.([target.user_id]);await refreshInventory(true);return{targetId:target.user_id,targetNickname:target.nickname}; }
 
-  return{products,refreshCatalog,refreshInventory,start,enter,leave,saveProduct,deleteProduct,inventory,recipients,purchase,use,requestDelivery,gift,normalizeProduct,normalizeInventory,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
+  return{products,refreshCatalog,refreshInventory,start,enter,leave,saveProduct,deleteProduct,inventory,recipients,purchase,randomPurchase,use,requestDelivery,gift,normalizeProduct,normalizeInventory,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
 })();

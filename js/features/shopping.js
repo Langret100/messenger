@@ -1,7 +1,7 @@
 /* 쇼핑 탭: 관리자 상품 카탈로그와 사용자 보관함을 표시합니다. */
 MiniTalk.Features.Shopping = (() => {
   const Service = MiniTalk.Shopping.StoreService;
-  let inventoryOpen = false, refreshTimer = 0;
+  let inventoryOpen = false, refreshTimer = 0, randomOverlay = null, randomArrivalId = "";
 
   const DELIVERY_AUDIO_URLS = ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'];
   const deliveryAudioPool = new Map();
@@ -84,11 +84,139 @@ MiniTalk.Features.Shopping = (() => {
 
   function shopHero(count, guest) {
     const D = MiniTalk.UI.Dom;
-    return D.el("section", { class: "shop-market-hero" }, [
-      D.el("span", { class: "shop-market-mark", text: "◇" }),
-      D.el("div", { class: "shop-market-copy" }, [D.el("strong", { text: "미니 상점" }), D.el("small", { text: guest ? "로그인하고 코인으로 상품을 만나보세요" : "모은 코인으로 원하는 상품을 골라보세요" })]),
+    return D.el("button", {
+      class: "shop-market-hero shop-random-entry",
+      type: "button",
+      "aria-label": guest ? "랜덤구매 로그인 필요" : "랜덤구매 열기",
+      onclick: () => guest ? MiniTalk.UI.Shell.toast("로그인 후 랜덤구매를 이용할 수 있어요.") : openRandomPurchase()
+    }, [
+      D.el("span", { class: "shop-market-mark random-mark", text: "?" }),
+      D.el("div", { class: "shop-market-copy" }, [
+        D.el("strong", { text: "랜덤구매" }),
+        D.el("small", { text: guest ? "로그인하고 3코인 랜덤구매를 이용해보세요" : "3코인으로 등록 상품 하나를 무작위로 뽑아요" })
+      ]),
       D.el("span", { class: "shop-market-count", text: count ? `${count}개 상품` : "준비 중" })
     ]);
+  }
+
+  const RANDOM_COST = 3;
+  let randomAudioContext = null;
+
+  function randomAudio() {
+    try {
+      if (!randomAudioContext) randomAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (randomAudioContext.state === "suspended") randomAudioContext.resume();
+      return randomAudioContext;
+    } catch (_) { return null; }
+  }
+
+  function randomTone(freq, duration=.06, type="square", gainValue=.09, delay=0) {
+    const ctx = randomAudio(); if (!ctx) return;
+    const at = ctx.currentTime + delay, osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = type; osc.frequency.setValueAtTime(freq, at); gain.gain.setValueAtTime(gainValue, at);
+    gain.gain.exponentialRampToValueAtTime(.001, at + duration);
+    osc.connect(gain); gain.connect(ctx.destination); osc.start(at); osc.stop(at + duration + .02);
+  }
+
+  function randomTick() { randomTone(690 + Math.random()*170, .045, "square", .055); }
+  function randomWhoosh() { randomTone(145, .42, "sawtooth", .06); randomTone(520, .34, "triangle", .045, .08); }
+  function randomBrake() { randomTone(180, .18, "sine", .12); randomTone(910, .05, "square", .06, .06); }
+  function randomFanfare() { [523,659,784,1047].forEach((f,i)=>randomTone(f,.35,"triangle",.09,i*.09)); }
+
+  function closeRandomOverlay() {
+    if (!randomOverlay) return;
+    const state=randomOverlay.__state||{};
+    (state.timers||[]).forEach(clearTimeout); if(state.interval)clearInterval(state.interval);
+    randomOverlay.classList.add("leaving");
+    setTimeout(()=>{ randomOverlay?.remove(); randomOverlay=null; }, 240);
+  }
+
+  function randomProductCell(product, active=false) {
+    const D=MiniTalk.UI.Dom;
+    return D.el("div", { class:`shop-random-reel-cell${active?" active":""}` }, [
+      product?.imageUrl ? D.el("img", { src:product.imageUrl, alt:"" }) : D.el("span", { class:"shop-random-placeholder", text:"◇" }),
+      D.el("strong", { text:product?.name||"?" })
+    ]);
+  }
+
+  function randomConfetti(doc, host) {
+    const shades=["#4f7cff","#70a0ff","#ffd66b","#8d7cff","#ffffff"];
+    for(let i=0;i<54;i++){
+      const bit=doc.createElement("i"); bit.className="shop-random-confetti";
+      bit.style.left=`${6+Math.random()*88}%`; bit.style.setProperty("--fall",`${210+Math.random()*260}px`);
+      bit.style.setProperty("--turn",`${Math.floor(Math.random()*780-390)}deg`);
+      bit.style.setProperty("--delay",`${Math.random()*.22}s`); bit.style.background=shades[Math.floor(Math.random()*shades.length)];
+      host.append(bit); setTimeout(()=>bit.remove(),2600);
+    }
+  }
+
+  function openRandomPurchase() {
+    const D=MiniTalk.UI.Dom, doc=D.doc(), products=Service.products();
+    if(!products.length){ MiniTalk.UI.Shell.toast("추첨할 상품이 아직 없어요."); return; }
+    closeRandomOverlay(); randomAudio();
+    const overlay=D.el("div", { class:"shop-random-overlay", role:"dialog", "aria-label":"랜덤구매" });
+    const card=D.el("section", { class:"shop-random-machine" });
+    const top=D.el("div", { class:"shop-random-top" }, [
+      D.el("span", { class:"shop-random-kicker", text:"RANDOM PICK" }),
+      D.el("span", { class:"shop-random-cost" }, [coinAmount(RANDOM_COST,"coin-amount"),D.el("small",{text:" / 1회"})])
+    ]);
+    const windowEl=D.el("div", { class:"shop-random-window" });
+    const strip=D.el("div", { class:"shop-random-strip" });
+    const hint=D.el("div", { class:"shop-random-tap" }, [D.el("strong",{text:"눌러!"}),D.el("small",{text:"한 번 더 누르면 바로 결과"})]);
+    windowEl.append(strip,hint); card.append(top,windowEl,D.el("small",{class:"shop-random-foot",text:`현재 ${products.length}개 상품 중 1개가 나와요` })); overlay.append(card);
+    const state={phase:"ready",products,timers:[],interval:0,result:null,winner:null,fast:false,finishing:false}; overlay.__state=state; randomOverlay=overlay;
+    const paintOne=(product)=>{ const cell=randomProductCell(product,true); strip.replaceChildren(cell); cell.style.height=`${Math.max(1,windowEl.clientHeight||360)}px`; };
+    const paintIdle=()=>paintOne({name:"?"});
+    paintIdle(); doc.body.append(overlay);
+    requestAnimationFrame(()=>{ overlay.classList.add("show"); paintIdle(); });
+
+    const beginWaiting=()=>{
+      state.phase="spinning"; overlay.classList.add("spinning"); hint.querySelector("strong").textContent="돌아가는 중"; hint.querySelector("small").textContent="다시 누르면 바로 결과";
+      randomWhoosh(); let i=0;
+      state.interval=setInterval(()=>{ const p=products[i++%products.length]; paintOne(p); strip.classList.remove("pulse"); void strip.offsetWidth; strip.classList.add("pulse"); randomTick(); },78);
+    };
+
+    const settle=()=>{
+      if(state.finishing||!state.result)return; state.finishing=true; if(state.interval){clearInterval(state.interval);state.interval=0;}
+      const winner=state.result.product||products.find(p=>p.id===state.result.product_id)||{name:state.result.product_name||"상품",imageUrl:state.result.product_image_url||""}; state.winner=winner;
+      const seq=[]; const steps=state.fast?7:28;
+      for(let i=0;i<steps;i++)seq.push(products[Math.floor(Math.random()*products.length)]); seq.push(winner);
+      strip.style.transition="none"; strip.style.transform="translateY(0)"; strip.replaceChildren(...seq.map((p,i)=>randomProductCell(p,i===seq.length-1))); void strip.offsetHeight;
+      const cellH=Math.max(1,windowEl.clientHeight); strip.querySelectorAll(".shop-random-reel-cell").forEach(el=>el.style.height=`${cellH}px`);
+      const target=-(seq.length-1)*cellH, duration=state.fast?.28:2.7; state.target=target;
+      strip.style.transition=`transform ${duration}s cubic-bezier(.12,.72,.16,1)`; requestAnimationFrame(()=>strip.style.transform=`translateY(${target}px)`);
+      const ticks=Math.min(22,seq.length-1); for(let i=0;i<ticks;i++){ const t=(duration*1000)*(i/ticks);state.timers.push(setTimeout(randomTick,t)); }
+      state.timers.push(setTimeout(()=>showWinner(),duration*1000+70));
+    };
+
+    const showWinner=()=>{
+      if(state.phase==="result")return; state.phase="result"; randomBrake(); randomFanfare(); overlay.classList.remove("spinning"); overlay.classList.add("result");
+      hint.replaceChildren(D.el("strong",{text:state.winner?.name||"당첨!"}),D.el("small",{text:"화면을 누르면 보관함으로 들어가요"}));
+      randomConfetti(doc,overlay); state.resultId=state.result?.item?.id||"";
+    };
+
+    overlay.addEventListener("click",async()=>{
+      if(state.phase==="ready"){
+        beginWaiting();
+        try { state.result=await Service.randomPurchase(); settle(); }
+        catch(error){ if(state.interval)clearInterval(state.interval);state.interval=0;state.phase="ready";state.finishing=false;overlay.classList.remove("spinning");paintIdle();hint.replaceChildren(D.el("strong",{text:"다시 눌러!"}),D.el("small",{text:error?.message||"추첨하지 못했어요"}));MiniTalk.UI.Shell.toast(error?.message||"랜덤구매에 실패했습니다."); }
+        return;
+      }
+      if(state.phase==="spinning"){
+        state.fast=true; hint.querySelector("small").textContent="결과 확인 중…";
+        if(state.result&&state.finishing){
+          state.timers.forEach(clearTimeout); state.timers=[]; randomBrake();
+          strip.style.transition="transform .22s cubic-bezier(.25,.8,.3,1)"; strip.style.transform=`translateY(${Number(state.target)||0}px)`;
+          state.timers.push(setTimeout(()=>showWinner(),270));
+        } else if(state.result) settle();
+        return;
+      }
+      if(state.phase==="result"){
+        const prize=windowEl.querySelector(".shop-random-reel-cell.active")||windowEl.querySelector(".shop-random-reel-cell:last-child");
+        prize?.classList.add("fly-to-inventory"); randomArrivalId=state.resultId||"";
+        state.timers.push(setTimeout(()=>{ closeRandomOverlay(); inventoryOpen=true; const host=MiniTalk.UI.Dom.byId("viewHost"); if(host&&MiniTalk.Store.get("route")==="shopping")render(host,{animate:false,refreshCatalog:false}); state.timers.push(setTimeout(()=>{randomArrivalId="";},1800)); },420));
+      }
+    });
   }
 
   function marketEmpty() {
@@ -201,7 +329,8 @@ MiniTalk.Features.Shopping = (() => {
       deliveryButton.onclick = () => requestDelivery(item, deliveryButton);
       actions.append(giftButton, deliveryButton);
     }
-    return D.el("article", { class: `shop-inventory-item${used ? " used" : ""}${status ? ` status-${status}` : ''}` }, [
+    const arrived = randomArrivalId && String(item.id || "") === String(randomArrivalId);
+    return D.el("article", { class: `shop-inventory-item${used ? " used" : ""}${status ? ` status-${status}` : ''}${arrived ? " random-arrived" : ""}` }, [
       item.imageUrl ? D.el("img", { class: "shop-inventory-image", src: item.imageUrl, alt: "", loading: "lazy" }) : null,
       D.el("div", { class: "shop-inventory-copy" }, [
         D.el("strong", { text: item.name || "상품" }),

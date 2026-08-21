@@ -1,0 +1,27 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const server=fs.readFileSync(path.join(root,'docs/apps-script/coin-shopping-extension.gs'),'utf8');
+const service=fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'utf8');
+const ui=fs.readFileSync(path.join(root,'js/features/shopping.js'),'utf8');
+const css=fs.readFileSync(path.join(root,'css/features/shopping-store.css'),'utf8');
+const auth=fs.readFileSync(path.join(root,'js/adapters/auth-api.js'),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(server.includes('SHOP_RANDOM_PURCHASE_PRICE = 3'),'random price must be 3');
+ok(server.includes('if (value <= 2) return 1.6')&&server.includes('if (value <= 5) return 1.0')&&server.includes('return 0.55'),'price-tier weights missing');
+ok(server.includes('moaruCoinChangeGuarded_(userId, "remove", chargePrice)'),'server coin deduction missing');
+ok(server.includes('createPurchasedInventory_(userId, inventoryProduct, purchaseKey)'),'server inventory award missing');
+ok(auth.includes('random_purchase: randomPurchase ? "1" : ""'),'random flag missing');
+ok(service.includes('MiniTalk.AuthApi.shopPurchase({userId:current.user_id,product:null,purchaseKey,randomPurchase:true,price:3})'),'client random purchase API missing');
+ok(ui.includes('text: "랜덤구매"')&&!ui.includes('text: "미니 상점"'),'mini shop hero was not replaced');
+ok(ui.includes('state.fast=true')&&ui.includes('결과 확인 중'),'second tap fast result path missing');
+ok(ui.includes('inventoryOpen=true')&&ui.includes('randomArrivalId'),'result-to-inventory transition missing');
+ok(css.includes('@keyframes shop-random-confetti')&&css.includes('@keyframes shop-random-win-pop'),'celebration animation missing');
+function weight(price){return price<=2?1.6:price<=5?1.0:.55}
+function pick(rows,r){let total=rows.reduce((s,p)=>s+weight(p.price),0),cursor=r*total;for(const p of rows){cursor-=weight(p.price);if(cursor<=0)return p}return rows.at(-1)}
+const rows=[{id:'low',price:2},{id:'mid',price:4},{id:'high',price:8}],counts={low:0,mid:0,high:0};
+let seed=0x12345678; const rand=()=>{seed=(1664525*seed+1013904223)>>>0;return seed/4294967296};
+for(let i=0;i<120000;i++)counts[pick(rows,rand()).id]++;
+ok(counts.low>counts.mid&&counts.mid>counts.high,`weighted order broken ${JSON.stringify(counts)}`);
+const total=counts.low+counts.mid+counts.high,ratios={low:counts.low/total,mid:counts.mid/total,high:counts.high/total};
+ok(ratios.low>.48&&ratios.low<.53&&ratios.mid>.29&&ratios.mid<.35&&ratios.high>.15&&ratios.high<.20,`weighted distribution out of tolerance ${JSON.stringify(ratios)}`);
+console.log('SHOPPING_RANDOM_PURCHASE_OK',JSON.stringify({counts,ratios}));

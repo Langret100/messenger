@@ -20,6 +20,7 @@ const MOARU_SHOP_INVENTORY_HEADERS = ["inventory_id","owner_id","product_id","na
 const SHOP_ADMIN_TOKEN_SECONDS = 21600; // 6시간
 const SHOP_PRODUCT_MAX_BYTES = 8500;
 const SHOP_IMAGE_MAX_CHARS = 7200;
+const SHOP_RANDOM_PURCHASE_PRICE = 3;
 const SHOP_INVENTORY_PROPERTY_PREFIX = "MOARU_SHOP_INV_";
 const MOARU_COMMAND_PROPERTY_PREFIX = "MOARU_COMMANDS_";
 const SHOP_PURCHASE_OWNER_PROPERTY_PREFIX = "MOARU_PURCHASE_OWNER_";
@@ -1273,10 +1274,30 @@ function handleAdminTaskBulkDelete(e) {
   } finally { lock.releaseLock(); }
 }
 
+function shopRandomWeight_(price) {
+  const value = Number(price) || 0;
+  if (value <= 2) return 1.6;
+  if (value <= 5) return 1.0;
+  return 0.55;
+}
+
+function pickWeightedShopProduct_(products) {
+  const rows = (products || []).filter(function (product) { return product && product.id && product.active && Number(product.price) > 0; });
+  if (!rows.length) return null;
+  const total = rows.reduce(function (sum, product) { return sum + shopRandomWeight_(product.price); }, 0);
+  let cursor = Math.random() * total;
+  for (let i = 0; i < rows.length; i++) {
+    cursor -= shopRandomWeight_(rows[i].price);
+    if (cursor <= 0) return rows[i];
+  }
+  return rows[rows.length - 1];
+}
+
 /** POST mode=shop_purchase */
 function handleShopPurchase(e) {
   const p = (e && e.parameter) || {};
   const userId = requireRegisteredShopUser_(p.user_id);
+  const randomMode = String(p.random_purchase || "") === "1";
   const productId = String(p.product_id || "").trim();
   const purchaseKey = String(p.purchase_key || "").trim();
   const clientPrice = parseInt(p.price, 10);
@@ -1284,116 +1305,65 @@ function handleShopPurchase(e) {
   const expectedDescription = String(p.expected_description || "").trim().slice(0, 160);
   const expectedUpdatedAt = Number(p.expected_updated_at) || 0;
 
-  if (!userId || !productId || !purchaseKey || isNaN(clientPrice)) {
-    return shopJson_({ ok: false, error: "MISSING_PARAM" });
-  }
-  if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  if (!userId || !purchaseKey || (!randomMode && (!productId || isNaN(clientPrice)))) return shopJson_({ ok: false, error: "MISSING_PARAM" });
   if (purchaseKey.length > 180) return shopJson_({ ok: false, error: "INVALID_PURCHASE_KEY" });
+  if (randomMode && !isNaN(clientPrice) && clientPrice !== SHOP_RANDOM_PURCHASE_PRICE) return shopJson_({ ok: false, error: "PRICE_CHANGED", message: "랜덤구매 비용이 변경되었습니다." });
 
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(4000)) {
-    return shopJson_({ ok: false, error: "SHOP_BUSY", message: "잠시 후 다시 시도해주세요." });
-  }
+  if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY", message: "잠시 후 다시 시도해주세요." });
 
   try {
     const logSheet = getOrCreateShopPurchaseLogSheet_();
     const duplicate = findShopPurchase_(logSheet, purchaseKey);
     if (duplicate) {
-      if (duplicate.userId !== userId || duplicate.productId !== productId) {
-        return shopJson_({ ok: false, error: "PURCHASE_KEY_CONFLICT" });
-      }
-      const currentProduct = readShopCatalog_()[productId] || {}, duplicateProduct = normalizeShopProduct_(Object.assign({}, currentProduct, { id: productId, name: duplicate.productName || currentProduct.name || "상품", price: duplicate.price || currentProduct.price || 1 }));
+      if (duplicate.userId !== userId || (!randomMode && duplicate.productId !== productId)) return shopJson_({ ok: false, error: "PURCHASE_KEY_CONFLICT" });
+      const currentProduct = readShopCatalog_()[duplicate.productId] || {};
+      const duplicateProduct = normalizeShopProduct_(Object.assign({}, currentProduct, { id: duplicate.productId, name: duplicate.productName || currentProduct.name || "상품", price: duplicate.price || currentProduct.price || 1 }));
       const duplicateItem = createPurchasedInventory_(userId, duplicateProduct, purchaseKey);
       clearPendingShopPurchase_(purchaseKey);
-      return shopJson_({ ok: true, applied: false, reason: "ALREADY_PURCHASED", newCoin: duplicate.newCoin, item: duplicateItem });
+      return shopJson_({ ok: true, applied: false, reason: "ALREADY_PURCHASED", newCoin: duplicate.newCoin, product_id: duplicateProduct.id, product_name: duplicateProduct.name, product_description: duplicateProduct.description || "", product_image_url: duplicateProduct.imageUrl || "", original_price: Number(currentProduct.price) || Number(duplicateProduct.price) || 0, item: duplicateItem });
     }
 
-    const product = normalizeShopProduct_(readShopCatalog_()[productId]);
-    if (!product.id || !product.active || product.price <= 0) {
-      return shopJson_({ ok: false, error: "PRODUCT_NOT_AVAILABLE" });
-    }
-    // 구매 요청 자체에 포함된 화면 스냅샷을 비교하므로 별도 서버 조회가 필요 없습니다.
-    // 이름·설명·가격·개정 시각 중 하나라도 다르면 코인 차감 전에 구매를 중단합니다.
-    if (clientPrice !== product.price ||
-        expectedName !== product.name ||
-        expectedDescription !== product.description ||
-        expectedUpdatedAt !== product.updatedAt) {
-      return shopJson_({
-        ok: false,
-        error: "PRODUCT_CHANGED",
-        currentPrice: product.price,
-        currentUpdatedAt: product.updatedAt,
-        message: "상품 정보가 변경되었습니다. 최신 상품을 확인해주세요."
-      });
+    const catalog = readShopCatalog_();
+    let product = null, chargePrice = 0, originalPrice = 0;
+    if (randomMode) {
+      product = pickWeightedShopProduct_(Object.keys(catalog).map(function (key) { return normalizeShopProduct_(catalog[key]); }));
+      if (!product) return shopJson_({ ok: false, error: "NO_RANDOM_PRODUCTS", message: "추첨할 상품이 아직 없습니다." });
+      originalPrice = Number(product.price) || 0;
+      chargePrice = SHOP_RANDOM_PURCHASE_PRICE;
+    } else {
+      product = normalizeShopProduct_(catalog[productId]);
+      if (!product.id || !product.active || product.price <= 0) return shopJson_({ ok: false, error: "PRODUCT_NOT_AVAILABLE" });
+      if (clientPrice !== product.price || expectedName !== product.name || expectedDescription !== product.description || expectedUpdatedAt !== product.updatedAt) return shopJson_({ ok: false, error: "PRODUCT_CHANGED", currentPrice: product.price, currentUpdatedAt: product.updatedAt, message: "상품 정보가 변경되었습니다. 최신 상품을 확인해주세요." });
+      originalPrice = Number(product.price) || 0;
+      chargePrice = product.price;
     }
 
     const userData = getRewardUserData_(userId);
     if (!userData) return shopJson_({ ok: false, error: "NO_REWARD_USER" });
     const beforeCoin = parseInt(userData.coin, 10) || 0;
-    if (beforeCoin < product.price) {
-      return shopJson_({ ok: false, error: "INSUFFICIENT_COIN", coin: beforeCoin });
-    }
-
-    const result = moaruCoinChangeGuarded_(userId, "remove", product.price);
+    if (beforeCoin < chargePrice) return shopJson_({ ok: false, error: "INSUFFICIENT_COIN", coin: beforeCoin });
+    const result = moaruCoinChangeGuarded_(userId, "remove", chargePrice);
     if (!result || !result.success) return shopJson_({ ok: false, error: "COIN_DEDUCTION_FAILED" });
 
-    try {
-      logSheet.appendRow([
-        purchaseKey, userId, product.id, product.name, product.price,
-        beforeCoin, result.newCoin, new Date()
-      ]);
-    } catch (logError) {
-      try { moaruCoinChangeGuarded_(userId, "add", product.price); }
-      catch (rollbackError) { console.error("SHOP_ROLLBACK_FAILED", rollbackError); }
+    try { logSheet.appendRow([purchaseKey, userId, product.id, product.name, chargePrice, beforeCoin, result.newCoin, new Date()]); }
+    catch (logError) {
+      try { moaruCoinChangeGuarded_(userId, "add", chargePrice); } catch (rollbackError) { console.error("SHOP_ROLLBACK_FAILED", rollbackError); }
       return shopJson_({ ok: false, error: "PURCHASE_LOG_FAILED" });
     }
 
+    const inventoryProduct = randomMode ? normalizeShopProduct_(Object.assign({}, product, { price: chargePrice })) : product;
     let inventoryItem = null, inventoryPending = false;
-    try {
-      inventoryItem = createPurchasedInventory_(userId, product, purchaseKey);
-      clearPendingShopPurchase_(purchaseKey);
-    } catch (inventoryError) {
-      /*
-       * 여기까지 왔으면 코인 차감 + 구매로그는 이미 성공했습니다.
-       * 이 상태를 구매 실패로 응답하면 사용자가 새 purchase_key로 다시 결제할 수 있으므로
-       * 구매는 성공으로 확정하고 서버 보관함만 재시도 큐에 남깁니다.
-       */
+    try { inventoryItem = createPurchasedInventory_(userId, inventoryProduct, purchaseKey); clearPendingShopPurchase_(purchaseKey); }
+    catch (inventoryError) {
       inventoryPending = true;
-      try { rememberPendingShopPurchase_(userId, product, purchaseKey); }
-      catch (pendingError) { console.error("SHOP_PENDING_PURCHASE_SAVE_FAILED", pendingError); }
+      try { rememberPendingShopPurchase_(userId, inventoryProduct, purchaseKey); } catch (pendingError) { console.error("SHOP_PENDING_PURCHASE_SAVE_FAILED", pendingError); }
       console.error("SHOP_INVENTORY_WRITE_DEFERRED", purchaseKey, inventoryError);
     }
-    return shopJson_({
-      ok: true,
-      applied: true,
-      product_id: product.id,
-      product_name: product.name,
-      price: product.price,
-      newCoin: result.newCoin,
-      item: inventoryItem,
-      inventory_pending: inventoryPending
-    });
+    return shopJson_({ ok: true, applied: true, random_purchase: randomMode, product_id: product.id, product_name: product.name, product_description: product.description || "", product_image_url: product.imageUrl || "", product_updated_at: Number(product.updatedAt) || 0, original_price: originalPrice, price: chargePrice, newCoin: result.newCoin, item: inventoryItem, inventory_pending: inventoryPending });
   } catch (error) {
     const message = String(error && error.message ? error.message : error);
-    return shopJson_({
-      ok: false,
-      error: message === "COIN_SHEET_TEMPORARY_ERROR" ? message : "SHOP_PURCHASE_FAILED",
-      message: message
-    });
-  } finally {
-    lock.releaseLock();
-  }
+    return shopJson_({ ok: false, error: message === "COIN_SHEET_TEMPORARY_ERROR" ? message : "SHOP_PURCHASE_FAILED", message: message === "COIN_SHEET_TEMPORARY_ERROR" ? "코인 정보를 확인하지 못했습니다. 잠시 후 다시 시도해주세요." : "구매 처리 중 오류가 발생했습니다." });
+  } finally { lock.releaseLock(); }
 }
 
-/*
- * Apps Script 설정 > 스크립트 속성에 아래 값을 먼저 추가하세요.
- * MINITALK_ADMIN_CODE = 관리자만 아는 고유 코드
- *
- * Code.gs mode 분기에 추가:
- * if (mode === "admin_unlock") return handleAdminUnlock(e);
- * if (mode === "shop_catalog") return handleShopCatalog(e);
- * if (mode === "user_directory") return handleUserDirectory(e);
- * if (mode === "shop_product_save") return handleShopProductSave(e);
- * if (mode === "shop_product_delete") return handleShopProductDelete(e);
- * if (mode === "shop_purchase") return handleShopPurchase(e);
- */

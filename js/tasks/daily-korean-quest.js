@@ -106,7 +106,7 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       if (done) card.append(D.el("img", { class: "quest-stamp", src: "assets/ui/quest-stamp.png", alt: "완료 도장" }));
       grid.append(card);
     });
-    return MiniTalk.Tasks.QuestAccordion.wrap({ subject: "korean", icon: "한", title: "오늘의 국어 퀘스트", subtitle: "맞춤법과 바른 문장 표현", completed: completedCount, total: MISSIONS.length, content: D.el("div", { class: "quest-daily-content" }, [MiniTalk.Tasks.DailyQuestClock.banner("국어"), grid]) });
+    return MiniTalk.Tasks.QuestAccordion.wrap({ subject: "korean", icon: "한", title: "오늘의 국어 퀘스트", subtitle: "맞춤법과 바른 문장 표현", completed: completedCount, total: MISSIONS.length, rewardCoin: 1, content: D.el("div", { class: "quest-daily-content" }, [MiniTalk.Tasks.DailyQuestClock.banner("국어"), grid]) });
   }
 
   function openMission(missionId, onProgress) {

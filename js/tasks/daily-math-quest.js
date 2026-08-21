@@ -199,6 +199,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
       subtitle: "계산과 분수, 미션마다 5문제",
       completed: completedCount,
       total: MISSIONS.length,
+      rewardCoin: 1,
       content: D.el("div", { class: "quest-daily-content" }, [MiniTalk.Tasks.DailyQuestClock.banner("수학"), grid])
     });
   }

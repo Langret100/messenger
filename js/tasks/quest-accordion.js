@@ -28,7 +28,7 @@ MiniTalk.Tasks.QuestAccordion = (() => {
     return activeKey;
   }
 
-  function wrap({ subject, icon, title, subtitle, completed, total, content }) {
+  function wrap({ subject, icon, title, subtitle, completed, total, rewardCoin = 0, content }) {
     const D = MiniTalk.UI.Dom;
     const subjectDone = total > 0 && completed >= total;
     const section = D.el("section", { class: `quest-accordion section-card${subjectDone ? " completed" : ""}`, "data-subject": subject });
@@ -45,8 +45,11 @@ MiniTalk.Tasks.QuestAccordion = (() => {
         D.el("strong", { text: title }),
         D.el("small", { text: subtitle })
       ]),
-      D.el("span", { class: `quest-subject-progress${subjectDone ? " completed" : ""}`, text: subjectDone ? "완료" : `${completed}/${total}` }),
-      ...(subjectDone ? [D.el("img", { class: "quest-subject-stamp", src: "assets/ui/quest-stamp.png", alt: "과목 완료 도장" })] : []),
+      D.el("span", { class: "quest-subject-meta" }, [
+        ...(Number(rewardCoin) > 0 ? [D.el("span", { class: "quest-subject-reward", "aria-label": `과목 완료 보상 ${Number(rewardCoin)}코인` }, [D.el("img", { src: "assets/ui/notebook-coin.svg", alt: "" }), D.el("b", { text: `+${Number(rewardCoin)}` })])] : []),
+        D.el("span", { class: `quest-subject-progress${subjectDone ? " completed" : ""}`, text: subjectDone ? "완료" : `${completed}/${total}` }),
+        ...(subjectDone ? [D.el("img", { class: "quest-subject-stamp", src: "assets/ui/quest-stamp.png", alt: "과목 완료 도장" })] : [])
+      ]),
       D.el("span", { class: "quest-accordion-arrow", text: "⌄", "aria-hidden": "true" })
     ]);
     const initiallyOpen = activeKey === subject;

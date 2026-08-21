@@ -59,9 +59,9 @@ MiniTalk.Features.Tools = (() => {
     );
     view.append(list);
     host.replaceChildren(view);
-    // PC/PiP: 도구 화면 대부분이 버튼/링크여도 세로 드래그를 시작할 수 있습니다.
-    // 5px 미만 이동은 기존 클릭, 그 이상 세로 이동은 스크롤로 구분합니다.
-    MiniTalk.UI.DragScroll?.bind?.(list,{allowInteractive:".profile-summary,.modern-tool,.shortcut-row",documentMouseDrag:true});
+    // 과제탭과 같은 공용 pointer 드래그 경로를 사용합니다.
+    // 도구 화면은 대부분 버튼/링크이므로 해당 요소 위에서도 세로 드래그만 허용합니다.
+    MiniTalk.UI.DragScroll?.bind?.(list,{allowInteractive:".profile-summary,.modern-tool,.shortcut-row"});
     activeDragList=list;
   }
 

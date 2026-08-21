@@ -18,7 +18,7 @@ ok(css.includes('.room-lock-badge{right:-5px;bottom:-4px;min-width:0;width:auto;
 ok(html.includes('js/features/chats.js?v=64.5.21'), 'stale cache version for js/features/chats.js');
 ok(html.includes('js/features/auth.js?v=64.5.35'),'stale cache version for js/features/auth.js');
 ok(html.includes('js/app.js?v=64.5.37'),'stale cache version for js/app.js');
-ok(html.includes('css/app.css?v=64.5.12'),'stale cache version for css/app.css');
+ok(html.includes('css/app.css?v=64.5.13'),'stale cache version for css/app.css');
 ok(html.includes('js/ui/shell.js?v=64.5.34'),'stale cache version for js/ui/shell.js');
 ok(html.includes('js/tools/profile-editor.js?v=64.4.2'),'stale cache version for js/tools/profile-editor.js');
 ok(html.includes('js/features/tools.js?v=64.5.6'),'stale cache version for js/features/tools.js');

@@ -6,5 +6,5 @@ ok(js.includes('const subjectDone = total > 0 && completed >= total'),'outer sub
 ok(js.includes('quest-subject-stamp')&&js.includes('과목 완료 도장'),'outer subject completion stamp missing');
 ok(js.includes('text: subjectDone ? "완료" : `${completed}/${total}`'),'outer subject completion label missing');
 ok(css.includes('.quest-subject-stamp')&&css.includes('.quest-accordion.completed'),'outer completion styling missing');
-ok(html.includes('js/tasks/quest-accordion.js?v=24')&&html.includes('css/features/quest-accordion.css?v=26'),'outer completion cache version missing');
+ok(html.includes('js/tasks/quest-accordion.js?v=24')&&html.includes('css/features/quest-accordion.css?v=27'),'outer completion cache version missing');
 console.log('DAILY_SUBJECT_OUTER_COMPLETION_OK');

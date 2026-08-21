@@ -17,7 +17,7 @@
    ============================================================ */
 MiniTalk.Features.MoaChat=(()=>{
   let busy=false,live=null,proactiveTimer=0,connectionGreetingChecked=false,lastHiddenAt=0;
-  const listNodes=new Set(),historyWrites=new Map(),memoryHistories=new Map(),historyRetryTimers=new Map();
+  const listNodes=new Set(),sessions=new Map();
   function D(){return MiniTalk.UI.Dom}
   function listItem(){
     const Dom=D(), node=Dom.el("button",{class:"conversation-item conversation-enter moa-chat-list-item",type:"button","data-room-id":"__moa_ai__","data-tone":"2","data-unread":"0","data-favorite":"0","data-member":"1","data-room-type":"ai","data-has-message":"1"},[
@@ -35,32 +35,53 @@ MiniTalk.Features.MoaChat=(()=>{
     for(const row of rows){if(!row||typeof row!=="object")continue;const id=String(row.id||`${row.ts||0}|${row.role||""}|${row.text||""}`);if(seen.has(id))continue;seen.add(id);out.push(row)}
     return out.slice(-120);
   }
-  function rememberMemory(key,list){const snapshot=list.slice(-120);memoryHistories.set(key,snapshot);return snapshot}
+  function session(key=cacheKey()){
+    if(!sessions.has(key))sessions.set(key,{messages:[],loaded:false,loading:null,saving:null,pending:null,retryTimer:0,retryCount:0});
+    return sessions.get(key);
+  }
+  function setSessionMessages(st,list){st.messages=(Array.isArray(list)?list:[]).slice(-120);return st.messages}
+  function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
   async function history(){
-    const key=cacheKey(),memory=memoryHistories.get(key)||[];
-    let cached=null;
-    try{cached=await MiniTalk.DataCache?.get?.("moa-chat-history",key,null)}catch(error){console.warn("모아 대화내역 읽기 실패 - 메모리 상태 유지",error)}
-    if(Array.isArray(cached)){const merged=mergeHistory(cached,memory);rememberMemory(key,merged);return merged}
-    /* v73의 localStorage 대화내역이 있으면 한 번만 IndexedDB로 옮겨 기존 대화를 보존합니다. */
-    const legacy=MiniTalk.Persistence.get(legacyHistoryKey(),null);
-    if(Array.isArray(legacy)&&legacy.length){const merged=mergeHistory(legacy,memory);rememberMemory(key,merged);saveHistory(merged);MiniTalk.Persistence.remove(legacyHistoryKey());return merged}
-    return rememberMemory(key,memory);
+    const key=cacheKey(),st=session(key);if(st.loaded)return st.messages;if(st.loading)return st.loading;
+    st.loading=(async()=>{
+      let cached=null;
+      try{cached=await MiniTalk.DataCache?.get?.("moa-chat-history",key,null)}catch(error){console.warn("모아 대화내역 읽기 실패 - 현재 세션 상태 유지",error)}
+      if(Array.isArray(cached))setSessionMessages(st,mergeHistory(cached,st.messages));
+      else{
+        const legacy=MiniTalk.Persistence.get(legacyHistoryKey(),null);
+        if(Array.isArray(legacy)&&legacy.length){setSessionMessages(st,mergeHistory(legacy,st.messages));queueHistorySave(st.messages,key);MiniTalk.Persistence.remove(legacyHistoryKey())}
+      }
+      st.loaded=true;return st.messages;
+    })().finally(()=>{st.loading=null});
+    return st.loading;
   }
-  function scheduleHistoryRetry(key,snapshot,attempt){
-    if(attempt>=3||historyRetryTimers.has(key))return;
-    const delay=[180,700,2200][attempt]||2200;
-    const timer=setTimeout(()=>{historyRetryTimers.delete(key);persistHistory(key,snapshot,attempt+1).catch(()=>{})},delay);
-    historyRetryTimers.set(key,timer);
+  function scheduleHistoryRetry(key){
+    const st=session(key);if(st.retryTimer||!st.pending||st.retryCount>=4)return;
+    const delay=[140,420,1400][Math.min(Math.max(st.retryCount-1,0),2)]||1400;
+    st.retryTimer=setTimeout(()=>{st.retryTimer=0;flushHistory(key).catch(()=>{})},delay);
   }
-  function persistHistory(key,snapshot,attempt=0){
-    const previous=historyWrites.get(key)||Promise.resolve();
-    const write=previous.catch(()=>{}).then(()=>MiniTalk.DataCache?.put?.("moa-chat-history",key,snapshot)).catch(error=>{scheduleHistoryRetry(key,snapshot,attempt);throw error});
-    historyWrites.set(key,write);
-    write.finally(()=>{if(historyWrites.get(key)===write)historyWrites.delete(key)}).catch(()=>{});
-    return write;
+  function flushHistory(key=cacheKey()){
+    const st=session(key);if(st.saving)return st.saving;if(!st.pending)return Promise.resolve(true);
+    st.saving=(async()=>{
+      while(st.pending){
+        const snapshot=st.pending;st.pending=null;
+        try{await MiniTalk.DataCache?.put?.("moa-chat-history",key,snapshot);st.retryCount=0}
+        catch(error){
+          st.pending=mergeHistory(snapshot,st.pending||[]);st.retryCount+=1;console.warn("모아 대화내역 저장 실패 - 현재 세션은 유지하고 재시도",error);scheduleHistoryRetry(key);return false;
+        }
+      }
+      return true;
+    })().finally(()=>{st.saving=null});
+    return st.saving;
   }
-  function saveHistory(list){const key=cacheKey(),snapshot=rememberMemory(key,list);return persistHistory(key,snapshot)}
-  function appendMessage(list,role,text,meta={}){const msg={id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,role,text,ts:Date.now(),...meta};list.push(msg);rememberMemory(cacheKey(),list);msg.persisted=saveHistory(list).catch(()=>false);return msg}
+  function queueHistorySave(list,key=cacheKey()){
+    const st=session(key);setSessionMessages(st,list);st.pending=st.messages.slice();flushHistory(key).catch(()=>{});return st.messages;
+  }
+  function saveHistory(list){queueHistorySave(list);return session().saving||Promise.resolve(true)}
+  function appendMessage(list,role,text,meta={}){
+    const msg={id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,role,text,ts:Date.now(),...meta};
+    list.push(msg);queueHistorySave(list);return msg;
+  }
   function lastUserAt(messages){const m=[...messages].reverse().find(v=>v.role==="user");return Number(m?.ts||0)}
   function unreadCount(messages){return messages.filter(v=>v.role==="assistant"&&v.source==="proactive"&&v.unread===true).length}
   function updateListNode(node,messages){
@@ -125,7 +146,7 @@ MiniTalk.Features.MoaChat=(()=>{
   }
   function fill(listNode,messages){listNode.replaceChildren(...messages.map(messageNode));listNode.scrollTop=listNode.scrollHeight;requestAnimationFrame(()=>{if(listNode.isConnected)listNode.scrollTop=listNode.scrollHeight})}
   function header(){MiniTalk.UI.Shell.setHeader("모아와 대화하기",[D().el("button",{class:"icon-button subtle",type:"button",text:"⋯","aria-label":"모아 대화 메뉴",onclick:openMenu})],{back:()=>MiniTalk.Router.go("chats")})}
-  function openMenu(){const Dom=D(),body=Dom.el("div",{class:"modal-stack"}),settings=MiniTalk.AI.MoaCommunicationEngine.initiativeSettings?.()||{enabled:true,quietStart:22,quietEnd:7},initiative=Dom.el("button",{class:"button secondary",type:"button",text:settings.enabled?"먼저 말 걸기: 켜짐":"먼저 말 걸기: 꺼짐"}),clear=Dom.el("button",{class:"button secondary",type:"button",text:"이 기기의 대화 내역 지우기"});initiative.onclick=()=>{const next=MiniTalk.AI.MoaCommunicationEngine.setInitiativeSettings?.({enabled:!MiniTalk.AI.MoaCommunicationEngine.initiativeSettings?.().enabled});initiative.textContent=next?.enabled?"먼저 말 걸기: 켜짐":"먼저 말 걸기: 꺼짐"};clear.onclick=async()=>{await MiniTalk.DataCache?.remove?.("moa-chat-history",cacheKey());MiniTalk.Persistence.remove(legacyHistoryKey());MiniTalk.AI.MoaCommunicationEngine.clearContext();MiniTalk.UI.Shell.closeModal();MiniTalk.Router.go("moa-chat")};body.append(Dom.el("p",{class:"muted modal-note",text:`모아는 대화가 쌓이면 최근 얘기·요일·시간대에 맞춰 약 2시간 간격으로 한 번씩 확률적으로 먼저 말을 걸 수 있어. 접속할 때도 가끔 가볍게 인사하고, ${settings.quietStart}:00~${settings.quietEnd}:00에는 먼저 말하지 않아.`}),initiative,Dom.el("p",{class:"muted modal-note",text:"화면에 보이는 대화 내역과 짧은 문맥은 이 기기에만 저장돼. Firebase에는 모아 대화를 저장하지 않아."}),clear);MiniTalk.UI.Shell.modal("모아 대화 설정",body)}
+  function openMenu(){const Dom=D(),body=Dom.el("div",{class:"modal-stack"}),settings=MiniTalk.AI.MoaCommunicationEngine.initiativeSettings?.()||{enabled:true,quietStart:22,quietEnd:7},initiative=Dom.el("button",{class:"button secondary",type:"button",text:settings.enabled?"먼저 말 걸기: 켜짐":"먼저 말 걸기: 꺼짐"}),clear=Dom.el("button",{class:"button secondary",type:"button",text:"이 기기의 대화 내역 지우기"});initiative.onclick=()=>{const next=MiniTalk.AI.MoaCommunicationEngine.setInitiativeSettings?.({enabled:!MiniTalk.AI.MoaCommunicationEngine.initiativeSettings?.().enabled});initiative.textContent=next?.enabled?"먼저 말 걸기: 켜짐":"먼저 말 걸기: 꺼짐"};clear.onclick=async()=>{const key=cacheKey(),st=sessions.get(key);if(st?.retryTimer)clearTimeout(st.retryTimer);sessions.delete(key);await MiniTalk.DataCache?.remove?.("moa-chat-history",key);MiniTalk.Persistence.remove(legacyHistoryKey());MiniTalk.AI.MoaCommunicationEngine.clearContext();MiniTalk.UI.Shell.closeModal();MiniTalk.Router.go("moa-chat")};body.append(Dom.el("p",{class:"muted modal-note",text:`모아는 대화가 쌓이면 최근 얘기·요일·시간대에 맞춰 약 2시간 간격으로 한 번씩 확률적으로 먼저 말을 걸 수 있어. 접속할 때도 가끔 가볍게 인사하고, ${settings.quietStart}:00~${settings.quietEnd}:00에는 먼저 말하지 않아.`}),initiative,Dom.el("p",{class:"muted modal-note",text:"화면에 보이는 대화 내역과 짧은 문맥은 이 기기에만 저장돼. Firebase에는 모아 대화를 저장하지 않아."}),clear);MiniTalk.UI.Shell.modal("모아 대화 설정",body)}
   async function render(host){
     MiniTalk.Store.set("activeRoom",null);MiniTalk.Realtime.unsubscribeMessages?.();header();
     /* 공용 학습 스냅샷과 개인 성향/기억은 뒤에서 캐시 동기화합니다. 화면 진입을 막지 않습니다. */

@@ -12,7 +12,7 @@ ok(weekly.includes('filter(x=>x.rate<100)'),'weak feedback must not list perfect
 ok(css.includes('.friday-wrong-toggle')&&css.includes('.friday-answer-compare'),'wrong-answer accordion styles missing');
 ok(engine.includes('return "whatdoing"')&&engine.includes('return "hungry"')&&engine.includes('return "nervous"')&&engine.includes('return "confused"'),'new local conversation reactions missing');
 for(const token of ['whatdoing:[','hungry:[','nervous:[','confused:['])ok(engine.includes(token),`new local dialogue pool missing: ${token}`);
-ok(html.includes('feed-classinfo-weekly.css?v=65.0.27'),'weekly report CSS cache bust missing');
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.28'),'weekly report CSS cache bust missing');
 ok(html.includes('friday-grade6-mission.js?v=65.0.17'),'weekly mission cache bust missing');
 ok(html.includes('moa-communication-engine.js?v=17'),'MOA local dialogue cache bust missing');
 ok(sw.includes('moaru-tools-scroll-layout'),'v95 SW cache missing');

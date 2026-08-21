@@ -28,6 +28,8 @@ MiniTalk.Tools.LookalikePlay = (() => {
   let lastResultId = "";
   const recentImageKeys = new Map();
   let audioContext = null;
+  let activeDoc = null;
+  let separateWindow = false;
 
   function audio(){
     try{
@@ -99,7 +101,8 @@ MiniTalk.Tools.LookalikePlay = (() => {
     { id:"bluebell", kind:"plant", ko:"블루벨", emoji:"🪻", query:"bluebell flowers", vibe:"맑고 살짝 신비로운 느낌" }
   ];
 
-  const doc = () => MiniTalk.UI?.Dom?.doc?.() || document;
+  const doc = () => activeDoc || MiniTalk.UI?.Dom?.doc?.() || document;
+  const dom = () => MiniTalk.UI.Dom.forDocument(doc());
   const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -132,7 +135,7 @@ MiniTalk.Tools.LookalikePlay = (() => {
   }
 
   function buildView(){
-    const D=MiniTalk.UI.Dom;
+    const D=dom();
     view=D.el("section",{class:"view lookalike-view view-enter"});
     const top=D.el("div",{class:"lookalike-topbar"});
     const back=D.el("button",{class:"lookalike-back",type:"button","aria-label":"나가기",text:"‹"});
@@ -162,10 +165,11 @@ MiniTalk.Tools.LookalikePlay = (() => {
     return view;
   }
 
-  async function open(onClose){
-    closeCallback=typeof onClose==="function"?onClose:null;
-    const host=MiniTalk.UI.Dom.byId("viewHost");if(!host)return;
+  async function open(onClose, options={}){
     dispose();
+    closeCallback=typeof onClose==="function"?onClose:null;
+    activeDoc=options.doc||MiniTalk.UI.Dom.doc();separateWindow=Boolean(options.separate);
+    const host=options.host||activeDoc.getElementById("viewHost");if(!host){activeDoc=null;separateWindow=false;return}
     host.replaceChildren(buildView());
     facing="user";category="any";busy=false;lastResultId="";
     await startCamera("user");
@@ -177,6 +181,7 @@ MiniTalk.Tools.LookalikePlay = (() => {
     stopCamera();
     if(resultPanel) resultPanel.replaceChildren();
     view=null;video=null;stage=null;statusNode=null;countdownNode=null;switchButton=null;shutter=null;modeButton=null;resultPanel=null;
+    activeDoc=null;separateWindow=false;
   }
 
   function close(){const cb=closeCallback;closeCallback=null;dispose();cb?.()}
@@ -285,7 +290,7 @@ MiniTalk.Tools.LookalikePlay = (() => {
   function plain(value){const div=doc().createElement("div");div.innerHTML=String(value||"");return (div.textContent||"").replace(/\s+/g," ").trim().slice(0,80)}
 
   function showResult(result,image){
-    const D=MiniTalk.UI.Dom;resultPanel.replaceChildren();
+    const D=dom();resultPanel.replaceChildren();
     const media=D.el("div",{class:"lookalike-result-media"});
     if(image?.url){const img=D.el("img",{class:"lookalike-result-image",alt:`${result.ko} 이미지`});img.referrerPolicy="no-referrer";img.decoding="async";img.src=image.url;media.append(img)}
     else media.append(D.el("div",{class:"lookalike-result-fallback",text:result.emoji}));
@@ -303,5 +308,5 @@ MiniTalk.Tools.LookalikePlay = (() => {
   }
 
   const _test={pickResult,RESULTS,wipeCanvas,COMMONS_API,findCommonsImage,chooseImageCandidate,recentImageKeys,sound};
-  return {open,dispose,_test};
+  return {open,dispose,isSeparate:()=>separateWindow,_test};
 })();

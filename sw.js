@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-face-play-facechange-drag";
+const CACHE = "moaru-camera-play-popup-polish";
 const CORE = [
   "./",
   "./index.html",

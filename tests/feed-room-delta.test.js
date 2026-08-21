@@ -12,5 +12,5 @@ ok(chats.includes('"data-has-message":roomHasVisibleActivity(room)?"1":"0"')&&ch
 ok(chats.includes('class:"room-summary-icon profile-image"')&&chats.includes('class:"room-member-avatar profile-image"'),"room information profile images missing");
 ok(appcss.includes('.room-summary-icon{')&&appcss.includes('object-fit:cover'),"room profile image crop style missing");
 ok(html.includes('feed-classinfo-weekly.css?v=65.0.31')&&html.includes('realtime.js?v=64.5.38')&&html.includes('features/chats.js?v=64.5.21')&&html.includes('features/feed.js?v=65.0.21')&&html.includes('app.js?v=64.5.37'),"delta patch cache versions stale");
-ok(sw.includes('moaru-face-play-facechange-drag')&&app.includes('sw.js?v=64.5.50'),"service worker cache bump missing");
+ok(sw.includes('moaru-camera-play-popup-polish')&&app.includes('sw.js?v=64.5.51'),"service worker cache bump missing");
 console.log("FEED_ROOM_DELTA_OK");

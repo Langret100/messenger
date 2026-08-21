@@ -116,3 +116,8 @@
   .game-community-actions { width: 100%; }
   .game-community-actions .mini-pill { flex: 1; }
 }
+
+/* 미니게임 목록은 휠/터치 스크롤은 유지하고 눈에 보이는 스크롤바만 숨깁니다. */
+.game-library{overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain}
+.game-library::-webkit-scrollbar{width:0;height:0;display:none}
+.game-grid{min-width:0;max-width:100%;box-sizing:border-box}

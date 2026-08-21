@@ -32,6 +32,8 @@ MiniTalk.Tools.FaceToy = (() => {
   let lastRandom = "";
   let audioContext = null;
   let effectDragCleanup = null;
+  let activeDoc = null;
+  let separateWindow = false;
 
   function audio() {
     try {
@@ -62,56 +64,66 @@ MiniTalk.Tools.FaceToy = (() => {
   ];
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const doc = () => MiniTalk.UI?.Dom?.doc?.() || document;
+  const doc = () => activeDoc || MiniTalk.UI?.Dom?.doc?.() || document;
+  const dom = () => MiniTalk.UI.Dom.forDocument(doc());
+  const shell = () => MiniTalk.UI.Shell.forDocument(doc());
 
   /* 효과 버튼 위에서 시작해도 PC에서는 좌우로 끌어 목록을 넘길 수 있게 한다.
      모바일은 CSS touch-action:pan-x + native overflow scroll을 그대로 사용한다. */
   function bindEffectDrag(scroller) {
     if (!scroller) return () => {};
     const owner = scroller.ownerDocument || doc();
-    let tracking = false, dragged = false, blockClick = false;
-    let startX = 0, startY = 0, startScroll = 0;
+    const win = owner.defaultView || window;
+    let tracking = false, dragged = false, blockClick = false, inertia = 0;
+    let startX = 0, startY = 0, lastX = 0, lastT = 0, velocity = 0;
+    const raf = typeof win.requestAnimationFrame === "function" ? win.requestAnimationFrame.bind(win) : null;
+    const caf = typeof win.cancelAnimationFrame === "function" ? win.cancelAnimationFrame.bind(win) : null;
 
+    const stopInertia = () => { if (inertia && caf) caf(inertia); inertia = 0; };
+    const settle = () => { scroller.classList.remove("dragging"); };
+    const glide = () => {
+      stopInertia();
+      if (!raf || Math.abs(velocity) < .35 || win.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return settle();
+      const step = () => {
+        scroller.scrollLeft += velocity; velocity *= .91;
+        if (Math.abs(velocity) < .35) { inertia = 0; settle(); return; }
+        inertia = raf(step);
+      };
+      inertia = raf(step);
+    };
     const down = event => {
       if (event.button !== 0) return;
-      tracking = true; dragged = false;
-      startX = event.clientX; startY = event.clientY; startScroll = scroller.scrollLeft;
+      stopInertia(); tracking = true; dragged = false; velocity = 0;
+      startX = lastX = event.clientX; startY = event.clientY; lastT = Date.now();
     };
     const move = event => {
       if (!tracking) return;
-      const dx = event.clientX - startX, dy = event.clientY - startY;
+      const dxTotal = event.clientX - startX, dyTotal = event.clientY - startY;
       if (!dragged) {
-        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
-        if (Math.abs(dy) > Math.abs(dx) * 1.15) { tracking = false; return; }
+        if (Math.abs(dxTotal) < 5 && Math.abs(dyTotal) < 5) return;
+        if (Math.abs(dyTotal) > Math.abs(dxTotal) * 1.15) { tracking = false; return; }
         dragged = true; scroller.classList.add("dragging");
       }
       event.preventDefault?.();
-      scroller.scrollLeft = startScroll - dx;
+      const now = Date.now(), dx = event.clientX - lastX, dt = Math.max(8, now - lastT);
+      scroller.scrollLeft -= dx;
+      const frameVelocity = (-dx / dt) * 16.67;
+      velocity = velocity * .62 + frameVelocity * .38;
+      lastX = event.clientX; lastT = now;
     };
     const up = () => {
-      if (dragged) blockClick = true;
-      tracking = false; dragged = false; scroller.classList.remove("dragging");
+      if (dragged) { blockClick = true; glide(); } else settle();
+      tracking = false; dragged = false;
     };
     const click = event => {
       if (!blockClick) return;
-      blockClick = false;
-      event.preventDefault?.(); event.stopImmediatePropagation?.(); event.stopPropagation?.();
+      blockClick = false; event.preventDefault?.(); event.stopImmediatePropagation?.(); event.stopPropagation?.();
     };
     const dragstart = event => event.preventDefault?.();
 
-    scroller.addEventListener("mousedown", down);
-    owner.addEventListener("mousemove", move);
-    owner.addEventListener("mouseup", up);
-    scroller.addEventListener("dragstart", dragstart, true);
-    scroller.addEventListener("click", click, true);
-    return () => {
-      scroller.removeEventListener("mousedown", down);
-      owner.removeEventListener("mousemove", move);
-      owner.removeEventListener("mouseup", up);
-      scroller.removeEventListener("dragstart", dragstart, true);
-      scroller.removeEventListener("click", click, true);
-      scroller.classList.remove("dragging");
-    };
+    scroller.addEventListener("mousedown", down); owner.addEventListener("mousemove", move); owner.addEventListener("mouseup", up);
+    scroller.addEventListener("dragstart", dragstart, true); scroller.addEventListener("click", click, true);
+    return () => { stopInertia(); scroller.removeEventListener("mousedown", down); owner.removeEventListener("mousemove", move); owner.removeEventListener("mouseup", up); scroller.removeEventListener("dragstart", dragstart, true); scroller.removeEventListener("click", click, true); settle(); };
   }
 
   function stopCamera() {
@@ -165,7 +177,7 @@ MiniTalk.Tools.FaceToy = (() => {
   }
 
   function buildView() {
-    const D = MiniTalk.UI.Dom;
+    const D = dom();
     view = D.el("section", { class: "view face-toy-view view-enter" });
     const top = D.el("div", { class: "face-toy-topbar" });
     const back = D.el("button", { class: "face-toy-back", type: "button", "aria-label": "페이스 체인지 나가기", text: "‹" });
@@ -222,11 +234,13 @@ MiniTalk.Tools.FaceToy = (() => {
     return view;
   }
 
-  async function open(onClose) {
+  async function open(onClose, options = {}) {
+    dispose();
     closeCallback = typeof onClose === "function" ? onClose : null;
-    const host = MiniTalk.UI.Dom.byId("viewHost");
-    if (!host) return;
-    stopCamera();
+    activeDoc = options.doc || MiniTalk.UI.Dom.doc();
+    separateWindow = Boolean(options.separate);
+    const host = options.host || activeDoc.getElementById("viewHost");
+    if (!host) { activeDoc = null; separateWindow = false; return; }
     host.replaceChildren(buildView());
     facing = "user";
     await startCamera("user");
@@ -240,8 +254,10 @@ MiniTalk.Tools.FaceToy = (() => {
     manualResolve = null;
     manualNeeded = 0;
     warpStart = null;
-    if (view) MiniTalk.UI.Shell.closeModal?.();
+    if (view && !separateWindow) shell().closeModal?.();
     view = null;
+    activeDoc = null;
+    separateWindow = false;
   }
 
   function close() {
@@ -538,20 +554,20 @@ MiniTalk.Tools.FaceToy = (() => {
     if (mode !== "edit" || !canvas?.width) return;
     const rooms = memberRooms();
     if (!rooms.length) { setStatus("참여 중인 대화방이 없어요.", true); return; }
-    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "face-room-picker" });
+    const D = dom(), body = D.el("div", { class: "face-room-picker" });
     body.append(D.el("p", { class: "muted face-room-picker-note", text: "완성된 사진을 보낼 대화방을 골라줘." }));
     const list = D.el("div", { class: "face-room-list" });
     rooms.forEach(room => {
       const button = D.el("button", { class: "face-room-row", type: "button" }, [D.el("span", { class: "face-room-icon", text: "▣" }), D.el("span", { class: "face-room-copy" }, [D.el("strong", { text: room.title || "대화방" }), D.el("small", { class: "muted", text: room.lastMessage || "메시지 없음" })]), D.el("span", { class: "row-arrow", text: "›" })]);
       button.onclick = async () => {
         button.disabled = true;
-        try { await sendCanvasToRoom(room.id); sound("done"); MiniTalk.UI.Shell.closeModal(); setStatus(`${room.title || "대화방"}에 보냈어!`); }
-        catch (error) { MiniTalk.UI.Shell.toast(error.message || "사진을 보내지 못했어요."); button.disabled = false; }
+        try { await sendCanvasToRoom(room.id); sound("done"); shell().closeModal(); setStatus(`${room.title || "대화방"}에 보냈어!`); }
+        catch (error) { shell().toast(error.message || "사진을 보내지 못했어요."); button.disabled = false; }
       };
       list.append(button);
     });
     body.append(list);
-    MiniTalk.UI.Shell.modal("대화방에 보내기", body);
+    shell().modal("대화방에 보내기", body);
   }
 
   async function sendCanvasToRoom(roomId) {
@@ -578,5 +594,5 @@ MiniTalk.Tools.FaceToy = (() => {
 
   function blobToDataUrl(blob) { return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result || "")); r.onerror = reject; r.readAsDataURL(blob); }); }
 
-  return { open, close, dispose, _test: { normalizeFace, memberRooms, sound, bindEffectDrag } };
+  return { open, close, dispose, isSeparate: () => separateWindow, _test: { normalizeFace, memberRooms, sound, bindEffectDrag } };
 })();

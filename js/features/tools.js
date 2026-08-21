@@ -8,7 +8,7 @@ MiniTalk.Features.Tools = (() => {
   const items = [
     { id: "tarot", icon: "✧", title: "오늘의 타로", description: "카드를 뽑아 보는 운세" },
     { id: "alarm", icon: "◉", title: "알람", description: "원하는 시간에 알림" },
-    { id: "lookalike", icon: "◌", title: "닮은 생물 찾기", description: "3·2·1 찍고 닮은 동식물 보기" },
+    { id: "lookalike", icon: "?", title: "닮은 생물 찾기", description: "3·2·1 찍고 닮은 동식물 보기" },
     { id: "face-toy", icon: "☺", title: "페이스 체인지", description: "찍고 바꾸고 크게 놀기" },
     { id: "timetable", icon: "▦", title: "오늘의 시간표", description: "이미지로 함께 갱신" },
     { id: "lunch", icon: "☰", title: "오늘의 급식표", description: "TXT에서 오늘 급식 보기" }
@@ -21,9 +21,71 @@ MiniTalk.Features.Tools = (() => {
     profile: () => MiniTalk.Tools.ProfileEditor.open(refreshIfVisible),
     timetable: () => MiniTalk.Tools.ClassInfo.openTimetable(),
     lunch: () => MiniTalk.Tools.ClassInfo.openLunch(),
-    "face-toy": () => MiniTalk.Tools.FaceToy.open(refreshIfVisible),
-    lookalike: () => MiniTalk.Tools.LookalikePlay.open(refreshIfVisible)
+    "face-toy": () => openCameraTool(MiniTalk.Tools.FaceToy, "페이스 체인지"),
+    lookalike: () => openCameraTool(MiniTalk.Tools.LookalikePlay, "닮은 생물 찾기")
   };
+
+
+  let cameraToolPopup = null;
+  let cameraToolModule = null;
+
+  function mobileCameraTool() {
+    if (MiniTalk.MobileImmersive?.isMobile?.()) return true;
+    const ua = navigator.userAgent || "";
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) && !/CrOS/i.test(ua);
+  }
+
+  function cameraPopupBounds(sourceView) {
+    const scr = sourceView.screen || {}, availLeft = Number(scr.availLeft) || 0, availTop = Number(scr.availTop) || 0;
+    const availWidth = Math.max(640, Number(scr.availWidth) || 1280), availHeight = Math.max(520, Number(scr.availHeight) || 800), gap = 42;
+    const messengerLeft = Number(sourceView.screenX ?? sourceView.screenLeft) || availLeft, messengerTop = Number(sourceView.screenY ?? sourceView.screenTop) || availTop;
+    const messengerW = Math.max(320, Number(sourceView.outerWidth) || Math.min(520, availWidth * .42)), messengerH = Math.max(420, Number(sourceView.outerHeight) || availHeight * .8);
+    const rightStart = Math.min(availLeft + availWidth, messengerLeft + messengerW + gap), rightSpace = Math.max(0, availLeft + availWidth - rightStart), leftSpace = Math.max(0, messengerLeft - gap - availLeft);
+    const bottomStart = Math.min(availTop + availHeight, messengerTop + messengerH + gap), bottomSpace = Math.max(0, availTop + availHeight - bottomStart), topSpace = Math.max(0, messengerTop - gap - availTop);
+    const desiredWidth = Math.min(1040, Math.max(760, Math.round(availWidth * .62))), desiredHeight = Math.min(860, Math.max(650, Math.round(availHeight * .84)));
+    const minSideWidth = Math.min(680, Math.max(540, Math.round(availWidth * .36)));
+    let width, height, left, top;
+    if (Math.max(rightSpace, leftSpace) >= minSideWidth) {
+      const useRight = rightSpace >= leftSpace, space = useRight ? rightSpace : leftSpace;
+      width = Math.min(desiredWidth, space); height = Math.min(desiredHeight, availHeight - 24); left = useRight ? rightStart : messengerLeft - gap - width;
+      top = Math.max(availTop + 8, Math.min(messengerTop, availTop + availHeight - height - 8));
+    } else if (Math.max(bottomSpace, topSpace) >= 500) {
+      const useBottom = bottomSpace >= topSpace; width = Math.min(desiredWidth, availWidth - 24); height = Math.min(desiredHeight, useBottom ? bottomSpace : topSpace);
+      left = Math.max(availLeft + 8, Math.min(messengerLeft, availLeft + availWidth - width - 8)); top = useBottom ? bottomStart : messengerTop - gap - height;
+    } else {
+      width = Math.min(Math.max(680, Math.round(availWidth * .64)), availWidth - 24); height = Math.min(desiredHeight, availHeight - 24);
+      left = (messengerLeft + messengerW / 2) <= (availLeft + availWidth / 2) ? availLeft + availWidth - width - 8 : availLeft + 8;
+      top = Math.max(availTop + 8, Math.min(messengerTop, availTop + availHeight - height - 8));
+    }
+    return { width: Math.round(Math.max(560, width)), height: Math.round(Math.max(600, height)), left: Math.round(left), top: Math.round(top) };
+  }
+
+  function enforceCameraPopupBounds(win, bounds) {
+    const apply = () => { try { win.resizeTo(bounds.width, bounds.height); win.moveTo(bounds.left, bounds.top); } catch {} };
+    apply(); setTimeout(apply, 80); setTimeout(apply, 260);
+  }
+
+  function openCameraTool(module, title) {
+    if (!module?.open) return;
+    if (mobileCameraTool()) return module.open(refreshIfVisible);
+    if (cameraToolPopup && !cameraToolPopup.closed) {
+      if (cameraToolModule === module) { try { cameraToolPopup.focus(); } catch {} return; }
+      try { cameraToolModule?.dispose?.(); cameraToolPopup.close(); } catch {}
+    }
+    const sourceDoc = MiniTalk.UI.Dom.doc(), sourceView = sourceDoc.defaultView || window, bounds = cameraPopupBounds(sourceView);
+    let popup = null;
+    try { popup = sourceView.open("", "MoaruCameraPlay", `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`); } catch {}
+    if (!popup) return module.open(refreshIfVisible);
+    const base = String(sourceDoc.baseURI || document.baseURI).replace(/'/g, "%27");
+    const d = popup.document; d.open(); d.write(`<!doctype html><html lang="ko" data-theme="${sourceDoc.documentElement?.dataset?.theme || "light"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><base href="${base}"><style>html,body,#cameraToolRoot{margin:0;width:100%;height:100%;overflow:hidden}body{background:var(--surface-2,#f5f7fb)}#cameraToolRoot{min-width:0;min-height:0}.toast-host,.modal-host{z-index:1000}</style></head><body class="camera-tool-window-body"><main id="cameraToolRoot"></main><div id="toastHost" class="toast-host" aria-live="polite"></div><div id="modalHost" class="modal-host hidden"></div></body></html>`); d.close();
+    for (const sheet of sourceDoc.styleSheets) { if (!sheet.href) continue; const link = d.createElement("link"); link.rel = "stylesheet"; link.href = sheet.href; d.head.append(link); }
+    cameraToolPopup = popup; cameraToolModule = module; enforceCameraPopupBounds(popup, bounds);
+    const root = d.getElementById("cameraToolRoot");
+    const closePopup = () => { if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; } try { popup.close(); } catch {} };
+    popup.addEventListener("pagehide", () => { try { module.dispose?.(); } catch {} if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; } }, { once: true });
+    module.open(closePopup, { host: root, doc: d, separate: true });
+    try { popup.focus(); } catch {}
+  }
 
   function render(host) {
     if(activeDragList){MiniTalk.UI.DragScroll?.unbind?.(activeDragList);activeDragList=null}
@@ -119,8 +181,8 @@ MiniTalk.Features.Tools = (() => {
 
   function leave() {
     if(activeDragList){MiniTalk.UI.DragScroll?.unbind?.(activeDragList);activeDragList=null}
-    MiniTalk.Tools.FaceToy?.dispose?.();
-    MiniTalk.Tools.LookalikePlay?.dispose?.();
+    if (!MiniTalk.Tools.FaceToy?.isSeparate?.()) MiniTalk.Tools.FaceToy?.dispose?.();
+    if (!MiniTalk.Tools.LookalikePlay?.isSeparate?.()) MiniTalk.Tools.LookalikePlay?.dispose?.();
     MiniTalk.Tools.TarotView.close();
   }
 

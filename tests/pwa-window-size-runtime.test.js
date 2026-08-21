@@ -24,8 +24,7 @@ function run(userAgent,isMobile){
 }
 
 const whaleBook=run("Mozilla/5.0 (X11; CrOS x86_64) Chrome/140",false);
-if(JSON.stringify(whaleBook.resizeCalls)!==JSON.stringify([[400,740]]))throw new Error("WhaleBook standalone sizing failed");
-if(JSON.stringify(whaleBook.moveCalls)!==JSON.stringify([[952,14]]))throw new Error("standalone bottom-right placement failed");
+if(whaleBook.resizeCalls.length||whaleBook.moveCalls.length)throw new Error("desktop standalone messenger must preserve the user's current window bounds");
 const mobile=run("Mozilla/5.0 (Linux; Android 16; Mobile)",true);
-if(mobile.resizeCalls.length)throw new Error("mobile standalone must not be resized");
+if(mobile.resizeCalls.length||mobile.moveCalls.length)throw new Error("mobile standalone must not be resized or moved");
 console.log("PWA_WINDOW_SIZE_RUNTIME_OK");

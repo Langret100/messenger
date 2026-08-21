@@ -12,6 +12,8 @@ const SHOP_PRODUCT_PROPERTY_PREFIX = "SHOP_PRODUCT_";
 const SHOP_ADMIN_CODE_PROPERTY = "MINITALK_ADMIN_CODE";
 const SHOP_MANAGER_CODE_PROPERTY = "MINITALK_SHOP_MANAGER_CODE";
 const SHOP_ADMIN_SESSION_PREFIX = "shop-admin:";
+const SHOP_ADMIN_SESSION_PROPERTY_PREFIX = "MOARU_ADMIN_SESSION_V2_";
+const MOARU_KNOWN_USER_CACHE_PREFIX = "moaru-known-user-v1-";
 const SHOP_PURCHASE_LOG_SHEET = "구매로그";
 const MOARU_SHOP_INVENTORY_SHEET = "모아루_쇼핑보관함";
 const MOARU_SHOP_INVENTORY_HEADERS = ["inventory_id","owner_id","product_id","name","description","price","purchase_key","purchased_at","created_at","gifted_by","gifted_by_nickname","gifted_at","delivery_status","delivery_requested_at","delivery_shipping_at","delivery_completed_at","delivery_cancelled_at","delivery_handled_by","used_at"];
@@ -151,20 +153,70 @@ function secureTextEquals_(left, right) {
   return mismatch === 0 ? { ok: true } : { ok: false, error: "ADMIN_AUTH_FAILED" };
 }
 
-function readShopAdminSession_(userId, token) {
-  const id = String(userId || "").trim();
-  const value = String(token || "").trim();
-  if (!id || !value) return { ok: false, error: "ADMIN_AUTH_REQUIRED" };
-  const raw = CacheService.getScriptCache().get(SHOP_ADMIN_SESSION_PREFIX + value);
-  if (!raw) return { ok: false, error: "ADMIN_SESSION_EXPIRED" };
-  // v5.18 이전 세션(값이 userId 문자열뿐인 형식)은 ADMIN으로만 호환합니다.
-  if (raw === id) return { ok: true, role: "ADMIN" };
+function shopAdminSessionPropertyKey_(token) {
+  // 토큰은 UUID 두 개를 이어 만든 서버 발급 난수이며 Script Properties 안에서만 키로 사용합니다.
+  return SHOP_ADMIN_SESSION_PROPERTY_PREFIX + moaruSafeKey_(String(token || ""));
+}
+function normalizeShopAdminSession_(raw, expectedUserId) {
+  const id = String(expectedUserId || "").trim();
+  if (!raw || !id) return null;
+  // v5.18 이전 CacheService 세션(값이 userId 문자열뿐인 형식)은 ADMIN으로만 호환합니다.
+  if (raw === id) return { userId: id, role: "ADMIN", expiresAt: Date.now() + 60000 };
   try {
-    const session = JSON.parse(raw);
-    if (!session || String(session.userId || "") !== id) return { ok: false, error: "ADMIN_SESSION_EXPIRED" };
-    const role = String(session.role || "ADMIN").toUpperCase();
-    return role === "ADMIN" || role === "SHOP_MANAGER" ? { ok: true, role: role } : { ok: false, error: "ADMIN_ROLE_INVALID" };
-  } catch (error) { return { ok: false, error: "ADMIN_SESSION_EXPIRED" }; }
+    const session = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!session || String(session.userId || "") !== id) return null;
+    const role = String(session.role || "ADMIN").toUpperCase(), expiresAt = Number(session.expiresAt) || 0;
+    if (role !== "ADMIN" && role !== "SHOP_MANAGER") return null;
+    if (expiresAt && expiresAt <= Date.now()) return null;
+    return { userId: id, role: role, expiresAt: expiresAt || Date.now() + SHOP_ADMIN_TOKEN_SECONDS * 1000 };
+  } catch (error) { return null; }
+}
+function writeShopAdminSession_(userId, role, token) {
+  const id = String(userId || "").trim(), value = String(token || "").trim(), normalizedRole = String(role || "").toUpperCase();
+  if (!id || !value || (normalizedRole !== "ADMIN" && normalizedRole !== "SHOP_MANAGER")) return false;
+  const session = { userId: id, role: normalizedRole, expiresAt: Date.now() + SHOP_ADMIN_TOKEN_SECONDS * 1000 }, raw = JSON.stringify(session);
+  // CacheService는 속도용일 뿐 보장 저장소가 아니므로 Script Properties에도 함께 저장합니다.
+  PropertiesService.getScriptProperties().setProperty(shopAdminSessionPropertyKey_(value), raw);
+  try { CacheService.getScriptCache().put(SHOP_ADMIN_SESSION_PREFIX + value, raw, SHOP_ADMIN_TOKEN_SECONDS); } catch (error) {}
+  return true;
+}
+function cleanupExpiredShopAdminSessions_() {
+  const props = PropertiesService.getScriptProperties(), all = props.getProperties(), now = Date.now();
+  Object.keys(all).filter(function (key) { return key.indexOf(SHOP_ADMIN_SESSION_PROPERTY_PREFIX) === 0; }).forEach(function (key) {
+    let session = null;try { session = JSON.parse(all[key] || "null"); } catch (error) {}
+    if (!session || Number(session.expiresAt) <= now) props.deleteProperty(key);
+  });
+}
+function readShopAdminSession_(userId, token) {
+  const id = String(userId || "").trim(), value = String(token || "").trim();
+  if (!id || !value) return { ok: false, error: "ADMIN_AUTH_REQUIRED" };
+  const cache = CacheService.getScriptCache(), cacheKey = SHOP_ADMIN_SESSION_PREFIX + value;
+  let session = null;
+  try { session = normalizeShopAdminSession_(cache.get(cacheKey), id); } catch (error) {}
+  if (!session) {
+    const props = PropertiesService.getScriptProperties(), propKey = shopAdminSessionPropertyKey_(value), raw = props.getProperty(propKey);
+    session = normalizeShopAdminSession_(raw, id);
+    if (!session) { if (raw) props.deleteProperty(propKey);return { ok: false, error: "ADMIN_SESSION_EXPIRED" }; }
+    const seconds = Math.max(1, Math.min(SHOP_ADMIN_TOKEN_SECONDS, Math.ceil((session.expiresAt - Date.now()) / 1000)));
+    try { cache.put(cacheKey, JSON.stringify(session), seconds); } catch (error) {}
+  }
+  return { ok: true, role: session.role };
+}
+function knownMoaruUserCacheKey_(userId) { return MOARU_KNOWN_USER_CACHE_PREFIX + moaruSafeKey_(userId); }
+function rememberKnownMoaruUser_(userId) {
+  const id = String(userId || "").trim();if (!id) return false;
+  try { CacheService.getScriptCache().put(knownMoaruUserCacheKey_(id), "1", SHOP_ADMIN_TOKEN_SECONDS); } catch (error) {}
+  return true;
+}
+function requireKnownMoaruUserFast_(userId) {
+  const id = String(userId || "").trim();if (!id) return "";
+  try { if (CacheService.getScriptCache().get(knownMoaruUserCacheKey_(id)) === "1") return id; } catch (error) {}
+  // 관리자 인증은 한 사용자만 확인하면 되므로 전체 로그인 시트를 배열로 읽지 않습니다.
+  const sheet = getSheet_(LOGIN_SHEET), lastRow = sheet.getLastRow();if (lastRow < 2) return "";
+  const match = sheet.getRange(2, 1, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();if (!match) return "";
+  const row = sheet.getRange(match.getRow(), 1, 1, 4).getValues()[0], foundId = String(row[0] || "").trim(), username = String(row[1] || "").trim(), nickname = String(row[3] || row[1] || "").trim();
+  if (foundId !== id || isMoaruGuestIdentity_(foundId, username, nickname)) return "";
+  rememberKnownMoaruUser_(foundId);return foundId;
 }
 function requireAdminToken_(userId, token) {
   const auth = readShopAdminSession_(userId, token);
@@ -179,20 +231,18 @@ function requireShopAdminToken_(userId, token) { return requireAdminToken_(userI
 
 /** POST mode=admin_unlock: ADMIN 또는 SHOP_MANAGER 코드를 검증해 6시간 역할 토큰을 발급합니다. */
 function handleAdminUnlock(e) {
-  const p = (e && e.parameter) || {};
-  const userId = String(p.user_id || "").trim();
-  const code = String(p.admin_code || "");
-  if (!requireKnownMoaruUser_(userId)) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
-  const props = PropertiesService.getScriptProperties();
-  const adminCode = props.getProperty(SHOP_ADMIN_CODE_PROPERTY) || "";
-  const shopCode = props.getProperty(SHOP_MANAGER_CODE_PROPERTY) || "";
+  const p = (e && e.parameter) || {}, userId = String(p.user_id || "").trim(), code = String(p.admin_code || ""), props = PropertiesService.getScriptProperties();
+  const adminCode = props.getProperty(SHOP_ADMIN_CODE_PROPERTY) || "", shopCode = props.getProperty(SHOP_MANAGER_CODE_PROPERTY) || "";
   if (!adminCode && !shopCode) return shopJson_({ ok: false, error: "ADMIN_CODE_NOT_CONFIGURED" });
+  // 비밀번호가 틀린 요청에서는 로그인 시트까지 읽지 않습니다.
   let role = "";
   if (adminCode && secureTextEquals_(adminCode, code).ok) role = "ADMIN";
   else if (shopCode && secureTextEquals_(shopCode, code).ok) role = "SHOP_MANAGER";
   if (!role) return shopJson_({ ok: false, error: "ADMIN_AUTH_FAILED" });
+  if (!requireKnownMoaruUserFast_(userId)) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   const token = Utilities.getUuid() + Utilities.getUuid();
-  CacheService.getScriptCache().put(SHOP_ADMIN_SESSION_PREFIX + token, JSON.stringify({ userId: userId, role: role }), SHOP_ADMIN_TOKEN_SECONDS);
+  writeShopAdminSession_(userId, role, token);
+  try { cleanupExpiredShopAdminSessions_(); } catch (error) {}
   return shopJson_({ ok: true, admin: role === "ADMIN", shop_manager: role === "SHOP_MANAGER", role: role, admin_token: token, expires_in: SHOP_ADMIN_TOKEN_SECONDS });
 }
 
@@ -478,6 +528,15 @@ function readShopInventoryFresh_(userId) {
   const catalog = readShopCatalog_();
   return readShopInventoryRowsForUser_(id).map(function (item) { return hydrateShopInventoryItem_(item, catalog); }).sort(function (a, b) { return Number(b.createdAt || b.giftedAt || 0) - Number(a.createdAt || a.giftedAt || 0); });
 }
+function findShopInventoryItemFresh_(ownerId, inventoryId) {
+  const owner = String(ownerId || "").trim(), id = String(inventoryId || "").trim();
+  if (!owner || !id) return null;
+  const sheet = getOrCreateShopInventorySheet_(), row = findShopInventorySheetRow_(sheet, id);
+  if (!row) return null;
+  const item = shopInventoryRowToItem_(sheet.getRange(row, 1, 1, MOARU_SHOP_INVENTORY_HEADERS.length).getValues()[0]);
+  if (!item.id || item.ownerId !== owner) return null;
+  return { row: row, item: hydrateShopInventoryItem_(item, readShopCatalog_()) };
+}
 function readShopInventory_(userId) {
   const id = String(userId || ""), cache = CacheService.getScriptCache(), cacheKey = shopInventoryCacheKey_(id);
   if (!id) return [];
@@ -487,11 +546,11 @@ function readShopInventory_(userId) {
   return items;
 }
 
-function writeShopInventoryItem_(userId, item) {
+function writeShopInventoryItem_(userId, item, rowHint) {
   const compact = Object.assign({}, item, { ownerId: String(userId || item.ownerId || "") });
   delete compact.imageUrl;
   if (!compact.id || !compact.ownerId) throw new Error("INVALID_SHOP_INVENTORY_ITEM");
-  const sheet = getOrCreateShopInventorySheet_(), row = findShopInventorySheetRow_(sheet, compact.id), values = shopInventoryItemToRow_(compact);
+  const sheet = getOrCreateShopInventorySheet_(), hinted = Math.floor(Number(rowHint) || 0), row = hinted >= 2 ? hinted : findShopInventorySheetRow_(sheet, compact.id), values = shopInventoryItemToRow_(compact);
   if (row) sheet.getRange(row, 1, 1, values.length).setValues([values]);
   else sheet.appendRow(values);
   clearShopInventoryCache_(compact.ownerId);
@@ -643,14 +702,14 @@ function handleShopRequestDelivery(e) {
   if (!inventoryId) return shopJson_({ ok: false, error: "MISSING_INVENTORY_ID" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
-    const item = readShopInventoryFresh_(userId).filter(function (row) { return row.id === inventoryId; })[0];
-    if (!item || String(item.ownerId || userId) !== userId) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+    const found = findShopInventoryItemFresh_(userId, inventoryId), item = found && found.item;
+    if (!item) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
     const status = normalizeDeliveryStatus_(item);
     if (status === "requested" || status === "shipping") return shopJson_({ ok: true, alreadyRequested: true, item: item, deliveryStatus: status });
     if (status === "completed") return shopJson_({ ok: true, alreadyCompleted: true, item: item, deliveryStatus: status });
     if (status !== "owned" && status !== "cancelled") return shopJson_({ ok: false, error: "DELIVERY_STATE_INVALID" });
     const now = Date.now();item.deliveryStatus = "requested";item.deliveryRequestedAt = now;delete item.deliveryShippingAt;delete item.deliveryCompletedAt;delete item.deliveryCancelledAt;delete item.deliveryHandledBy;delete item.usedAt;
-    const saved = writeShopInventoryItem_(userId, item);
+    const saved = writeShopInventoryItem_(userId, item, found.row);
     if (requestId) PropertiesService.getScriptProperties().setProperty(MOARU_SHOP_DELIVERY_REQUEST_PREFIX + requestId, JSON.stringify({ userId: userId, inventoryId: inventoryId, requestedAt: now }));
     return shopJson_({ ok: true, item: saved, deliveryStatus: "requested", deliveryRequestedAt: now, cue: { sound: "delivery-class-order", animation: "running-student" } });
   } finally { lock.releaseLock(); }
@@ -672,7 +731,7 @@ function updateShopDeliveryByManager_(e, nextStatus) {
   if (!ownerId || !inventoryId) return shopJson_({ ok: false, error: "INVALID_DELIVERY_TARGET" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
-    const item = readShopInventoryFresh_(ownerId).filter(function (row) { return row.id === inventoryId; })[0];if (!item) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+    const found = findShopInventoryItemFresh_(ownerId, inventoryId), item = found && found.item;if (!item) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
     const current = normalizeDeliveryStatus_(item), now = Date.now();
     if (current === nextStatus) return shopJson_({ ok: true, alreadyApplied: true, item: item, deliveryStatus: current });
     if (nextStatus === "shipping" && current !== "requested") return shopJson_({ ok: false, error: "DELIVERY_STATE_INVALID", status: current });
@@ -681,7 +740,7 @@ function updateShopDeliveryByManager_(e, nextStatus) {
     if (nextStatus === "shipping") item.deliveryShippingAt = now;
     if (nextStatus === "completed") { item.deliveryCompletedAt = now;item.usedAt = now; }
     if (nextStatus === "cancelled") { item.deliveryCancelledAt = now;delete item.usedAt; }
-    const saved = writeShopInventoryItem_(ownerId, item);
+    const saved = writeShopInventoryItem_(ownerId, item, found.row);
     enqueueMoaruCommand_(ownerId, nextStatus === "completed" ? "SHOP_DELIVERY_COMPLETED" : nextStatus === "cancelled" ? "SHOP_DELIVERY_CANCELLED" : "SHOP_DELIVERY_SHIPPING", { itemId: saved.id, name: saved.name, deliveryStatus: nextStatus }, p.user_id);
     return shopJson_({ ok: true, item: saved, deliveryStatus: nextStatus });
   } finally { lock.releaseLock(); }

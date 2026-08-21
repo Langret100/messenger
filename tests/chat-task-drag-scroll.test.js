@@ -7,7 +7,7 @@ const html=read('index.html');
 const drag=read('js/ui/drag-scroll.js');
 const chats=read('js/features/chats.js');
 const tasks=read('js/features/tasks.js');
-ok(html.includes('js/ui/drag-scroll.js?v=7'),'drag-scroll v3 cache ref missing');
+ok(html.includes('js/ui/drag-scroll.js?v=8'),'drag-scroll v3 cache ref missing');
 ok(html.includes('js/features/chats.js?v=64.5.21'),'chats cache ref stale');
 ok(html.includes('js/features/tasks.js?v=64.5.2'),'tasks cache ref stale');
 ok(drag.includes('drag-scroll-surface')&&drag.includes('scrollbar-width:none')&&drag.includes('::-webkit-scrollbar'),'scrollbar-free drag surface missing');

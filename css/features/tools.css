@@ -44,6 +44,9 @@
 
 /* v97: 도구탭은 휠/터치/마우스 드래그 스크롤은 유지하고 스크롤바만 숨깁니다. */
 .tools-screen {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
   overscroll-behavior: contain;

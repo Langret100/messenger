@@ -22,6 +22,7 @@ MiniTalk.UI.DragScroll=(()=>{
     if(!scroller||bound.has(scroller))return scroller;
     ensureStyle(scroller.ownerDocument||document);
     const keepScrollbar=options?.keepScrollbar===true;
+    const allowInteractive=String(options?.allowInteractive||"").trim();
     scroller.classList.add("drag-scroll-surface");
     if(keepScrollbar)scroller.classList.add("drag-scroll-keep-scrollbar");
     bound.add(scroller);
@@ -41,7 +42,8 @@ MiniTalk.UI.DragScroll=(()=>{
         }
       }
       const blocked=target.closest(BLOCKED);
-      if(blocked&&!blocked.matches?.(".shop-product-card"))return false;
+      const explicitlyAllowed=Boolean(allowInteractive&&target.closest?.(allowInteractive));
+      if(blocked&&!blocked.matches?.(".shop-product-card")&&!explicitlyAllowed)return false;
       return scroller.scrollHeight>scroller.clientHeight+1;
     };
     scroller.addEventListener("pointerdown",event=>{

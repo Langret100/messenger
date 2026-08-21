@@ -12,7 +12,7 @@ ok(refreshPos>=0 && returnPos>refreshPos,'background inventory refresh arrangeme
 ok(!requestBlock.includes('await refreshInventory(true)'),'delivery success still waits for inventory refresh');
 ok(server.includes('function readShopInventoryFresh_'),'fresh inventory reader missing');
 const managerBlock=server.slice(server.indexOf('function updateShopDeliveryByManager_'),server.indexOf('function handleShopDeliveryShipping'));
-ok(managerBlock.includes('readShopInventoryFresh_(ownerId)'),'manager delivery mutation still reads cached inventory');
+ok(managerBlock.includes('findShopInventoryItemFresh_(ownerId, inventoryId)'),'manager delivery mutation should use direct fresh item lookup');
 const requestServer=server.slice(server.indexOf('function handleShopRequestDelivery'),server.indexOf('function handleShopDeliveryList'));
-ok(requestServer.includes('readShopInventoryFresh_(userId)'),'delivery request still reads cached inventory');
+ok(requestServer.includes('findShopInventoryItemFresh_(userId, inventoryId)'),'delivery request should use direct fresh item lookup');
 console.log('DELIVERY_STATE_AUDIO_LATENCY_OK');

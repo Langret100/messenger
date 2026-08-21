@@ -334,20 +334,26 @@ MiniTalk.Features.Shopping = (() => {
             if (button.disabled) return;button.disabled = true;
             try {
               const payload = { userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("SHOP"), ownerId: row.ownerId || row.owner_id, inventoryId: row.id || row.inventoryId || row.inventory_id };
-              if (kind === "shipping") await MiniTalk.AuthApi.shopDeliveryShipping(payload);
-              else if (kind === "completed") await MiniTalk.AuthApi.shopDeliveryComplete(payload);
-              else await MiniTalk.AuthApi.shopDeliveryCancel(payload);
+              const result = kind === "shipping" ? await MiniTalk.AuthApi.shopDeliveryShipping(payload) : kind === "completed" ? await MiniTalk.AuthApi.shopDeliveryComplete(payload) : await MiniTalk.AuthApi.shopDeliveryCancel(payload);
+              if (String(result?.deliveryStatus || "") !== kind) throw new Error("서버의 배송 상태 변경을 확인하지 못했습니다.");
               MiniTalk.Realtime.notifyCommandTargets?.([payload.ownerId]);
               Shell.toast(kind === "completed" ? "배송완료로 처리했습니다." : kind === "cancelled" ? "배송을 취소했습니다." : "배송중으로 변경했습니다.");
-              await load();
-            } catch (error) { Shell.toast(error.message || "배송 상태를 변경하지 못했습니다.");button.disabled = false; }
+              load().catch?.(() => {});
+            } catch (error) {
+              if (["ADMIN_SESSION_EXPIRED","ADMIN_AUTH_REQUIRED","SHOP_MANAGER_PERMISSION_REQUIRED"].includes(String(error?.code || ""))) { MiniTalk.AdminSession.clear?.();Shell.toast("관리자 인증이 만료되었습니다. 설정에서 다시 인증해주세요."); }
+              else if (error?.code === "REQUEST_TIMEOUT") { Shell.toast("처리 응답이 늦습니다. 새로고침으로 배송 상태를 다시 확인해주세요."); }
+              else Shell.toast(error.message || "배송 상태를 변경하지 못했습니다.");
+              button.disabled = false;
+            }
           };
           if (status === "requested") { const shipping = D.el("button", { class: "button secondary compact-button", type: "button", text: "배송 시작" });shipping.onclick = () => action("shipping", shipping);buttons.append(shipping); }
           const complete = D.el("button", { class: "button primary compact-button", type: "button", text: "배송완료" }), cancel = D.el("button", { class: "button secondary compact-button", type: "button", text: "취소" });
           complete.onclick = () => action("completed", complete);cancel.onclick = () => action("cancelled", cancel);buttons.append(complete, cancel);item.append(copy, buttons);list.append(item);
         });
-      } catch (error) { list.replaceChildren(D.el("p", { class: "muted", text: error.message || "배송 요청을 불러오지 못했습니다." })); }
-      finally { loading = false;refresh.disabled = false; }
+      } catch (error) {
+        if (["ADMIN_SESSION_EXPIRED","ADMIN_AUTH_REQUIRED","SHOP_MANAGER_PERMISSION_REQUIRED"].includes(String(error?.code || ""))) MiniTalk.AdminSession.clear?.();
+        list.replaceChildren(D.el("p", { class: "muted", text: error.message || "배송 요청을 불러오지 못했습니다." }));
+      } finally { loading = false;refresh.disabled = false; }
     };
     refresh.onclick = load;load();return panel;
   }

@@ -40,31 +40,10 @@ MiniTalk.WindowMode=(()=>{
   const canInstall=()=>Boolean(installEvent);
 
   function fitStandaloneWindow(){
-    const fit=()=>{
-      if(!standalone()||mobileWindow())return;
-      const availW=Math.max(320,screen.availWidth||STANDALONE_BOUNDS.width);
-      const availH=Math.max(520,screen.availHeight||STANDALONE_BOUNDS.height);
-      const width=Math.min(STANDALONE_BOUNDS.width,availW);
-      const height=Math.min(STANDALONE_BOUNDS.height,availH);
-      try{
-        window.resizeTo(width,height);
-        const actualW=Math.max(width,Number(window.outerWidth)||width);
-        const actualH=Math.max(height,Number(window.outerHeight)||height);
-        const margin=14;
-        const left=(Number(screen.availLeft)||0)+Math.max(0,Math.round(availW-actualW-margin));
-        const top=(Number(screen.availTop)||0)+Math.max(0,Math.round(availH-actualH-margin));
-        window.moveTo(left,top);
-      }catch{}
-    };
-    const start=()=>{
-      /* 설치 직후 첫 실행에서는 Chrome이 첫 resizeTo를 무시할 수 있어 짧게 재시도합니다.
-         영구 완료 표식을 저장하지 않아 다음 실행에서도 정상 크기로 복구할 수 있습니다. */
-      requestAnimationFrame(fit);
-      [180,650,1400].forEach(delay=>setTimeout(()=>requestAnimationFrame(fit),delay));
-      addEventListener("pageshow",fit,{once:true});
-    };
-    if(document.readyState==="loading")addEventListener("DOMContentLoaded",start,{once:true});
-    else start();
+    /* v98: 설치형/PWA 메신저 본체의 크기는 사용 중 강제로 바꾸지 않습니다.
+       일부 Chromium 계열에서 지연 resizeTo()가 늦게 적용되어 작업 중 갑자기 폭이
+       줄어드는 현상이 있었으므로, standalone은 브라우저/사용자가 정한 현재 크기를 존중합니다. */
+    return;
   }
 
   function clampNumber(value,min,max,fallback){
@@ -161,8 +140,7 @@ MiniTalk.WindowMode=(()=>{
       return false;
     }
     popupHandle=handle;
-    // window.open 옵션을 느슨하게 처리하는 브라우저에서도 새 기본 폭을 한 번 더 요청합니다.
-    if(!bounds.version)setTimeout(()=>{try{popupHandle?.resizeTo?.(bounds.width,bounds.height)}catch{}},80);
+    // v98: 메신저 본체는 window.open 시 지정한 초기 크기 이후 런타임 resizeTo를 하지 않습니다.
     try{popupHandle.focus()}catch{}
     setTransferredState(true);setLaunchMessage("필요할 때 ‘창 앞으로’를 누르면 메신저를 다시 찾을 수 있어요.");
     watchPopup();

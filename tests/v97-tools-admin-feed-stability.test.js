@@ -4,7 +4,7 @@ const ok=(v,m)=>{if(!v)throw new Error(m)};
 const toolsCss=read('css/features/tools.css'),admin=read('js/features/admin.js'),settings=read('js/features/settings.js'),feed=read('js/features/feed.js'),html=read('index.html'),sw=read('sw.js');
 
 ok(toolsCss.includes('.tools-screen')&&toolsCss.includes('scrollbar-width: none')&&toolsCss.includes('.tools-screen::-webkit-scrollbar')&&toolsCss.includes('display: none'),'tools scrollbar hiding missing');
-ok(read('js/features/tools.js').includes('MiniTalk.UI.DragScroll?.bind?.(list)'),'tools vertical drag must remain enabled');
+ok(read('js/features/tools.js').includes('MiniTalk.UI.DragScroll?.bind?.(list,{allowInteractive:'),'tools vertical interactive drag must remain enabled');
 
 ok(admin.includes('function reserveDesktopAdminPopup(host)'),'admin popup reservation missing');
 ok(admin.includes('sourceView.open("","MoaruAdmin"'),'admin popup must open from active source window');
@@ -17,9 +17,9 @@ ok(feed.includes('if(!sameComments(previous,post))patchComments(id)'),'heart-onl
 ok(feed.includes('draft=oldInput?.value||""')&&feed.includes('nextInput.value=draft'),'comment draft preservation missing');
 ok(feed.includes('doc?.activeElement===oldInput')&&feed.includes('setSelectionRange'),'comment focus/caret preservation missing');
 
-ok(html.includes('css/features/tools.css?v=19'),'tools css cache-bust missing');
+ok(html.includes('css/features/tools.css?v=20'),'tools css cache-bust missing');
 ok(html.includes('js/features/feed.js?v=65.0.21'),'feed cache-bust missing');
 ok(html.includes('js/features/settings.js?v=45'),'settings cache-bust missing');
 ok(html.includes('js/features/admin.js?v=64.5.29'),'admin cache-bust missing');
-ok(sw.includes('moaru-v64.5.57-admin-feed-tools-v97-20260821'),'v97 service worker cache missing');
+ok(sw.includes('moaru-v64.5.59-admin-delivery-reliability-v100-20260821'),'v97 service worker cache missing');
 console.log('V97_TOOLS_ADMIN_FEED_STABILITY_OK');

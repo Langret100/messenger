@@ -10,6 +10,6 @@ ok(rt.includes('async function getRoom(roomId)')&&chats.includes('if(!room?._det
 ok(rules.includes('"roomSummaries"')&&rules.includes('"userRooms"'),'Firebase rules missing summary/index paths');
 ok(css.includes('min-height:calc(100dvh + 72px);overflow-y:auto')&&css.includes('.app-shell{position:sticky;top:0}'),'mobile root scroll allowance missing');
 ok(mobile.includes('touchStartY-y>22')&&mobile.includes('nudgeBrowserChrome()'),'mobile chrome gesture assist missing');
-ok(html.includes('js/adapters/realtime.js?v=64.5.37')&&html.includes('js/adapters/mobile-immersive.js?v=57')&&html.includes('js/features/chats.js?v=64.5.21')&&html.includes('js/app.js?v=64.5.36'),'v5.24 cache versions stale');
-ok(sw.includes('moaru-v64.5.57-admin-feed-tools-v97-20260821')&&app.includes('sw.js?v=64.5.48'),'v5.24 service worker stale');
+ok(html.includes('js/adapters/realtime.js?v=64.5.37')&&html.includes('js/adapters/mobile-immersive.js?v=57')&&html.includes('js/features/chats.js?v=64.5.21')&&html.includes('js/app.js?v=64.5.37'),'v5.24 cache versions stale');
+ok(sw.includes('moaru-v64.5.59-admin-delivery-reliability-v100-20260821')&&app.includes('sw.js?v=64.5.49'),'v5.24 service worker stale');
 console.log('ROOM_SUMMARY_MOBILE_CHROME_OK');

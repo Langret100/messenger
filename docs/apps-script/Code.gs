@@ -508,6 +508,7 @@ function signup_(data) {
   }
   try { CacheService.getScriptCache().remove("moaru-user-directory-v1"); } catch (cacheError) {}
   try { CacheService.getScriptCache().remove("moaru-registered-users-v2"); } catch (cacheError) {}
+  try { if (typeof rememberKnownMoaruUser_ === "function") rememberKnownMoaruUser_(userId); } catch (cacheError) {}
 
   return jsonResponse_({
     ok: true,
@@ -558,6 +559,7 @@ function login_(data) {
       const now = new Date();
       const lastLogin = formatDateTime_(now);
       sheet.getRange(2 + i, 6).setValue(lastLogin);
+      try { if (typeof rememberKnownMoaruUser_ === "function") rememberKnownMoaruUser_(rowUserId); } catch (cacheError) {}
 
       return jsonResponse_({
         ok: true,

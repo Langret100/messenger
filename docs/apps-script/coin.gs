@@ -205,7 +205,7 @@ function handleCoinStatus(e) {
  *    ATTEND_5D    : +1 코인
  *    RANKING_1ST  : +2 코인
  *    QUEST_5CLEAR : +1 코인
- *    WEEKLY_CHECK_OVER80 : +3 코인 (금요일 20문항 80점 초과)
+ *    WEEKLY_CHECK_OVER80 : +3 코인 (금요일 20문항 80점 이상; legacy type name 유지)
  * - 같은 (user_id, reward_type, reward_key) 조합에는 한 번만 지급
  */
 function handleCoinReward(e) {
@@ -240,6 +240,13 @@ function handleCoinReward(e) {
   } else if (type === "QUEST_5CLEAR") {
     delta = 1;
   } else if (type === "WEEKLY_CHECK_OVER80") {
+    // 보상 타입 이름은 기존 로그 호환을 위해 유지하지만 기준은 80점 이상입니다.
+    const weeklyScore = Number(p.score_percent);
+    if (!Number.isFinite(weeklyScore) || weeklyScore < 80 || weeklyScore > 100) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: false, error: "WEEKLY_SCORE_NOT_ELIGIBLE", minimum: 80 }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     delta = 3;
   } else {
     return ContentService
@@ -292,10 +299,11 @@ function handleCoinReward(e) {
     }
   }
 
-  // 실제 코인 증가 처리: 기존 processCoinChange() 재사용
+  // 실제 코인 증가 처리: ScriptLock 안에서 잔액을 먼저 변경합니다.
   let result;
   try {
     result = processCoinChangeUnlocked_(userId, "add", delta);
+    if (!result || result.success !== true) throw new Error("COIN_CHANGE_NOT_APPLIED");
   } catch (err) {
     return ContentService
       .createTextOutput(
@@ -308,12 +316,40 @@ function handleCoinReward(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // 지급 성공 시 로그에 기록
-  const newLastRow = logSheet.getLastRow();
-  const writeRow = newLastRow + 1;
-  logSheet
-    .getRange(writeRow, 1, 1, 5)
-    .setValues([[userId, type, key, delta, new Date()]]);
+  /*
+   * 코인 변경과 보상로그는 한 보상 트랜잭션으로 취급합니다.
+   * 로그 쓰기만 실패한 채 코인이 남으면 같은 reward_key 재시도에서 중복 지급될 수 있으므로
+   * 로그 실패 시 방금 올린 코인을 즉시 되돌립니다. ScriptLock을 이미 보유하므로 unlocked 함수를 사용합니다.
+   */
+  try {
+    const newLastRow = logSheet.getLastRow();
+    const writeRow = newLastRow + 1;
+    logSheet
+      .getRange(writeRow, 1, 1, 5)
+      .setValues([[userId, type, key, delta, new Date()]]);
+  } catch (logError) {
+    let rollbackOk = false;
+    let rollbackMessage = "";
+    try {
+      const rollback = processCoinChangeUnlocked_(userId, "remove", delta);
+      rollbackOk = Boolean(rollback && rollback.success === true);
+      if (!rollbackOk) rollbackMessage = "ROLLBACK_NOT_APPLIED";
+    } catch (rollbackError) {
+      rollbackMessage = String(rollbackError && rollbackError.message ? rollbackError.message : rollbackError);
+      console.error("COIN_REWARD_ROLLBACK_FAILED", rollbackError);
+    }
+    return ContentService
+      .createTextOutput(
+        JSON.stringify({
+          ok: false,
+          error: rollbackOk ? "REWARD_LOG_FAILED" : "REWARD_ROLLBACK_FAILED",
+          retry_safe: rollbackOk,
+          message: String(logError && logError.message ? logError.message : logError),
+          rollback_message: rollbackMessage
+        })
+      )
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 
   const out = {
     ok: true,

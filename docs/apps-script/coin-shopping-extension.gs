@@ -517,6 +517,39 @@ function createPurchasedInventory_(userId, product, purchaseKey) {
   return writeShopInventoryItem_(userId, item);
 }
 
+/*
+ * 구매로그까지 확정됐지만 서버 보관함 쓰기만 일시 실패한 구매를 보존합니다.
+ * 구매 자체를 실패 처리하면 새로고침 후 새 purchase_key로 다시 결제될 수 있으므로,
+ * 이미 차감/로그가 확정된 구매는 pending으로 남기고 shop_inventory 조회 때 재구성합니다.
+ */
+const MOARU_SHOP_PENDING_PURCHASE_PREFIX = "MOARU_SHOP_PENDING_PURCHASE_";
+function pendingShopPurchaseKey_(purchaseKey) {
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(purchaseKey || ""));
+  return MOARU_SHOP_PENDING_PURCHASE_PREFIX + digest.slice(0, 12).map(function (value) { return (value & 255).toString(16).padStart(2, "0"); }).join("");
+}
+function rememberPendingShopPurchase_(userId, product, purchaseKey) {
+  const payload = { userId: String(userId || ""), product: normalizeShopProduct_(product || {}), purchaseKey: String(purchaseKey || ""), createdAt: Date.now() };
+  PropertiesService.getScriptProperties().setProperty(pendingShopPurchaseKey_(purchaseKey), JSON.stringify(payload));
+  return payload;
+}
+function clearPendingShopPurchase_(purchaseKey) {
+  PropertiesService.getScriptProperties().deleteProperty(pendingShopPurchaseKey_(purchaseKey));
+}
+function reconcilePendingShopPurchases_(userId) {
+  const properties = PropertiesService.getScriptProperties(), all = properties.getProperties();
+  Object.keys(all).filter(function (key) { return key.indexOf(MOARU_SHOP_PENDING_PURCHASE_PREFIX) === 0; }).forEach(function (key) {
+    let pending = null;
+    try { pending = JSON.parse(all[key] || "null"); } catch (error) { pending = null; }
+    if (!pending || String(pending.userId || "") !== String(userId || "") || !pending.purchaseKey) return;
+    try {
+      createPurchasedInventory_(userId, pending.product || {}, pending.purchaseKey);
+      properties.deleteProperty(key);
+    } catch (error) {
+      console.warn("SHOP_PENDING_INVENTORY_RETRY_FAILED", pending.purchaseKey, error);
+    }
+  });
+}
+
 /** 구형 상품별 Script Properties를 새 보관함 시트로 안전하게 옮깁니다. */
 function migrateLegacyShopInventoryToSheetOnce() {
   const lock = LockService.getScriptLock();if (!lock.tryLock(10000)) throw new Error("SHOP_BUSY");
@@ -555,6 +588,8 @@ function requireRegisteredShopUser_(userId, registeredUsers) {
 function handleShopInventory(e) {
   const userId = requireRegisteredShopUser_(((e && e.parameter) || {}).user_id);
   if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  // 결제/구매로그는 확정됐지만 서버 보관함 쓰기만 실패한 건이 있으면 먼저 복구합니다.
+  reconcilePendingShopPurchases_(userId);
   return shopJson_({ ok: true, items: readShopInventory_(userId) });
 }
 
@@ -1192,6 +1227,7 @@ function handleShopPurchase(e) {
       }
       const currentProduct = readShopCatalog_()[productId] || {}, duplicateProduct = normalizeShopProduct_(Object.assign({}, currentProduct, { id: productId, name: duplicate.productName || currentProduct.name || "상품", price: duplicate.price || currentProduct.price || 1 }));
       const duplicateItem = createPurchasedInventory_(userId, duplicateProduct, purchaseKey);
+      clearPendingShopPurchase_(purchaseKey);
       return shopJson_({ ok: true, applied: false, reason: "ALREADY_PURCHASED", newCoin: duplicate.newCoin, item: duplicateItem });
     }
 
@@ -1235,7 +1271,21 @@ function handleShopPurchase(e) {
       return shopJson_({ ok: false, error: "PURCHASE_LOG_FAILED" });
     }
 
-    const inventoryItem = createPurchasedInventory_(userId, product, purchaseKey);
+    let inventoryItem = null, inventoryPending = false;
+    try {
+      inventoryItem = createPurchasedInventory_(userId, product, purchaseKey);
+      clearPendingShopPurchase_(purchaseKey);
+    } catch (inventoryError) {
+      /*
+       * 여기까지 왔으면 코인 차감 + 구매로그는 이미 성공했습니다.
+       * 이 상태를 구매 실패로 응답하면 사용자가 새 purchase_key로 다시 결제할 수 있으므로
+       * 구매는 성공으로 확정하고 서버 보관함만 재시도 큐에 남깁니다.
+       */
+      inventoryPending = true;
+      try { rememberPendingShopPurchase_(userId, product, purchaseKey); }
+      catch (pendingError) { console.error("SHOP_PENDING_PURCHASE_SAVE_FAILED", pendingError); }
+      console.error("SHOP_INVENTORY_WRITE_DEFERRED", purchaseKey, inventoryError);
+    }
     return shopJson_({
       ok: true,
       applied: true,
@@ -1243,7 +1293,8 @@ function handleShopPurchase(e) {
       product_name: product.name,
       price: product.price,
       newCoin: result.newCoin,
-      item: inventoryItem
+      item: inventoryItem,
+      inventory_pending: inventoryPending
     });
   } catch (error) {
     const message = String(error && error.message ? error.message : error);

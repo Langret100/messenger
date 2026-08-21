@@ -14,5 +14,5 @@ ok(api.missionSubject(new Date('2026-09-03T12:00:00'))==='수학','third week mu
 // makeQuestions uses current Date, so verify source guarantees TOTAL=20 and each branch emits only one subject.
 ok(src.includes('for(let i=0;i<TOTAL;i++)')&&src.includes('rows.push(q("수학"'),'Math week does not generate 20 math rows');
 ok(src.includes('shuffle(korBank,r).slice(0,TOTAL)')&&src.includes('rows.push(q("국어"'),'Korean week does not generate 20 Korean rows');
-const html=fs.readFileSync(path.join(root,'index.html'),'utf8');ok(html.includes('friday-grade6-mission.js?v=65.0.5'),'Friday mission cache version stale');
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');ok(html.includes('friday-grade6-mission.js?v=65.0.6'),'Friday mission cache version stale');
 console.log('FRIDAY_ALTERNATING_SUBJECT_OK');

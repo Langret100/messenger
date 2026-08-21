@@ -8,7 +8,7 @@ ok(tools.includes('allowInteractive:".profile-summary,.modern-tool,.shortcut-row
 ok(!tools.includes('documentMouseDrag:true'),'tools must use the same default pointer drag path as tasks');
 ok(drag.includes('doc.addEventListener("mousemove",move,{passive:false})'),'document mousemove drag path missing');
 ok(wm.includes('preferInitialWindowPlacement:true'),'PiP must prefer requested initial placement/size');
-ok(wm.includes('pipWindow.resizeTo?.(PIP_BOUNDS.width,PIP_BOUNDS.height)'),'PiP one-shot immediate size correction missing');
-ok(!wm.includes('setTimeout(()=>pipWindow')&&!wm.includes('[80,260,700]'),'PiP delayed resize must not return');
-ok(html.includes('drag-scroll.js?v=11')&&html.includes('tools.js?v=64.5.6')&&html.includes('window-mode.js?v=64.5.38'),'v101 cache refs stale');
+ok(!wm.includes('pipWindow.resizeTo?.(')&&!wm.includes('resizeTo(PIP_BOUNDS.width'),'PiP must not resize after requestWindow');
+ok(wm.includes('body{visibility:hidden!important}')&&wm.includes('await copyStyles(doc)')&&wm.includes('boot.remove()'),'PiP single-paint boot guard missing');
+ok(html.includes('drag-scroll.js?v=11')&&html.includes('tools.js?v=64.5.6')&&html.includes('window-mode.js?v=64.5.40'),'v101 cache refs stale');
 console.log('V101_TOOLS_PIP_REAL_FIX_OK');

@@ -126,7 +126,7 @@ MiniTalk.Features.Shopping = (() => {
   function closeRandomOverlay() {
     if (!randomOverlay) return;
     const state=randomOverlay.__state||{};
-    (state.timers||[]).forEach(clearTimeout); if(state.interval)clearInterval(state.interval);
+    (state.timers||[]).forEach(clearTimeout); if(state.interval)clearInterval(state.interval);try{state.rollAnimation?.cancel?.()}catch{}
     randomOverlay.classList.add("leaving");
     setTimeout(()=>{ randomOverlay?.remove(); randomOverlay=null; }, 240);
   }
@@ -164,72 +164,76 @@ MiniTalk.Features.Shopping = (() => {
     ]);
     const windowEl=D.el("div", { class:"shop-random-window" });
     const strip=D.el("div", { class:"shop-random-strip" });
-    const hint=D.el("div", { class:"shop-random-tap" });
+    const tap=D.el("div", { class:"shop-random-tap" }, [D.el("strong",{text:"눌러서 뽑기"}),D.el("small",{text:"3코인 · 한 번 뽑기"})]);
+    const status=D.el("div", { class:"shop-random-status" }, [D.el("strong",{text:""}),D.el("small",{text:""})]);
     const footer=D.el("small",{class:"shop-random-foot",text:`현재 ${products.length}개 상품 중 하나가 나와요`});
-    windowEl.append(strip,hint); card.append(top,windowEl,footer); overlay.append(card);
-    const state={phase:cachedBalance<RANDOM_COST?"insufficient":"ready",products,timers:[],interval:0,result:null,winner:null,finishing:false,resultId:""};
+    windowEl.append(strip,tap); card.append(top,windowEl,status,footer); overlay.append(card);
+    const state={phase:cachedBalance<RANDOM_COST?"insufficient":"ready",products,timers:[],result:null,winner:null,resultId:"",rollAnimation:null,startedAt:0,settling:false,fastRequested:false};
     overlay.__state=state; randomOverlay=overlay;
 
-    const cellHeight=()=>Math.max(1,windowEl.clientHeight||390);
-    const paintOne=product=>{const cell=randomProductCell(product,true);strip.replaceChildren(cell);cell.style.height=`${cellHeight()}px`;};
-    const setHint=(title,sub="")=>hint.replaceChildren(D.el("strong",{text:title}),...(sub?[D.el("small",{text:sub})]:[]));
-    const showInsufficient=()=>{
-      state.phase="insufficient"; overlay.classList.remove("spinning","result","error"); overlay.classList.add("insufficient");
-      strip.replaceChildren(); setHint("코인이 부족해요","눌러서 닫기");
+    const setStatus=(title="",sub="")=>{status.querySelector("strong").textContent=title;status.querySelector("small").textContent=sub;status.classList.toggle("active",Boolean(title||sub));};
+    const randomProduct=()=>products[Math.floor(Math.random()*products.length)];
+    const cellHeight=()=>Math.max(96,windowEl.clientHeight/3);
+    const sizeCells=()=>{const h=cellHeight();strip.querySelectorAll(".shop-random-reel-cell").forEach(el=>el.style.height=`${h}px`);return h;};
+    const seedReel=()=>{
+      const seq=Array.from({length:7},randomProduct);strip.replaceChildren(...seq.map(randomProductCell));
+      const h=sizeCells();strip.style.transform=`translateY(${-2*h}px)`;
     };
-    paintOne({name:"?"});
-    if(state.phase==="insufficient")showInsufficient(); else setHint("눌러서 뽑기","3코인 · 1회");
-    doc.body.append(overlay);
-    requestAnimationFrame(()=>{overlay.classList.add("show");if(state.phase==="ready")paintOne({name:"?"});});
+    const showInsufficient=()=>{
+      state.phase="insufficient";try{state.rollAnimation?.cancel?.()}catch{};state.rollAnimation=null;
+      overlay.classList.remove("spinning","result","error");overlay.classList.add("insufficient");strip.replaceChildren();tap.replaceChildren(D.el("strong",{text:"코인이 부족해요"}),D.el("small",{text:"화면을 누르면 닫혀요"}));setStatus();
+    };
+    seedReel();
+    if(state.phase==="insufficient")showInsufficient();
+    doc.body.append(overlay);requestAnimationFrame(()=>overlay.classList.add("show"));
 
-    // 화면은 즉시 열고, 서버 잔액 확인은 뒤에서 보정합니다. 구매 순간에는 서버가 다시 검증합니다.
     MiniTalk.Economy.CoinWallet.refresh(true).then(balance=>{if(randomOverlay!==overlay||state.phase!=="ready")return;if(Number(balance)<RANDOM_COST)showInsufficient()}).catch(()=>{});
 
-    const beginSpin=()=>{
-      if(state.phase!=="ready")return;
-      state.phase="spinning";overlay.classList.add("spinning");setHint("뽑는 중…");
-      randomWhoosh();let i=0;
-      state.interval=setInterval(()=>{
-        const p=products[i++%products.length];paintOne(p);strip.classList.remove("pulse");void strip.offsetWidth;strip.classList.add("pulse");randomTick();
-      },76);
+    const buildRollingStrip=()=>{
+      const seq=Array.from({length:90},randomProduct);strip.replaceChildren(...seq.map(randomProductCell));
+      const h=sizeCells();strip.style.transform="translateY(0px)";
+      return h;
     };
-
+    const startRolling=()=>{
+      const h=buildRollingStrip();state.startedAt=performance.now();state.phase="spinning";overlay.classList.add("spinning");tap.classList.add("hidden");setStatus("돌아가는 중","한 번 더 누르면 바로 뽑아요");randomWhoosh();
+      const distance=h*72;
+      state.rollAnimation=strip.animate([{transform:"translateY(0px)"},{transform:`translateY(${-distance}px)`}],{duration:9000,easing:"linear",fill:"forwards"});
+      for(let i=0;i<34;i++)state.timers.push(setTimeout(randomTick,60+i*92));
+    };
     const movePrizeToInventory=()=>{
-      if(state.phase!=="result")return;
-      state.phase="closing";
-      const prize=windowEl.querySelector(".shop-random-reel-cell.active")||windowEl.querySelector(".shop-random-reel-cell:last-child");
-      prize?.classList.add("fly-to-inventory");overlay.classList.add("prize-leaving");randomArrivalId=state.resultId||"";
-      state.timers.push(setTimeout(()=>{closeRandomOverlay();inventoryOpen=true;const host=MiniTalk.UI.Dom.byId("viewHost");if(host&&MiniTalk.Store.get("route")==="shopping")render(host,{animate:false,refreshCatalog:false});setTimeout(()=>{randomArrivalId="";},1800)},520));
+      if(state.phase!=="result")return;state.phase="closing";
+      const prize=windowEl.querySelector(".shop-random-reel-cell.active");prize?.classList.add("fly-to-inventory");overlay.classList.add("prize-leaving");randomArrivalId=state.resultId||"";
+      state.timers.push(setTimeout(()=>{closeRandomOverlay();inventoryOpen=true;const host=MiniTalk.UI.Dom.byId("viewHost");if(host&&MiniTalk.Store.get("route")==="shopping")render(host,{animate:false,refreshCatalog:false});setTimeout(()=>{randomArrivalId="";},1800)},560));
     };
-
     const showWinner=()=>{
-      if(state.phase==="result"||state.phase==="closing")return;
-      state.phase="result";randomBrake();randomFanfare();overlay.classList.remove("spinning");overlay.classList.add("result");
-      setHint(state.winner?.name||"당첨!","보관함에 넣는 중…");randomConfetti(doc,overlay);state.resultId=state.result?.item?.id||"";state.timers.push(setTimeout(movePrizeToInventory,1350));
+      if(state.phase==="result"||state.phase==="closing")return;state.phase="result";randomBrake();randomFanfare();overlay.classList.remove("spinning");overlay.classList.add("result");
+      setStatus(state.winner?.name||"당첨!","보관함으로 이동 중");randomConfetti(doc,overlay);state.resultId=state.result?.item?.id||"";state.timers.push(setTimeout(movePrizeToInventory,1100));
     };
-
-    const settle=()=>{
-      if(state.finishing||!state.result)return;
-      state.finishing=true;if(state.interval){clearInterval(state.interval);state.interval=0;}
+    const settle=(fast=false)=>{
+      if(state.settling||!state.result)return;state.settling=true;try{state.rollAnimation?.cancel?.()}catch{};state.rollAnimation=null;
       const winner=state.result.product||products.find(p=>p.id===state.result.product_id)||{name:state.result.product_name||"상품",imageUrl:state.result.product_image_url||""};state.winner=winner;
-      const seq=[];for(let i=0;i<26;i++)seq.push(products[Math.floor(Math.random()*products.length)]);seq.push(winner);
-      strip.style.transition="none";strip.style.transform="translateY(0)";strip.replaceChildren(...seq.map((p,i)=>randomProductCell(p,i===seq.length-1)));void strip.offsetHeight;
-      const h=cellHeight();strip.querySelectorAll(".shop-random-reel-cell").forEach(el=>el.style.height=`${h}px`);
-      const target=-(seq.length-1)*h,duration=2.65;strip.style.transition=`transform ${duration}s cubic-bezier(.10,.72,.18,1)`;requestAnimationFrame(()=>strip.style.transform=`translateY(${target}px)`);
-      for(let i=0;i<21;i++){const progress=i/21;state.timers.push(setTimeout(randomTick,(duration*1000)*(progress*progress*.88)));}
-      state.timers.push(setTimeout(showWinner,duration*1000+80));
+      const seq=Array.from({length:10},randomProduct);const winnerIndex=seq.length;seq.push(winner,randomProduct());
+      strip.replaceChildren(...seq.map((p,i)=>randomProductCell(p,i===winnerIndex)));const h=sizeCells();strip.style.transform="translateY(0px)";void strip.offsetHeight;
+      const target=-(winnerIndex-1)*h,duration=fast?420:820;strip.style.transition=`transform ${duration}ms cubic-bezier(.12,.72,.16,1)`;requestAnimationFrame(()=>strip.style.transform=`translateY(${target}px)`);
+      const ticks=fast?8:14;for(let i=0;i<ticks;i++){const progress=i/ticks;state.timers.push(setTimeout(randomTick,duration*(progress*progress*.88)));}
+      state.timers.push(setTimeout(showWinner,duration+70));
+    };
+    const scheduleNormalSettle=()=>{
+      if(!state.result||state.settling)return;const elapsed=performance.now()-state.startedAt,wait=Math.max(0,2680-elapsed);state.timers.push(setTimeout(()=>settle(false),wait));
+    };
+    const requestPurchase=async()=>{
+      try{state.result=await Service.randomPurchase();if(state.fastRequested)settle(true);else scheduleNormalSettle();}
+      catch(error){
+        try{state.rollAnimation?.cancel?.()}catch{};state.rollAnimation=null;state.timers.forEach(clearTimeout);state.timers=[];overlay.classList.remove("spinning");tap.classList.remove("hidden");
+        if(error?.code==="INSUFFICIENT_COIN")showInsufficient();
+        else{state.phase="error";overlay.classList.add("error");strip.replaceChildren();tap.replaceChildren(D.el("strong",{text:"추첨하지 못했어요"}),D.el("small",{text:"화면을 누르면 닫혀요"}));setStatus();MiniTalk.UI.Shell.toast(error?.message||"랜덤구매에 실패했습니다.");}
+      }
     };
 
-    overlay.addEventListener("click",async()=>{
+    overlay.addEventListener("click",()=>{
       if(state.phase==="insufficient"||state.phase==="error"){closeRandomOverlay();return;}
-      if(state.phase!=="ready")return;
-      beginSpin();
-      try{state.result=await Service.randomPurchase();settle();}
-      catch(error){
-        if(state.interval){clearInterval(state.interval);state.interval=0;}state.timers.forEach(clearTimeout);state.timers=[];state.finishing=false;strip.style.transition="none";overlay.classList.remove("spinning");
-        if(error?.code==="INSUFFICIENT_COIN")showInsufficient();
-        else{state.phase="error";overlay.classList.add("error");strip.replaceChildren();setHint("추첨하지 못했어요","눌러서 닫기");MiniTalk.UI.Shell.toast(error?.message||"랜덤구매에 실패했습니다.");}
-      }
+      if(state.phase==="ready"){startRolling();requestPurchase();return;}
+      if(state.phase==="spinning"&&!state.settling){state.fastRequested=true;setStatus("빠르게 뽑는 중","잠깐만!");if(state.rollAnimation)state.rollAnimation.playbackRate=3.2;if(state.result)settle(true);}
     });
   }
 

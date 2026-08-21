@@ -157,13 +157,21 @@ MiniTalk.WindowMode=(()=>{
     popupHandle=null;updatePopupControls(false);setTransferredState(false);setLaunchMessage("모아루 창을 닫았습니다.");
   }
 
-  function copyStyles(doc){
+  async function copyStyles(doc){
+    const css=[],wait=[];
     for(const sheet of document.styleSheets){
       try{
-        if(sheet.href){const link=doc.createElement("link");link.rel="stylesheet";link.href=sheet.href;doc.head.append(link)}
-        else{const style=doc.createElement("style");style.textContent=[...sheet.cssRules].map(rule=>rule.cssText).join("\n");doc.head.append(style)}
-      }catch(error){console.warn("PiP 스타일 복사 실패",error)}
+        const rules=[...sheet.cssRules].map(rule=>rule.cssText).join("\n");
+        if(rules)css.push(rules);
+      }catch(error){
+        if(sheet.href){
+          const link=doc.createElement("link");link.rel="stylesheet";link.href=sheet.href;
+          wait.push(new Promise(resolve=>{link.onload=resolve;link.onerror=resolve}));doc.head.append(link);
+        }else console.warn("PiP 스타일 복사 실패",error);
+      }
     }
+    if(css.length){const style=doc.createElement("style");style.dataset.pipSnapshot="1";style.textContent=css.join("\n");doc.head.append(style)}
+    if(wait.length)await Promise.all(wait);
   }
   function restoreNodes(){
     if(!movedNodes.length)return;
@@ -179,27 +187,26 @@ MiniTalk.WindowMode=(()=>{
     MiniTalk.UI.Shell?.resetWorkspaceSession?.();
     setTimeout(()=>MiniTalk.Features.Auth?.returnToLogin?.(),0);
   }
-  /* Document PiP 크기는 requestWindow()에서 한 번만 요청합니다.
-     열린 뒤 resizeTo()를 지연 반복하면 사용 중 레이아웃이 갑자기 줄어드는 것처럼
-     보일 수 있으므로 런타임 강제 리사이즈는 하지 않습니다. */
+  /* Document PiP 크기는 requestWindow()에서 딱 한 번 요청합니다.
+     열린 뒤에는 resizeTo()를 전혀 호출하지 않고, 스타일과 앱 DOM을 숨긴 상태에서
+     준비한 다음 한 프레임에 공개해 초기 재배치가 눈에 보이지 않게 합니다. */
   async function openPiP(){
     if(!window.documentPictureInPicture)return false;
     if(pipWindow&&!pipWindow.closed){pipWindow.focus();return true}
     pipWindow=await documentPictureInPicture.requestWindow({...PIP_BOUNDS,preferInitialWindowPlacement:true,disallowReturnToOpener:true});
-    /* v101: Chromium이 이전 PiP 크기를 재사용하는 경우를 막기 위해 생성 직후 한 번만 보정합니다.
-       지연 timer 재보정은 사용 중 폭 축소를 만들 수 있으므로 절대 사용하지 않습니다. */
-    try{pipWindow.resizeTo?.(PIP_BOUNDS.width,PIP_BOUNDS.height)}catch(_){}
-    const doc=pipWindow.document,meta=doc.createElement("meta"),base=doc.createElement("base");
+    const doc=pipWindow.document,meta=doc.createElement("meta"),base=doc.createElement("base"),boot=doc.createElement("style");
     meta.name="viewport";meta.content="width=device-width,initial-scale=1,viewport-fit=cover";base.href=document.baseURI;
-    doc.head.append(meta,base);doc.title=MiniTalkConfig.appName;
-    copyStyles(doc);
+    boot.dataset.pipBoot="1";boot.textContent="html,body{margin:0;background:#fff}body{visibility:hidden!important}";
+    doc.head.append(meta,base,boot);doc.title=MiniTalkConfig.appName;
+    await copyStyles(doc);
     movedNodes=["appShell","toastHost","notificationHost","overlayHost","modalHost"].map(id=>document.getElementById(id)).filter(Boolean);
-    /* 기존 문서의 잠금 레이어는 별도 body 자식이라 자동 이동되지 않습니다. */
     document.getElementById("hardLock")?.remove();
     for(const node of movedNodes)doc.body.append(node);
     MiniTalk.Store.set("rootDocument",doc);MiniTalk.Features.Layout?.apply?.();MiniTalk.Features.Admin?.applyStoredLock?.();
     pipWindow.addEventListener("pagehide",()=>{restoreNodes();pipWindow=null},{once:true});
     await MiniTalk.UI.Shell.showApp();
+    await new Promise(resolve=>pipWindow.requestAnimationFrame(()=>resolve()));
+    boot.remove();
     setTransferredState(true);updatePopupControls(false);setLaunchMessage("메신저는 항상 위 창에서 계속 실행됩니다.");
     return true;
   }

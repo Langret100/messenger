@@ -8,7 +8,6 @@ MiniTalk.Registry = (() => {
       throw new Error(`중복 기능 ID: ${feature.id}`);
     }
     features.push(feature);
-    try { MiniTalk.Events?.emit?.("registry:changed", { id: feature.id }); } catch (_) {}
     return feature;
   }
 

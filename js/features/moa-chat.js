@@ -16,7 +16,7 @@
    대화 화면에 보이는 누적 내역은 서버가 아니라 IndexedDB(DataCache)에만 저장합니다.
    ============================================================ */
 MiniTalk.Features.MoaChat=(()=>{
-  let busy=false,live=null,proactiveTimer=0,connectionGreetingChecked=false,lastHiddenAt=0;const listNodes=new Set();
+  let busy=false,live=null,proactiveTimer=0,connectionGreetingChecked=false,lastHiddenAt=0;const listNodes=new Set(),historyWrites=new Map();
   function D(){return MiniTalk.UI.Dom}
   function listItem(){
     const Dom=D(), node=Dom.el("button",{class:"conversation-item conversation-enter moa-chat-list-item",type:"button","data-room-id":"__moa_ai__","data-tone":"2","data-unread":"0","data-favorite":"0","data-member":"1","data-room-type":"ai","data-has-message":"1"},[
@@ -30,6 +30,7 @@ MiniTalk.Features.MoaChat=(()=>{
   function legacyHistoryKey(){return`moa.chat.history.${cacheKey()}`}
   async function history(){
     const key=cacheKey();
+    const pending=historyWrites.get(key);if(pending)await pending.catch(()=>{});
     const cached=await MiniTalk.DataCache?.get?.("moa-chat-history",key,null);
     if(Array.isArray(cached))return cached;
     /* v73의 localStorage 대화내역이 있으면 한 번만 IndexedDB로 옮겨 기존 대화를 보존합니다. */
@@ -37,8 +38,15 @@ MiniTalk.Features.MoaChat=(()=>{
     if(Array.isArray(legacy)&&legacy.length){await MiniTalk.DataCache?.put?.("moa-chat-history",key,legacy);MiniTalk.Persistence.remove(legacyHistoryKey());return legacy}
     return [];
   }
-  function saveHistory(list){MiniTalk.DataCache?.put?.("moa-chat-history",cacheKey(),list.slice(-120)).catch?.(()=>{})}
-  function appendMessage(list,role,text,meta={}){const msg={id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,role,text,ts:Date.now(),...meta};list.push(msg);saveHistory(list);return msg}
+  function saveHistory(list){
+    const key=cacheKey(),snapshot=list.slice(-120);
+    const previous=historyWrites.get(key)||Promise.resolve();
+    const write=previous.catch(()=>{}).then(()=>MiniTalk.DataCache?.put?.("moa-chat-history",key,snapshot));
+    historyWrites.set(key,write);
+    write.finally(()=>{if(historyWrites.get(key)===write)historyWrites.delete(key)}).catch(()=>{});
+    return write;
+  }
+  function appendMessage(list,role,text,meta={}){const msg={id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,role,text,ts:Date.now(),...meta};list.push(msg);msg.persisted=saveHistory(list);return msg}
   function lastUserAt(messages){const m=[...messages].reverse().find(v=>v.role==="user");return Number(m?.ts||0)}
   function unreadCount(messages){return messages.filter(v=>v.role==="assistant"&&v.source==="proactive"&&v.unread===true).length}
   function updateListNode(node,messages){
@@ -53,12 +61,14 @@ MiniTalk.Features.MoaChat=(()=>{
   async function maybeCreateProactive(messages){
     if(document.querySelector?.(".moa-chat-room"))return null;await evaluateIgnored(messages);
     const planned=MiniTalk.AI.MoaCommunicationEngine.maybeInitiate?.({now:Date.now(),lastUserAt:lastUserAt(messages),hasUnreadProactive:unreadCount(messages)>0});if(!planned?.reply)return null;
-    const msg=appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:planned.type||"general",initiativeTopic:planned.topic||"",unread:true});return msg;
+    const msg=appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:planned.type||"general",initiativeTopic:planned.topic||"",unread:true});
+    await msg.persisted;return msg;
   }
   async function maybeCreateConnectionGreeting(messages){
     if(document.querySelector?.(".moa-chat-room")||unreadCount(messages)>0)return null;
     const planned=MiniTalk.AI.MoaCommunicationEngine.maybeConnectionGreeting?.({now:Date.now(),lastUserAt:lastUserAt(messages),hasUnreadProactive:false});if(!planned?.reply)return null;
-    return appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:"greeting",initiativeTopic:planned.topic||"",unread:true});
+    const msg=appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:"greeting",initiativeTopic:planned.topic||"",unread:true});
+    await msg.persisted;return msg;
   }
   async function refreshProactive(node=null,options={}){
     const messages=await history();let created=null;

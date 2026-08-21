@@ -2,5 +2,5 @@ const fs=require('fs'),path=require('path');const root=path.resolve(__dirname,'.
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 ok(/\.shop-price\s*\{[^}]*font-size:\s*12px/.test(css),'desktop shop price is still too small');
 ok(/@media[\s\S]*\.shop-price\s*\{[^}]*font-size:\s*11px/.test(css),'small-screen shop price is still too small');
-ok(html.includes('shopping-store.css?v=64.5.14'),'shop price cache ref stale');
+ok(html.includes('shopping-store.css?v=64.5.15'),'shop price cache ref stale');
 console.log('SHOP_PRICE_READABILITY_OK');

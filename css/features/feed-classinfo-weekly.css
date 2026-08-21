@@ -65,6 +65,7 @@
 @media(max-width:520px){.friday-answer-compare{grid-template-columns:1fr}.friday-wrong-toggle{padding:10px}.friday-wrong-detail{padding:0 10px 10px}}
 
 /* 주간 미션 카드: 상태/반응형 규칙을 이 블록 하나에서 관리합니다. */
+.task-center-view>.card-list{grid-auto-rows:max-content;align-content:start}
 .friday-mission-card{
   position:relative;
   margin-bottom:12px;
@@ -78,7 +79,9 @@
   grid-template-columns:minmax(0,1fr) auto;
   align-items:center;
   gap:12px;
-  min-height:108px;
+  min-height:max-content;
+  height:max-content;
+  align-self:start;
   padding:14px 15px;
   border-color:color-mix(in srgb,var(--accent) 16%,var(--line));
   background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 5%,var(--surface)),var(--surface));
@@ -108,7 +111,7 @@
 
 /* 340px 이하에서는 옆칸을 억지로 유지하지 않고 버튼을 아래로 내려 카드가 찌그러지지 않게 합니다. */
 @media(max-width:340px){
-  .friday-mission-card.open:not(.quest-compact){grid-template-columns:1fr;gap:10px;min-height:0;padding:12px 11px}
+  .friday-mission-card.open:not(.quest-compact){grid-template-columns:1fr;gap:10px;min-height:max-content;height:max-content;padding:12px 11px}
   .friday-mission-card.open:not(.quest-compact) .friday-mission-copy{gap:4px}
   .friday-mission-card.open:not(.quest-compact) .friday-mission-copy>strong{font-size:13px}
   .friday-mission-card.open:not(.quest-compact) .friday-mission-meta{gap:4px;font-size:8px}

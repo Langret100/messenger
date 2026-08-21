@@ -128,6 +128,13 @@ MiniTalk.Tools.TarotView = (() => {
 
   function renderResult(stage, result, returning) {
     const D = MiniTalk.UI.Dom;
+    if (activeOverlay) {
+      activeOverlay.classList.add("result-open");
+      activeOverlay.onclick = event => {
+        event.preventDefault();
+        close();
+      };
+    }
     const wrap = D.el("div", {
       class: `tarot-result ${returning ? "returning" : "fresh"}`,
       role: "button",

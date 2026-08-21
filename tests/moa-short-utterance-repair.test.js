@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const src=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('moa-communication-engine.js?v=15'),'engine cache bust v9 missing');
+ok(html.includes('moa-communication-engine.js?v=16'),'engine cache bust v9 missing');
 const store={user:{user_id:'u1'}},persist=new Map();
 const ctx={console,MiniTalk:{AI:{},Store:{get:k=>store[k]},Persistence:{get:(k,d)=>persist.has(k)?persist.get(k):d,set:(k,v)=>persist.set(k,v),remove:k=>persist.delete(k)},AuthApi:{}}};
 vm.createContext(ctx);vm.runInContext(src,ctx);

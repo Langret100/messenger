@@ -5,6 +5,7 @@ MiniTalk.AuthApi = (() => {
     ADMIN_CODE_NOT_CONFIGURED: "서버에 관리자 고유 코드가 설정되지 않았습니다.",
     ADMIN_SESSION_EXPIRED: "관리자 인증 시간이 만료되었습니다. 다시 인증해주세요.",
     ADMIN_AUTH_REQUIRED: "관리자 인증이 필요합니다.",
+    SHOP_MANAGER_PERMISSION_REQUIRED: "쇼핑몰 관리자 권한이 필요합니다.",
     LOGIN_REQUIRED: "로그인 후 이용할 수 있어요.",
     INSUFFICIENT_COIN: "코인이 부족합니다.",
     PRICE_CHANGED: "상품 가격이 변경되었습니다. 쇼핑 화면을 다시 열어주세요.",
@@ -50,7 +51,11 @@ MiniTalk.AuthApi = (() => {
         signal: controller.signal
       });
     } catch (error) {
-      if (error?.name === "AbortError") throw new Error("서버 응답이 지연되고 있습니다. 잠시 후 다시 시도하세요.");
+      if (error?.name === "AbortError") {
+        const timeoutError = new Error("서버 응답이 지연되고 있습니다. 잠시 후 다시 시도하세요.");
+        timeoutError.code = "REQUEST_TIMEOUT";
+        throw timeoutError;
+      }
       throw error;
     } finally {
       clearTimeout(timer);

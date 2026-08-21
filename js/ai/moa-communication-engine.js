@@ -37,11 +37,16 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     formality: .18,
     punctuationAffinity: .20,
     slang: .20,
-    lowEffort: .12
+    lowEffort: .12,
+    roughStreak: 0,
+    kindness: .50,
+    gratitude: .20,
+    hostility: .06,
+    mannerTurns: 0
   });
 
   const ctxByUser = new Map(), stateByUser = new Map(), learnedByUser = new Map();
-  const policyByUser = new Map(), profileByUser = new Map(), memoriesByUser = new Map();
+  const policyByUser = new Map(), expressionByUser = new Map(), profileByUser = new Map(), memoriesByUser = new Map();
   const recentChoices = new Map(), syncAt = new Map(), syncVersion = new Map();
   const commitQueues = new Map(), commitTimers = new Map(), rpsByUser = new Map();
 
@@ -78,6 +83,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     e.lastChanceAt=Number(e.lastChanceAt||0);
     e.lastGreetingAt=Number(e.lastGreetingAt||0);
     e.lastGreetingAttemptAt=Number(e.lastGreetingAttemptAt||0);
+    e.lastMannerDiscoveryAt=Number(e.lastMannerDiscoveryAt||0);
     e.lastReadAt=Number(e.lastReadAt||0);
     e.lastUserAt=Number(e.lastUserAt||0);
     e.ignoredStreak=Math.max(0,Math.min(6,Number(e.ignoredStreak||0)));
@@ -128,13 +134,26 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const slang=/(ㅋㅋ|ㅎㅎ|ㄹㅇ|ㅇㅇ|ㄴㄴ|ㅈㄴ|개웃|개좋|개빡)/i.test(t);
     const low=pun||t.length<=4||/^(응|ㅇㅇ|ㄴㄴ|몰라|그냥|됐어|귀찮아|ㅋ+|ㅎ+)$/.test(c);
     const step=.035;
-    p.roughness=clamp(Number(p.roughness||.12)+(profanity?step*1.8:-step*.10));
-    p.formality=clamp(Number(p.formality||.18)+(polite?step*1.2:-step*.10));
-    p.slang=clamp(Number(p.slang||.20)+(slang?step:-step*.08));
-    p.punctuationAffinity=clamp(Number(p.punctuationAffinity||.20)+(pun?step*1.4:-step*.07));
-    p.lowEffort=clamp(Number(p.lowEffort||.12)+(low?step:-step*.10));
+    const directed=DIRECTED_ABUSE.test(t);
+    const streak=Math.max(0,Math.min(24,Number(p.roughStreak||0)));
+    // Rough language is a LOCAL style preference only. Repeated casual profanity
+    // raises the preference faster, while clean/polite turns cool it down slowly.
+    p.roughStreak=profanity&&!directed?Math.min(24,streak+1):Math.max(0,streak-(polite?2:1));
+    const streakBoost=profanity&&!directed?Math.min(.035,Number(p.roughStreak||0)*.0025):0;
+    p.roughness=clamp(Number(p.roughness??.12)+(profanity?(step*1.8+streakBoost):-step*(polite?.24:.12)));
+    p.formality=clamp(Number(p.formality??.18)+(polite?step*1.2:-step*.10));
+    p.slang=clamp(Number(p.slang??.20)+(slang?step:-step*.08));
+    p.punctuationAffinity=clamp(Number(p.punctuationAffinity??.20)+(pun?step*1.4:-step*.07));
+    p.lowEffort=clamp(Number(p.lowEffort??.12)+(low?step:-step*.10));
+    const gratitude=/(고마워|고맙|감사|땡큐|thanks|ㄱㅅ)/i.test(t);
+    const considerate=/(괜찮아|괜찮아요|부탁|미안|죄송|수고|잘했|좋아요|좋네|도와줘서|덕분)/i.test(t);
+    const hostile=directed||/(꺼져|닥쳐|죽어|싫어.*너|너.*싫어|한심|등신|멍청)/i.test(t);
+    p.kindness=clamp(Number(p.kindness??.50)+(gratitude?.030:0)+(considerate?.018:0)+(polite?.010:0)-(hostile?.055:0)-(!hostile&&!gratitude&&!considerate?.0015:0));
+    p.gratitude=clamp(Number(p.gratitude??.20)+(gratitude?.040:-.0015));
+    p.hostility=clamp(Number(p.hostility??.06)+(hostile?.065:-.006));
+    p.mannerTurns=Math.max(0,Number(p.mannerTurns||0)+1);
     saveProfile();
-    return {pun,profanity,polite,slang,low,directed:DIRECTED_ABUSE.test(t)};
+    return {pun,profanity,polite,slang,low,directed,gratitude,considerate,hostile};
   }
   function toneMode(){
     const p=profile();
@@ -142,9 +161,31 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(Number(p.roughness||0)>.58||Number(p.slang||0)>.68)return "rough";
     return "casual";
   }
+  function roughReplyRate(){
+    const p=profile(),rough=Number(p.roughness||0),streak=Number(p.roughStreak||0),formal=Number(p.formality||0);
+    if(formal>.60||rough<.42)return 0;
+    // Even a very rough user never forces every reply into profanity. This keeps
+    // variety and lets the style cool down naturally when their tone changes.
+    return clamp((rough-.38)*.82+Math.min(.30,streak*.027)-Math.max(0,formal-.28)*.45,0,.72);
+  }
+  function roughFriendlyRewrite(answer,frame,source){
+    let out=clean(answer);if(!out)return out;
+    if(!String(source||"").startsWith("local")||source==="local-utility"||source==="local-repair"||source==="local-knowledge")return out;
+    if(frame.directedAbuse||/(?:요|습니다|세요|해줘요|고마워요)[.!?？！]*$/.test(frame.text)||frame.question||frame.searchCue||/[?？]$/.test(out))return out;
+    const rate=roughReplyRate();if(rate<=0||Math.random()>=rate)return out;
+    // Friendly/emphatic profanity only: never generate a slur or insult aimed at a person.
+    const negative=frame.affect==="negative"||/(짜증|빡|힘들|피곤|별로|아쉽|졌|망)/.test(frame.c);
+    const positive=frame.affect==="positive"||/(좋|이겼|성공|만점|칭찬|재밌)/.test(frame.c);
+    const options=negative
+      ? ["아 씨, 그건 좀 빡치겠다 ㅋㅋ", "시발 그건 좀 짜증나겠다 ㅋㅋ", "아 ㅋㅋ 그건 진짜 개빡세네", "와 씨, 그건 좀 힘들었겠다."]
+      : positive
+        ? ["와 씨 ㅋㅋ 그건 개좋네", "오 ㅋㅋ 그건 존나 좋았겠다", "와 ㅋㅋ 그건 진짜 개쩐다", "오 씨, 그건 좀 뿌듯하겠다 ㅋㅋ"]
+        : ["아 ㅋㅋ 그런 거였구나", "오 씨 ㅋㅋ 그렇구나", "ㅋㅋ 그건 좀 세네", "ㅇㅇ ㅋㅋ 알겠어."];
+    return options[Math.floor(Math.random()*options.length)]||out;
+  }
   function styleShortReply(kind){
     const mode=toneMode(), p=profile();
-    const qOK=Number(p.questionTolerance||.5)>.32;
+    const qOK=Number(p.questionTolerance??.5)>.32;
     if(kind==="ellipsis")return mode==="rough"?(qOK?"ㅋㅋ 왜 말이 끊겼냐. 귀찮으면 그냥 있어도 돼.":"ㅋㅋ 말하기 귀찮은 모드네. 그냥 있어도 돼."):(mode==="gentle"?"말하기 귀찮으면 잠깐 조용히 있어도 괜찮아요.":"말하기 귀찮으면 그냥 있어도 돼.");
     if(kind==="question")return mode==="rough"?(qOK?"왜 ㅋㅋ 뭐가 이상했어?":"ㅋㅋ 뭔가 이상했나 보네."):(qOK?"응? 뭐가 이상했어?":"응? 뭔가 걸렸구나.");
     if(kind==="bang")return mode==="rough"?"오 ㅋㅋ 텐션 뭐냐":"오, 갑자기 텐션 올라왔네 ㅋㅋ";
@@ -571,6 +612,40 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return Math.max(-8,Math.min(14,raw));
   }
 
+  function expressionKey(text){
+    const t=clean(text).toLowerCase();let h=2166136261;
+    for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}
+    return "e"+(h>>>0).toString(36);
+  }
+  function expressionFeatureKeys(text){
+    const t=clean(text),out=[];
+    if(/ㅋㅋ|ㅎㅎ/.test(t))out.push("f:laugh");
+    if(/[?？]$/.test(t))out.push("f:question");
+    if(t.length<=18)out.push("f:short"); else if(t.length>=55)out.push("f:long");
+    if(/그랬구나|그렇구나|알겠어|듣고 있어|응/.test(t))out.push("f:ack");
+    if(/힘들|속상|신경|기분|아쉽|짜증/.test(t))out.push("f:empathy");
+    if(/오 |와 |헐|좋네|잘됐|뿌듯/.test(t))out.push("f:positive-react");
+    return [...new Set(out)].slice(0,4);
+  }
+  function publicExpressionBoost(text){
+    const data=expressionByUser.get(userKey())||{},keys=[expressionKey(text),...expressionFeatureKeys(text)];
+    let total=0,count=0;
+    for(const key of keys){const row=data[key];if(!row)continue;const pos=Number(row.positiveScore??row.positive??0),neg=Number(row.negativeScore??row.negative??0),tier=String(row.tier||"observing");let raw=(pos-neg)*1.35;
+      if(tier==="solo")raw=Math.max(-1.5,Math.min(2.5,raw));else if(tier==="growing")raw=Math.max(-3,Math.min(5,raw));else raw=Math.max(-5,Math.min(8,raw));
+      total+=raw;count++;
+    }
+    return count?Math.max(-7,Math.min(10,total/Math.sqrt(count))):0;
+  }
+  function weightedPick(items,scoreFn,random=Math.random){
+    if(!items?.length)return null;
+    const scored=items.map(v=>({v,score:Number(scoreFn(v)||0)}));
+    const max=Math.max(...scored.map(x=>x.score)),eligible=scored.filter(x=>x.score>=max-16);
+    const weights=eligible.map(x=>Math.max(.02,Math.exp((x.score-max)/5.5))),sum=weights.reduce((a,b)=>a+b,0);
+    let r=Math.max(0,Math.min(.999999,Number(random())||0))*sum;
+    for(let i=0;i<eligible.length;i++){r-=weights[i];if(r<=0)return eligible[i].v;}
+    return eligible[eligible.length-1].v;
+  }
+
   function strategyScores(frame,ref){
     const p=profile(),q=questionPressure(),key=policyKey(frame),eligible=responseMoveEligibility(frame,ref),scores={ack:40,empathy:30,explore:24,clarify:18,playful:18,direct:26,continue:20,social:18};
     Object.keys(scores).forEach(name=>{if(eligible[name]===false)scores[name]=-999;});
@@ -602,7 +677,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function chooseText(family,arr){
     const key=userKey(),used=recentChoices.get(key)||[],items=arr.map((text,i)=>({id:`${family}:${i}`,text}));
     let pool=items.filter(v=>!used.includes(v.id));if(!pool.length)pool=items;
-    const chosen=pool[Math.floor(Math.random()*pool.length)]||items[0]; if(!chosen)return "";
+    const chosen=weightedPick(pool,v=>publicExpressionBoost(v.text)-(used.includes(v.id)?7:0),Math.random)||items[0]; if(!chosen)return "";
     recentChoices.set(key,[chosen.id,...used.filter(v=>v!==chosen.id)].slice(0,16)); return chosen.text;
   }
   function correctionReply(frame){
@@ -739,8 +814,9 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       if(c.strategy==="direct")c.score+=(p.directness-.5)*8;
       c.score-=conversationalPenalty(frame,c);
     }
-    candidates.sort((a,b)=>b.score-a.score); const viable=candidates.filter(v=>v.score>-35),top=(viable.length?viable:candidates).slice(0,3); let best=top[0];
-    if(top.length>1&&top[0].score-top[1].score<4&&Math.random()<.14)best=top[1];
+    for(const c of candidates)c.score+=publicExpressionBoost(c.text);
+    candidates.sort((a,b)=>b.score-a.score); const viable=candidates.filter(v=>v.score>-35),pool=(viable.length?viable:candidates).slice(0,5);
+    const best=weightedPick(pool,v=>v.score,Math.random)||pool[0];
     if(best){recentChoices.set(userKey(),[best.id,...used.filter(v=>v!==best.id)].slice(0,16));}
     return best;
   }
@@ -834,7 +910,96 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const signal=explicit||cont;if(!signal)return;
     adaptProfile(signal,ex.assistant);
     const quality=signal==="positive"?1:signal==="negative"?-1:.35,evidenceKey=feedbackEvidenceKey(currentFrame,ex,signal);
-    queueCommit({type:"policy_feedback",signal:signal==="negative"?"negative":"positive",weight:quality,evidenceKey,strategy:ex.assistant.strategy||"ack",policyKey:ex.assistant.policyKey||"",frameKey:`${ex.user.intent||"statement"}|${ex.user.affect||"neutral"}`});
+    queueCommit({type:"policy_feedback",signal:signal==="negative"?"negative":"positive",weight:quality,evidenceKey,strategy:ex.assistant.strategy||"ack",policyKey:ex.assistant.policyKey||"",expressionKey:expressionKey(ex.assistant.text||""),featureKeys:expressionFeatureKeys(ex.assistant.text||""),frameKey:`${ex.user.intent||"statement"}|${ex.user.affect||"neutral"}`});
+  }
+
+
+  function mannerScore(){
+    const p=profile(),turns=Math.max(0,Number(p.mannerTurns||0));
+    const kindness=Number(p.kindness??.50),gratitude=Number(p.gratitude??.20),hostility=Number(p.hostility??.06);
+    const formal=Number(p.formality??.18),rough=Number(p.roughness??.12);
+    // Friendly rough language is style, not bad manners. Direct hostility carries
+    // most of the penalty; gratitude/consideration are the strongest positives.
+    const raw=68+kindness*17+gratitude*8+Math.min(.8,formal)*5-hostility*31-Math.max(0,rough-.72)*4;
+    const confidence=clamp(turns/45,0,1);
+    const score=Math.round(70+(raw-70)*(.35+.65*confidence));
+    return {score:Math.max(0,Math.min(100,score)),confidence,turns,kindness,gratitude,hostility,formality:formal,roughness:rough};
+  }
+  function mannerQuestion(text){
+    const c=compact(text);
+    return /(내|나의)?(?:대화)?(?:매너|예의|말투)(?:점수|평가|등급)|내점수|나말예쁘게|말예쁘게해|대화습관어때|내말투어때|매너어때/.test(c);
+  }
+  function mannerAdviceText(random=Math.random){
+    const m=mannerScore(),p=profile(),mode=toneMode(),score=m.score;
+    const bands=score>=92?["상당히 부드러운 편","대화 분위기 진짜 편안한 편","말을 꽤 배려 있게 하는 편"]:score>=80?["전체적으로 매너 좋은 편","편하게 말해도 선을 잘 지키는 편","대화 분위기가 좋은 편"]:score>=65?["솔직하고 편한 스타일","꽤 직설적인 편이지만 무난한 편","편한 말투 쪽에 가까운 편"]:["요즘 말이 꽤 센 편","직설적인 표현이 많이 잡혀","상대에게 세게 말하는 비율이 조금 높은 편"];
+    const reasons=[];
+    if(m.gratitude>.34)reasons.push("감사 표현을 자주 쓰는 게 플러스야");
+    if(m.kindness>.62)reasons.push("상대를 배려하는 표현이 꽤 많아");
+    if(m.formality>.55)reasons.push("존댓말을 꾸준히 쓰는 편이야");
+    if(m.hostility>.25)reasons.push("상대에게 직접 세게 말하는 표현 때문에 조금 깎였어");
+    if(m.roughness>.65&&m.hostility<.18)reasons.push("욕은 좀 섞지만 친근한 강조 쪽이라 감점은 크지 않아");
+    if(!reasons.length)reasons.push("아직 특정 습관이 아주 강하게 잡히진 않았어");
+    const tips=m.hostility>.25?["상대한테 직접 꽂는 말만 조금 줄이면 금방 올라가","짜증나도 사람 말고 상황 쪽으로 욕하면 점수 방어됨 ㅋㅋ"]:m.gratitude<.25?["고맙다거나 괜찮냐는 표현이 조금 늘면 더 올라갈 듯","지금도 무난한데 감사 표현이 늘면 점수가 잘 올라가"]:["지금 스타일이면 굳이 억지로 바꿀 건 없어","지금처럼 말하면 돼. 점수보다 네 대화 스타일 보는 재미로 보면 됨"];
+    const band=pickOne(bands,random),reason=pickOne(reasons,random),tip=pickOne(tips,random);
+    if(mode==="gentle"){
+      const politeReason=reason.replace(/플러스야$/,"플러스예요").replace(/많아$/,"많아요").replace(/편이야$/,"편이에요").replace(/깎였어$/,"깎였어요").replace(/크지 않아$/,"크지 않아요").replace(/잡히진 않았어$/,"잡히진 않았어요");
+      const politeTip=tip.replace(/올라가$/,"올라가요").replace(/방어됨 ㅋㅋ$/,"영향을 덜 받아요").replace(/올라갈 듯$/,"올라갈 거예요").replace(/잘 올라가$/,"잘 올라가요").replace(/없어$/,"없어요").replace(/보면 됨$/,"보면 돼요").replace(/바꾸면 돼$/,"바꾸면 돼요").replace(/말하면 돼$/,"말하면 돼요").replace(/하면 돼$/,"하면 돼요");
+      return `지금 대화매너 점수는 ${score}점이에요. ${band}이에요. ${politeReason}. ${politeTip}.`;
+    }
+    if(mode==="rough")return `지금 매너점수 ${score}점 ㅋㅋ ${band}이네. ${reason}. ${tip}.`;
+    return `지금 대화매너 ${score}점. ${band}이야. ${reason}. ${tip}.`;
+  }
+  function mannerDiscoveryCandidate(now,e){
+    const p=profile(),turns=Number(p.mannerTurns||0),last=Number(e.lastMannerDiscoveryAt||0);
+    if(turns<12||now-last<5*86400000)return null;
+    return {id:"feature:manner-score",type:"feature-discovery",frame:"manner-score",topic:"대화매너",priority:18};
+  }
+  function composeMannerDiscovery(now,e,random=Math.random){
+    const mode=toneMode(),m=mannerScore(),p=profile();
+    const intro=mode==="gentle"?[
+      {key:"i0",text:"참, 대화를 하다 보니 작은 기능 하나 알려드릴 게 있어요."},
+      {key:"i1",text:"그러고 보니 지금까지의 대화로 볼 수 있는 재미있는 기능이 있어요."},
+      {key:"i2",text:"아, 혹시 궁금하실까 봐 하나 말씀드리면요."},
+      {key:"i3",text:"대화하다 생각났는데, 가볍게 볼 만한 기능이 하나 있어요."}
+    ]:mode==="rough"?[
+      {key:"i0",text:"아 맞다 ㅋㅋ 이런 것도 있음."},{key:"i1",text:"그러고 보니 너 이거 알았냐 ㅋㅋ"},
+      {key:"i2",text:"갑자기 생각났는데 재밌는 거 하나 있음 ㅋㅋ"},{key:"i3",text:"참고로 나 은근 이런 것도 보고 있음 ㅋㅋ"}
+    ]:[
+      {key:"i0",text:"아 맞다, 이런 기능도 있어."},{key:"i1",text:"그러고 보니 재밌는 거 하나 알려줄까."},
+      {key:"i2",text:"대화하다 생각났는데 이런 것도 볼 수 있어."},{key:"i3",text:"참, 나랑 얘기하다 보면 이런 것도 쌓여."}
+    ];
+    const body=mode==="gentle"?[
+      {key:"b0",text:"지금까지의 말투를 바탕으로 대화매너 점수를 가볍게 계산해 볼 수 있어요."},
+      {key:"b1",text:"감사 표현이나 배려, 말투 같은 걸 종합한 대화매너 점수를 볼 수 있어요."},
+      {key:"b2",text:"대화 습관을 바탕으로 재미로 보는 매너 점수와 간단한 설명을 만들어 드릴 수 있어요."},
+      {key:"b3",text:"제가 기억한 이 기기의 대화 스타일로 매너 점수와 말투 특징을 볼 수 있어요."}
+    ]:mode==="rough"?[
+      {key:"b0",text:"우리 대화 쌓인 걸로 네 대화매너 점수도 뽑아볼 수 있음."},
+      {key:"b1",text:"욕 얼마나 하냐만 보는 건 아니고 배려나 감사 같은 것도 합쳐서 매너점수가 나옴 ㅋㅋ"},
+      {key:"b2",text:"지금 말투 데이터로 네 매너점수랑 대화 스타일을 재미로 볼 수 있어."},
+      {key:"b3",text:"내가 네 말투 습관 좀 쌓아둬서 매너점수 같은 것도 보여줄 수 있음 ㅋㅋ"}
+    ]:[
+      {key:"b0",text:"지금까지 대화한 걸로 네 대화매너 점수도 볼 수 있어."},
+      {key:"b1",text:"감사나 배려, 거친 말투 같은 걸 합쳐서 재미용 매너점수를 계산할 수 있거든."},
+      {key:"b2",text:"네 대화 스타일이 쌓이면 매너점수랑 특징도 같이 볼 수 있어."},
+      {key:"b3",text:"말투 습관을 바탕으로 매너점수랑 간단한 조언도 볼 수 있어."}
+    ];
+    const tail=mode==="gentle"?[
+      {key:"t0",text:"궁금할 때 '내 매너점수 알려줘'라고 물어보시면 돼요."},
+      {key:"t1",text:"나중에 '내 점수 어때요?'라고 물어보시면 이유도 같이 알려드릴게요."},
+      {key:"t2",text:"원하실 때 매너점수를 물어보시면 어떤 부분이 반영됐는지도 설명해 드려요."}
+    ]:mode==="rough"?[
+      {key:"t0",text:"궁금하면 그냥 '내 매너점수 뭐냐' 해봐 ㅋㅋ"},
+      {key:"t1",text:"나중에 내 점수 물어보면 왜 그렇게 나왔는지도 까줌 ㅋㅋ"},
+      {key:"t2",text:"궁금할 때 점수 물어봐. 뭐 때문에 오르고 깎였는지도 알려줌."}
+    ]:[
+      {key:"t0",text:"궁금하면 '내 매너점수 뭐야?'라고 물어봐."},
+      {key:"t1",text:"나중에 내 점수 물어보면 이유도 같이 알려줄게."},
+      {key:"t2",text:"궁금할 때 점수 물어봐. 어떤 습관이 반영됐는지도 알려줄게."}
+    ];
+    const result=assembleUnique(e,[intro,body,tail],random,`feature:manner:${mode}`);
+    if(result.text){e.lastMannerDiscoveryAt=now;rememberInitiativeVariant(e,result.text,result.pattern);saveEngagement(e);}
+    return result;
   }
 
   function initiativeSettings(){const e=engagement();return {enabled:e.enabled!==false,quietStart:Number(e.quietStart||22),quietEnd:Number(e.quietEnd||7)};}
@@ -893,10 +1058,12 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(idle>=3*86400000)out.push({id:"return:3d",type:"return",frame:"long-return",priority:64,topic:"근황"});
     else if(idle>=24*60*60*1000)out.push({id:"return:1d",type:"return",frame:"return",priority:48,topic:"근황"});
     out.forEach(v=>{v.priority+=publicPolicyBoost(`initiative|${v.type}`,"initiative");});
+    const manner=mannerDiscoveryCandidate(now,engagement());if(manner)out.push(manner);
     return out.sort((a,b)=>b.priority-a.priority);
   }
   function composeInitiative(candidate,now,e,random=Math.random,mode="proactive"){
-    const p=profile(),d=new Date(now),hour=d.getHours(),playful=Number(p.playfulness||.55)>.48,ask=Number(p.questionTolerance||.5)>.30,topic=clean(candidate.topic||""),tone=toneMode();
+    if(candidate&&candidate.type==="feature-discovery"&&candidate.frame==="manner-score")return composeMannerDiscovery(now,e,random);
+    const p=profile(),d=new Date(now),hour=d.getHours(),playful=Number(p.playfulness??.55)>.48,ask=Number(p.questionTolerance??.5)>.30,topic=clean(candidate.topic||""),tone=toneMode();
     const soft=tone==="rough"?[{key:"s0",text:""},{key:"s1",text:"ㅋㅋ"},{key:"s2",text:"야 문득 생각났는데,"}]:tone==="gentle"?[{key:"s0",text:""},{key:"s3",text:"문득 생각났어요."},{key:"s4",text:"그러고 보니,"}]:playful?[{key:"s0",text:""},{key:"s1",text:"ㅋㅋ"},{key:"s2",text:"문득 생각났는데,"}]:[{key:"s0",text:""},{key:"s3",text:"문득,"},{key:"s4",text:"그러고 보니,"}];
     let body=[],tail=[];
     if(candidate.type==="open-loop"){
@@ -930,7 +1097,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
   function proactiveChance(now,lastUserAt,e,p,candidates){
     const idle=now-lastUserAt,due=candidates.some(v=>v.type==="open-loop"&&v.priority>=90),ignored=Number(e.ignoredStreak||0);
-    return Math.max(.18,Math.min(.82,.52+(Number(p.initiative||.52)-.5)*.58+(idle>=48*3600000?.10:0)+(due?.12:0)-ignored*.075));
+    return Math.max(.18,Math.min(.82,.52+(Number(p.initiative??.52)-.5)*.58+(idle>=48*3600000?.10:0)+(due?.12:0)-ignored*.075));
   }
   function chooseInitiativeCandidate(rows,e,random=Math.random){
     if(!rows.length)return null;const used=e.recentStarterIds||[],fresh=rows.filter(v=>!used.slice(0,8).includes(v.id)),src=fresh.length?fresh:rows;
@@ -961,7 +1128,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return out;
   }
   function composeConnectionGreeting(candidate,now,e,random=Math.random){
-    const d=new Date(now),p=profile(),topic=clean(candidate.topic||""),playful=Number(p.playfulness||.55)>.45,tone=toneMode();
+    const d=new Date(now),p=profile(),topic=clean(candidate.topic||""),playful=Number(p.playfulness??.55)>.45,tone=toneMode();
     const hello=tone==="rough"?[{key:"h0",text:"오 왔냐 ㅋㅋ"},{key:"h1",text:"왔네 ㅋㅋ"},{key:"h2",text:"오 또 왔구만"},{key:"h3",text:"ㅎㅇ ㅋㅋ"}]:tone==="gentle"?[{key:"h0",text:"안녕하세요."},{key:"h1",text:"다시 왔네요."},{key:"h2",text:"반가워요."},{key:"h3",text:"또 보네요."}]:playful?[{key:"h0",text:"오, 왔네 ㅋㅋ"},{key:"h1",text:"안녕 ㅋㅋ"},{key:"h2",text:"오, 또 보네."},{key:"h3",text:"왔구나 ㅋㅋ"}]:[{key:"h0",text:"안녕."},{key:"h1",text:"왔네."},{key:"h2",text:"반가워."},{key:"h3",text:"다시 보네."}];
     let context=[];
     if(candidate.frame==="interest-greeting")context=[{key:"c0",text:`전에 ${topic} 얘기했던 게 생각났어.`},{key:"c1",text:`${withJosa(topic,"은","는")} 요즘도 관심 있어?`},{key:"c2",text:`전에 얘기한 ${topic}, 아직 기억나더라.`}];
@@ -971,7 +1138,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     else if(candidate.frame==="lunch")context=[{key:"c0",text:"점심때 딱 왔네."},{key:"c1",text:"배고플 시간이다."},{key:"c2",text:"벌써 점심이네."}];
     else if(candidate.frame==="afternoon")context=[{key:"c0",text:"오후에 다시 보네."},{key:"c1",text:"하루 절반쯤 지나서 왔네."},{key:"c2",text:"오후다."}];
     else context=[{key:"c0",text:"저녁에 왔네."},{key:"c1",text:"오늘도 하루 거의 다 갔다."},{key:"c2",text:"슬슬 쉬고 싶을 시간이네."}];
-    const tail=Number(p.questionTolerance||.5)>.38?[{key:"t0",text:"뭐 하다가 왔어?"},{key:"t1",text:"오늘은 좀 어땠어?"},{key:"t2",text:"지금은 뭐 하고 있어?"},{key:"t3",text:"아무 얘기 하나 할래?"}]:[{key:"t0",text:"편하게 있다 가."},{key:"t1",text:"할 말 생기면 아무거나 던져."},{key:"t2",text:"그냥 잠깐 있어도 되고 ㅋㅋ"}];
+    const tail=Number(p.questionTolerance??.5)>.38?[{key:"t0",text:"뭐 하다가 왔어?"},{key:"t1",text:"오늘은 좀 어땠어?"},{key:"t2",text:"지금은 뭐 하고 있어?"},{key:"t3",text:"아무 얘기 하나 할래?"}]:[{key:"t0",text:"편하게 있다 가."},{key:"t1",text:"할 말 생기면 아무거나 던져."},{key:"t2",text:"그냥 잠깐 있어도 되고 ㅋㅋ"}];
     return assembleUnique(e,[hello,context,tail],random,`connection:${candidate.frame}:${d.getDay()}`);
   }
   function maybeConnectionGreeting(options={}){
@@ -981,7 +1148,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(!force&&now-Number(e.lastGreetingAt||0)<CONNECTION_GREETING_GAP)return null;
     if(!force&&now-Number(e.lastGreetingAttemptAt||0)<30*60*1000)return null;
     if(!force){e.lastGreetingAttemptAt=now;saveEngagement(e);}
-    const chance=Math.max(.08,Math.min(.52,.29+(Number(p.initiative||.52)-.5)*.35-Number(e.ignoredStreak||0)*.045+(now-lastUserAt>=48*3600000?.07:0)));if(!force&&random()>chance)return null;
+    const chance=Math.max(.08,Math.min(.52,.29+(Number(p.initiative??.52)-.5)*.35-Number(e.ignoredStreak||0)*.045+(now-lastUserAt>=48*3600000?.07:0)));if(!force&&random()>chance)return null;
     const candidates=connectionCandidates(now,lastUserAt),chosen=chooseInitiativeCandidate(candidates,e,random);if(!chosen)return null;const composed=composeConnectionGreeting(chosen,now,e,random);if(!composed.text)return null;
     e.lastGreetingAt=now;e.lastInitiatedAt=now;e.lastChanceAt=now;e.lastInitiativeType="greeting";e.lastInitiativeTopic=chosen.topic||"";rememberInitiativeVariant(e,composed.text,composed.pattern);saveEngagement(e);
     remember("assistant",composed.text,{source:"proactive",candidateId:chosen.id,intent:"initiative",affect:"neutral",strategy:"initiative",policyKey:"initiative|greeting",question:/[?？]$/.test(composed.text),proactive:true,initiativeType:"greeting",initiativeTopic:chosen.topic||""});
@@ -993,10 +1160,10 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
   function noteProactiveResponse(signal="positive",messageId=""){
     const p=profile(),e=engagement(),type=e.lastInitiativeType||"general",bucket=Math.floor(Date.now()/(6*60*60*1000));
-    if(signal==="negative"){p.initiative=clamp(Number(p.initiative||.52)-.035);e.ignoredStreak=Math.min(6,Number(e.ignoredStreak||0)+1);}else if(signal==="neutral"){p.initiative=clamp(Number(p.initiative||.52)+.004);e.ignoredStreak=Math.max(0,Number(e.ignoredStreak||0)-1);}else{p.initiative=clamp(Number(p.initiative||.52)+.025);e.ignoredStreak=Math.max(0,Number(e.ignoredStreak||0)-2);}
+    if(signal==="negative"){p.initiative=clamp(Number(p.initiative??.52)-.035);e.ignoredStreak=Math.min(6,Number(e.ignoredStreak||0)+1);}else if(signal==="neutral"){p.initiative=clamp(Number(p.initiative??.52)+.004);e.ignoredStreak=Math.max(0,Number(e.ignoredStreak||0)-1);}else{p.initiative=clamp(Number(p.initiative??.52)+.025);e.ignoredStreak=Math.max(0,Number(e.ignoredStreak||0)-2);}
     saveProfile();saveEngagement(e);queueCommit({type:"policy_feedback",signal:signal==="negative"?"negative":"positive",weight:signal==="negative"?-.45:signal==="neutral"?.12:.48,evidenceKey:`initiative|${bucket}|${messageId||type}`,strategy:"initiative",policyKey:`initiative|${type}`});
   }
-  function markProactiveIgnored(){const p=profile(),e=engagement(),type=e.lastInitiativeType||"general",bucket=Math.floor(Date.now()/(6*60*60*1000));p.initiative=clamp(Number(p.initiative||.52)-.02);e.ignoredStreak=Math.min(6,Number(e.ignoredStreak||0)+1);saveProfile();saveEngagement(e);queueCommit({type:"policy_feedback",signal:"negative",weight:-.32,evidenceKey:`initiative-ignore|${bucket}|${type}`,strategy:"initiative",policyKey:`initiative|${type}`});}
+  function markProactiveIgnored(){const p=profile(),e=engagement(),type=e.lastInitiativeType||"general",bucket=Math.floor(Date.now()/(6*60*60*1000));p.initiative=clamp(Number(p.initiative??.52)-.02);e.ignoredStreak=Math.min(6,Number(e.ignoredStreak||0)+1);saveProfile();saveEngagement(e);queueCommit({type:"policy_feedback",signal:"negative",weight:-.32,evidenceKey:`initiative-ignore|${bucket}|${type}`,strategy:"initiative",policyKey:`initiative|${type}`});}
   function proactiveFollowupReply(frame){
     const ex=previousExchange();if(!ex||!(ex.assistant.proactive===true||ex.assistant.source==="proactive")||frame.question)return "";const c=compact(frame.text),type=String(ex.assistant.initiativeType||engagement().lastInitiativeType||"general"),topic=String(ex.assistant.initiativeTopic||engagement().lastInitiativeTopic||"");
     if(/^(몰라|모름|그냥|귀찮아|귀찮|됐어|됐음|ㄴㄴ|노|싫어|싫음|말하기싫|나중에|패스)$/.test(c)||/(그만물|묻지마|귀찮)/.test(c))return pickOne(["오케이 ㅋㅋ 그럼 이 얘긴 넘기자.","알겠어. 굳이 얘기 안 해도 돼.","ㅇㅋ, 그건 패스하자 ㅋㅋ","좋아. 다른 얘기 하고 싶을 때 바꾸면 돼."]);
@@ -1024,6 +1191,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       const d=await MiniTalk.AuthApi.moaSync(key,known);
       if(Array.isArray(d?.patterns)){learnedByUser.set(key,{patterns:d.patterns});pset(`moa.v91.patterns.${key}`,d.patterns);}else if(!learnedByUser.has(key))learnedByUser.set(key,{patterns:pget(`moa.v91.patterns.${key}`,[])||pget(`moa.v90.patterns.${key}`,[])||pget(`moa.v89.patterns.${key}`,[])||pget(`moa.v88.patterns.${key}`,[])||pget(`moa.v87.patterns.${key}`,[])||[]});
       if(d?.policy&&typeof d.policy==="object"){policyByUser.set(key,d.policy);pset(`moa.v91.policy.${key}`,d.policy);}else if(!policyByUser.has(key))policyByUser.set(key,pget(`moa.v91.policy.${key}`,{})||pget(`moa.v90.policy.${key}`,{})||pget(`moa.v89.policy.${key}`,{})||pget(`moa.v88.policy.${key}`,{})||{});
+      if(d?.expressionWeights&&typeof d.expressionWeights==="object"){expressionByUser.set(key,d.expressionWeights);pset(`moa.v91.expressionWeights.${key}`,d.expressionWeights);}else if(!expressionByUser.has(key))expressionByUser.set(key,pget(`moa.v91.expressionWeights.${key}`,{})||{});
       if(Number(d?.version||0)){syncVersion.set(key,Number(d.version));pset(`moa.v91.syncVersion.${key}`,Number(d.version));}
     }catch(e){console.warn("모아 학습 동기화 실패",e);syncAt.set(key,Date.now()-SYNC_TTL+30000);}
   }
@@ -1035,8 +1203,9 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const ref=resolveReference(frame);const searchMode=searchPolicy(frame,ref);
     let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="";
 
+    const manner=mannerQuestion(text)?mannerAdviceText():null;
     const dt=dateTime(text),calc=math(text),game=rps(text),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayDialogue=everydayDialogueReply(frame),knowledge=localKnowledgeReply(text);
-    if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc)answer=calc;else if(game)answer=game;else if(punct){answer=punct;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social){answer=social;source="local";strategy="social";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc)answer=calc;else if(game)answer=game;else if(punct){answer=punct;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social){answer=social;source="local";strategy="social";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
     const memQ=memoryQuestion(text);
@@ -1061,6 +1230,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     }
 
     answer=qualityGate(answer,frame,source,strategy);
+    answer=roughFriendlyRewrite(answer,frame,source);
     const m=inferMemory(text);if(m){memories()[m.key]={value:m.value,label:m.label,updatedAt:Date.now()};saveMemories();}
     const s=state();s.strategyHistory.push(strategy);while(s.strategyHistory.length>12)s.strategyHistory.shift();
     if(frame.question)s.initiative.userQuestions=Number(s.initiative.userQuestions||0)+1;
@@ -1075,6 +1245,6 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     premove(`moa.v91.context.${key}`);premove(`moa.v91.state.${key}`);premove(`moa.v90.context.${key}`);premove(`moa.v90.state.${key}`);
     ["moa.v89.context.","moa.v89.state.","moa.v88.context.","moa.v88.state.","moa.v87.context.","moa.v87.state.","moa.v86.context.","moa.v86.state.","moa.context."].forEach(prefix=>premove(prefix+key));
   }
-  function debugSnapshot(){return {version:VERSION,ownership:{personal:"local-only",server:"public-learning-only"},state:{...state()},profile:{...profile()},memories:{...memories()},engagement:{...engagement()},context:context().slice(),patterns:(learnedByUser.get(userKey())||{patterns:[]}).patterns.slice(0,5),policy:policyByUser.get(userKey())||{},queued:(commitQueues.get(userKey())||[]).length};}
-  return {reply,warmup,sync,flushCommit,clearContext,analyze,resolveReference,maybeInitiate,maybeConnectionGreeting,initiativeSettings,setInitiativeSettings,markProactiveIgnored,starterSuggestions,debugSnapshot};
+  function debugSnapshot(){return {version:VERSION,manner:mannerScore(),ownership:{personal:"local-only",server:"public-learning-only"},state:{...state()},profile:{...profile()},memories:{...memories()},engagement:{...engagement()},context:context().slice(),patterns:(learnedByUser.get(userKey())||{patterns:[]}).patterns.slice(0,5),policy:policyByUser.get(userKey())||{},expressionWeights:expressionByUser.get(userKey())||{},queued:(commitQueues.get(userKey())||[]).length};}
+  return {reply,warmup,sync,flushCommit,clearContext,analyze,resolveReference,maybeInitiate,maybeConnectionGreeting,initiativeSettings,setInitiativeSettings,markProactiveIgnored,starterSuggestions,mannerScore,composeMannerDiscovery,debugSnapshot};
 })();

@@ -11,6 +11,7 @@
    No per-user MOA profile or personal memory is created/read/written here.
    ============================================================ */
 var MOA_POLICY_SHEET = "모아_대화정책";
+var MOA_EXPRESSION_SHEET = "모아_표현가중치";
 var MOA_ACTIVITY_PROPERTY = "MOA_ACTIVITY_SERIAL";
 var MOA_SYNC_VERSION_PROPERTY = "MOA_SYNC_VERSION";
 var MOA_MAINTENANCE_ACTIVITY_STEP = 800;
@@ -382,6 +383,7 @@ function moaNum_(v,d){v=Number(v);return isFinite(v)?v:d;}
 function moaClamp_(v,a,b){return Math.max(a,Math.min(b,moaNum_(v,a)));}
 
 function moaPolicySheet_(){return moaEnsureSheet_(MOA_POLICY_SHEET,["policy_key","strategy","positive_users","negative_users","positive_hashes","negative_hashes","updated_at","last_activity_serial","state","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
+function moaExpressionSheet_(){return moaEnsureSheet_(MOA_EXPRESSION_SHEET,["expression_key","positive_users","negative_users","positive_hashes","negative_hashes","updated_at","last_activity_serial","state","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
 function moaEnsureHeaders_(sh,headers){
   if(sh.getMaxColumns()<headers.length)sh.insertColumnsAfter(sh.getMaxColumns(),headers.length-sh.getMaxColumns());
   var current=sh.getRange(1,1,1,headers.length).getValues()[0],dirty=false;
@@ -390,6 +392,7 @@ function moaEnsureHeaders_(sh,headers){
   return sh;
 }
 function moaEnsurePolicyWidth_(){return moaEnsureHeaders_(moaPolicySheet_(),["policy_key","strategy","positive_users","negative_users","positive_hashes","negative_hashes","updated_at","last_activity_serial","state","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
+function moaEnsureExpressionWidth_(){return moaEnsureHeaders_(moaExpressionSheet_(),["expression_key","positive_users","negative_users","positive_hashes","negative_hashes","updated_at","last_activity_serial","state","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
 
 function moaPublicPolicy_(){
   var sh=moaEnsurePolicyWidth_(),last=sh.getLastRow(),out={};if(last<=1)return out;
@@ -400,16 +403,25 @@ function moaPublicPolicy_(){
     if(!out[key])out[key]={};out[key][strategy]={positive:pos,negative:neg,positiveScore:posScore,negativeScore:negScore,evidenceCount:evidenceCount,tier:tier};
   });return out;
 }
+function moaPublicExpressionWeights_(){
+  var sh=moaEnsureExpressionWidth_(),last=sh.getLastRow(),out={};if(last<=1)return out;
+  sh.getRange(2,1,last-1,13).getValues().forEach(function(r){
+    var key=String(r[0]||""),pos=Number(r[1]||0),neg=Number(r[2]||0),state=String(r[7]||"active"),posScore=Number(r[8]||pos||0),negScore=Number(r[9]||neg||0),evidenceCount=Number(r[11]||0);
+    if(!key||state==="dormant")return;
+    var tier=moaPolicyLearningTier_(pos,neg,posScore,negScore,evidenceCount);if(tier==="observing")return;
+    out[key]={positive:pos,negative:neg,positiveScore:posScore,negativeScore:negScore,evidenceCount:evidenceCount,tier:tier};
+  });return out;
+}
 function moaPublicSnapshot_(){
-  var version=moaCurrentSyncVersion_(),key="moa-public-policy-"+version,cache=CacheService.getScriptCache(),hit=cache.get(key);
+  var version=moaCurrentSyncVersion_(),key="moa-public-learning-"+version,cache=CacheService.getScriptCache(),hit=cache.get(key);
   if(hit){try{return JSON.parse(hit)}catch(e){}}
-  var snapshot={policy:moaPublicPolicy_()};
+  var snapshot={policy:moaPublicPolicy_(),expressionWeights:moaPublicExpressionWeights_()};
   try{cache.put(key,JSON.stringify(snapshot),300)}catch(e){}
   return snapshot;
 }
 function moaSync_(data){
   var known=Number(data.known_version||0),version=moaCurrentSyncVersion_(),out={ok:true,version:version};
-  if(known!==version){var pub=moaPublicSnapshot_();out.policy=pub.policy;}
+  if(known!==version){var pub=moaPublicSnapshot_();out.policy=pub.policy;out.expressionWeights=pub.expressionWeights;}
   return jsonResponse_(out);
 }
 
@@ -432,6 +444,26 @@ function moaStorePolicyEvents_(uid,events){
   var appended=rows.slice(originalCount);if(appended.length)sh.getRange(originalCount+2,1,appended.length,14).setValues(appended);
   return publicChanged;
 }
+function moaStoreExpressionEvents_(uid,events){
+  var sh=moaEnsureExpressionWidth_(),last=sh.getLastRow(),rows=last>1?sh.getRange(2,1,last-1,13).getValues():[],originalCount=rows.length,index={},dirty={},publicChanged=false;
+  rows.forEach(function(r,i){index[String(r[0])]=i;});
+  var userHash=moaUserHash_(uid),now=new Date(),activity=moaCurrentActivitySerial_();
+  function applyKey(key,ev){
+    key=String(key||"").slice(0,40);if(!/^e[a-z0-9]+$/.test(key)&&!/^f:[a-z0-9-]+$/.test(key))return;
+    var i=index[key],r;if(i==null){i=rows.length;index[key]=i;r=[key,0,0,"","",now,activity,"active",0,0,"",0,"observing"];rows.push(r);}else r=rows[i];while(r.length<13)r.push("");
+    var signal=String(ev.signal||""),beforeTier=moaPolicyLearningTier_(r[1],r[2],Number(r[8]||r[1]||0),Number(r[9]||r[2]||0),Number(r[11]||0));
+    var col=signal==="positive"?3:4,res=moaAppendUniqueHash_(String(r[col]||""),userHash);if(res.added){r[col]=res.value;r[signal==="positive"?1:2]=Number(r[signal==="positive"?1:2]||0)+1;}
+    var eh=moaEvidenceHash_(uid,{evidenceKey:String(ev.evidenceKey||"")+"|"+key,type:"expression_feedback",strategy:key}),er=moaAppendUniqueHash_(String(r[10]||""),eh),changed=!!res.added;
+    if(er.added){var w=moaEvidenceWeight_(ev);r[10]=er.value;r[11]=Number(r[11]||0)+1;if(signal==="positive")r[8]=Number(r[8]||0)+w;else r[9]=Number(r[9]||0)+w;changed=true;}
+    var tier=moaPolicyLearningTier_(r[1],r[2],r[8],r[9],r[11]);if(String(r[12]||"")!==tier){r[12]=tier;changed=true;}
+    if(!changed)return;if(beforeTier!=="observing"||tier!=="observing")publicChanged=true;r[5]=now;r[6]=activity;r[7]="active";dirty[i]=true;
+  }
+  (events||[]).forEach(function(ev){if(!ev||ev.type!=="policy_feedback"||["positive","negative"].indexOf(String(ev.signal||""))<0)return;applyKey(ev.expressionKey,ev);var features=Array.isArray(ev.featureKeys)?ev.featureKeys:[];features.slice(0,4).forEach(function(k){applyKey(k,ev);});});
+  Object.keys(dirty).map(Number).filter(function(i){return i<originalCount}).forEach(function(i){sh.getRange(i+2,1,1,13).setValues([rows[i]]);});
+  var appended=rows.slice(originalCount);if(appended.length)sh.getRange(originalCount+2,1,appended.length,13).setValues(appended);
+  return publicChanged;
+}
+
 function moaCommit_(data){
   var uid=String(data.user_id||"").trim();if(!uid)return jsonResponse_({ok:false,error:"MOA_COMMIT_USER_REQUIRED"});
   var events=moaJson_(data.events_json,[]);if(!Array.isArray(events))events=[];
@@ -440,7 +472,8 @@ function moaCommit_(data){
   try{
     moaActivityTick_();
     var changedPublic=moaStorePolicyEvents_(uid,events);
-    if(changedPublic)moaBumpSyncVersion_();
+    var changedExpressions=moaStoreExpressionEvents_(uid,events);
+    if(changedPublic||changedExpressions)moaBumpSyncVersion_();
     return jsonResponse_({ok:true,stored:events.length,version:moaCurrentSyncVersion_()});
   }finally{lock.releaseLock();}
 }
@@ -462,5 +495,13 @@ function moaRunLearningMaintenance_(){
 function moaInstallMaintenanceTrigger_(){moaRemoveMaintenanceTrigger_();ScriptApp.newTrigger("moaRunLearningMaintenance_").timeBased().everyWeeks(1).create();}
 function moaRemoveMaintenanceTrigger_(){ScriptApp.getProjectTriggers().forEach(function(t){if(t.getHandlerFunction()==="moaRunLearningMaintenance_")ScriptApp.deleteTrigger(t)});}
 
-/** 더 이상 사용하지 않는 모아 AI 레거시 시트를 필요할 때 한 번 정리합니다. */
-function moaCleanupLegacySheets(){var ss=SpreadsheetApp.getActiveSpreadsheet();["모아_학습후보","모아_반응학습","모아_주제학습"].forEach(function(n){var s=ss.getSheetByName(n);if(s)ss.deleteSheet(s);});}
+/** 더 이상 사용하지 않는 모아 AI 개인/레거시 시트를 필요할 때 한 번 정리합니다.
+ * 현재 공용학습 시트인 모아_대화정책 / 모아_표현가중치는 절대 삭제하지 않습니다.
+ */
+function moaCleanupLegacySheets(){
+  var ss=SpreadsheetApp.getActiveSpreadsheet(),removed=[];
+  ["모아_개인기억","모아_사용자성향","모아_표현학습","모아_학습후보","모아_반응학습","모아_주제학습"].forEach(function(n){
+    var sh=ss.getSheetByName(n);if(sh){ss.deleteSheet(sh);removed.push(n);}
+  });
+  return {ok:true,removed:removed,preserved:[MOA_POLICY_SHEET,MOA_EXPRESSION_SHEET]};
+}

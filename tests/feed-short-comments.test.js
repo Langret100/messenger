@@ -1,0 +1,16 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const feed=read('js/features/feed.js'),css=read('css/features/feed-classinfo-weekly.css'),html=read('index.html'),sw=read('sw.js'),app=read('js/app.js');
+ok(feed.includes('MAX_COMMENTS=20')&&feed.includes('COMMENT_LIMIT=60'),'short-comment limits missing');
+ok(feed.includes('function addComment(post,input,button)')&&feed.includes('cloudTransaction(postPath'),'comment transaction missing');
+ok(feed.includes('function commentsBlock(post)')&&feed.includes('짧게 댓글 달기…'),'inline comment UI missing');
+ok(feed.includes('openCommentComposers')&&feed.includes('toggleCommentComposerFromCard')&&feed.includes('setCommentComposer(card,!comments.classList.contains("compose-open"),true)'),'tap-to-open comment composer missing');
+ok(feed.includes('typeof target.closest!=="function"')&&!feed.includes('target instanceof Element'),'PiP cross-realm comment tap guard missing');
+ok(feed.includes('patchHeart(id,previous)')&&feed.includes('if(!sameComments(previous,post))patchComments(id)'),'realtime heart/comment partial patch missing');
+ok(feed.includes('while(rows.length>MAX_COMMENTS)'),'comment cap cleanup missing');
+ok(css.includes('.feed-comments')&&css.includes('.feed-comment-compose')&&css.includes('.feed-comment-input'),'comment styles missing');
+ok(css.includes('.feed-comments.compose-open .feed-comment-compose')&&css.includes('font-size:12px')&&css.includes('font-size:11px'),'comment collapse/size styles missing');
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.25')&&html.includes('js/features/feed.js?v=65.0.21'),'comment asset cache versions missing');
+ok(sw.includes('moaru-v64.5.62-admin-fastpath-v104-20260821')&&app.includes('sw.js?v=64.5.49'),'v5.38 service worker version missing');
+console.log('FEED_SHORT_COMMENTS_OK');

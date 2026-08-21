@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),ai=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
-ok(html.includes('moa-communication-engine.js?v=6'),'v88 cache bust missing');
+ok(html.includes('moa-communication-engine.js?v=8'),'v88 cache bust missing');
 ok(sw.includes('moaru-v64.5.49-task-reward-shopping-audit-v91-20260821'),'v88 service worker cache missing');
 for(const token of ['strategyScores','pickStrategy','policyKey','searchPolicy','referenceConfidence','policy_feedback','strategyHistory'])ok(engine.includes(token),'v88 engine layer missing: '+token);
 ok(ai.includes('MOA_POLICY_SHEET')&&ai.includes('모아_대화정책')&&ai.includes('moaStorePolicyEvents_')&&ai.includes('moaPublicPolicy_'),'policy learning store missing');

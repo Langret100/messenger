@@ -1,5 +1,5 @@
 /* ============================================================
-   MOA COMMUNICATION ENGINE v91
+   MOA COMMUNICATION ENGINE v91 SMART FOUNDATION
    Local-first dialogue engine for lightweight long-term adaptation.
 
    Pipeline
@@ -130,9 +130,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
   function analyze(raw){
     const text=clean(raw),c=compact(text),cs=concepts(text);
-    const explicitQuestion=/[?？]$/.test(text)||/(뭐야|누구야|어디야|언제야|왜|어떻게|어때|알아|알려줘|설명해줘|몇|얼마|맞아)$/.test(c);
+    const decisionCue=/(뭐먹지|뭐먹을까|뭘먹지|뭘먹을까|뭐할까|뭐하지|어디갈까|어디가지|뭘고를까|뭐고르지|어떤게좋을까|뭐가좋을까)/.test(c);
+    const repairCue=/(물었는데|물어봤는데|대답해|대답안|말했잖아|뭐가그렇구나|뭘듣고있|뭘듣고|엉뚱|딴소리|한심|답답|왜이래)/.test(c);
+    const explicitQuestion=/[?？]$/.test(text)||decisionCue||/(뭐야|누구야|어디야|언제야|왜|어떻게|어때|알아|알려줘|설명해줘|몇|얼마|맞아)$/.test(c);
     const referenceCue=/^(그래서|그다음|그리고|그럼|근데|왜|어떻게|그게|그거|그건|그걸|걔|걔가|거기|그사람|아까)/.test(c);
-    const searchCue=/(검색해|찾아줘|찾아봐|알아봐|최신|뉴스|날씨|기온|미세먼지|공기질|환율|현지시간)/.test(c);
+    const searchCue=/(검색해|검색해줘|찾아줘|찾아봐|알아봐|확인해줘|더자세히|자세히알려|최신|최근|뉴스|날씨|기온|미세먼지|공기질|환율|현지시간|추천해줘|비교해줘)/.test(c);
     let affect="neutral";
     if(/(좋아|재밌|이겼|성공|신나|기뻐|맛있|잘됐|뿌듯)/.test(c))affect="positive";
     if(/(싫어|힘들|피곤|실패|속상|짜증|화나|어려|망했|졌어|별로|아쉬워)/.test(c))affect="negative";
@@ -144,9 +146,10 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const preference=/(좋아해|싫어해|재밌어|맛있어|좋더라|별로야|취향)/.test(c);
     const reasonQuestion=explicitQuestion&&/(왜|이유|어째서)/.test(c);
     const opinionQuestion=explicitQuestion&&/(어때|어떻게생각|생각은|괜찮아|좋아보여)/.test(c);
-    const factQuestion=explicitQuestion&&!reasonQuestion&&!opinionQuestion&&/(누구|뭐야|무엇|어디|언제|몇|얼마|뜻|알려줘|설명)/.test(c);
+    const factQuestion=explicitQuestion&&!reasonQuestion&&!opinionQuestion&&/(누구|뭐야|무엇|어디|언제|몇|얼마|뜻|알려줘|설명|정의|유래|역사|차이)/.test(c);
+    const knowledgeCue=searchCue||factQuestion||reasonQuestion||/(무슨뜻|뜻이뭐|어떤사람|어떤곳|어떤거|차이가뭐|장단점|원리|유래|역사|왜그런|어떻게작동|추천해줘|비교해줘|정리해줘)/.test(c);
     const speechAct=reaction?`social:${reaction}`:plan?"inform:plan":preference?"inform:preference":event?"inform:event":reasonQuestion?"ask:reason":opinionQuestion?"ask:opinion":factQuestion?"ask:fact":act==="followup"?"followup":"inform:statement";
-    return {text,c,concepts:cs,topic:topicFrom(text,cs),affect,act,speechAct,reaction,event,plan,preference,question:explicitQuestion||act==="followup",searchCue,referenceCue};
+    return {text,c,concepts:cs,topic:topicFrom(text,cs),affect,act,speechAct,reaction,event,plan,preference,question:explicitQuestion||act==="followup",searchCue,knowledgeCue,referenceCue,decisionCue,repairCue};
   }
 
   function resolveReference(frame){
@@ -275,23 +278,76 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/(몇살|나이가)/.test(c))return "나는 사람처럼 나이가 있는 건 아니야 ㅋㅋ 그냥 모아라고 생각하면 돼.";
     if(/(뭐해|뭐하고있)/.test(c))return chooseText("self.status",["너랑 얘기하는 중이지 ㅋㅋ","지금은 너랑 잡담 중!","네가 뭐 말할지 보고 있었어."]);
     if(/(?:너|넌|모아).*(뭐좋아|좋아하는거|좋아하는음식|좋아하는게임)|(뭐좋아|좋아하는거|좋아하는음식|좋아하는게임).*(너|넌|모아)/.test(c))return chooseText("self.like",["딱 하나 고르긴 어렵네 ㅋㅋ 네 취향 얘기 듣는 건 재밌어.","나는 네가 좋아하는 얘기 듣는 쪽이 더 재밌어 ㅋㅋ"]);
-    if(/(뭐할수|할수있는)/.test(c))return "잡담하고, 네가 알려준 걸 기억하고, 필요한 정보는 찾아줄 수도 있어.";
+    if(/(뭐가궁금|궁금한거있|뭐궁금)/.test(c))return "나는 네가 요즘 뭐에 관심 있는지나, 오늘 있었던 일 중 뭐가 제일 기억나는지가 궁금해 ㅋㅋ 꼭 대답해야 하는 건 아니고 편한 얘기부터 해도 돼.";
+    if(/(뭐할수|할수있는)/.test(c))return "잡담도 하고, 네가 말한 취향이나 대화 흐름을 기억하고, 사실이 필요한 건 공개 자료를 찾아서 내용부터 정리해줄 수 있어.";
     return "";
+  }
+
+
+  function practicalDecisionReply(raw){
+    const text=clean(raw),c=compact(text);
+    const meal=/(점심|저녁|아침|야식|밥|먹지|먹을까|먹을거)/.test(c)&&( /(뭐먹|뭘먹|메뉴|먹지|먹을까)/.test(c) );
+    if(meal){
+      const slot=/아침/.test(c)?"아침":/저녁/.test(c)?"저녁":/야식/.test(c)?"야식":"점심";
+      const rows={
+        아침:["간단하게면 토스트나 김밥, 든든하게면 국밥이나 계란밥 어때?","빨리 먹을 거면 샌드위치, 든든하게는 김밥이나 국밥 쪽이 괜찮겠다."],
+        점심:["점심이면 든든하게는 제육덮밥이나 돈까스, 가볍게는 김밥이나 국수 어때?","오늘 점심은 볶음밥·덮밥처럼 한 그릇 메뉴도 괜찮고, 시원한 거 당기면 냉면이나 국수도 좋겠다."],
+        저녁:["저녁이면 찌개나 덮밥처럼 든든한 거 어때? 좀 가볍게 먹고 싶으면 국수나 샐러드도 괜찮고.","저녁은 고기류나 찌개, 아니면 간단하게 덮밥 쪽이 무난하겠다. 지금 매운 거랑 안 매운 거 중 뭐가 더 당겨?"],
+        야식:["야식이면 너무 무겁지 않게 만두나 토스트 정도 어때? 배 많이 고프면 라면에 계란도 무난하고.","야식은 간단하게 만두·김밥·토스트 중 하나가 좋겠다. 너무 늦었으면 양은 조금 가볍게 먹고."]
+      };
+      return chooseText(`decision.meal.${slot}`,rows[slot]);
+    }
+    if(/(뭐할까|뭐하지|할거없|심심)/.test(c))return chooseText("decision.activity",["지금 바로 할 거면 짧게 산책하거나 게임 한 판, 아니면 보고 싶던 영상 하나 보는 건 어때?","10분짜리로 하나 고르자. 간식 먹기, 짧게 걷기, 게임 한 판 중에 지금 제일 덜 귀찮은 걸로 ㅋㅋ"]);
+    if(/(어디갈까|어디가지)/.test(c))return "가까운 데서 놀 거면 카페·공원·서점 같은 식으로 먼저 좁혀보자. 실내가 좋아, 밖이 좋아?";
+    if(/(뭘고를까|뭐고르지|어떤게좋을까|뭐가좋을까)/.test(c))return "후보를 말해주면 장단점 비교해서 하나 골라줄게. 그냥 추천해도 되면 용도나 원하는 느낌 한 가지만 알려줘.";
+    return "";
+  }
+
+  function priorUserPrompt(){
+    const rows=context().filter(v=>v.role==="user").slice(0,-1).reverse();
+    for(const row of rows.slice(0,6)){
+      const f=analyze(row.text||"");
+      if(f.decisionCue||f.question||f.searchCue)return row.text;
+    }
+    return "";
+  }
+  function repairConversation(raw){
+    const c=compact(raw);
+    if(!/(물었는데|물어봤는데|대답해|대답안|말했잖아|뭐가그렇구나|뭘듣고있|뭘듣고|엉뚱|딴소리|한심|답답|왜이래|멍청|바보)/.test(c))return "";
+    let embedded=clean(raw).match(/((?:아침|점심|저녁|야식)?\s*(?:뭐|뭘)\s*먹(?:지|을까))/)?.[1]||"";
+    const target=embedded||priorUserPrompt();
+    const direct=practicalDecisionReply(target);
+    if(direct)return `맞아, 방금 답이 엉뚱했어. ${direct}`;
+    return target?"방금 내가 질문을 제대로 못 받았어. 아까 물은 내용 기준으로 다시 답할게.":"방금 답이 맥락을 못 따라갔어. 질문을 다시 한 번만 말해주면 이번엔 거기에 바로 답할게.";
   }
 
   function searchPolicy(frame,ref){
     const c=frame.c;
     if(frame.reaction||frame.act==="social")return "forbidden";
-    if(/(검색해|찾아줘|찾아봐|알아봐|최신|뉴스|날씨|기온|미세먼지|공기질|환율|현지시간)/.test(c))return "required";
     if(frame.act==="followup"&&frame.referenceCue&&ref.ambiguous)return "forbidden";
-    if(frame.question&&/(누구야|뭐야|어디야|언제야|뜻이야|설명해줘|알려줘)/.test(c))return "optional";
+    if(frame.searchCue)return "required";
+    // 사실/정의/원리 질문은 아는 척하는 로컬 템플릿보다 공개 자료 확인을 우선한다.
+    if(frame.knowledgeCue&&frame.question)return "required";
     return "forbidden";
+  }
+  function previousSearchAnchor(){
+    const users=context().filter(v=>v.role==="user").slice(-6,-1).reverse();
+    for(const row of users){
+      const t=clean(row.text);if(!t)continue;
+      const c=compact(t);if(/^(찾아줘|찾아봐|검색해|검색해줘|알아봐|알려줘|더찾아줘|더찾아봐)$/.test(c))continue;
+      const f=analyze(t);if(f.topic)return f.topic;
+      if(f.concepts?.length)return f.concepts.slice(0,3).join(" ");
+    }
+    return "";
   }
   function searchQuery(frame,ref){
     let q=clean(ref.text||frame.text).replace(/[?？]/g,"");
-    q=q.replace(/(?:검색해줘|검색해|찾아줘|찾아봐|알아봐줘|알아봐|설명해줘|알려줘)$/g,"").trim();
-    q=q.replace(/\s*(?:누구야|뭐야|어디야|언제야)$/g,"").trim();
-    return q||ref.target||state().topic||frame.text;
+    q=q.replace(/(?:좀\s*)?(?:검색해줘|검색해|찾아줘|찾아봐|더\s*찾아줘|더\s*찾아봐|알아봐줘|알아봐|확인해줘|설명해줘|알려줘|정리해줘|비교해줘|추천해줘|더\s*자세히(?:\s*알려줘)?|자세히\s*알려줘)$/g,"").trim();
+    q=q.replace(/\s*(?:누구야|뭐야|무엇이야|어디야|언제야|뜻이야|무슨뜻이야)$/g,"").trim();
+    q=q.replace(/(\S{2,})(?:은|는|이|가)$/,"$1").trim();
+    const generic=/^(이거|그거|그게|그건|그걸|그사람|걔|거기|좀|더|더자세히|자세히|찾아줘|찾아봐|검색해|검색해줘|알아봐|알려줘)?$/;
+    if(!q||generic.test(compact(q))){const prior=previousSearchAnchor(),topic=clean(state().topic);q=ref.target||prior||(!generic.test(compact(topic))?topic:"");}
+    return clean(q);
   }
 
   const BASE={
@@ -384,7 +440,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else if(frame.event&&frame.affect==="negative")add("ack.event.neg",["아 그건 좀 힘들었겠다.","아이고, 생각대로 안 됐구나.","그건 기분 좀 상했겠다."]);
       else if(frame.plan)add("ack.plan",["오, 그렇게 하기로 했구나.","좋네 ㅋㅋ 다음 계획까지 잡았네.","오케이. 다음엔 그걸 해보는 거구나."]);
       else if(frame.preference)add("ack.pref",frame.affect==="negative"?["아, 그건 취향에 안 맞는구나.","오, 넌 그쪽은 별로구나."]:["오 그거 좋아하는구나 ㅋㅋ","그쪽 취향이구나.","오, 그건 기억해둘 만하네."]);
-      else add("ack.general",["오, 그렇구나.","응응, 듣고 있어.","아하, 그랬구나."]);
+      else if(frame.topic)add("ack.topic",[`아, ${frame.topic} 얘기구나.`,`응, ${frame.topic} 쪽 얘기네.`]);
+      else add("ack.general",["응, 무슨 얘기인지 보고 있어.","아하, 흐름은 따라가고 있어."]);
     }
     if(strategy==="playful")add("playful",["오 ㅋㅋ 그건 좀 웃기네.","아 ㅋㅋ 상황이 그려진다.","ㅋㅋㅋ 그랬구나."]);
     if(strategy==="continue"){
@@ -397,11 +454,17 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else add("explore.general",["넌 그중에 뭐가 제일 좋았어?","그건 왜 그렇게 생각했어?","조금 더 얘기해봐 ㅋㅋ"]);
     }
     if(strategy==="direct"){
-      if(frame.act==="question"&&!frame.searchCue)add("direct.question",s.lastStatement?["앞 얘기랑 이어지는 질문이네. 내가 확실히 알 수 있는 부분부터 말해볼게.","앞 얘기 기준으로 보면 맥락이 조금 더 필요해."]:["그건 상황에 따라 달라질 수 있어.","조금만 더 맥락을 주면 더 정확하게 답할 수 있어."]);
+      if(frame.act==="question"&&!frame.knowledgeCue)add("direct.question",s.lastStatement?["앞 얘기랑 이어지는 질문이네. 지금 말한 상황 기준으로 보면 한 가지로 딱 잘라 말하긴 어려워.","앞 얘기 기준으로 답하려면 조건이 하나만 더 있으면 좋겠어."]:["그건 상황에 따라 달라질 수 있어. 어떤 상황인지 한 줄만 더 말해줘.","조건에 따라 답이 달라져. 지금 상황을 조금만 더 알려줘."]);
+      else if(frame.event&&frame.topic)add("direct.event",frame.affect==="positive"?[`${frame.topic} 쪽은 결과가 괜찮았던 거네 ㅋㅋ`,`오, ${frame.topic} 얘기는 잘 풀렸구나.`]:frame.affect==="negative"?[`${frame.topic} 때문에 꽤 신경 쓰였겠네.`,`아, ${frame.topic} 쪽에서 일이 꼬였구나.`]:[`${frame.topic}에서 그런 일이 있었구나.`,`아, ${frame.topic} 얘기였구나.`]);
+      else if(frame.plan&&frame.topic)add("direct.plan",[`그럼 다음엔 ${frame.topic} 쪽으로 해보려는 거네.`,`오케이, ${frame.topic} 계획까지 잡아둔 거구나.`]);
+      else if(frame.preference&&frame.topic)add("direct.preference",frame.affect==="negative"?[`${frame.topic} 쪽은 취향이 아닌 거네.`]:[`${frame.topic} 쪽을 좋아하는구나. 그건 기억해둘게.`]);
       else if(frame.topic&&frame.text.length<=24)add("direct.topic",[`응, ${frame.topic} 얘기구나.`,`오, ${frame.topic} 얘기네.`]);
-      else add("direct.general",["응, 그 얘기 이해했어.","아하, 무슨 말인지 알겠어."]);
+      else add("direct.general",["응, 무슨 말인지 따라가고 있어.","아하, 지금 얘기 흐름은 이해했어."]);
     }
-    if(!out.length)add("fallback",["오, 그렇구나.","응응, 듣고 있어.","아하, 그랬구나."],"ack");
+    if(!out.length){
+      if(frame.topic)add("fallback.topic",[`응, ${frame.topic} 얘기부터 이어가자.`,`아, ${frame.topic} 쪽 얘기네.`],"direct");
+      else add("fallback",["응, 무슨 말인지 보고 있어.","아하, 흐름은 따라가고 있어."],"ack");
+    }
     return out;
   }
 
@@ -589,8 +652,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const ref=resolveReference(frame);const searchMode=searchPolicy(frame,ref);
     let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame);
 
-    const dt=dateTime(text),calc=math(text),game=rps(text),self=selfReply(text);
-    if(dt)answer=dt;else if(calc)answer=calc;else if(game)answer=game;else if(self)answer=self;
+    const dt=dateTime(text),calc=math(text),game=rps(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text);
+    if(dt)answer=dt;else if(calc)answer=calc;else if(game)answer=game;else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
     const memQ=memoryQuestion(text);
@@ -598,13 +661,17 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
     if(!answer&&searchMode!=="forbidden"){
       if(ref.ambiguous){answer="아까 말한 대상 중에서 어느 걸 말하는 거야?";source="local";strategy="clarify";}
-      else try{const q=searchQuery(frame,ref),d=await MiniTalk.AuthApi.moaSearch({userId:userKey(),text,query:q,context:context().slice(-8)});if(d?.reply){answer=d.reply;source=d.source||"search";candidateId=`search:${d.kind||"general"}`;strategy="search";}}catch(e){console.warn("모아 검색 실패",e);}
+      else {
+        const q=searchQuery(frame,ref);
+        if(!q){answer="뭘 찾아볼까? 궁금한 대상이나 주제를 말해줘.";source="local";strategy="clarify";}
+        else try{const d=await MiniTalk.AuthApi.moaSearch({userId:userKey(),text,query:q,context:context().slice(-8)});if(d?.reply){answer=d.reply;source=d.source||"search";candidateId=`search:${d.kind||"general"}`;strategy="search";}}catch(e){console.warn("모아 검색 실패",e);}
+      }
     }
 
     if(!answer){
       const policy=pickStrategy(frame,ref);strategy=policy.strategy;policyKeyValue=policy.policyKey;
       const chosen=chooseCandidate(frame,policy,[...generateCandidates(frame,ref,policy),...learnedCandidates(frame,policy,ref)]);
-      answer=chosen?.text||"응응, 듣고 있어.";source=chosen?.source||"local";candidateId=chosen?.id||"fallback";strategy=chosen?.strategy||strategy;
+      answer=chosen?.text||"응, 무슨 말인지 보고 있어.";source=chosen?.source||"local";candidateId=chosen?.id||"fallback";strategy=chosen?.strategy||strategy;
     }
 
     const m=inferMemory(text);if(m){memories()[m.key]={value:m.value,label:m.label,updatedAt:Date.now()};saveMemories();queueCommit({type:"memory",...m});}

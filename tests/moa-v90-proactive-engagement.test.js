@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),chat=read('js/features/moa-chat.js'),css=read('css/features/moa-chat.css'),gs=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
-ok(html.includes('moa-chat.css?v=5')&&html.includes('moa-communication-engine.js?v=6')&&html.includes('moa-chat.js?v=10'),'v90 cache bust missing');
+ok(html.includes('moa-chat.css?v=5')&&html.includes('moa-communication-engine.js?v=8')&&html.includes('moa-chat.js?v=10'),'v90 cache bust missing');
 ok(sw.includes('moaru-v64.5.49-task-reward-shopping-audit-v91-20260821'),'v90 service worker cache missing');
 for(const token of ['maybeInitiate','proactiveCandidates','dueOpenLoop','strongestInterest','starterSuggestions','initiativeSettings','PROACTIVE_DAILY_MAX'])ok(engine.includes(token),'v90 proactive engine missing '+token);
 for(const token of ['refreshProactive','moa-proactive-unread','먼저 말 걸기','unread:true'])ok(chat.includes(token),'v90 proactive chat UI missing '+token);

@@ -62,14 +62,16 @@ MiniTalk.GameHost=(()=>{
   }
 
   function popupBounds(){
-    const scr=window.screen||{};
-    const availWidth=Math.max(900,Number(scr.availWidth)||1280);
-    const availHeight=Math.max(650,Number(scr.availHeight)||800);
-    const width=Math.max(900,Math.min(1360,Math.round(availWidth*.90)));
-    const height=Math.max(650,Math.min(920,Math.round(availHeight*.90)));
-    const left=Math.round((Number(scr.availLeft)||0)+(availWidth-width)/2);
-    const top=Math.round((Number(scr.availTop)||0)+(availHeight-height)/2);
-    return{width,height,left,top};
+    const scr=window.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0;
+    const availWidth=Math.max(900,Number(scr.availWidth)||1280),availHeight=Math.max(650,Number(scr.availHeight)||800);
+    const messengerLeft=Number(window.screenX??window.screenLeft)||availLeft,messengerTop=Number(window.screenY??window.screenTop)||availTop,messengerW=Math.max(0,Number(window.outerWidth)||0);
+    const gap=14,rightStart=Math.max(availLeft,messengerLeft+messengerW+gap),rightSpace=(availLeft+availWidth)-rightStart,leftSpace=Math.max(0,messengerLeft-gap-availLeft);
+    const targetWidth=Math.max(900,Math.min(1360,Math.round(availWidth*.82))),height=Math.max(650,Math.min(920,Math.round(availHeight*.90)));
+    let width=Math.min(targetWidth,Math.max(760,rightSpace)),left=rightStart;
+    if(rightSpace<820&&leftSpace>rightSpace){width=Math.min(targetWidth,Math.max(760,leftSpace));left=Math.max(availLeft,messengerLeft-gap-width)}
+    if(Math.max(rightSpace,leftSpace)<760){width=Math.max(900,Math.min(1280,Math.round(availWidth*.86)));left=availLeft+Math.max(0,Math.round((availWidth-width)/2))}
+    const top=Math.max(availTop,Math.min(messengerTop,availTop+availHeight-height));
+    return{width:Math.round(width),height:Math.round(height),left:Math.round(left),top:Math.round(top)};
   }
 
   function popupFeatures(){
@@ -93,7 +95,7 @@ MiniTalk.GameHost=(()=>{
     const doc=popup.document;
     const base=String(document.baseURI||location.href).replace(/"/g,"%22");
     doc.open();
-    doc.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>${String(game.title||"게임").replace(/[<>]/g,"")}</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b10;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.host{height:100%;display:grid;grid-template-rows:48px minmax(0,1fr)}.bar{display:flex;align-items:center;gap:10px;padding:0 12px;background:#0c1119;color:#f5f7fb;border-bottom:1px solid #202936;user-select:none}.close{width:34px;height:34px;border:0;border-radius:10px;background:#171f2b;color:#fff;font-size:22px;cursor:pointer}.title{flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badge{font-size:9px;font-weight:900;letter-spacing:.08em;color:#73e6c0;background:#133529;padding:5px 7px;border-radius:999px}.frame{width:100%;height:100%;border:0;background:#fff}</style></head><body><main class="host"><header class="bar"><button id="gameClose" class="close" type="button" aria-label="게임 닫기">‹</button><strong class="title"></strong><span class="badge">GAME</span></header><iframe id="gameFrame" class="frame" title="게임" allow="autoplay; fullscreen" referrerpolicy="same-origin"></iframe></main></body></html>`);
+    doc.write(`<!doctype html><html lang="ko" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>${String(game.title||"게임").replace(/[<>]/g,"")}</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f7f9fc;color:#18212f;color-scheme:light;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.host{height:100%;display:grid;grid-template-rows:48px minmax(0,1fr)}.bar{display:flex;align-items:center;gap:10px;padding:0 12px;background:#fff;color:#18212f;border-bottom:1px solid #dfe5ee;box-shadow:0 2px 10px rgba(22,33,50,.06);user-select:none}.close{width:34px;height:34px;border:1px solid #dfe5ee;border-radius:10px;background:#f5f7fb;color:#253246;font-size:22px;cursor:pointer}.title{flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badge{font-size:9px;font-weight:900;letter-spacing:.08em;color:#16745b;background:#e3f7f0;padding:5px 7px;border-radius:999px}.frame{width:100%;height:100%;border:0;background:#fff}</style></head><body><main class="host"><header class="bar"><button id="gameClose" class="close" type="button" aria-label="게임 닫기">‹</button><strong class="title"></strong><span class="badge">GAME</span></header><iframe id="gameFrame" class="frame" title="게임" allow="autoplay; fullscreen" referrerpolicy="same-origin"></iframe></main></body></html>`);
     doc.close();
     titleNode=doc.querySelector(".title");
     if(titleNode)titleNode.textContent=game.title||"게임";

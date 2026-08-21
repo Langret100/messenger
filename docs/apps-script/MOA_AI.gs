@@ -1,5 +1,5 @@
 /* ============================================================
-   MOA_AI.gs - MOA AI backend v91
+   MOA_AI.gs - MOA AI backend v91 smart-search foundation
 
    Browser owns conversation understanding and dialogue policy.
    Apps Script is intentionally limited to:
@@ -153,10 +153,6 @@ function moaSearchShortcut_(text,query){
     var iq=strip(/(?:이미지|사진|검색|찾아줘|찾아봐|찾아)/g);if(!iq)iq=q;
     return {reply:"이미지 검색으로 바로 볼 수 있어:\nhttps://www.google.com/search?safe=active&tbm=isch&q="+encodeURIComponent(iq),source:"image-search",kind:"image"};
   }
-  if(/사전|단어\s*뜻|뜻\s*찾/.test(raw)){
-    var dq=strip(/(?:네이버|사전|에서|단어|뜻|검색|찾아줘|찾아봐|찾아|알려줘)/g);if(!dq)dq=q;
-    return {reply:"사전에서 바로 확인할 수 있어:\nhttps://dict.naver.com/dict.search?query="+encodeURIComponent(dq),source:"dictionary-search",kind:"dictionary"};
-  }
   if(/네이버.*검색|네이버에서/.test(raw)){
     var nq=strip(/(?:네이버|에서|검색|찾아줘|찾아봐|찾아)/g);if(!nq)nq=q;
     return {reply:"네이버 검색 결과 바로가기:\nhttps://search.naver.com/search.naver?query="+encodeURIComponent(nq),source:"naver-search",kind:"web"};
@@ -188,24 +184,70 @@ function moaNewsSearch_(text,query){
     return {reply:"최근 관련 소식은 이쪽이야:\n"+lines.join("\n\n"),source:"google-news",kind:"news"};
   }catch(e){return null;}
 }
-function moaGeneralSearch_(query){
+function moaSentenceParts_(text){
+  var s=String(text||"").replace(/\s+/g," ").trim();if(!s)return [];
+  var parts=s.match(/[^.!?。！？]+[.!?。！？]?/g)||[s];
+  return parts.map(function(v){return v.trim()}).filter(function(v){return v.length>=18});
+}
+function moaSearchWords_(text){
+  return moaNormalize_(text).replace(/[^0-9a-z가-힣 ]/gi," ").split(/\s+/).filter(function(v){return v.length>=2&&!["알려줘","설명해줘","찾아줘","검색해줘","뭐야","누구야","무엇","어디","언제"].includes(v)});
+}
+function moaSentenceScore_(sentence,query,index){
+  var s=moaNormalize_(sentence), words=moaSearchWords_(query), score=Math.max(0,18-index*2);
+  words.forEach(function(w){if(s.indexOf(w)>=0)score+=8});
+  if(sentence.length>=45&&sentence.length<=190)score+=6;
+  if(/^(이 문서는|동음이의어|분류:|위키)/.test(s))score-=30;
+  return score;
+}
+function moaSynthesizeSearch_(query,results){
+  var candidates=[],seen={};
+  (results||[]).forEach(function(row,ri){
+    moaSentenceParts_(row.snippet).forEach(function(sentence,si){
+      var key=moaNormalize_(sentence).replace(/[^0-9a-z가-힣]/gi,"").slice(0,90);if(!key||seen[key])return;seen[key]=1;
+      candidates.push({text:sentence,score:moaSentenceScore_(sentence,query,ri*3+si),source:ri});
+    });
+  });
+  candidates.sort(function(a,b){return b.score-a.score});
+  var chosen=[],usedSources={};
+  candidates.forEach(function(v){
+    if(chosen.length>=3)return;
+    var tooSimilar=chosen.some(function(x){
+      var a=moaSearchWords_(x.text),b=moaSearchWords_(v.text),same=a.filter(function(w){return b.indexOf(w)>=0}).length;
+      return same>=Math.min(4,Math.max(2,Math.floor(Math.min(a.length,b.length)*.65)));
+    });
+    if(!tooSimilar){chosen.push(v);usedSources[v.source]=1;}
+  });
+  if(!chosen.length)return "";
+  var answer=chosen.map(function(v){return moaTrimAnswer_(v.text,240)}).join(" ");
+  return moaTrimAnswer_(answer,620);
+}
+function moaGeneralSearch_(query,text){
   var q=String(query||"").trim();if(!q)return null;
-  var cache=CacheService.getScriptCache(), key="moa.search."+Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,q)).slice(0,28), hit=cache.get(key);if(hit){try{return JSON.parse(hit)}catch(e){}}
-  var results=[], wiki=moaWikiSearch_(q);
-  wiki.forEach(function(v){if(results.length<3)results.push(v)});
-  if(results.length<2){
-    var ddgJson=moaFetchJson_("https://api.duckduckgo.com/?q="+encodeURIComponent(q)+"&format=json&no_html=1&no_redirect=1&skip_disambig=1");
-    if(ddgJson&&(ddgJson.Answer||ddgJson.AbstractText))results.push({title:ddgJson.Heading||q,snippet:moaTrimAnswer_(ddgJson.Answer||ddgJson.AbstractText,260),url:ddgJson.AbstractURL||""});
+  var raw=String(text||"");
+  var lookup=q;
+  if(/추천|골라|뭐가\s*좋/.test(raw)&&!/추천/.test(lookup))lookup=q+" 추천";
+  else if(/비교|차이|장단점/.test(raw)&&!/(비교|차이)/.test(lookup))lookup=q+" 비교 차이";
+  else if(/최신|최근|요즘/.test(raw)&&!/(최신|최근)/.test(lookup))lookup=q+" 최신";
+  var cache=CacheService.getScriptCache(), key="moa.search.v2."+Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,lookup)).slice(0,28), hit=cache.get(key);if(hit){try{return JSON.parse(hit)}catch(e){}}
+  var results=[], intentWeb=/(추천|골라|비교|차이|장단점)/.test(raw);
+  if(intentWeb){moaDuckHtmlSearch_(lookup).forEach(function(v){if(results.length<4)results.push(v)});}
+  var wiki=moaWikiSearch_(lookup);
+  wiki.forEach(function(v){if(results.length<4&&!results.some(function(x){return x.url&&x.url===v.url}))results.push(v)});
+  if(results.length<3){
+    var ddgJson=moaFetchJson_("https://api.duckduckgo.com/?q="+encodeURIComponent(lookup)+"&format=json&no_html=1&no_redirect=1&skip_disambig=1");
+    if(ddgJson&&(ddgJson.Answer||ddgJson.AbstractText))results.push({title:ddgJson.Heading||q,snippet:moaTrimAnswer_(ddgJson.Answer||ddgJson.AbstractText,360),url:ddgJson.AbstractURL||""});
   }
-  if(results.length<2){
-    moaDuckHtmlSearch_(q).forEach(function(v){if(results.length<3&&!results.some(function(x){return x.url&&x.url===v.url}))results.push(v)});
+  if(results.length<3){
+    moaDuckHtmlSearch_(lookup).forEach(function(v){if(results.length<4&&!results.some(function(x){return x.url&&x.url===v.url}))results.push(v)});
   }
-  var safeUrl="https://www.google.com/search?safe=active&q="+encodeURIComponent(q), out;
-  if(results.length){
-    var lines=results.slice(0,3).map(function(v,i){return (i+1)+". "+v.title+(v.snippet?"\n"+v.snippet:"")+(v.url?"\n"+v.url:"")});
-    out={reply:"🔎 ‘"+q+"’ 찾아봤어.\n\n"+lines.join("\n\n")+"\n\n더 찾아보기\n"+safeUrl,source:results[0].url&&/wikipedia\.org/.test(results[0].url)?"wikipedia-search":"web-search",kind:"general"};
+  var out,summary=moaSynthesizeSearch_(lookup,results);
+  if(results.length&&summary){
+    var refs=results.filter(function(v){return v.url&&v.snippet}).slice(0,2).map(function(v){return "• "+moaTrimAnswer_(v.title,70)+"\n"+v.url});
+    out={reply:summary+(refs.length?"\n\n참고한 공개 자료\n"+refs.join("\n"):""),source:results[0].url&&/wikipedia\.org/.test(results[0].url)?"wikipedia-answer":"web-answer",kind:"answer"};
+  }else if(results.length){
+    var first=results[0];out={reply:"관련 자료는 찾았는데 지금 가져온 내용만으로는 확실하게 요약하기 어려워. 검색어를 조금 더 구체적으로 말해주면 다시 확인해볼게."+(first.url?"\n\n참고 자료\n"+first.url:""),source:"web-answer",kind:"answer"};
   }else{
-    out={reply:"🔎 ‘"+q+"’로 공개 검색에서 바로 확인할 만한 결과를 못 찾았어.\n표현이나 철자가 맞는지 한 번 확인해볼래?\n\n직접 더 찾아보기\n"+safeUrl,source:"web-search",kind:"general"};
+    out={reply:"공개 자료에서 믿고 바로 답할 만한 내용을 찾지 못했어. 이름이나 표현을 조금 더 구체적으로 말해주면 다시 찾아볼게.",source:"web-answer",kind:"answer"};
   }
   cache.put(key,JSON.stringify(out),600);return out;
 }
@@ -217,7 +259,7 @@ function moaSearchAssist_(data){
   var weather=moaWeatherSearch_(text||query);if(weather)return jsonResponse_({ok:true,reply:weather.reply,source:weather.source,kind:weather.kind});
   var currency=moaCurrencySearch_(text||query);if(currency)return jsonResponse_({ok:true,reply:currency.reply,source:currency.source,kind:currency.kind});
   var news=moaNewsSearch_(text||query,query);if(news)return jsonResponse_({ok:true,reply:news.reply,source:news.source,kind:news.kind});
-  var general=moaGeneralSearch_(query);return jsonResponse_({ok:true,reply:general.reply,source:general.source,kind:general.kind});
+  var general=moaGeneralSearch_(query,text);return jsonResponse_({ok:true,reply:general.reply,source:general.source,kind:general.kind});
 }
 
 

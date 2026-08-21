@@ -1,0 +1,17 @@
+const fs=require('fs');
+const weekly=fs.readFileSync('js/tasks/friday-grade6-mission.js','utf8');
+const css=fs.readFileSync('css/features/feed-classinfo-weekly.css','utf8');
+const game=fs.readFileSync('js/game-bridge/game-host.js','utf8');
+const html=fs.readFileSync('index.html','utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(weekly.includes('<html lang="ko" data-theme="light">')&&weekly.includes('color-scheme')===false,'weekly popup must explicitly request light theme');
+ok(css.includes('.weekly-exam-popup{margin:0;background:#f6f8fc')&&css.includes('color-scheme:light'),'weekly worksheet light surface missing');
+ok(css.includes('.weekly-exam-submit{width:auto!important')&&weekly.includes('weekly-exam-footer-copy'),'weekly footer submit/copy layout fix missing');
+ok(css.includes('width:min(1180px')&&weekly.includes('targetW=Math.max(900,Math.min(1240'),'weekly worksheet width expansion missing');
+ok(weekly.includes('rightSpace')&&weekly.includes('leftSpace')&&weekly.includes('messengerW'),'weekly popup avoidance placement missing');
+ok(game.includes('rightSpace')&&game.includes('leftSpace')&&game.includes('messengerW'),'game popup avoidance placement missing');
+ok(game.includes('<html lang="ko" data-theme="light">')&&game.includes('background:#fff;color:#18212f'),'game popup chrome light theme missing');
+ok(weekly.includes('주간 미션 완료 도장')&&weekly.includes('20문항 제출이 완료되어 도장을 받았어요.'),'weekly completion stamp missing');
+ok(css.includes('.friday-start-button{min-width:84px;width:auto!important;margin:0!important'),'weekly card start button clipping fix missing');
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.21')&&html.includes('js/game-bridge/game-host.js?v=22')&&html.includes('js/tasks/friday-grade6-mission.js?v=65.0.10'),'new UI cache versions missing');
+console.log('WEEKLY_POPUP_UI_POLISH_OK');

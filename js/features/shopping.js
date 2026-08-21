@@ -150,71 +150,99 @@ MiniTalk.Features.Shopping = (() => {
     }
   }
 
-  function openRandomPurchase() {
+  async function openRandomPurchase() {
     const D=MiniTalk.UI.Dom, doc=D.doc(), products=Service.products();
     if(!products.length){ MiniTalk.UI.Shell.toast("추첨할 상품이 아직 없어요."); return; }
+
+    // 서버 잔액을 먼저 확인해서 코인이 부족한 사용자는 룰렛 자체가 돌지 않게 합니다.
+    let balance=MiniTalk.Economy.CoinWallet.value();
+    try { balance=await MiniTalk.Economy.CoinWallet.refresh(true); } catch (_) {}
     closeRandomOverlay(); randomAudio();
+
     const overlay=D.el("div", { class:"shop-random-overlay", role:"dialog", "aria-label":"랜덤구매" });
     const card=D.el("section", { class:"shop-random-machine" });
     const top=D.el("div", { class:"shop-random-top" }, [
-      D.el("span", { class:"shop-random-kicker", text:"RANDOM PICK" }),
-      D.el("span", { class:"shop-random-cost" }, [coinAmount(RANDOM_COST,"coin-amount"),D.el("small",{text:" / 1회"})])
+      D.el("span", { class:"shop-random-kicker", text:"랜덤 뽑기" }),
+      D.el("span", { class:"shop-random-cost" }, [coinAmount(RANDOM_COST,"coin-amount"),D.el("small",{text:"1회"})])
     ]);
     const windowEl=D.el("div", { class:"shop-random-window" });
     const strip=D.el("div", { class:"shop-random-strip" });
-    const hint=D.el("div", { class:"shop-random-tap" }, [D.el("strong",{text:"눌러!"}),D.el("small",{text:"한 번 더 누르면 바로 결과"})]);
-    windowEl.append(strip,hint); card.append(top,windowEl,D.el("small",{class:"shop-random-foot",text:`현재 ${products.length}개 상품 중 1개가 나와요` })); overlay.append(card);
-    const state={phase:"ready",products,timers:[],interval:0,result:null,winner:null,fast:false,finishing:false}; overlay.__state=state; randomOverlay=overlay;
-    const paintOne=(product)=>{ const cell=randomProductCell(product,true); strip.replaceChildren(cell); cell.style.height=`${Math.max(1,windowEl.clientHeight||360)}px`; };
-    const paintIdle=()=>paintOne({name:"?"});
-    paintIdle(); doc.body.append(overlay);
-    requestAnimationFrame(()=>{ overlay.classList.add("show"); paintIdle(); });
+    const hint=D.el("div", { class:"shop-random-tap" });
+    const footer=D.el("small",{class:"shop-random-foot",text:`현재 ${products.length}개 상품 중 하나가 나와요`});
+    windowEl.append(strip,hint); card.append(top,windowEl,footer); overlay.append(card);
+    const state={phase:balance<RANDOM_COST?"insufficient":"ready",products,timers:[],interval:0,result:null,winner:null,finishing:false,resultId:""};
+    overlay.__state=state; randomOverlay=overlay;
 
-    const beginWaiting=()=>{
-      state.phase="spinning"; overlay.classList.add("spinning"); hint.querySelector("strong").textContent="돌아가는 중"; hint.querySelector("small").textContent="다시 누르면 바로 결과";
-      randomWhoosh(); let i=0;
-      state.interval=setInterval(()=>{ const p=products[i++%products.length]; paintOne(p); strip.classList.remove("pulse"); void strip.offsetWidth; strip.classList.add("pulse"); randomTick(); },78);
+    const cellHeight=()=>Math.max(1,windowEl.clientHeight||390);
+    const paintOne=product=>{const cell=randomProductCell(product,true);strip.replaceChildren(cell);cell.style.height=`${cellHeight()}px`;};
+    const setHint=(title,sub="")=>hint.replaceChildren(D.el("strong",{text:title}),...(sub?[D.el("small",{text:sub})]:[]));
+    paintOne({name:"?"});
+    if(state.phase==="insufficient"){
+      overlay.classList.add("insufficient");
+      setHint("코인이 부족해요", "화면을 누르면 닫혀요");
+    }else setHint("화면을 눌러 뽑기", "3코인 · 한 번만 뽑아요");
+    doc.body.append(overlay);
+    requestAnimationFrame(()=>{overlay.classList.add("show");paintOne({name:"?"});});
+
+    const beginSpin=()=>{
+      if(state.phase!=="ready")return;
+      state.phase="spinning";overlay.classList.add("spinning");setHint("뽑는 중…");
+      randomWhoosh();let i=0;
+      state.interval=setInterval(()=>{
+        const p=products[i++%products.length];paintOne(p);strip.classList.remove("pulse");void strip.offsetWidth;strip.classList.add("pulse");randomTick();
+      },76);
     };
 
-    const settle=()=>{
-      if(state.finishing||!state.result)return; state.finishing=true; if(state.interval){clearInterval(state.interval);state.interval=0;}
-      const winner=state.result.product||products.find(p=>p.id===state.result.product_id)||{name:state.result.product_name||"상품",imageUrl:state.result.product_image_url||""}; state.winner=winner;
-      const seq=[]; const steps=state.fast?7:28;
-      for(let i=0;i<steps;i++)seq.push(products[Math.floor(Math.random()*products.length)]); seq.push(winner);
-      strip.style.transition="none"; strip.style.transform="translateY(0)"; strip.replaceChildren(...seq.map((p,i)=>randomProductCell(p,i===seq.length-1))); void strip.offsetHeight;
-      const cellH=Math.max(1,windowEl.clientHeight); strip.querySelectorAll(".shop-random-reel-cell").forEach(el=>el.style.height=`${cellH}px`);
-      const target=-(seq.length-1)*cellH, duration=state.fast?.28:2.7; state.target=target;
-      strip.style.transition=`transform ${duration}s cubic-bezier(.12,.72,.16,1)`; requestAnimationFrame(()=>strip.style.transform=`translateY(${target}px)`);
-      const ticks=Math.min(22,seq.length-1); for(let i=0;i<ticks;i++){ const t=(duration*1000)*(i/ticks);state.timers.push(setTimeout(randomTick,t)); }
-      state.timers.push(setTimeout(()=>showWinner(),duration*1000+70));
+    const movePrizeToInventory=()=>{
+      if(state.phase!=="result")return;
+      state.phase="closing";
+      const prize=windowEl.querySelector(".shop-random-reel-cell.active")||windowEl.querySelector(".shop-random-reel-cell:last-child");
+      prize?.classList.add("fly-to-inventory");
+      overlay.classList.add("prize-leaving");
+      randomArrivalId=state.resultId||"";
+      state.timers.push(setTimeout(()=>{
+        closeRandomOverlay();
+        inventoryOpen=true;
+        const host=MiniTalk.UI.Dom.byId("viewHost");
+        if(host&&MiniTalk.Store.get("route")==="shopping")render(host,{animate:false,refreshCatalog:false});
+        setTimeout(()=>{randomArrivalId="";},1800);
+      },520));
     };
 
     const showWinner=()=>{
-      if(state.phase==="result")return; state.phase="result"; randomBrake(); randomFanfare(); overlay.classList.remove("spinning"); overlay.classList.add("result");
-      hint.replaceChildren(D.el("strong",{text:state.winner?.name||"당첨!"}),D.el("small",{text:"화면을 누르면 보관함으로 들어가요"}));
-      randomConfetti(doc,overlay); state.resultId=state.result?.item?.id||"";
+      if(state.phase==="result"||state.phase==="closing")return;
+      state.phase="result";randomBrake();randomFanfare();overlay.classList.remove("spinning");overlay.classList.add("result");
+      setHint(state.winner?.name||"당첨!", "보관함에 넣는 중…");
+      randomConfetti(doc,overlay);state.resultId=state.result?.item?.id||"";
+      state.timers.push(setTimeout(movePrizeToInventory,1350));
+    };
+
+    const settle=()=>{
+      if(state.finishing||!state.result)return;
+      state.finishing=true;if(state.interval){clearInterval(state.interval);state.interval=0;}
+      const winner=state.result.product||products.find(p=>p.id===state.result.product_id)||{name:state.result.product_name||"상품",imageUrl:state.result.product_image_url||""};state.winner=winner;
+      const seq=[];for(let i=0;i<26;i++)seq.push(products[Math.floor(Math.random()*products.length)]);seq.push(winner);
+      strip.style.transition="none";strip.style.transform="translateY(0)";strip.replaceChildren(...seq.map((p,i)=>randomProductCell(p,i===seq.length-1)));void strip.offsetHeight;
+      const h=cellHeight();strip.querySelectorAll(".shop-random-reel-cell").forEach(el=>el.style.height=`${h}px`);
+      const target=-(seq.length-1)*h,duration=2.65;
+      strip.style.transition=`transform ${duration}s cubic-bezier(.10,.72,.18,1)`;requestAnimationFrame(()=>strip.style.transform=`translateY(${target}px)`);
+      for(let i=0;i<21;i++){const progress=i/21;state.timers.push(setTimeout(randomTick,(duration*1000)*(progress*progress*.88)));}
+      state.timers.push(setTimeout(showWinner,duration*1000+80));
     };
 
     overlay.addEventListener("click",async()=>{
-      if(state.phase==="ready"){
-        beginWaiting();
-        try { state.result=await Service.randomPurchase(); settle(); }
-        catch(error){ if(state.interval)clearInterval(state.interval);state.interval=0;state.phase="ready";state.finishing=false;overlay.classList.remove("spinning");paintIdle();hint.replaceChildren(D.el("strong",{text:"다시 눌러!"}),D.el("small",{text:error?.message||"추첨하지 못했어요"}));MiniTalk.UI.Shell.toast(error?.message||"랜덤구매에 실패했습니다."); }
-        return;
-      }
-      if(state.phase==="spinning"){
-        state.fast=true; hint.querySelector("small").textContent="결과 확인 중…";
-        if(state.result&&state.finishing){
-          state.timers.forEach(clearTimeout); state.timers=[]; randomBrake();
-          strip.style.transition="transform .22s cubic-bezier(.25,.8,.3,1)"; strip.style.transform=`translateY(${Number(state.target)||0}px)`;
-          state.timers.push(setTimeout(()=>showWinner(),270));
-        } else if(state.result) settle();
-        return;
-      }
-      if(state.phase==="result"){
-        const prize=windowEl.querySelector(".shop-random-reel-cell.active")||windowEl.querySelector(".shop-random-reel-cell:last-child");
-        prize?.classList.add("fly-to-inventory"); randomArrivalId=state.resultId||"";
-        state.timers.push(setTimeout(()=>{ closeRandomOverlay(); inventoryOpen=true; const host=MiniTalk.UI.Dom.byId("viewHost"); if(host&&MiniTalk.Store.get("route")==="shopping")render(host,{animate:false,refreshCatalog:false}); state.timers.push(setTimeout(()=>{randomArrivalId="";},1800)); },420));
+      if(state.phase==="insufficient"||state.phase==="error"){closeRandomOverlay();return;}
+      if(state.phase!=="ready")return;
+      beginSpin();
+      try{state.result=await Service.randomPurchase();settle();}
+      catch(error){
+        if(state.interval){clearInterval(state.interval);state.interval=0;}
+        state.timers.forEach(clearTimeout);state.timers=[];state.finishing=false;strip.style.transition="none";paintOne({name:"?"});overlay.classList.remove("spinning");
+        if(error?.code==="INSUFFICIENT_COIN"){
+          state.phase="insufficient";overlay.classList.add("insufficient");setHint("코인이 부족해요","화면을 누르면 닫혀요");
+        }else{
+          state.phase="error";overlay.classList.add("error");setHint("추첨하지 못했어요","화면을 누르면 닫혀요");MiniTalk.UI.Shell.toast(error?.message||"랜덤구매에 실패했습니다.");
+        }
       }
     });
   }

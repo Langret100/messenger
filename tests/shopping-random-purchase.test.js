@@ -13,7 +13,10 @@ ok(server.includes('createPurchasedInventory_(userId, inventoryProduct, purchase
 ok(auth.includes('random_purchase: randomPurchase ? "1" : ""'),'random flag missing');
 ok(service.includes('MiniTalk.AuthApi.shopPurchase({userId:current.user_id,product:null,purchaseKey,randomPurchase:true,price:3})'),'client random purchase API missing');
 ok(ui.includes('text: "랜덤구매"')&&!ui.includes('text: "미니 상점"'),'mini shop hero was not replaced');
-ok(ui.includes('state.fast=true')&&ui.includes('결과 확인 중'),'second tap fast result path missing');
+ok(!ui.includes('state.fast=true')&&!ui.includes('한 번 더 누르면')&&!ui.includes('다시 눌러!'),'random purchase must be single-spin per opening');
+ok(ui.includes('MiniTalk.Economy.CoinWallet.refresh(true)')&&ui.includes('phase:balance<RANDOM_COST?"insufficient":"ready"'),'coin balance precheck missing');
+ok(ui.includes('setTimeout(movePrizeToInventory,1350)')&&ui.includes('inventoryOpen=true'),'automatic result-to-inventory close flow missing');
+ok(ui.includes('if(state.phase==="insufficient"||state.phase==="error"){closeRandomOverlay();return;}'),'insufficient/error tap-to-close path missing');
 ok(ui.includes('inventoryOpen=true')&&ui.includes('randomArrivalId'),'result-to-inventory transition missing');
 ok(css.includes('@keyframes shop-random-confetti')&&css.includes('@keyframes shop-random-win-pop'),'celebration animation missing');
 function weight(price){return price<=2?1.6:price<=5?1.0:.55}

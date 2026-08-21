@@ -13,7 +13,7 @@ ok(game.includes('rightSpace')&&game.includes('leftSpace')&&game.includes('messe
 ok(game.includes('<html lang="ko" data-theme="light">')&&game.includes('background:#fff;color:#18212f'),'game popup chrome light theme missing');
 ok(weekly.includes('주간 미션 완료 도장')&&weekly.includes('20문항 제출이 완료되어 도장을 받았어요.'),'weekly completion stamp missing');
 ok(css.includes('.friday-mission-card.open{grid-template-columns:minmax(0,1fr)')&&css.includes('.friday-start-button{display:inline-flex')&&css.includes('min-height:38px'),'weekly card start button clipping fix missing');
-ok(html.includes('feed-classinfo-weekly.css?v=65.0.25')&&html.includes('js/game-bridge/game-host.js?v=24')&&html.includes('js/tasks/friday-grade6-mission.js?v=65.0.15')&&html.includes('js/tasks/task-window.js?v=64.5.10')&&html.includes('js/features/admin.js?v=64.5.30'),'new UI cache versions missing');
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.26')&&html.includes('js/game-bridge/game-host.js?v=24')&&html.includes('js/tasks/friday-grade6-mission.js?v=65.0.16')&&html.includes('js/tasks/task-window.js?v=64.5.10')&&html.includes('js/features/admin.js?v=64.5.30'),'new UI cache versions missing');
 console.log('WEEKLY_POPUP_UI_POLISH_OK');
 
 ok(css.includes('@media(max-width:760px){.weekly-exam-popup{min-width:0')&&css.includes('max-height:calc(100dvh - 92px)')&&css.includes('.weekly-exam-choices{grid-template-columns:1fr'), 'weekly worksheet mobile layout missing');

@@ -11,6 +11,6 @@ ok(rt.includes('lastMessageEmoticon:message.emoticon||null'),'room metadata does
 ok(css.includes('.conversation-preview .chat-emoticon{width:22px!important;height:22px!important'),'room-list emoticon is not compact');
 ok(feedcss.includes('background:color-mix(in srgb,#d5d9e1 48%,transparent)'),'feed FAB is not translucent light gray');
 ok(feedcss.includes('bottom:calc(-20px + 58px'),'feed FAB was not lowered further');
-ok(html.includes('css/app.css?v=64.5.12')&&html.includes('feed-classinfo-weekly.css?v=65.0.25')&&html.includes('realtime.js?v=64.5.38')&&html.includes('features/chats.js?v=64.5.21')&&html.includes('app.js?v=64.5.37'),'v5.22 cache versions stale');
+ok(html.includes('css/app.css?v=64.5.12')&&html.includes('feed-classinfo-weekly.css?v=65.0.26')&&html.includes('realtime.js?v=64.5.38')&&html.includes('features/chats.js?v=64.5.21')&&html.includes('app.js?v=64.5.37'),'v5.22 cache versions stale');
 ok(sw.includes('moaru-tools-scroll-layout')&&app.includes('sw.js?v=64.5.50'),'v5.22 service worker version stale');
 console.log('LEGACY_ROOM_EMOJI_UI_OK');

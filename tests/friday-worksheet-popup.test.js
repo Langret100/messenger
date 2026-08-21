@@ -10,7 +10,7 @@ ok(src.includes('saveDraft(questions,selections,setVersion')&&src.includes('sche
 ok(src.includes('grade6-worksheet-${legacy?"v4":"v5"}')&&src.includes('shuffle(cats,r)'),'weekly randomized worksheet generator missing');
 ok(src.includes('const korBank=[')&&src.includes('다음 글을 읽고 중심 생각')&&src.includes('거스름돈은 얼마인가요?'),'sentence/passage question bank missing');
 ok(css.includes('.weekly-exam-sheet')&&css.includes('.weekly-exam-choices')&&css.includes('.weekly-exam-popup'),'worksheet popup styling missing');
-ok(html.includes('friday-grade6-mission.js?v=65.0.15')&&html.includes('feed-classinfo-weekly.css?v=65.0.25'),'worksheet cache bust missing');
+ok(html.includes('friday-grade6-mission.js?v=65.0.16')&&html.includes('feed-classinfo-weekly.css?v=65.0.26'),'worksheet cache bust missing');
 ok(gs.includes('function moaCleanupLegacySheets()')&&!gs.includes('moaCleanupLegacySheets_'),'clean single MOA cleanup function missing');
 ok(!gs.includes('moaV91CleanupLegacySheets')&&!install.includes('moaV91CleanupLegacySheets'),'versioned MOA cleanup function name remains');
 console.log('FRIDAY_WORKSHEET_POPUP_OK');

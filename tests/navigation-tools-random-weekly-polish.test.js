@@ -1,0 +1,15 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const read=f=>fs.readFileSync(path.join(root,f),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const tools=read('js/features/tools.js'),registry=read('js/core/registry.js'),shell=read('js/ui/shell.js'),shop=read('js/features/shopping.js'),shopCss=read('css/features/shopping-store.css'),friday=read('js/tasks/friday-grade6-mission.js'),weeklyCss=read('css/features/feed-classinfo-weekly.css'),html=read('index.html');
+ok(tools.includes('title: "동작 인식 게임"')&&tools.includes('https://langret100.github.io/Math-in-Math/'),'motion recognition game tool link missing');
+ok(registry.includes('registry:changed')&&shell.includes('MiniTalk.Events.on("registry:changed"')&&shell.includes('function ensurePrimaryNav()'),'nav registry resync missing');
+ok(shell.includes('[80,260,900].forEach(ms=>setTimeout(()=>renderNav(),ms))'),'nav delayed safety sync missing');
+ok(shop.includes('phase:balance<RANDOM_COST?"insufficient":"ready"')&&shop.includes('코인이 부족해요'),'random insufficient-coin state missing');
+ok(!shop.includes('다시 눌러!')&&!shop.includes('한 번 더 누르면'),'repeat-spin/second-tap copy must not remain');
+ok(shop.includes('setTimeout(movePrizeToInventory,1350)')&&shop.includes('inventoryOpen=true'),'winner must auto-fly to inventory and close');
+ok(shopCss.includes('.shop-random-overlay.insufficient')&&shopCss.includes('background:linear-gradient(180deg,#fff 0%,#f7f9ff 100%)'),'random purchase visual polish missing');
+ok(friday.includes('friday-mission-badge')&&friday.includes('friday-mission-action')&&weeklyCss.includes('.friday-mission-card.open::before'),'weekly mission card polish missing');
+for(const ref of ['shopping-store.css?v=64.5.13','feed-classinfo-weekly.css?v=65.0.26','js/core/registry.js?v=2','js/ui/shell.js?v=64.5.32','friday-grade6-mission.js?v=65.0.16','js/features/tools.js?v=64.5.6','js/features/shopping.js?v=64.5.32'])ok(html.includes(ref),`cache ref missing ${ref}`);
+console.log('NAV_TOOLS_RANDOM_WEEKLY_POLISH_OK');

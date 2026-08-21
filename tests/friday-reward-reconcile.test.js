@@ -6,5 +6,5 @@ ok(friday.includes('record?.reward?.acknowledged===true')&&friday.includes('Coin
 ok(friday.includes('application/x-www-form-urlencoded;charset=UTF-8'),'weekly reward content type missing');
 ok(friday.includes('error?.code==="COIN_BUSY"')&&friday.includes('COIN_SHEET_TEMPORARY_ERROR'),'weekly reward transient retry guard missing');
 ok(friday.includes('scorePercent(record)>=80'),'weekly threshold regressed');
-ok(html.includes('js/tasks/friday-grade6-mission.js?v=65.0.15'),'weekly reward cache version missing');
+ok(html.includes('js/tasks/friday-grade6-mission.js?v=65.0.16'),'weekly reward cache version missing');
 console.log('FRIDAY_REWARD_RECONCILE_OK');

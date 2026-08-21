@@ -5,7 +5,7 @@ const friday=read('js/tasks/friday-grade6-mission.js');
 const coin=read('docs/apps-script/coin.gs');
 ok(friday.includes('return scorePercent(record)>=80'),'client weekly threshold is not >=80');
 ok(friday.includes('score_percent:String(scorePercent(record))'),'weekly score is not sent to server');
-ok(friday.includes('80점 이상이면 주 1회 보상됩니다.')&&friday.includes('80점 이상 시 🪙 +${REWARD_COIN}'),'weekly >=80 UI text missing');
+ok(friday.includes('80점 이상이면 주 1회 보상됩니다.')&&friday.includes('80점 이상 🪙 +${REWARD_COIN}'),'weekly >=80 UI text missing');
 ok(coin.includes('const weeklyScore = Number(p.score_percent)'),'server weekly score parse missing');
 ok(coin.includes('weeklyScore < 80')&&coin.includes('WEEKLY_SCORE_NOT_ELIGIBLE'),'server weekly 80 boundary guard missing');
 ok(!friday.includes('scorePercent(record)>80')&&!friday.includes('80점 초과'),'old >80 weekly rule remains in client');

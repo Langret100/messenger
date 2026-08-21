@@ -5,6 +5,7 @@ ok(src.includes('ALT_ANCHOR_WEEK="2026-08-17"'),'alternating mission anchor miss
 ok(src.includes('missionSubject')&&src.includes('subject==="수학"')&&src.includes('slice(0,TOTAL)'),'single-subject 20-question generator missing');
 ok(!src.includes('slice(0,10).forEach'),'old 10 Korean + 10 Math split still exists');
 ok(src.includes('text:`${subject} · 20문항`')&&src.includes('text:`+${REWARD_COIN}`')&&src.includes('text:"80점 이상"'),'weekly reward summary copy missing');
+const metaStart=src.indexOf('class:"friday-mission-meta"');const threshold=src.indexOf('text:"80점 이상"',metaStart);const reward=src.indexOf('text:`+${REWARD_COIN}`',metaStart);ok(metaStart>=0&&threshold>metaStart&&reward>threshold,'weekly expanded meta order must be threshold then reward');
 ok(!src.includes('큰 별도 창')&&!src.includes('다음 주 ${subject')&&!src.includes('주간 미션 · 시험지형'),'internal worksheet implementation copy leaked into UI');
 const sandbox={Date,URLSearchParams,fetch:async()=>({ok:true,json:async()=>({ok:true})}),console,setInterval,clearInterval,setTimeout,clearTimeout,MiniTalk:{Tasks:{},Store:{get:k=>k==='user'?{user_id:'u1'}:null},Realtime:{},UI:{},Economy:{}},MiniTalkConfig:{sheetUrl:''}};
 vm.createContext(sandbox);vm.runInContext(src,sandbox);
@@ -15,5 +16,5 @@ ok(api.missionSubject(new Date('2026-09-03T12:00:00'))==='수학','third week mu
 // makeQuestions uses current Date, so verify source guarantees TOTAL=20 and each branch emits only one subject.
 ok(src.includes('for(const cat of mathCats)for(let i=0;i<4;i++)cats.push({cat,variant:i})')&&src.includes('rows.push(legacy?makeMathQuestionV4(item.cat,r):makeMathQuestion(item.cat,r,item.variant))'),'Math week does not generate balanced 20 math rows');
 ok(src.includes('const bank=legacy?korBank:korBank.concat(korExtra)')&&src.includes('rows.push(q("국어"'),'Korean week does not generate 20 Korean rows');
-const html=fs.readFileSync(path.join(root,'index.html'),'utf8');ok(html.includes('friday-grade6-mission.js?v=65.0.17'),'Friday mission cache version stale');
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');ok(html.includes('friday-grade6-mission.js?v=65.0.19'),'Friday mission cache version stale');
 console.log('FRIDAY_ALTERNATING_SUBJECT_OK');

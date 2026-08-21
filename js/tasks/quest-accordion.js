@@ -7,15 +7,11 @@ MiniTalk.Tasks.QuestAccordion = (() => {
 
   function syncWeeklyCompact(root = MiniTalk.UI.Dom.doc()) {
     const scope = root?.querySelectorAll ? root : MiniTalk.UI.Dom.doc();
-    const expandedDaily = Array.from(scope?.querySelectorAll?.(".quest-accordion[data-subject].expanded") || []).some(section => {
-      const panel = section.querySelector?.(".quest-accordion-panel");
-      return !panel || !panel.classList.contains("hidden");
-    });
+    const compact = activeKey === "math" || activeKey === "korean";
     (scope?.querySelectorAll?.('.friday-mission-card[data-quest-key="weekly"]') || []).forEach(card => {
-      card.classList.toggle("quest-compact", expandedDaily);
-      card.classList.toggle("quest-focused", activeKey === "weekly" && !expandedDaily);
+      card.classList.toggle("quest-compact", compact);
     });
-    return expandedDaily;
+    return compact;
   }
 
   function applyState(doc = MiniTalk.UI.Dom.doc()) {
@@ -55,8 +51,8 @@ MiniTalk.Tasks.QuestAccordion = (() => {
         D.el("small", { text: subtitle })
       ]),
       D.el("span", { class: "quest-subject-meta" }, [
-        ...(Number(rewardCoin) > 0 ? [D.el("span", { class: "quest-subject-reward", "aria-label": `과목 완료 보상 ${Number(rewardCoin)}코인` }, [D.el("img", { src: "assets/ui/notebook-coin.svg", alt: "" }), D.el("b", { text: `+${Number(rewardCoin)}` })])] : []),
         D.el("span", { class: `quest-subject-progress${subjectDone ? " completed" : ""}`, text: subjectDone ? "완료" : `${completed}/${total}` }),
+        ...(Number(rewardCoin) > 0 ? [D.el("span", { class: "quest-subject-reward", "aria-label": `과목 완료 보상 ${Number(rewardCoin)}코인` }, [D.el("img", { src: "assets/ui/notebook-coin.svg", alt: "" }), D.el("b", { text: `+${Number(rewardCoin)}` })])] : []),
         ...(subjectDone ? [D.el("img", { class: "quest-subject-stamp", src: "assets/ui/quest-stamp.png", alt: "과목 완료 도장" })] : [])
       ]),
       D.el("span", { class: "quest-accordion-arrow", text: "⌄", "aria-hidden": "true" })

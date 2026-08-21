@@ -18,16 +18,10 @@
 .feed-camera{display:grid;gap:12px}.feed-camera-video{width:100%;aspect-ratio:4/3;object-fit:cover;background:#111;border-radius:16px}.feed-camera-status{text-align:center;font-weight:800}
 .class-info-preview{min-height:150px;border-radius:16px;background:var(--surface-3);display:grid;place-items:center;overflow:hidden}.class-info-preview img{width:100%;max-height:520px;object-fit:contain}
 .lunch-today{display:grid;gap:9px}.lunch-lines{display:grid;gap:5px}
-.friday-mission-card{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;margin-bottom:12px;padding:16px 18px;border-radius:22px;overflow:hidden}
-.friday-mission-card.open{grid-template-columns:minmax(0,1fr);align-items:start;padding-bottom:18px;overflow:visible;background:linear-gradient(145deg,color-mix(in srgb,var(--surface) 94%,var(--accent) 6%),var(--surface-raised))}
-.friday-mission-card.locked{background:linear-gradient(145deg,color-mix(in srgb,var(--surface-3) 88%,white 12%),color-mix(in srgb,var(--surface-3) 96%,var(--accent) 4%));opacity:.96;min-height:112px}
-.friday-mission-card.locked::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.04));pointer-events:none}
-.friday-mission-copy{display:grid;gap:5px;position:relative;z-index:1;min-width:0}.friday-mission-eyebrow{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}.friday-countdown{font-size:12px;color:var(--text)}.friday-start-button{display:inline-flex;align-items:center;justify-content:center;min-width:92px;min-height:38px;width:auto!important;margin:4px 0 0!important;padding:9px 14px!important;box-sizing:border-box;line-height:1.2;align-self:start;justify-self:start;position:relative;z-index:2}
-.friday-lock-overlay{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:0}.friday-lock-overlay span{font-size:56px;line-height:1;opacity:.16;filter:saturate(.7)}
 .friday-bars{display:grid;gap:9px}.friday-bar-row{display:grid;grid-template-columns:minmax(100px,1fr) 2fr 42px;gap:8px;align-items:center;font-size:10px}.friday-bar-row i{height:8px;border-radius:99px;background:linear-gradient(90deg,var(--accent) var(--rate),var(--surface-3) var(--rate));display:block}.friday-bar-row b{text-align:right}
 .image-load-error{display:block;padding:18px 12px;color:var(--muted);font-size:10px;text-align:center}
 .feed-media-placeholder.video-gated{position:relative;min-height:150px;background:#111;isolation:isolate}.feed-media-placeholder.video-gated .feed-video-thumb{position:absolute;inset:0;width:100%;height:100%;max-height:none;object-fit:cover;background:#111;z-index:0}.feed-video-thumb-status{position:relative;z-index:1;font-weight:750;font-size:12px;color:rgba(255,255,255,.72)}.feed-video-play{position:absolute;left:50%;top:50%;z-index:2;transform:translate(-50%,-50%);width:54px;height:54px;border:1px solid rgba(255,255,255,.5);border-radius:50%;background:rgba(20,24,31,.56);color:#fff;font-size:22px;line-height:1;display:grid;place-items:center;padding:0 0 0 3px;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 8px 24px rgba(0,0,0,.24);transition:transform .16s var(--ease),background .16s ease}.feed-video-play:hover{transform:translate(-50%,-50%) scale(1.06);background:rgba(20,24,31,.68)}.feed-video-play:active{transform:translate(-50%,-50%) scale(.95)}.feed-media-placeholder.video-gated.loading .feed-video-play{opacity:.72;pointer-events:none}.feed-media-placeholder.video-gated video{position:relative;z-index:3}
-@media(max-width:520px){.feed-view{padding:8px 10px calc(84px + env(safe-area-inset-bottom,0px))}.feed-media-placeholder{min-height:120px}.feed-fab{width:42px;height:42px;right:max(12px,calc(env(safe-area-inset-right,0px) + 12px));bottom:calc(-20px + 54px + env(safe-area-inset-bottom,0px))}.feed-fab span{font-size:24px}.friday-mission-card{grid-template-columns:1fr}.friday-mission-card.open .friday-start-button{justify-self:start}}
+@media(max-width:520px){.feed-view{padding:8px 10px calc(84px + env(safe-area-inset-bottom,0px))}.feed-media-placeholder{min-height:120px}.feed-fab{width:42px;height:42px;right:max(12px,calc(env(safe-area-inset-right,0px) + 12px));bottom:calc(-20px + 54px + env(safe-area-inset-bottom,0px))}.feed-fab span{font-size:24px}}
 .feed-heart{position:relative;overflow:visible}.feed-heart.heart-pop{animation:feed-heart-pop .46s var(--ease)}.heart-particle{position:absolute;left:50%;top:2px;color:#e0526b;font-style:normal;font-size:11px;line-height:1;pointer-events:none;z-index:3;animation:feed-heart-particle .6s ease-out forwards;transform:translateX(-50%)}.feed-heart.active{color:#e0526b}@keyframes feed-heart-pop{0%{transform:scale(1)}32%{transform:scale(1.42)}67%{transform:scale(.91)}100%{transform:scale(1)}}@keyframes feed-heart-particle{0%{opacity:0;transform:translate(calc(-50% + var(--dx,0)),4px) scale(.55)}18%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--dx,0)),calc(-29px - var(--dy,0))) scale(1.18)}}
 
 /* Firebase Spark 동시 연결 한도에 닿기 전 신규 접속만 대기시키는 경량 입장 화면 */
@@ -61,17 +55,6 @@
 .weekly-exam-footer{position:sticky;bottom:0;z-index:5;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;padding:14px 18px;margin-top:15px;border:1px solid var(--border);border-radius:18px;background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(16px);box-shadow:0 -8px 26px rgba(0,0,0,.06)}.weekly-exam-footer-copy{display:grid;gap:3px;min-width:0}.weekly-exam-footer-copy strong{font-size:12px}.weekly-exam-footer .muted{font-size:11px;line-height:1.4}.weekly-exam-submit{width:auto!important;min-width:180px;margin:0!important;flex:none}
 @media(max-width:760px){.weekly-exam-popup{min-width:0;width:100%;overflow-x:hidden}.weekly-exam-root{width:100%;padding:8px 8px calc(18px + env(safe-area-inset-bottom,0px));box-sizing:border-box}.weekly-exam-modal{width:100%;max-height:calc(100dvh - 92px);padding:0 2px 14px;box-sizing:border-box;overflow-x:hidden;overflow-y:auto}.weekly-exam-header{position:relative;display:grid;gap:8px;padding:13px 12px;margin-bottom:9px;border-radius:15px}.weekly-exam-header h1{font-size:19px;line-height:1.25}.weekly-exam-header p{font-size:11px;line-height:1.45}.weekly-exam-meta{min-width:0;text-align:left;grid-template-columns:auto 1fr;align-items:center}.weekly-exam-save{text-align:right}.weekly-exam-sheet{gap:9px}.weekly-exam-question{padding:14px 11px;border-radius:14px;scroll-margin-top:14px}.weekly-question-heading{margin-bottom:8px}.weekly-question-text{font-size:15px;line-height:1.55;margin-bottom:11px}.weekly-question-text.sentence-form{padding:10px 11px}.weekly-exam-choices{grid-template-columns:1fr;gap:7px}.weekly-exam-choice{min-height:44px;padding:10px 11px}.weekly-exam-footer{position:sticky;bottom:0;padding:10px;margin:9px 0 0;display:grid;grid-template-columns:1fr;gap:8px;border-radius:14px}.weekly-exam-footer-copy{gap:2px}.weekly-exam-submit{width:100%!important;min-width:0;min-height:44px}}@media(max-width:420px){.weekly-exam-root{padding-left:6px;padding-right:6px}.weekly-exam-header{padding:12px 10px}.weekly-exam-question{padding:12px 10px}.weekly-question-text{font-size:14px}.weekly-exam-choice{font-size:13px}.weekly-exam-footer{padding:8px}}
 
-/* v91: 다른 일일 퀘스트가 펼쳐졌을 때 주간 미션은 전용 축약 헤더로 정돈합니다. */
-.friday-mission-compact-toggle{display:none;width:100%;min-height:58px;grid-template-columns:auto minmax(0,1fr) 22px;align-items:center;gap:10px;padding:10px 12px;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}
-.friday-mission-card.quest-compact{display:block;min-height:0!important;padding:0!important;margin-bottom:10px;border-radius:18px;overflow:hidden;opacity:1}
-.friday-mission-card.quest-compact>.friday-mission-copy,.friday-mission-card.quest-compact>.friday-start-button,.friday-mission-card.quest-compact>.friday-lock-overlay{display:none!important}
-.friday-mission-card.quest-compact>.friday-mission-compact-toggle{display:grid}
-.friday-mission-card.quest-compact:hover{background:color-mix(in srgb,var(--surface-hover) 76%,var(--surface-raised))}
-.friday-compact-badge{display:inline-grid;place-items:center;min-width:42px;height:30px;padding:0 9px;border-radius:11px;background:var(--accent-soft);color:var(--accent);font-size:10px;font-weight:900}
-.friday-compact-copy{min-width:0;display:grid;gap:2px}.friday-compact-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.friday-compact-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:9px}
-.friday-compact-arrow{font-size:19px;color:var(--muted);transform:rotate(180deg)}
-.friday-mission-card.quest-focused{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 10%,transparent),0 8px 24px rgba(0,0,0,.05)}
-
 .friday-complete-mark{display:flex;align-items:center;gap:14px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 24%,var(--line));border-radius:16px;background:color-mix(in srgb,var(--accent) 7%,var(--surface));}.friday-complete-mark .quest-complete-stamp{width:72px;height:72px;margin:0;flex:none}.friday-complete-mark>div{display:grid;gap:3px}.friday-complete-mark strong{font-size:14px}.friday-complete-mark small{font-size:10px;line-height:1.45}
 
 /* v91 interaction repair: explicit comment control stays clickable inside drag-scroll feed. */
@@ -81,72 +64,56 @@
 .friday-feedback-card{display:grid;gap:9px}.friday-feedback-list{display:grid;gap:8px}.friday-feedback-list p{margin:0;padding:9px 10px;border-radius:12px;background:var(--surface-2);font-size:11px;line-height:1.55}.friday-wrong-review{display:grid;gap:10px}.friday-review-title{display:flex;align-items:center;justify-content:space-between;gap:10px}.friday-wrong-count{font-size:10px;font-weight:800;padding:4px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted)}.friday-wrong-list{display:grid;gap:8px}.friday-wrong-item{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)}.friday-wrong-toggle{width:100%;border:0;background:transparent;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;text-align:left;color:inherit;cursor:pointer}.friday-wrong-toggle>span{display:grid;gap:2px}.friday-wrong-toggle b{font-size:11px}.friday-wrong-toggle small{font-size:9px}.friday-wrong-toggle i{font-style:normal;font-size:14px;color:var(--muted)}.friday-wrong-detail{padding:0 12px 12px;border-top:1px solid var(--line)}.friday-wrong-question{margin:10px 0;font-size:11px;line-height:1.55;font-weight:700}.friday-answer-compare{display:grid;grid-template-columns:1fr 1fr;gap:8px}.friday-answer-box{display:grid;gap:4px;padding:9px 10px;border-radius:11px;background:var(--surface-2)}.friday-answer-box span{font-size:9px;color:var(--muted)}.friday-answer-box b{font-size:11px;word-break:break-word}.friday-answer-box.mine{background:color-mix(in srgb,#e46767 8%,var(--surface-2))}.friday-answer-box.correct{background:color-mix(in srgb,#3fa56a 9%,var(--surface-2))}.friday-wrong-tip{margin:9px 0 0;font-size:10px;line-height:1.5;color:var(--muted)}
 @media(max-width:520px){.friday-answer-compare{grid-template-columns:1fr}.friday-wrong-toggle{padding:10px}.friday-wrong-detail{padding:0 10px 10px}}
 
-/* 주간 미션 펼침 상태만 정돈합니다. 접힘(.quest-compact)은 기존 디자인을 그대로 유지합니다. */
+/* 주간 미션 카드: 상태/반응형 규칙을 이 블록 하나에서 관리합니다. */
+.friday-mission-card{
+  position:relative;
+  margin-bottom:12px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:var(--surface);
+  overflow:hidden;
+}
 .friday-mission-card.open:not(.quest-compact){
   display:grid;
   grid-template-columns:minmax(0,1fr) auto;
   align-items:center;
-  gap:14px;
-  padding:16px 16px 15px;
-  border:1px solid color-mix(in srgb,var(--accent) 16%,var(--line));
-  border-radius:20px;
-  background:linear-gradient(145deg,color-mix(in srgb,var(--surface) 98%,var(--accent) 2%),color-mix(in srgb,var(--surface-raised) 96%,var(--accent) 4%));
-  box-shadow:0 8px 24px rgba(31,54,102,.055);
-  overflow:hidden;
-}
-.friday-mission-card.open:not(.quest-compact)::before{content:"";position:absolute;left:0;top:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 45%,#9bb5ff),transparent 88%);opacity:.78}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-copy{display:grid;gap:6px;min-width:0}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-eyebrow{font-size:9px;letter-spacing:.09em;color:var(--accent);font-weight:900}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-copy>strong{font-size:15px;line-height:1.35;letter-spacing:-.025em}
-.friday-mission-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--muted);font-size:9px;font-weight:750}
-.friday-mission-meta>span{display:inline-flex;align-items:center;min-height:24px;padding:4px 8px;border:1px solid color-mix(in srgb,var(--line) 84%,transparent);border-radius:999px;background:color-mix(in srgb,var(--surface-2) 88%,transparent)}
-.friday-mission-meta .friday-reward-pill{gap:3px;color:#9a6a00;background:color-mix(in srgb,#ffd86a 22%,var(--surface));border-color:color-mix(in srgb,#e1b836 28%,var(--line))}
-.friday-reward-pill img{width:14px;height:14px;object-fit:contain}.friday-reward-pill b{font-size:9px}
-.friday-mission-card.open:not(.quest-compact) .friday-countdown{font-size:10px;color:var(--text);font-weight:800;line-height:1.35}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-action{position:relative;z-index:2;display:grid;justify-items:end;gap:5px;min-width:104px}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-action>small{font-size:8px;white-space:nowrap;color:var(--muted)}
-.friday-mission-card.open:not(.quest-compact) .friday-start-button{min-width:104px!important;min-height:38px!important;margin:0!important;padding:9px 14px!important;border-radius:12px!important;font-size:11px!important;font-weight:900!important;box-shadow:none}
-.friday-mission-card.open:not(.quest-compact) .friday-start-button:hover{transform:translateY(-1px)}
-.friday-mission-card.open:not(.quest-compact) .friday-start-button:active{transform:scale(.98)}
-@media(max-width:520px){
-  .friday-mission-card.open:not(.quest-compact){grid-template-columns:1fr;gap:11px;padding:14px 13px 13px}
-  .friday-mission-card.open:not(.quest-compact) .friday-mission-action{display:flex;align-items:center;justify-content:space-between;gap:9px;min-width:0;width:100%}
-  .friday-mission-card.open:not(.quest-compact) .friday-mission-action>small{white-space:normal;text-align:right}
-  .friday-mission-card.open:not(.quest-compact) .friday-start-button{min-width:112px!important}
-}
-
-/* 주간 미션: 펼침은 정보 위계를 정돈하고, 접힘은 원래 동작을 유지하되 깔끔한 한 줄 카드로 표시합니다. */
-.friday-mission-card.open:not(.quest-compact){
-  grid-template-columns:minmax(0,1fr) auto;
-  align-items:center;
-  gap:14px;
-  padding:15px 16px;
-  border-radius:18px;
-  overflow:hidden;
-  border:1px solid color-mix(in srgb,var(--accent) 16%,var(--line));
+  gap:12px;
+  min-height:108px;
+  padding:14px 15px;
+  border-color:color-mix(in srgb,var(--accent) 16%,var(--line));
   background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 5%,var(--surface)),var(--surface));
   box-shadow:0 5px 18px rgba(31,49,82,.055);
 }
-.friday-mission-card.open:not(.quest-compact)::before{height:2px;opacity:.55}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-copy{gap:5px;align-content:center}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-eyebrow{font-size:9px;line-height:1.1;margin:0;letter-spacing:.04em;text-transform:none}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-copy>strong{font-size:14px;line-height:1.3;word-break:keep-all}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px 7px;font-size:9px;line-height:1.25;color:var(--muted);word-break:keep-all}
-.friday-mission-card.open:not(.quest-compact) .friday-reward-pill{display:inline-flex;align-items:center;gap:3px;padding:3px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
-.friday-mission-card.open:not(.quest-compact) .friday-reward-pill img{width:13px;height:13px}.friday-mission-card.open:not(.quest-compact) .friday-reward-pill b{font-size:9px}
-.friday-mission-card.open:not(.quest-compact) .friday-countdown{font-size:9px;line-height:1.25;color:var(--muted);font-weight:750;word-break:keep-all}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-action{display:grid;justify-items:end;gap:3px;min-width:102px}
-.friday-mission-card.open:not(.quest-compact) .friday-mission-action>small{font-size:7px;line-height:1.2;white-space:nowrap}
-.friday-mission-card.open:not(.quest-compact) .friday-start-button{min-width:102px!important;min-height:36px!important;margin:0!important;padding:8px 12px!important;border-radius:11px!important;font-size:10px!important}
-.friday-mission-card.quest-compact{padding:0!important;border-radius:15px;min-height:54px!important;background:var(--surface)!important;box-shadow:none!important;border:1px solid var(--line)!important}
+.friday-mission-card.open:not(.quest-compact)::before{content:"";position:absolute;left:0;top:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 45%,#9bb5ff),transparent 88%);opacity:.55}
+.friday-mission-copy{display:grid;gap:5px;align-content:center;min-width:0;position:relative;z-index:1}
+.friday-mission-eyebrow{font-size:9px;line-height:1.1;color:var(--accent);font-weight:900;letter-spacing:.04em}
+.friday-mission-copy>strong{font-size:14px;line-height:1.3;letter-spacing:-.02em;word-break:keep-all;overflow-wrap:normal}
+.friday-mission-meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px 7px;color:var(--muted);font-size:9px;font-weight:750;line-height:1.25;word-break:keep-all}
+.friday-mission-meta>span{display:inline-flex;align-items:center;min-height:22px;padding:3px 7px;border:1px solid color-mix(in srgb,var(--line) 84%,transparent);border-radius:999px;background:color-mix(in srgb,var(--surface-2) 88%,transparent)}
+.friday-reward-pill{gap:3px;color:#9a6a00;background:color-mix(in srgb,#ffd86a 22%,var(--surface))!important;border-color:color-mix(in srgb,#e1b836 28%,var(--line))!important}
+.friday-reward-pill img{width:13px;height:13px;object-fit:contain}.friday-reward-pill b{font-size:9px}
+.friday-countdown{font-size:9px;line-height:1.3;color:var(--muted);font-weight:750;word-break:keep-all}
+.friday-mission-action{position:relative;z-index:2;display:flex;align-items:center;justify-content:flex-end;min-width:104px}
+.friday-start-button{min-width:104px!important;min-height:38px!important;margin:0!important;padding:9px 13px!important;border-radius:11px!important;font-size:10px!important;font-weight:900!important;white-space:nowrap;box-shadow:none}
+.friday-mission-compact-toggle{display:none}
+.friday-lock-overlay{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}.friday-lock-overlay span{font-size:56px;line-height:1;opacity:.16}
+.friday-mission-card.locked{min-height:106px;padding:14px 15px;display:grid;align-items:center;background:var(--surface-2);opacity:.96}
+
+/* 다른 일일 퀘스트가 열렸을 때만 compact. '주간 미션' 라벨은 노출하지 않습니다. */
+.friday-mission-card.quest-compact{display:block;min-height:50px;padding:0;margin-bottom:10px;border-radius:15px;box-shadow:none;background:var(--surface)}
 .friday-mission-card.quest-compact>.friday-mission-copy,.friday-mission-card.quest-compact>.friday-mission-action,.friday-mission-card.quest-compact>.friday-lock-overlay{display:none!important}
-.friday-mission-card.quest-compact>.friday-mission-compact-toggle{display:grid;min-height:54px;padding:8px 10px;grid-template-columns:40px minmax(0,1fr) 18px;gap:8px;align-items:center}
-.friday-compact-badge{min-width:38px;height:27px;padding:0 7px;border-radius:9px;font-size:9px}
-.friday-compact-copy{gap:1px;align-content:center}.friday-compact-copy strong,.friday-compact-copy small{word-break:keep-all;overflow-wrap:normal}.friday-compact-copy strong{font-size:11px;line-height:1.22}.friday-compact-copy small{font-size:8px;line-height:1.25}
-.friday-compact-arrow{font-size:16px;line-height:1;text-align:center}
+.friday-mission-card.quest-compact>.friday-mission-compact-toggle{display:grid;grid-template-columns:minmax(0,1fr) 18px;align-items:center;gap:8px;width:100%;min-height:50px;padding:8px 11px;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.friday-compact-copy{min-width:0;display:grid;gap:2px}.friday-compact-copy strong,.friday-compact-copy small{word-break:keep-all;overflow-wrap:normal}.friday-compact-copy strong{font-size:11px;line-height:1.22}.friday-compact-copy small{font-size:8px;line-height:1.25;color:var(--muted)}
+.friday-compact-arrow{font-size:16px;line-height:1;text-align:center;color:var(--muted)}
+
+/* 340px 이하에서는 옆칸을 억지로 유지하지 않고 버튼을 아래로 내려 카드가 찌그러지지 않게 합니다. */
 @media(max-width:340px){
-  .friday-mission-card.open:not(.quest-compact){grid-template-columns:1fr;gap:9px;padding:13px 12px}
-  .friday-mission-card.open:not(.quest-compact) .friday-mission-action{display:flex;align-items:center;justify-content:space-between;width:100%;min-width:0}
-  .friday-mission-card.open:not(.quest-compact) .friday-start-button{min-width:108px!important}
-  .friday-mission-card.open:not(.quest-compact) .friday-mission-action>small{white-space:normal;text-align:right;word-break:keep-all}
+  .friday-mission-card.open:not(.quest-compact){grid-template-columns:1fr;gap:10px;min-height:0;padding:12px 11px}
+  .friday-mission-card.open:not(.quest-compact) .friday-mission-copy{gap:4px}
+  .friday-mission-card.open:not(.quest-compact) .friday-mission-copy>strong{font-size:13px}
+  .friday-mission-card.open:not(.quest-compact) .friday-mission-meta{gap:4px;font-size:8px}
+  .friday-mission-card.open:not(.quest-compact) .friday-mission-meta>span{min-height:20px;padding:2px 6px}
+  .friday-mission-card.open:not(.quest-compact) .friday-mission-action{min-width:0;width:100%;justify-content:stretch}
+  .friday-mission-card.open:not(.quest-compact) .friday-start-button{width:100%!important;min-width:0!important;min-height:38px!important;padding:9px!important;font-size:10px!important}
 }
+

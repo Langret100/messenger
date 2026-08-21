@@ -1,0 +1,10 @@
+const fs=require('fs'),path=require('path'),root=path.resolve(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
+const admin=read('js/features/admin.js'),chats=read('js/features/chats.js'),rt=read('js/adapters/realtime.js'),css=read('css/app.css');
+ok(admin.includes('function ensureOverlayHost()'),'admin overlay host fallback missing');
+ok(admin.includes('host=ensureOverlayHost()'),'admin image/stamp effects are not routed through global overlay host');
+ok(chats.includes('function roomHasVisibleActivity(room)'),'legacy group-room activity fallback missing');
+ok(chats.includes('"data-has-message":roomHasVisibleActivity(room)?"1":"0"'),'group room visibility is not based on legacy activity fallback');
+ok(rt.includes('async function lastMessageSummary(roomId,room)')&&rt.includes('limitToLast(1)'),'legacy room last-message migration fallback missing');
+ok(css.includes('.app-notification-banner{display:grid') && css.includes('border:0;border-radius:18px'),'top notification chrome was not softened');
+console.log('ADMIN_OVERLAY_ROOM_LEGACY_OK');

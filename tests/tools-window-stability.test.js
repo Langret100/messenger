@@ -1,0 +1,20 @@
+const fs=require('fs');
+const html=fs.readFileSync('index.html','utf8');
+const tools=fs.readFileSync('js/features/tools.js','utf8');
+const drag=fs.readFileSync('js/ui/drag-scroll.js','utf8');
+const css=fs.readFileSync('css/features/tools.css','utf8');
+const sw=fs.readFileSync('sw.js','utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+
+ok(html.includes('css/features/tools.css?v=22'),'tools css cache ref missing');
+ok(sw.includes('moaru-tools-scroll-layout'),'service-worker cache missing');
+ok(tools.includes('class: "card-list tools-screen"'),'tools scroll surface missing');
+ok(tools.includes('class: "tool-shortcuts section-card"'),'tools more section missing');
+ok(tools.includes('allowInteractive:".profile-summary,.modern-tool,.shortcut-row"'),'tools interactive drag allowance missing');
+ok(drag.includes('const allowInteractive=String(options?.allowInteractive||"").trim()'),'drag allowInteractive option missing');
+ok(/\.tools-screen\s*\{[^}]*flex:\s*1 1 0;[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*overflow-y:\s*auto;/s.test(css),'tools screen must use one natural vertical scroll flow');
+ok(/\.tools-screen > \*\s*\{[^}]*flex:\s*0 0 auto;/s.test(css),'tools children must keep their natural content height');
+ok(/\.tools-screen \.tool-shortcuts\s*\{[^}]*flex:\s*0 0 auto;[^}]*height:\s*auto;[^}]*overflow:\s*hidden;/s.test(css),'tools more section must stay inside the scroll content');
+ok(/\.tools-screen \.shortcut-row\s*\{[^}]*min-height:\s*60px;/s.test(css),'tool shortcut rows have no stable height');
+ok(/padding-bottom:\s*max\(34px,\s*calc\(env\(safe-area-inset-bottom,\s*0px\) \+ 24px\)\)/.test(css),'tools bottom scroll breathing room missing');
+console.log('TOOLS_WINDOW_STABILITY_OK');

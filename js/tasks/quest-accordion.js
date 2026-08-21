@@ -5,6 +5,19 @@ MiniTalk.Tasks.QuestAccordion = (() => {
 
   function active() { return activeKey; }
 
+  function syncWeeklyCompact(root = MiniTalk.UI.Dom.doc()) {
+    const scope = root?.querySelectorAll ? root : MiniTalk.UI.Dom.doc();
+    const expandedDaily = Array.from(scope?.querySelectorAll?.(".quest-accordion[data-subject].expanded") || []).some(section => {
+      const panel = section.querySelector?.(".quest-accordion-panel");
+      return !panel || !panel.classList.contains("hidden");
+    });
+    (scope?.querySelectorAll?.('.friday-mission-card[data-quest-key="weekly"]') || []).forEach(card => {
+      card.classList.toggle("quest-compact", expandedDaily);
+      card.classList.toggle("quest-focused", activeKey === "weekly" && !expandedDaily);
+    });
+    return expandedDaily;
+  }
+
   function applyState(doc = MiniTalk.UI.Dom.doc()) {
     doc?.querySelectorAll?.(".quest-accordion[data-subject]").forEach(section => {
       const key = section.dataset.subject || "";
@@ -13,11 +26,7 @@ MiniTalk.Tasks.QuestAccordion = (() => {
       section.querySelector(".quest-accordion-toggle")?.setAttribute("aria-expanded", String(open));
       section.querySelector(".quest-accordion-panel")?.classList.toggle("hidden", !open);
     });
-    doc?.querySelectorAll?.('.friday-mission-card[data-quest-key="weekly"]').forEach(card => {
-      const compact = Boolean(activeKey && activeKey !== "weekly");
-      card.classList.toggle("quest-compact", compact);
-      card.classList.toggle("quest-focused", activeKey === "weekly");
-    });
+    syncWeeklyCompact(doc);
   }
 
   function activate(key) {
@@ -86,5 +95,5 @@ MiniTalk.Tasks.QuestAccordion = (() => {
     }, 820);
   }
 
-  return { wrap, celebrate, active, activate, applyState };
+  return { wrap, celebrate, active, activate, applyState, syncWeeklyCompact };
 })();

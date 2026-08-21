@@ -4,13 +4,15 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-tools-scroll-layout";
+const CACHE = "moaru-face-play-polish";
 const CORE = [
   "./",
   "./index.html",
   "./css/tokens.css",
   "./css/app.css",
   "./css/features/tools.css",
+  "./css/features/face-toy.css",
+  "./css/features/lookalike-play.css",
   "./css/features/tarot.css",
   "./css/features/chat-background.css",
   "./css/features/game-community.css",
@@ -74,6 +76,8 @@ const CORE = [
   "./js/tools/profile-editor.js",
   "./js/tools/capture.js",
   "./js/tools/class-info.js",
+  "./js/tools/face-toy.js",
+  "./js/tools/lookalike-play.js",
   "./js/features/tools.js",
   "./js/features/tasks.js",
   "./js/features/links.js",

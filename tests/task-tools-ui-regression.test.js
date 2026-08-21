@@ -9,5 +9,5 @@ ok(accordion.includes('quest-subject-reward')&&accordion.includes('과목 완료
 ok(css.includes('.quest-subject-reward')&&css.includes('.quest-subject-meta'),'quest reward badge CSS missing');
 ok(friday.includes('text:`${subject} · 20문항`')&&friday.includes('text:`+${REWARD_COIN}`')&&friday.includes('text:"80점 이상"'),'weekly concise reward copy missing');
 for(const noisy of ['큰 별도 창','주간 미션 · 시험지형','다음 주 ${subject'])ok(!friday.includes(noisy),`weekly implementation copy still visible: ${noisy}`);
-for(const ref of ['quest-accordion.css?v=29','quest-accordion.js?v=26','daily-math-quest.js?v=64.5.7','daily-korean-quest.js?v=64.4.2','friday-grade6-mission.js?v=65.0.19','features/tools.js?v=64.5.6'])ok(html.includes(ref),`cache ref stale: ${ref}`);
+for(const ref of ['quest-accordion.css?v=29','quest-accordion.js?v=26','daily-math-quest.js?v=64.5.7','daily-korean-quest.js?v=64.4.2','friday-grade6-mission.js?v=65.0.19','features/tools.js?v=64.5.8'])ok(html.includes(ref),`cache ref stale: ${ref}`);
 console.log('TASK_TOOLS_UI_REGRESSION_OK');

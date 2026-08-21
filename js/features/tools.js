@@ -8,8 +8,8 @@ MiniTalk.Features.Tools = (() => {
   const items = [
     { id: "tarot", icon: "✧", title: "오늘의 타로", description: "카드를 뽑아 보는 운세" },
     { id: "alarm", icon: "◉", title: "알람", description: "원하는 시간에 알림" },
-    { id: "playground", icon: "◇", title: "놀이터", description: "온라인 놀이학습", url: "https://langret100.github.io/multiroom-playground/" },
-    { id: "motion-math", icon: "◎", title: "동작 인식 게임", description: "몸을 움직여 즐기는 수학 게임", url: "https://langret100.github.io/Math-in-Math/" },
+    { id: "lookalike", icon: "◌", title: "닮은 생물 찾기", description: "3·2·1 찍고 닮은 동식물 보기" },
+    { id: "face-toy", icon: "☺", title: "얼굴 장난감", description: "찍고 바꾸고 크게 놀기" },
     { id: "timetable", icon: "▦", title: "오늘의 시간표", description: "이미지로 함께 갱신" },
     { id: "lunch", icon: "☰", title: "오늘의 급식표", description: "TXT에서 오늘 급식 보기" }
   ];
@@ -20,7 +20,9 @@ MiniTalk.Features.Tools = (() => {
     alarm: () => MiniTalk.Tools.TimerAlarm.openAlarm(),
     profile: () => MiniTalk.Tools.ProfileEditor.open(refreshIfVisible),
     timetable: () => MiniTalk.Tools.ClassInfo.openTimetable(),
-    lunch: () => MiniTalk.Tools.ClassInfo.openLunch()
+    lunch: () => MiniTalk.Tools.ClassInfo.openLunch(),
+    "face-toy": () => MiniTalk.Tools.FaceToy.open(refreshIfVisible),
+    lookalike: () => MiniTalk.Tools.LookalikePlay.open(refreshIfVisible)
   };
 
   function render(host) {
@@ -55,7 +57,7 @@ MiniTalk.Features.Tools = (() => {
       sectionLabel("더보기", "", "compact-section-label"),
       D.el("section", { class: "tool-shortcuts section-card" }, [
         shortcut("▣", "게임", "미니게임 5개", () => MiniTalk.Router.go("games")),
-        shortcut("↗", "링크", "자주 쓰는 사이트", () => MiniTalk.Router.go("links"))
+        shortcut("↗", "관련 링크", "자주 쓰는 사이트와 놀이", () => MiniTalk.Router.go("links"))
       ])
     );
     view.append(list);
@@ -117,6 +119,8 @@ MiniTalk.Features.Tools = (() => {
 
   function leave() {
     if(activeDragList){MiniTalk.UI.DragScroll?.unbind?.(activeDragList);activeDragList=null}
+    MiniTalk.Tools.FaceToy?.dispose?.();
+    MiniTalk.Tools.LookalikePlay?.dispose?.();
     MiniTalk.Tools.TarotView.close();
   }
 

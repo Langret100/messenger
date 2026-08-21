@@ -1,0 +1,53 @@
+const fs=require('fs');
+const vm=require('vm');
+const path=require('path');
+const root=path.join(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const face=read('js/tools/face-toy.js'),tools=read('js/features/tools.js'),config=read('js/config.js'),html=read('index.html'),sw=read('sw.js'),css=read('css/features/face-toy.css');
+
+ok(tools.includes('id: "face-toy"')&&tools.includes('MiniTalk.Tools.FaceToy.open(refreshIfVisible)'),'face toy tool entry missing');
+ok(!tools.includes('id: "motion-math"'),'motion game must leave main tools grid');
+ok(config.includes('{name:"동작 인식 게임",url:"https://langret100.github.io/Math-in-Math/"}'),'motion game related link missing');
+ok(html.includes('css/features/face-toy.css?v=2')&&html.includes('js/tools/face-toy.js?v=2'),'face toy assets not loaded');
+ok(html.indexOf('js/tools/face-toy.js?v=2')<html.indexOf('js/tools/lookalike-play.js?v=2')&&html.indexOf('js/tools/lookalike-play.js?v=2')<html.indexOf('js/features/tools.js?v=64.5.8'),'face toy module must load before tools feature');
+ok(sw.includes('./css/features/face-toy.css')&&sw.includes('./js/tools/face-toy.js'),'face toy offline assets missing');
+
+// 로컬 전용: 자체 fetch/API/Firebase 경로가 없어야 하며, 공유 시 기존 Realtime.sendMessage만 재사용한다.
+ok(!/\bfetch\s*\(/.test(face),'face toy must not perform its own network fetch');
+ok(!/sheetUrl|firebase|script\.google|mediapipe|jsdelivr/i.test(face),'face toy introduced external/server dependency');
+ok(face.includes('MiniTalk.Realtime.sendMessage(roomId'),'existing chat send path not reused');
+ok(face.includes('MiniTalk.Realtime?.isRoomMember?.(room)'),'room picker must filter to joined rooms');
+ok(face.includes('CHAT_DATA_LIMIT = 60 * 1024')&&face.includes('44 * 1024'),'chat image budget guard missing');
+
+// 모바일 카메라: 기본 전면, exact 우선 전/후면 전환, 기존 stream stop, 전면 미리보기만 mirror.
+ok(face.includes('let facing = "user"'),'front camera is not default');
+ok(face.includes('startCamera("user")'),'open must start front camera');
+ok(face.includes('facing === "user" ? "environment" : "user"'),'front/rear switch missing');
+ok(face.includes('facingMode: { exact: facing }')&&face.includes('facingMode: { ideal: facing }'),'camera switch fallback chain missing');
+ok(face.includes('stream.getTracks().forEach(track => track.stop())'),'old camera stream is not stopped');
+ok(face.includes('video.classList.toggle("is-mirrored", facing === "user")'),'front preview mirror missing');
+ok(!face.includes('ctx.scale(-1'),'saved image should not be mirror-flipped');
+
+// 5개 놀이와 큰 카메라/여유 있는 하단 스크롤 UI.
+for(const id of ['warp','swap','random','bighead','half'])ok(face.includes(`id: "${id}"`),`effect missing: ${id}`);
+ok(css.includes('.face-toy-stage')&&css.includes('flex:1 1 auto'),'camera stage is not dominant');
+ok(css.includes('.face-toy-effects')&&css.includes('overflow-x:auto'),'effect controls should scroll instead of crowding');
+ok(css.includes('min-width:74px')||css.includes('min-width: 74px'),'effect tap targets too dense/missing');
+ok(css.includes('@media(max-width:340px)'),'290px/PiP responsive rules missing');
+
+
+// 놀이 피드백 효과음: 외부 음원 다운로드 없이 WebAudio 합성으로 촬영/효과/완료 피드백.
+ok(face.includes('window.AudioContext || window.webkitAudioContext'),'face toy local audio synth missing');
+ok(face.includes('sound("shutter")')&&face.includes('sound("effect")')&&face.includes('sound("warp")')&&face.includes('sound("done")'),'face toy sound cues missing');
+ok(!/new Audio\(|assets\/sounds\//.test(face),'face toy should not add downloadable sound assets');
+
+// FaceDetector가 없을 때도 직접 얼굴 중심 선택으로 기능을 계속 쓸 수 있어야 한다.
+ok(face.includes('selectFacesManually')&&face.includes('manual-face-pick'),'manual face fallback missing');
+
+// memberRooms 실제 필터/정렬 경로 런타임 확인.
+const sandbox={console,window:{},navigator:{},Image:function(){},FileReader:function(){},URL:{},crypto:{},MiniTalk:{Tools:{},UI:{Dom:{}},Store:{get:k=>k==='rooms'?{a:{id:'a',title:'A',updatedAt:1},b:{id:'b',title:'B',updatedAt:4},c:{id:'c',title:'C',updatedAt:2}}:{}},Realtime:{isRoomMember:r=>r.id!=='c'}}};
+vm.createContext(sandbox);vm.runInContext(face,sandbox);
+const rooms=sandbox.MiniTalk.Tools.FaceToy._test.memberRooms();
+ok(rooms.length===2&&rooms[0].id==='b'&&rooms[1].id==='a','joined room filter/order runtime failed');
+console.log('FACE_TOY_LOCAL_PLAY_OK');

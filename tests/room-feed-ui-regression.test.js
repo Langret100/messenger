@@ -13,5 +13,5 @@ ok(css.includes('.feed-shell{height:100%;min-height:0;position:relative;overflow
 ok(css.includes('.feed-fab{position:absolute;'),'feed FAB must anchor to non-scrolling shell');
 ok(!css.includes('.feed-fab{position:fixed;'),'fixed FAB inside animated feed view must not return');
 ok(html.includes('feed-classinfo-weekly.css?v=65.0.31')&&html.includes('realtime.js?v=64.5.38')&&html.includes('features/feed.js?v=65.0.21')&&html.includes('app.js?v=64.5.37'),'room/feed cache versions stale');
-ok(sw.includes('moaru-tools-scroll-layout')&&app.includes('sw.js?v=64.5.50'),'service worker cache version stale');
+ok(sw.includes('moaru-face-play-polish')&&app.includes('sw.js?v=64.5.50'),'service worker cache version stale');
 console.log('ROOM_FEED_UI_REGRESSION_OK');

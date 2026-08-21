@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const sw=read('sw.js'),code=read('docs/apps-script/Code.gs'),ai=read('docs/apps-script/MOA_AI.gs'),install=read('docs/apps-script/MOA_AI_INSTALL.md'),api=read('js/adapters/auth-api.js');
-const CACHE='moaru-tools-scroll-layout';
+const CACHE='moaru-face-play-polish';
 ok(sw.includes(`const CACHE = "${CACHE}"`),'final service-worker cache is not the audited v91 baseline');
 for(const f of fs.readdirSync(path.join(root,'tests')).filter(x=>x.endsWith('.test.js')&&x!=='final-integration-consistency.test.js')){
   const text=read('tests/'+f);

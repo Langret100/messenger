@@ -66,6 +66,6 @@ assert.strictEqual(doc2.count('mouseup'),0,'PiP document mouseup listener leaked
 assert(tools.includes('MiniTalk.UI.DragScroll?.unbind?.(activeDragList)'),'tools cleanup hook missing');
 assert((tools.match(/MiniTalk\.UI\.DragScroll\?\.unbind\?\.\(activeDragList\)/g)||[]).length>=2,'tools must cleanup on rerender and leave');
 assert(index.includes('js/ui/drag-scroll.js?v=10'),'drag-scroll cache-bust stale');
-assert(index.includes('js/features/tools.js?v=64.5.4'),'tools cache-bust stale');
-assert(sw.includes('moaru-v64.5.62-admin-fastpath-v104-20260821'),'service worker cache stale');
+assert(index.includes('js/features/tools.js?v=64.5.5'),'tools cache-bust stale');
+assert(sw.includes('moaru-v64.5.63-task-tools-ui-20260821'),'service worker cache stale');
 console.log('V102_DRAGSCROLL_CLEANUP_RUNTIME_OK');

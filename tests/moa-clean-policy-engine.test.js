@@ -3,7 +3,7 @@ const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),api=read('js/adapters/auth-api.js'),code=read('docs/apps-script/Code.gs'),gs=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
 ok(html.includes('moa-communication-engine.js?v=11'),'v89 cache bust missing');
-ok(sw.includes('moaru-v64.5.62-admin-fastpath-v104-20260821'),'v89 service worker cache missing');
+ok(sw.includes('moaru-v64.5.63-task-tools-ui-20260821'),'v89 service worker cache missing');
 ok(!fs.existsSync('docs/apps-script/MOA_CHAT.gs')&&!fs.existsSync('docs/apps-script/MOA_LEARNING.gs'),'legacy MOA GS docs remain');
 for(const route of ['moa_sync','moa_commit','moa_search'])ok(code.includes(`case "${route}"`),`missing route ${route}`);
 for(const gone of ['moa_chat','moa_feedback','moa_learn','moa_memory_get','moa_memory_set','moa_topic_observe','moa_reaction_observe'])ok(!code.includes(`case "${gone}"`),`legacy route remains ${gone}`);

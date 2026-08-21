@@ -17,7 +17,7 @@ ok(feed.includes('if(!sameComments(previous,post))patchComments(id)'),'heart-onl
 ok(feed.includes('draft=oldInput?.value||""')&&feed.includes('nextInput.value=draft'),'comment draft preservation missing');
 ok(feed.includes('doc?.activeElement===oldInput')&&feed.includes('setSelectionRange'),'comment focus/caret preservation missing');
 
-ok(html.includes('css/features/tools.css?v=20'),'tools css cache-bust missing');
+ok(html.includes('css/features/tools.css?v=22'),'tools css cache-bust missing');
 ok(html.includes('js/features/feed.js?v=65.0.21'),'feed cache-bust missing');
 ok(html.includes('js/features/settings.js?v=45'),'settings cache-bust missing');
 ok(html.includes('js/features/admin.js?v=64.5.30'),'admin cache-bust missing');

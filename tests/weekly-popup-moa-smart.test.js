@@ -5,8 +5,8 @@ const weekly=read('js/tasks/friday-grade6-mission.js'),html=read('index.html'),s
 ok(weekly.includes('const sourceView=MiniTalk.UI.Dom.doc()?.defaultView||window'),'weekly popup must use the live messenger/PiP view');
 ok(weekly.includes('const gap=42'),'weekly popup must keep the same 42px safety gap');
 ok(weekly.includes('sourceView.screenX??sourceView.screenLeft')&&weekly.includes('sourceView.outerWidth'),'weekly popup still uses the wrong browser window geometry');
-ok(html.includes('friday-grade6-mission.js?v=65.0.14'),'weekly popup cache-bust missing');
-ok(sw.includes('moaru-v64.5.62-admin-fastpath-v104-20260821'),'v92 service worker cache id missing');
+ok(html.includes('friday-grade6-mission.js?v=65.0.15'),'weekly popup cache-bust missing');
+ok(sw.includes('moaru-v64.5.63-task-tools-ui-20260821'),'v92 service worker cache id missing');
 for(const token of ['function moaSearchContext_','function moaContextAnchor_','function moaCleanKnowledgeQuery_','function moaWikiExact_','function moaResultQuality_','function moaRankResults_','function moaFactualAnswer_','moa.search.v4.'])ok(gs.includes(token),`MOA smart search piece missing: ${token}`);
 ok(gs.includes('"군산":"Gunsan"')&&gs.includes('"수원":"Suwon"')&&gs.includes('variants.push(q+"시")'),'Korean city geocoding fallback is incomplete');
 const ctx={console};vm.createContext(ctx);vm.runInContext(gs,ctx);

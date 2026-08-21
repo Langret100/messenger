@@ -14,5 +14,5 @@ ok(friday.includes('friday-mission-compact-toggle')&&friday.includes('data-quest
 ok(css.includes('.friday-mission-card.quest-compact')&&css.includes('.friday-mission-compact-toggle'),'weekly compact layout missing');
 ok(math.includes('if (progress.completed[missionId] === true) onProgress?.()'),'math still rerenders task page on every correct answer');
 ok(korean.includes('if (progress.completed[missionId] === true) onProgress?.()'),'Korean still rerenders task page on every correct answer');
-ok(html.includes('quest-accordion.css?v=25')&&html.includes('drag-scroll.js?v=10')&&html.includes('friday-grade6-mission.js?v=65.0.14'),'quest UI cache refs stale');
+ok(html.includes('quest-accordion.css?v=26')&&html.includes('drag-scroll.js?v=10')&&html.includes('friday-grade6-mission.js?v=65.0.15'),'quest UI cache refs stale');
 console.log('QUEST_ACCORDION_STABLE_UI_OK');

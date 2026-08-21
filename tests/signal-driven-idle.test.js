@@ -10,5 +10,5 @@ if(!shop.includes('async function enter()')||shop.includes('setInterval(()=>refr
 if(feed.includes('render(MiniTalk.UI.Dom.byId("viewHost"))'))throw new Error("feed changes still trigger full-screen render");
 if(!chats.includes('startRoomListSubscription')||!chats.includes('stopRoomListSubscription'))throw new Error("room list is not route-scoped");
 for(const ref of ['realtime.js?v=64.5.38','task-service.js?v=64.5.26','features/tasks.js?v=64.5.2','features/admin.js?v=64.5.30','app.js?v=64.5.37'])if(!index.includes(ref))throw new Error(`cache-busted signal-idle asset missing: ${ref}`);
-if(!sw.includes('moaru-v64.5.62-admin-fastpath-v104-20260821')||!app.includes('sw.js?v=64.5.49'))throw new Error("signal-idle service worker cache bump missing");
+if(!sw.includes('moaru-v64.5.63-task-tools-ui-20260821')||!app.includes('sw.js?v=64.5.50'))throw new Error("signal-idle service worker cache bump missing");
 console.log("FIREBASE_IDLE_APPS_SAFETY_OK");

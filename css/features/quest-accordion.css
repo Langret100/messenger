@@ -54,3 +54,13 @@
 .quest-accordion.expanded{box-shadow:0 8px 24px rgba(19,31,55,.055)}
 .quest-accordion-panel.hidden{display:none!important}
 .quest-accordion-toggle:focus-visible,.friday-mission-compact-toggle:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 42%,transparent);outline-offset:-2px}
+
+/* 좁은 PiP에서도 과목 제목은 한글 음절 중간에서 쪼개지지 않습니다. */
+.quest-subject-copy strong,.quest-subject-copy small{word-break:keep-all;overflow-wrap:normal}
+@media(max-width:340px){
+  .quest-accordion-toggle{grid-template-columns:40px minmax(0,1fr) auto 16px;gap:7px;padding:11px 10px}
+  .quest-subject-copy strong{font-size:13px;line-height:1.25}
+  .quest-subject-copy small{font-size:10px}
+  .quest-subject-meta{gap:4px}
+  .quest-subject-progress{min-width:36px;padding:5px 6px}
+}

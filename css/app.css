@@ -252,3 +252,9 @@ body{min-height:100dvh}
 
 /* 0.5초 이상 걸리는 실제 로딩에서만 나타나는 모아루 로딩 연출 */
 .moaru-loading-host{position:fixed;inset:0;z-index:60000;display:grid;place-items:center;background:color-mix(in srgb,var(--surface) 58%,transparent);backdrop-filter:blur(3px);animation:fade-in .16s ease;pointer-events:auto}.moaru-loading-host.leaving{opacity:0;transition:opacity .18s ease}.moaru-loading-card{display:grid;justify-items:center;gap:8px;color:var(--text);text-align:center}.moaru-loading-card img{width:92px;height:92px;object-fit:contain;animation:moaru-loading-pulse 1.15s ease-in-out infinite}.moaru-loading-card strong{font-size:12px;letter-spacing:-.02em;animation:moaru-loading-pulse 1.15s ease-in-out infinite}.moaru-loading-card::after{content:"";width:42px;height:3px;border-radius:99px;background:color-mix(in srgb,var(--accent) 36%,transparent);animation:moaru-loading-bar 1.15s ease-in-out infinite}@keyframes moaru-loading-pulse{0%,100%{opacity:.56;transform:scale(.985)}50%{opacity:1;transform:scale(1)}}@keyframes moaru-loading-bar{0%,100%{opacity:.35;transform:scaleX(.62)}50%{opacity:.8;transform:scaleX(1)}}
+
+/* Document PiP/좁은 창 공통: 기능 진입으로 문서 폭이 재계산되거나 한글 제목이 음절 단위로 찢어지지 않게 합니다. */
+@media(max-width:340px){
+  html,body,.app-shell,.workspace,.view-host,.view,.utility-view{min-width:0!important;max-width:100%;box-sizing:border-box}
+  .tool-label strong,.shortcut-copy strong,.settings-row-copy strong,.quest-subject-copy strong{word-break:keep-all;overflow-wrap:normal}
+}

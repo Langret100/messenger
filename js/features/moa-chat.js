@@ -16,7 +16,8 @@
    대화 화면에 보이는 누적 내역은 서버가 아니라 IndexedDB(DataCache)에만 저장합니다.
    ============================================================ */
 MiniTalk.Features.MoaChat=(()=>{
-  let busy=false,live=null,proactiveTimer=0,connectionGreetingChecked=false,lastHiddenAt=0;const listNodes=new Set(),historyWrites=new Map();
+  let busy=false,live=null,proactiveTimer=0,connectionGreetingChecked=false,lastHiddenAt=0;
+  const listNodes=new Set(),historyWrites=new Map(),memoryHistories=new Map(),historyRetryTimers=new Map();
   function D(){return MiniTalk.UI.Dom}
   function listItem(){
     const Dom=D(), node=Dom.el("button",{class:"conversation-item conversation-enter moa-chat-list-item",type:"button","data-room-id":"__moa_ai__","data-tone":"2","data-unread":"0","data-favorite":"0","data-member":"1","data-room-type":"ai","data-has-message":"1"},[
@@ -28,25 +29,38 @@ MiniTalk.Features.MoaChat=(()=>{
   }
   function cacheKey(){return String(MiniTalk.Store.get("user")?.user_id||"guest")}
   function legacyHistoryKey(){return`moa.chat.history.${cacheKey()}`}
+  function mergeHistory(a,b){
+    const rows=[...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])],seen=new Set(),out=[];
+    rows.sort((x,y)=>Number(x?.ts||0)-Number(y?.ts||0));
+    for(const row of rows){if(!row||typeof row!=="object")continue;const id=String(row.id||`${row.ts||0}|${row.role||""}|${row.text||""}`);if(seen.has(id))continue;seen.add(id);out.push(row)}
+    return out.slice(-120);
+  }
+  function rememberMemory(key,list){const snapshot=list.slice(-120);memoryHistories.set(key,snapshot);return snapshot}
   async function history(){
-    const key=cacheKey();
-    const pending=historyWrites.get(key);if(pending)await pending.catch(()=>{});
-    const cached=await MiniTalk.DataCache?.get?.("moa-chat-history",key,null);
-    if(Array.isArray(cached))return cached;
+    const key=cacheKey(),memory=memoryHistories.get(key)||[];
+    let cached=null;
+    try{cached=await MiniTalk.DataCache?.get?.("moa-chat-history",key,null)}catch(error){console.warn("모아 대화내역 읽기 실패 - 메모리 상태 유지",error)}
+    if(Array.isArray(cached)){const merged=mergeHistory(cached,memory);rememberMemory(key,merged);return merged}
     /* v73의 localStorage 대화내역이 있으면 한 번만 IndexedDB로 옮겨 기존 대화를 보존합니다. */
     const legacy=MiniTalk.Persistence.get(legacyHistoryKey(),null);
-    if(Array.isArray(legacy)&&legacy.length){await MiniTalk.DataCache?.put?.("moa-chat-history",key,legacy);MiniTalk.Persistence.remove(legacyHistoryKey());return legacy}
-    return [];
+    if(Array.isArray(legacy)&&legacy.length){const merged=mergeHistory(legacy,memory);rememberMemory(key,merged);saveHistory(merged);MiniTalk.Persistence.remove(legacyHistoryKey());return merged}
+    return rememberMemory(key,memory);
   }
-  function saveHistory(list){
-    const key=cacheKey(),snapshot=list.slice(-120);
+  function scheduleHistoryRetry(key,snapshot,attempt){
+    if(attempt>=3||historyRetryTimers.has(key))return;
+    const delay=[180,700,2200][attempt]||2200;
+    const timer=setTimeout(()=>{historyRetryTimers.delete(key);persistHistory(key,snapshot,attempt+1).catch(()=>{})},delay);
+    historyRetryTimers.set(key,timer);
+  }
+  function persistHistory(key,snapshot,attempt=0){
     const previous=historyWrites.get(key)||Promise.resolve();
-    const write=previous.catch(()=>{}).then(()=>MiniTalk.DataCache?.put?.("moa-chat-history",key,snapshot));
+    const write=previous.catch(()=>{}).then(()=>MiniTalk.DataCache?.put?.("moa-chat-history",key,snapshot)).catch(error=>{scheduleHistoryRetry(key,snapshot,attempt);throw error});
     historyWrites.set(key,write);
     write.finally(()=>{if(historyWrites.get(key)===write)historyWrites.delete(key)}).catch(()=>{});
     return write;
   }
-  function appendMessage(list,role,text,meta={}){const msg={id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,role,text,ts:Date.now(),...meta};list.push(msg);msg.persisted=saveHistory(list);return msg}
+  function saveHistory(list){const key=cacheKey(),snapshot=rememberMemory(key,list);return persistHistory(key,snapshot)}
+  function appendMessage(list,role,text,meta={}){const msg={id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,role,text,ts:Date.now(),...meta};list.push(msg);rememberMemory(cacheKey(),list);msg.persisted=saveHistory(list).catch(()=>false);return msg}
   function lastUserAt(messages){const m=[...messages].reverse().find(v=>v.role==="user");return Number(m?.ts||0)}
   function unreadCount(messages){return messages.filter(v=>v.role==="assistant"&&v.source==="proactive"&&v.unread===true).length}
   function updateListNode(node,messages){
@@ -62,13 +76,13 @@ MiniTalk.Features.MoaChat=(()=>{
     if(document.querySelector?.(".moa-chat-room"))return null;await evaluateIgnored(messages);
     const planned=MiniTalk.AI.MoaCommunicationEngine.maybeInitiate?.({now:Date.now(),lastUserAt:lastUserAt(messages),hasUnreadProactive:unreadCount(messages)>0});if(!planned?.reply)return null;
     const msg=appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:planned.type||"general",initiativeTopic:planned.topic||"",unread:true});
-    await msg.persisted;return msg;
+    for(const n of [...listNodes])updateListNode(n,messages);return msg;
   }
   async function maybeCreateConnectionGreeting(messages){
     if(document.querySelector?.(".moa-chat-room")||unreadCount(messages)>0)return null;
     const planned=MiniTalk.AI.MoaCommunicationEngine.maybeConnectionGreeting?.({now:Date.now(),lastUserAt:lastUserAt(messages),hasUnreadProactive:false});if(!planned?.reply)return null;
     const msg=appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:"greeting",initiativeTopic:planned.topic||"",unread:true});
-    await msg.persisted;return msg;
+    for(const n of [...listNodes])updateListNode(n,messages);return msg;
   }
   async function refreshProactive(node=null,options={}){
     const messages=await history();let created=null;

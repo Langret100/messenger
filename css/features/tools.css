@@ -86,3 +86,12 @@
   width: 0;
   height: 0;
 }
+
+/* 작은 PiP: 제목은 '시간/표'처럼 음절 단위로 부서지지 않게 유지합니다. */
+.tools-screen .tool-label strong,.tools-screen .tool-label small,.tools-screen .shortcut-copy strong,.tools-screen .shortcut-copy small{word-break:keep-all;overflow-wrap:normal}
+@media(max-width:340px){
+  .tools-screen .modern-tool-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .tools-screen .modern-tool{grid-column:auto;min-width:0;padding:10px 9px;min-height:88px}
+  .tools-screen .tool-label strong{font-size:10px;line-height:1.28}
+  .tools-screen .tool-label small{font-size:7.5px;line-height:1.3}
+}

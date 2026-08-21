@@ -1,18 +1,15 @@
 /* ============================================================
-   MOA_AI.gs - MOA AI backend v91 smart-search foundation
+   MOA_AI.gs - public learning + search backend
 
-   Browser owns conversation understanding and dialogue policy.
-   Apps Script is intentionally limited to:
-   - moa_sync   : public learning + small user profile/memory snapshot
-   - moa_commit : batched learning/profile/memory persistence
-   - moa_search : external information lookup
+   Hard ownership boundary
+   - Browser/local cache owns every user-specific memory and style profile.
+   - Apps Script stores only reusable aggregate policy evidence.
+   - moa_sync returns public policy only.
+   - moa_commit accepts policy_feedback only.
+   - moa_search performs transient external lookup; chat history is not stored.
 
-   No normal-chat response selection lives here.
-   No raw MOA chat transcript is stored in Google Sheets.
+   No per-user MOA profile or personal memory is created/read/written here.
    ============================================================ */
-var MOA_PHRASE_SHEET = "모아_표현학습";
-var MOA_MEMORY_SHEET = "모아_개인기억";
-var MOA_PROFILE_SHEET = "모아_사용자성향";
 var MOA_POLICY_SHEET = "모아_대화정책";
 var MOA_ACTIVITY_PROPERTY = "MOA_ACTIVITY_SERIAL";
 var MOA_SYNC_VERSION_PROPERTY = "MOA_SYNC_VERSION";
@@ -373,13 +370,6 @@ function moaEvidenceHash_(uid,event){
   return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,raw)).slice(0,18);
 }
 function moaEvidenceWeight_(event){return moaClamp_(Math.abs(moaNum_(event&&event.weight,1)),.10,1);}
-function moaLearningTier_(posUsers,negUsers,posScore,negScore,evidenceCount){
-  posUsers=Number(posUsers||0);negUsers=Number(negUsers||0);posScore=Number(posScore||0);negScore=Number(negScore||0);evidenceCount=Number(evidenceCount||0);
-  if(posUsers>=3&&posUsers>=negUsers+2&&posScore>=2.4&&posScore>=negScore+1.4)return "confirmed";
-  if(posUsers>=2&&posUsers>negUsers&&posScore>=1.8&&posScore>=negScore+1.1)return "growing";
-  if(posUsers>=1&&evidenceCount>=3&&posScore>=2.0&&negScore<=.35&&posScore>=negScore+1.8)return "solo";
-  return "observing";
-}
 function moaPolicyLearningTier_(posUsers,negUsers,posScore,negScore,evidenceCount){
   posUsers=Number(posUsers||0);negUsers=Number(negUsers||0);posScore=Number(posScore||0);negScore=Number(negScore||0);evidenceCount=Number(evidenceCount||0);
   if(posUsers>=3&&posUsers>=negUsers+2&&posScore>=2.6&&posScore>=negScore+1.5)return "confirmed";
@@ -390,24 +380,8 @@ function moaPolicyLearningTier_(posUsers,negUsers,posScore,negScore,evidenceCoun
 function moaJson_(value,fallback){try{return JSON.parse(String(value||""))}catch(e){return fallback;}}
 function moaNum_(v,d){v=Number(v);return isFinite(v)?v:d;}
 function moaClamp_(v,a,b){return Math.max(a,Math.min(b,moaNum_(v,a)));}
-function moaProfileNum_(v,d){return moaClamp_(moaNum_(v,d),0,1);}
 
-function moaPhraseSheet_(){return moaEnsureSheet_(MOA_PHRASE_SHEET,["normalized","trigger","candidate_id","reply","source","positive_users","negative_users","last_user_id","created_at","updated_at","act","affect","last_activity_serial","state","positive_hashes","negative_hashes","strategy","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
-function moaMemorySheet_(){return moaEnsureSheet_(MOA_MEMORY_SHEET,["user_id","key","value","label","confidence","created_at","updated_at"]);}
-function moaProfileSheet_(){
-  var sh=moaEnsureSheet_(MOA_PROFILE_SHEET,["user_id","brevity","question_tolerance","playfulness","empathy","directness","initiative","updated_at"]);
-  if(sh.getMaxColumns()<8)sh.insertColumnsAfter(sh.getMaxColumns(),8-sh.getMaxColumns());
-  var h7=String(sh.getRange(1,7).getValue()||""),h8=String(sh.getRange(1,8).getValue()||"");
-  if(h7!=="initiative"){
-    var last=sh.getLastRow();
-    if(last>1&&h7==="updated_at"){var old=sh.getRange(2,7,last-1,1).getValues();sh.getRange(2,8,last-1,1).setValues(old);sh.getRange(2,7,last-1,1).setValues(old.map(function(){return [.52]}));}
-    sh.getRange(1,7).setValue("initiative");
-  }
-  if(h8!=="updated_at")sh.getRange(1,8).setValue("updated_at");
-  return sh;
-}
 function moaPolicySheet_(){return moaEnsureSheet_(MOA_POLICY_SHEET,["policy_key","strategy","positive_users","negative_users","positive_hashes","negative_hashes","updated_at","last_activity_serial","state","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
-
 function moaEnsureHeaders_(sh,headers){
   if(sh.getMaxColumns()<headers.length)sh.insertColumnsAfter(sh.getMaxColumns(),headers.length-sh.getMaxColumns());
   var current=sh.getRange(1,1,1,headers.length).getValues()[0],dirty=false;
@@ -415,45 +389,8 @@ function moaEnsureHeaders_(sh,headers){
   if(dirty)sh.getRange(1,1,1,headers.length).setValues([current]);
   return sh;
 }
-function moaEnsurePhraseWidth_(){return moaEnsureHeaders_(moaPhraseSheet_(),["normalized","trigger","candidate_id","reply","source","positive_users","negative_users","last_user_id","created_at","updated_at","act","affect","last_activity_serial","state","positive_hashes","negative_hashes","strategy","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
 function moaEnsurePolicyWidth_(){return moaEnsureHeaders_(moaPolicySheet_(),["policy_key","strategy","positive_users","negative_users","positive_hashes","negative_hashes","updated_at","last_activity_serial","state","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
 
-function moaReadProfile_(uid){
-  var sh=moaProfileSheet_(),last=sh.getLastRow();if(last<=1)return null;
-  var rows=sh.getRange(2,1,last-1,8).getValues();
-  for(var i=rows.length-1;i>=0;i--)if(String(rows[i][0])===uid)return {brevity:moaProfileNum_(rows[i][1],.58),questionTolerance:moaProfileNum_(rows[i][2],.50),playfulness:moaProfileNum_(rows[i][3],.55),empathy:moaProfileNum_(rows[i][4],.60),directness:moaProfileNum_(rows[i][5],.60),initiative:moaProfileNum_(rows[i][6],.52)};
-  return null;
-}
-function moaWriteProfile_(uid,p){
-  if(!uid||!p||typeof p!=="object")return;
-  var sh=moaProfileSheet_(),last=sh.getLastRow(),row=0,rows=last>1?sh.getRange(2,1,last-1,8).getValues():[];
-  for(var i=rows.length-1;i>=0;i--)if(String(rows[i][0])===uid){row=i+2;break;}
-  var values=[uid,moaProfileNum_(p.brevity,.58),moaProfileNum_(p.questionTolerance,.50),moaProfileNum_(p.playfulness,.55),moaProfileNum_(p.empathy,.60),moaProfileNum_(p.directness,.60),moaProfileNum_(p.initiative,.52),new Date()];
-  if(row)sh.getRange(row,1,1,8).setValues([values]);else sh.appendRow(values);
-}
-function moaReadMemories_(uid){
-  var out={},sh=moaMemorySheet_(),last=sh.getLastRow();if(last<=1)return out;
-  var rows=sh.getRange(2,1,last-1,7).getValues();
-  rows.forEach(function(r){if(String(r[0])===uid&&r[1]&&r[2])out[String(r[1])]={value:String(r[2]),label:String(r[3]||""),confidence:Number(r[4]||.7)};});return out;
-}
-function moaWriteMemory_(uid,key,value,label){
-  uid=String(uid||"");key=String(key||"").trim();value=String(value||"").trim();label=String(label||"");if(!uid||!key||!value||key.length>40||value.length>80)return;
-  var sh=moaMemorySheet_(),last=sh.getLastRow(),row=0,rows=last>1?sh.getRange(2,1,last-1,7).getValues():[];
-  for(var i=rows.length-1;i>=0;i--)if(String(rows[i][0])===uid&&String(rows[i][1])===key){row=i+2;break;}
-  var now=new Date();if(row){var old=sh.getRange(row,1,1,7).getValues()[0];sh.getRange(row,1,1,7).setValues([[uid,key,value,label,Math.min(.98,Number(old[4]||.7)+.04),old[5]||now,now]]);}else sh.appendRow([uid,key,value,label,.72,now,now]);
-}
-
-function moaPublicPatterns_(){
-  var sh=moaEnsurePhraseWidth_(),last=sh.getLastRow(),out=[];if(last<=1)return out;
-  sh.getRange(2,1,last-1,22).getValues().forEach(function(r,i){
-    var state=String(r[13]||"active").toLowerCase(),pos=Number(r[5]||0),neg=Number(r[6]||0),posScore=Number(r[17]||pos||0),negScore=Number(r[18]||neg||0),evidenceCount=Number(r[20]||0);
-    if(state==="dormant"||!r[1]||!r[3])return;
-    var tier=moaLearningTier_(pos,neg,posScore,negScore,evidenceCount);if(tier==="observing")return;
-    var base=tier==="confirmed"?.72:tier==="growing"?.65:.58,margin=Math.max(0,posScore-negScore),confidence=Math.min(tier==="confirmed"?.96:tier==="growing"?.82:.69,base+margin*.025);
-    out.push({id:String(r[2]||("phrase:"+(i+2))),trigger:String(r[1]),reply:String(r[3]),source:String(r[4]||"learned"),positive:pos,negative:neg,positiveScore:posScore,negativeScore:negScore,evidenceCount:evidenceCount,tier:tier,act:String(r[10]||""),affect:String(r[11]||"neutral"),strategy:String(r[16]||""),confidence:confidence});
-  });
-  out.sort(function(a,b){var rank={confirmed:3,growing:2,solo:1};return (rank[b.tier]-rank[a.tier])||((b.positiveScore-b.negativeScore)-(a.positiveScore-a.negativeScore));});return out.slice(0,180);
-}
 function moaPublicPolicy_(){
   var sh=moaEnsurePolicyWidth_(),last=sh.getLastRow(),out={};if(last<=1)return out;
   sh.getRange(2,1,last-1,14).getValues().forEach(function(r){
@@ -464,45 +401,18 @@ function moaPublicPolicy_(){
   });return out;
 }
 function moaPublicSnapshot_(){
-  var version=moaCurrentSyncVersion_(),key="moa-public-v91-"+version,cache=CacheService.getScriptCache(),hit=cache.get(key);
+  var version=moaCurrentSyncVersion_(),key="moa-public-policy-"+version,cache=CacheService.getScriptCache(),hit=cache.get(key);
   if(hit){try{return JSON.parse(hit)}catch(e){}}
-  var snapshot={patterns:moaPublicPatterns_(),policy:moaPublicPolicy_()};
+  var snapshot={policy:moaPublicPolicy_()};
   try{cache.put(key,JSON.stringify(snapshot),300)}catch(e){}
   return snapshot;
 }
 function moaSync_(data){
-  var uid=String(data.user_id||"").trim();if(!uid)return jsonResponse_({ok:false,error:"MOA_SYNC_USER_REQUIRED"});
-  var known=Number(data.known_version||0),version=moaCurrentSyncVersion_(),out={ok:true,version:version,profile:moaReadProfile_(uid)||null,memories:moaReadMemories_(uid)};
-  if(known!==version){var pub=moaPublicSnapshot_();out.patterns=pub.patterns;out.policy=pub.policy;}
+  var known=Number(data.known_version||0),version=moaCurrentSyncVersion_(),out={ok:true,version:version};
+  if(known!==version){var pub=moaPublicSnapshot_();out.policy=pub.policy;}
   return jsonResponse_(out);
 }
 
-function moaStoreFeedbackEvents_(uid,events){
-  var sh=moaEnsurePhraseWidth_(),last=sh.getLastRow(),rows=last>1?sh.getRange(2,1,last-1,22).getValues():[],originalCount=rows.length,index={},dirty={},changed=false,publicChanged=false;
-  rows.forEach(function(r,i){index[String(r[0])+"\u001f"+String(r[3])]=i;});
-  var now=new Date(),hash=moaUserHash_(uid),activity=moaCurrentActivitySerial_();
-  events.forEach(function(event){
-    if(!event||event.type!=="feedback")return;
-    var trigger=String(event.trigger||"").trim(),reply=String(event.reply||"").trim(),source=String(event.source||"local"),signal=String(event.signal||""),act=String(event.act||""),affect=String(event.affect||"neutral"),strategy=String(event.strategy||"");
-    if(!trigger||!reply||["positive","negative"].indexOf(signal)<0)return;
-    var norm=moaCompact_(trigger);if(norm.length<2||norm.length>180||reply.length>600)return;
-    var k=norm+"\u001f"+reply,i=index[k],r;
-    if(i==null){i=rows.length;index[k]=i;r=[norm,trigger,"phrase:"+(i+2),reply,source,0,0,uid,now,now,act,affect,activity,"active","","",strategy,0,0,"",0,"observing"];rows.push(r);}else r=rows[i];
-    while(r.length<22)r.push("");
-    var beforeTier=moaLearningTier_(r[5],r[6],Number(r[17]||r[5]||0),Number(r[18]||r[6]||0),Number(r[20]||0));
-    var ph=String(r[14]||""),nh=String(r[15]||""),localChanged=false,res;
-    if(signal==="positive"){res=moaAppendUniqueHash_(ph,hash);ph=res.value;if(res.added){r[5]=Number(r[5]||0)+1;localChanged=true;}}
-    if(signal==="negative"){res=moaAppendUniqueHash_(nh,hash);nh=res.value;if(res.added){r[6]=Number(r[6]||0)+1;localChanged=true;}}
-    var evHash=moaEvidenceHash_(uid,event),er=moaAppendUniqueHash_(String(r[19]||""),evHash);
-    if(er.added){var w=moaEvidenceWeight_(event);r[19]=er.value;r[20]=Number(r[20]||0)+1;if(signal==="positive")r[17]=Number(r[17]||0)+w;else r[18]=Number(r[18]||0)+w;localChanged=true;}
-    var tier=moaLearningTier_(r[5],r[6],r[17],r[18],r[20]);if(String(r[21]||"")!==tier){r[21]=tier;localChanged=true;}
-    if(localChanged&&(beforeTier!=="observing"||tier!=="observing"))publicChanged=true;
-    if(localChanged){r[7]=uid;r[9]=now;r[10]=act||r[10]||"";r[11]=affect||r[11]||"neutral";r[12]=activity;r[13]="active";r[14]=ph;r[15]=nh;r[16]=strategy||r[16]||"";dirty[i]=true;changed=true;}
-  });
-  Object.keys(dirty).map(Number).filter(function(i){return i<originalCount}).forEach(function(i){sh.getRange(i+2,1,1,22).setValues([rows[i]]);});
-  var appended=rows.slice(originalCount);if(appended.length)sh.getRange(originalCount+2,1,appended.length,22).setValues(appended);
-  return publicChanged;
-}
 function moaStorePolicyEvents_(uid,events){
   var sh=moaEnsurePolicyWidth_(),last=sh.getLastRow(),rows=last>1?sh.getRange(2,1,last-1,14).getValues():[],originalCount=rows.length,index={},dirty={},changed=false,publicChanged=false;
   rows.forEach(function(r,i){index[String(r[0])+"\u001f"+String(r[1])]=i;});
@@ -524,24 +434,28 @@ function moaStorePolicyEvents_(uid,events){
 }
 function moaCommit_(data){
   var uid=String(data.user_id||"").trim();if(!uid)return jsonResponse_({ok:false,error:"MOA_COMMIT_USER_REQUIRED"});
-  var events=moaJson_(data.events_json,[]);if(!Array.isArray(events))events=[];events=events.slice(0,30);var prof=moaJson_(data.profile_json,null),changedPublic=false;
+  var events=moaJson_(data.events_json,[]);if(!Array.isArray(events))events=[];
+  events=events.filter(function(ev){return ev&&ev.type==="policy_feedback";}).slice(0,30);
   var lock=LockService.getScriptLock();if(!lock.tryLock(4500))return jsonResponse_({ok:false,error:"MOA_COMMIT_BUSY"});
   try{
-    moaActivityTick_();changedPublic=moaStoreFeedbackEvents_(uid,events)||changedPublic;changedPublic=moaStorePolicyEvents_(uid,events)||changedPublic;
-    events.forEach(function(ev){if(ev&&ev.type==="memory")moaWriteMemory_(uid,ev.key,ev.value,ev.label);});if(prof&&typeof prof==="object")moaWriteProfile_(uid,prof);
-    if(changedPublic)moaBumpSyncVersion_();return jsonResponse_({ok:true,stored:events.length,version:moaCurrentSyncVersion_()});
+    moaActivityTick_();
+    var changedPublic=moaStorePolicyEvents_(uid,events);
+    if(changedPublic)moaBumpSyncVersion_();
+    return jsonResponse_({ok:true,stored:events.length,version:moaCurrentSyncVersion_()});
   }finally{lock.releaseLock();}
+}
+
+function moaRemoveLegacyPersonalDataSheets_(){
+  var ss=SpreadsheetApp.getActiveSpreadsheet(),removed=[];
+  ["모아_개인기억","모아_사용자성향","모아_표현학습"].forEach(function(name){var sh=ss.getSheetByName(name);if(sh){ss.deleteSheet(sh);removed.push(name);}});
+  return {ok:true,removed:removed};
 }
 
 function moaRunLearningMaintenance_(){
   var activity=moaCurrentActivitySerial_(),out={ok:true,dormant:0,deleted:0},changed=false;
-  var sh=moaEnsurePhraseWidth_(),last=sh.getLastRow();if(last>1){var rows=sh.getRange(2,1,last-1,22).getValues(),del=[];
-    for(var i=rows.length-1;i>=0;i--){var r=rows[i],pos=Number(r[5]||0),neg=Number(r[6]||0),lastAct=Number(r[12]||0),st=String(r[13]||"active");if(!lastAct){sh.getRange(i+2,13).setValue(activity);continue;}var tier=moaLearningTier_(pos,neg,Number(r[17]||pos||0),Number(r[18]||neg||0),Number(r[20]||0));if(activity-lastAct<MOA_MAINTENANCE_ACTIVITY_STEP||tier!=="observing")continue;if(st==="dormant"){del.push(i+2);out.deleted++;changed=true;}else{sh.getRange(i+2,13,1,2).setValues([[activity,"dormant"]]);out.dormant++;changed=true;}}
-    del.forEach(function(rn){sh.deleteRow(rn)});
-  }
-  var ps=moaEnsurePolicyWidth_(),pl=ps.getLastRow();if(pl>1){var prows=ps.getRange(2,1,pl-1,14).getValues(),pdel=[];
-    for(var j=prows.length-1;j>=0;j--){var pr=prows[j],pp=Number(pr[2]||0),pn=Number(pr[3]||0),pa=Number(pr[7]||0),pst=String(pr[8]||"active");if(!pa){ps.getRange(j+2,8).setValue(activity);continue;}var ptier=moaPolicyLearningTier_(pp,pn,Number(pr[9]||pp||0),Number(pr[10]||pn||0),Number(pr[12]||0));if(activity-pa<MOA_MAINTENANCE_ACTIVITY_STEP||ptier!=="observing")continue;if(pst==="dormant"){pdel.push(j+2);out.deleted++;changed=true;}else{ps.getRange(j+2,8,1,2).setValues([[activity,"dormant"]]);out.dormant++;changed=true;}}
-    pdel.forEach(function(rn){ps.deleteRow(rn)});
+  var ps=moaEnsurePolicyWidth_(),pl=ps.getLastRow();if(pl>1){var rows=ps.getRange(2,1,pl-1,14).getValues(),del=[];
+    for(var i=rows.length-1;i>=0;i--){var r=rows[i],pos=Number(r[2]||0),neg=Number(r[3]||0),lastAct=Number(r[7]||0),state=String(r[8]||"active");if(!lastAct){ps.getRange(i+2,8).setValue(activity);continue;}var tier=moaPolicyLearningTier_(pos,neg,Number(r[9]||pos||0),Number(r[10]||neg||0),Number(r[12]||0));if(activity-lastAct<MOA_MAINTENANCE_ACTIVITY_STEP||tier!=="observing")continue;if(state==="dormant"){del.push(i+2);out.deleted++;changed=true;}else{ps.getRange(i+2,8,1,2).setValues([[activity,"dormant"]]);out.dormant++;changed=true;}}
+    del.forEach(function(row){ps.deleteRow(row);});
   }
   if(changed)moaBumpSyncVersion_();return out;
 }

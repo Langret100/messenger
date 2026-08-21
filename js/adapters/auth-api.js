@@ -5,9 +5,6 @@ MiniTalk.AuthApi = (() => {
     ADMIN_CODE_NOT_CONFIGURED: "서버에 관리자 고유 코드가 설정되지 않았습니다.",
     ADMIN_SESSION_EXPIRED: "관리자 인증 시간이 만료되었습니다. 다시 인증해주세요.",
     ADMIN_AUTH_REQUIRED: "관리자 인증이 필요합니다.",
-    ADMIN_PERMISSION_REQUIRED: "전체 관리자 권한이 필요합니다.",
-    SHOP_MANAGER_PERMISSION_REQUIRED: "쇼핑몰 관리자 권한이 필요합니다.",
-    ADMIN_ROLE_INVALID: "관리자 권한 정보가 올바르지 않습니다.",
     LOGIN_REQUIRED: "로그인 후 이용할 수 있어요.",
     INSUFFICIENT_COIN: "코인이 부족합니다.",
     PRICE_CHANGED: "상품 가격이 변경되었습니다. 쇼핑 화면을 다시 열어주세요.",
@@ -53,7 +50,7 @@ MiniTalk.AuthApi = (() => {
         signal: controller.signal
       });
     } catch (error) {
-      if (error?.name === "AbortError") { const timeoutError = new Error("서버 응답이 지연되고 있습니다. 잠시 후 다시 시도하세요.");timeoutError.code = "REQUEST_TIMEOUT";throw timeoutError; }
+      if (error?.name === "AbortError") throw new Error("서버 응답이 지연되고 있습니다. 잠시 후 다시 시도하세요.");
       throw error;
     } finally {
       clearTimeout(timer);
@@ -211,17 +208,16 @@ MiniTalk.AuthApi = (() => {
       return Array.isArray(data.commands) ? data.commands : [];
     },
     /* MOA_CHAT_INTEGRATION_START
-       v91: 대화 판단은 local-first 소통엔진이 담당합니다.
-       Apps Script는 스냅샷 동기화, 묶음 학습 저장, 외부 검색만 담당합니다. */
+       MOA ownership: personal memory/style stays local.
+       Apps Script receives public policy feedback and search requests only. */
     async moaSync(userId, knownVersion = 0) {
       return post({ mode: "moa_sync", user_id: userId, known_version: Number(knownVersion || 0) });
     },
-    async moaCommit({ userId, events = [], profile = {} }) {
+    async moaCommit({ userId, events = [] }) {
       return post({
         mode: "moa_commit",
         user_id: userId,
-        events_json: JSON.stringify(events || []),
-        profile_json: JSON.stringify(profile || {})
+        events_json: JSON.stringify(events || [])
       });
     },
     async moaSearch({ userId, text, query = "", context = [] }) {

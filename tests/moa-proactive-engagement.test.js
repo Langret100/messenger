@@ -4,16 +4,16 @@ const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),chat=read('js/features/moa-chat.js'),css=read('css/features/moa-chat.css'),gs=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
 ok(html.includes('moa-chat.css?v=6')&&html.includes('moa-communication-engine.js?v=15')&&html.includes('moa-chat.js?v=11'),'v90 cache bust missing');
 ok(sw.includes('moaru-tools-scroll-layout'),'v90 service worker cache missing');
-for(const token of ['maybeInitiate','proactiveCandidates','dueOpenLoop','strongestInterest','starterSuggestions','initiativeSettings','PROACTIVE_DAILY_MAX'])ok(engine.includes(token),'v90 proactive engine missing '+token);
+for(const token of ['maybeInitiate','proactiveCandidates','dueOpenLoop','strongestInterest','starterSuggestions','initiativeSettings','PROACTIVE_CHANCE_GAP'])ok(engine.includes(token),'proactive engine missing '+token);
 for(const token of ['refreshProactive','moa-proactive-unread','먼저 말 걸기','unread:true'])ok(chat.includes(token),'v90 proactive chat UI missing '+token);
 ok(!chat.includes('moa-suggestion-row')&&!chat.includes('moa-suggestion-chip')&&!chat.includes('starterRows'),'removed MOA quick-suggestion UI returned');
 ok(css.includes('.moa-proactive-unread'),'v90 unread style missing');
-ok(gs.includes('"initiative","updated_at"')&&gs.includes('initiative:moaProfileNum_'),'v90 profile initiative persistence missing');
+ok(!gs.includes('MOA_PROFILE_SHEET')&&!gs.includes('MOA_MEMORY_SHEET')&&gs.includes('policy_feedback'),'server must be public-policy only');
 ok(gs.includes('function moaCleanupLegacySheets()'),'cleanup function missing');
 
 const store={};let commits=[];const fakeMath=Object.create(Math);fakeMath.random=()=>0;
 const sandbox={console,Date,Math:fakeMath,setTimeout:()=>1,clearTimeout:()=>{},MiniTalk:{AI:{},Store:{get:()=>({user_id:'u1',isGuest:false})},Persistence:{get:(k,d)=>k in store?store[k]:d,set:(k,v)=>store[k]=v,remove:k=>delete store[k]},AuthApi:{
-  moaSync:async()=>({ok:true,version:20,patterns:[],policy:{},profile:{brevity:.58,questionTolerance:.5,playfulness:.55,empathy:.6,directness:.6,initiative:.52},memories:{}}),
+  moaSync:async()=>({ok:true,version:20,policy:{}}),
   moaSearch:async({query})=>({reply:'SEARCH:'+query,source:'test-search',kind:'general'}),
   moaCommit:async p=>{commits.push(p);return {ok:true,version:21}}
 }}};

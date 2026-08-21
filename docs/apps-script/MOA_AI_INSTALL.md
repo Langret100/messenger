@@ -1,55 +1,35 @@
-# MOA AI v91 설치 / 구조
+# MOA AI Apps Script
 
-## 적용
-1. v85 앱 기준이라면 v86~v90 중간 패치는 적용하지 않습니다.
-2. v85→v91 누적 PATCH-ONLY ZIP을 저장소 루트에 덮어씁니다.
-3. 저장소에 남아 있으면 `js/ai/moa-dialogue-core.js`, `js/ai/moa-chat-engine.js`를 삭제합니다.
-4. Apps Script에서는 기존 `MOA_CHAT.gs`, `MOA_LEARNING.gs`를 삭제합니다.
-5. v91 Apps Script ZIP의 `Code.gs`와 `MOA_AI.gs`를 적용하고 웹앱을 새 버전으로 재배포합니다.
+## Ownership rule
 
-## 역할 분리
-- 브라우저 `moa-communication-engine.js`: 대화 상태, 문맥/참조 해석, 대화정책, 후보선택, 로컬 기억, 사용자 성향, 선제대화 판단
-- `MOA_AI.gs`: 공용 학습/정책·개인 성향·명시적 기억 저장/동기화와 외부 정보 검색
-- `Code.gs`: 전체 Apps Script 공용 라우터. MOA는 `moa_sync`, `moa_commit`, `moa_search` 세 요청만 연결
+MOA personalization is local-only.
 
-일반 잡담을 위해 Apps Script를 왕복하지 않습니다. 화면의 모아 대화 원문은 Google Sheet나 Firebase에 저장하지 않고 기기 IndexedDB에만 보관합니다.
+Local browser/device data:
+- personal memories and interests
+- recent conversation/context
+- preferred tone, roughness, formality, slang and brevity
+- punctuation-only / low-effort response habits
+- proactive-message acceptance and ignore streak
 
-## v91 소수 사용자 공용학습
-v91은 `사용자 3명 전에는 공용학습 불가` 규칙을 제거했습니다. 대신 신뢰도 단계로 승격합니다.
+Apps Script data:
+- reusable aggregate dialogue-policy feedback only
+- public policy snapshot shared by all users
+- transient external search requests
 
-- `observing`: 아직 공용 배포하지 않는 관찰 단계
-- `solo`: 한 사용자라도 서로 다른 시간/후속 문맥에서 반복적으로 좋은 결과가 누적되고 부정 증거가 거의 없으면 낮은 가중치로 공용 배포
-- `growing`: 서로 다른 사용자 2명 이상에서 검증되면 중간 가중치
-- `confirmed`: 서로 다른 사용자 3명 이상에서 충분히 검증되면 일반 공용 가중치
+Apps Script does not create, read, sync, or update a per-user MOA profile or personal-memory sheet.
 
-한 사용자의 같은 반응을 연타해서 점수를 올리지 못하도록, 클라이언트가 6시간 버킷 + 이전 답변/전략 + 후속 문맥을 이용한 evidence key를 만들고 서버는 사용자 해시와 함께 해시화해 중복 증거를 한 번만 반영합니다.
+## Files
 
-표현학습 solo 기준은 기본적으로 `서로 다른 증거 3개 이상 + 누적 긍정점수 2.0 이상 + 부정점수 0.35 이하`입니다. 대화정책은 더 보수적으로 `서로 다른 증거 5개 이상 + 긍정점수 2.3 이상 + 부정점수 0.35 이하`를 요구합니다.
+Replace `MOA_AI.gs` with the supplied file. `Code.gs` routes stay the same:
+- `moa_sync`
+- `moa_commit`
+- `moa_search`
 
-`solo` 데이터는 새 사용자에게도 내려가지만 영향력을 강하게 제한합니다. 사용자 수가 늘어 `growing`, `confirmed`로 올라갈수록 가중치 상한이 높아집니다. 따라서 초기 1명 사용에서도 성장하되, 한 사람의 취향이 곧바로 전체 AI의 강한 기본값이 되지는 않습니다.
+Deploy a new Apps Script web-app version after replacing `MOA_AI.gs`.
 
-## 학습 신호
-- 명시적 긍정/부정은 강한 증거로 사용합니다.
-- 같은 주제·개념의 자연스러운 후속 대화는 약한 긍정 증거로 사용합니다.
-- 완전히 다른 새 주제로 전환한 것은 직전 답변의 성공으로 계산하지 않습니다.
-- 공용 정책과 공용 표현은 별도로 학습합니다.
-- 사용자 개인 성향은 공용학습과 분리합니다.
+## Existing legacy personal sheets
 
-## 캐시 / 서버부담
-- 일반 대화 판단은 클라이언트에서 처리합니다.
-- 학습 이벤트는 로컬 큐에서 묶어 `moa_commit`으로 전송합니다.
-- 공용 스냅샷은 클라이언트 TTL + 버전 번호 + Apps Script CacheService를 사용합니다.
-- Google Sheet는 장기 저장소이며 매 대화마다 읽지 않습니다.
+New code ignores old `모아_개인기억`, `모아_사용자성향`, and `모아_표현학습` sheets.
+If you want to delete those old MOA sheets after confirming the new deployment, run `moaRemoveLegacyPersonalDataSheets_()` manually once in the Apps Script editor.
 
-## 먼저 말 걸기
-- 첫 대화 이후 최근 활동이 충분히 떨어졌을 때만 로컬 엔진이 선제 메시지를 만들 수 있습니다.
-- 기본 제한: 하루 최대 1회, 22:00~07:00 조용한 시간, 최소 8시간 간격.
-- 우선순위: 미래 계획 후속 질문 > 실제로 오래 이어진 관심 주제 > 요일/시간대 > 장기 미접속 후 재시작.
-- 선제대화 정책도 `solo → growing → confirmed` 단계로 공용학습됩니다.
-- 대화 설정에서 `먼저 말 걸기`를 끌 수 있습니다.
-- 별도의 FCM/Web Push는 추가하지 않습니다. 앱이 완전히 종료된 동안 서버가 푸시하는 구조는 아닙니다.
-
-## 선택적 구형 시트 정리
-v91 정상 동작을 확인한 뒤 `moaCleanupLegacySheets()`를 한 번 수동 실행하면 더 이상 사용하지 않는 `모아_학습후보`, `모아_반응학습`, `모아_주제학습` 시트를 삭제합니다. 자동 삭제하지 않습니다.
-
-현재 사용하는 시트는 `모아_표현학습`, `모아_개인기억`, `모아_사용자성향`, `모아_대화정책`입니다. 기존 v90 시트에는 v91 증거 점수/단계 열이 자동으로 추가됩니다.
+This cleanup is intentionally not automatic.

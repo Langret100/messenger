@@ -16,7 +16,7 @@
    대화 화면에 보이는 누적 내역은 서버가 아니라 IndexedDB(DataCache)에만 저장합니다.
    ============================================================ */
 MiniTalk.Features.MoaChat=(()=>{
-  let busy=false,live=null,proactiveTimer=0;const listNodes=new Set();
+  let busy=false,live=null,proactiveTimer=0,connectionGreetingChecked=false,lastHiddenAt=0;const listNodes=new Set();
   function D(){return MiniTalk.UI.Dom}
   function listItem(){
     const Dom=D(), node=Dom.el("button",{class:"conversation-item conversation-enter moa-chat-list-item",type:"button","data-room-id":"__moa_ai__","data-tone":"2","data-unread":"0","data-favorite":"0","data-member":"1","data-room-type":"ai","data-has-message":"1"},[
@@ -24,7 +24,7 @@ MiniTalk.Features.MoaChat=(()=>{
       Dom.el("div",{class:"conversation-main"},[Dom.el("strong",{class:"conversation-title",text:"모아와 대화하기"}),Dom.el("p",{class:"conversation-preview",text:"편하게 얘기하면서 조금씩 더 잘 알아듣는 모아"})]),
       Dom.el("div",{class:"conversation-meta"},[Dom.el("span",{class:"moa-ai-badge",text:"AI"})])
     ]);
-    listNodes.add(node);node.onclick=()=>MiniTalk.Router.go("moa-chat");refreshProactive(node).catch(()=>{});startProactiveLoop();return node;
+    listNodes.add(node);node.onclick=()=>MiniTalk.Router.go("moa-chat");refreshProactive(node,{connection:true}).catch(()=>{});startProactiveLoop();return node;
   }
   function cacheKey(){return String(MiniTalk.Store.get("user")?.user_id||"guest")}
   function legacyHistoryKey(){return`moa.chat.history.${cacheKey()}`}
@@ -47,20 +47,31 @@ MiniTalk.Features.MoaChat=(()=>{
     let badge=meta?.querySelector?.(".moa-proactive-unread");if(count&&!badge){badge=D().el("span",{class:"moa-proactive-unread",text:String(Math.min(count,9))});meta?.prepend(badge)}else if(badge&&count)badge.textContent=String(Math.min(count,9));else badge?.remove?.();
   }
   async function evaluateIgnored(messages){
-    const last=[...messages].reverse().find(v=>v.role==="assistant"&&v.source==="proactive"&&!v.engagementEvaluated);if(!last||last.unread===true||Date.now()-Number(last.ts||0)<36*60*60*1000)return;
+    const last=[...messages].reverse().find(v=>v.role==="assistant"&&v.source==="proactive"&&!v.engagementEvaluated);if(!last||last.unread===true||Date.now()-Number(last.ts||0)<4*60*60*1000)return;
     const idx=messages.indexOf(last),replied=messages.slice(idx+1).some(v=>v.role==="user");last.engagementEvaluated=true;if(!replied)MiniTalk.AI.MoaCommunicationEngine.markProactiveIgnored?.();saveHistory(messages);
   }
   async function maybeCreateProactive(messages){
     if(document.querySelector?.(".moa-chat-room"))return null;await evaluateIgnored(messages);
-    const planned=MiniTalk.AI.MoaCommunicationEngine.maybeInitiate?.({now:Date.now(),lastUserAt:lastUserAt(messages)});if(!planned?.reply)return null;
-    const msg=appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:planned.type||"general",unread:true});return msg;
+    const planned=MiniTalk.AI.MoaCommunicationEngine.maybeInitiate?.({now:Date.now(),lastUserAt:lastUserAt(messages),hasUnreadProactive:unreadCount(messages)>0});if(!planned?.reply)return null;
+    const msg=appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:planned.type||"general",initiativeTopic:planned.topic||"",unread:true});return msg;
   }
-  async function refreshProactive(node=null){
-    const messages=await history();await maybeCreateProactive(messages);if(node)updateListNode(node,messages);for(const n of [...listNodes])updateListNode(n,messages);return messages;
+  async function maybeCreateConnectionGreeting(messages){
+    if(document.querySelector?.(".moa-chat-room")||unreadCount(messages)>0)return null;
+    const planned=MiniTalk.AI.MoaCommunicationEngine.maybeConnectionGreeting?.({now:Date.now(),lastUserAt:lastUserAt(messages),hasUnreadProactive:false});if(!planned?.reply)return null;
+    return appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:"greeting",initiativeTopic:planned.topic||"",unread:true});
+  }
+  async function refreshProactive(node=null,options={}){
+    const messages=await history();let created=null;
+    if(options.connection&&!connectionGreetingChecked){connectionGreetingChecked=true;created=await maybeCreateConnectionGreeting(messages);}
+    if(!created)await maybeCreateProactive(messages);
+    if(node)updateListNode(node,messages);for(const n of [...listNodes])updateListNode(n,messages);return messages;
   }
   function startProactiveLoop(){
     if(proactiveTimer)return;proactiveTimer=setInterval(()=>{if(document.visibilityState!=="hidden")refreshProactive().catch(()=>{})},2*60*1000);
-    document.addEventListener?.("visibilitychange",()=>{if(document.visibilityState==="visible")refreshProactive().catch(()=>{})});
+    document.addEventListener?.("visibilitychange",()=>{
+      if(document.visibilityState==="hidden"){lastHiddenAt=Date.now();return;}
+      if(document.visibilityState==="visible"){const returned=lastHiddenAt&&Date.now()-lastHiddenAt>=30*60*1000;if(returned)connectionGreetingChecked=false;refreshProactive(null,{connection:returned}).catch(()=>{});}
+    });
   }
   function appendRichText(node,text){
     const doc=D().doc(),parts=String(text||"").split(/(https?:\/\/[^\s]+)/g);
@@ -90,7 +101,7 @@ MiniTalk.Features.MoaChat=(()=>{
   }
   function fill(listNode,messages){listNode.replaceChildren(...messages.map(messageNode));listNode.scrollTop=listNode.scrollHeight;requestAnimationFrame(()=>{if(listNode.isConnected)listNode.scrollTop=listNode.scrollHeight})}
   function header(){MiniTalk.UI.Shell.setHeader("모아와 대화하기",[D().el("button",{class:"icon-button subtle",type:"button",text:"⋯","aria-label":"모아 대화 메뉴",onclick:openMenu})],{back:()=>MiniTalk.Router.go("chats")})}
-  function openMenu(){const Dom=D(),body=Dom.el("div",{class:"modal-stack"}),settings=MiniTalk.AI.MoaCommunicationEngine.initiativeSettings?.()||{enabled:true,quietStart:22,quietEnd:7},initiative=Dom.el("button",{class:"button secondary",type:"button",text:settings.enabled?"먼저 말 걸기: 켜짐":"먼저 말 걸기: 꺼짐"}),clear=Dom.el("button",{class:"button secondary",type:"button",text:"이 기기의 대화 내역 지우기"});initiative.onclick=()=>{const next=MiniTalk.AI.MoaCommunicationEngine.setInitiativeSettings?.({enabled:!MiniTalk.AI.MoaCommunicationEngine.initiativeSettings?.().enabled});initiative.textContent=next?.enabled?"먼저 말 걸기: 켜짐":"먼저 말 걸기: 꺼짐"};clear.onclick=async()=>{await MiniTalk.DataCache?.remove?.("moa-chat-history",cacheKey());MiniTalk.Persistence.remove(legacyHistoryKey());MiniTalk.AI.MoaCommunicationEngine.clearContext();MiniTalk.UI.Shell.closeModal();MiniTalk.Router.go("moa-chat")};body.append(Dom.el("p",{class:"muted modal-note",text:`모아는 대화가 쌓이면 전에 하던 얘기나 시간대에 맞춰 가끔 먼저 말을 걸 수 있어. 하루 최대 1회, ${settings.quietStart}:00~${settings.quietEnd}:00에는 먼저 말하지 않아.`}),initiative,Dom.el("p",{class:"muted modal-note",text:"화면에 보이는 대화 내역과 짧은 문맥은 이 기기에만 저장돼. Firebase에는 모아 대화를 저장하지 않아."}),clear);MiniTalk.UI.Shell.modal("모아 대화 설정",body)}
+  function openMenu(){const Dom=D(),body=Dom.el("div",{class:"modal-stack"}),settings=MiniTalk.AI.MoaCommunicationEngine.initiativeSettings?.()||{enabled:true,quietStart:22,quietEnd:7},initiative=Dom.el("button",{class:"button secondary",type:"button",text:settings.enabled?"먼저 말 걸기: 켜짐":"먼저 말 걸기: 꺼짐"}),clear=Dom.el("button",{class:"button secondary",type:"button",text:"이 기기의 대화 내역 지우기"});initiative.onclick=()=>{const next=MiniTalk.AI.MoaCommunicationEngine.setInitiativeSettings?.({enabled:!MiniTalk.AI.MoaCommunicationEngine.initiativeSettings?.().enabled});initiative.textContent=next?.enabled?"먼저 말 걸기: 켜짐":"먼저 말 걸기: 꺼짐"};clear.onclick=async()=>{await MiniTalk.DataCache?.remove?.("moa-chat-history",cacheKey());MiniTalk.Persistence.remove(legacyHistoryKey());MiniTalk.AI.MoaCommunicationEngine.clearContext();MiniTalk.UI.Shell.closeModal();MiniTalk.Router.go("moa-chat")};body.append(Dom.el("p",{class:"muted modal-note",text:`모아는 대화가 쌓이면 최근 얘기·요일·시간대에 맞춰 약 2시간 간격으로 한 번씩 확률적으로 먼저 말을 걸 수 있어. 접속할 때도 가끔 가볍게 인사하고, ${settings.quietStart}:00~${settings.quietEnd}:00에는 먼저 말하지 않아.`}),initiative,Dom.el("p",{class:"muted modal-note",text:"화면에 보이는 대화 내역과 짧은 문맥은 이 기기에만 저장돼. Firebase에는 모아 대화를 저장하지 않아."}),clear);MiniTalk.UI.Shell.modal("모아 대화 설정",body)}
   async function render(host){
     MiniTalk.Store.set("activeRoom",null);MiniTalk.Realtime.unsubscribeMessages?.();header();
     /* 공용 학습 스냅샷과 개인 성향/기억은 뒤에서 캐시 동기화합니다. 화면 진입을 막지 않습니다. */

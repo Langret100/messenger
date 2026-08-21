@@ -108,7 +108,10 @@ MiniTalk.UI.DragScroll=(()=>{
     scroller.addEventListener("pointerdown",event=>{
       if(!canStart(event))return;
       active=true;moved=false;pointerId=event.pointerId;startY=event.clientY;startX=event.clientX;startTop=scroller.scrollTop;
-      deferCapture=Boolean(event.target?.closest?.(".shop-product-card"));
+      // 클릭 가능한 카드를 누른 순간에는 포인터를 빼앗지 않습니다.
+      // 실제 세로 이동이 5px을 넘은 뒤에만 capture하여 클릭과 드래그를 구분합니다.
+      const allowedInteractive=Boolean(allowInteractive&&event.target?.closest?.(allowInteractive));
+      deferCapture=Boolean(event.target?.closest?.(".shop-product-card")||allowedInteractive);
       scroller.classList.add("drag-scroll-ready");
       if(!deferCapture){try{scroller.setPointerCapture?.(pointerId)}catch(_){ }}
     });
@@ -118,6 +121,10 @@ MiniTalk.UI.DragScroll=(()=>{
       if(!moved){
         if(Math.hypot(dx,dy)<5)return;
         if(Math.abs(dx)>Math.abs(dy)*1.35){
+          // 클릭 가능한 카드/버튼 위에서 이미 임계 거리 이상 움직였다면
+          // 가로 제스처로 취급하고 뒤따르는 click도 한 번 막습니다.
+          // (세로 스크롤로 전환하지는 않음)
+          if(deferCapture){suppressClick=true;setTimeout(()=>{suppressClick=false},120)}
           try{if(pointerId!=null&&scroller.hasPointerCapture?.(pointerId))scroller.releasePointerCapture(pointerId)}catch(_){ }
           active=false;moved=false;pointerId=null;deferCapture=false;scroller.classList.remove("drag-scroll-ready","drag-scrolling");return
         }

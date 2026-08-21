@@ -3,7 +3,7 @@ const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),ai=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
 ok(html.includes('moa-communication-engine.js?v=17'),'v88 cache bust missing');
-ok(sw.includes('moaru-face-memory-cleanup'),'v88 service worker cache missing');
+ok(sw.includes('moaru-camera-popup-task-scroll-fix'),'v88 service worker cache missing');
 for(const token of ['strategyScores','pickStrategy','policyKey','searchPolicy','referenceConfidence','policy_feedback','strategyHistory'])ok(engine.includes(token),'v88 engine layer missing: '+token);
 ok(ai.includes('MOA_POLICY_SHEET')&&ai.includes('모아_대화정책')&&ai.includes('moaStorePolicyEvents_')&&ai.includes('moaPublicPolicy_'),'policy learning store missing');
 

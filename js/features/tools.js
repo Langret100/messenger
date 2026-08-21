@@ -77,14 +77,22 @@ MiniTalk.Features.Tools = (() => {
     try { popup = sourceView.open("", "MoaruCameraPlay", `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`); } catch {}
     if (!popup) return module.open(refreshIfVisible);
     const base = String(sourceDoc.baseURI || document.baseURI).replace(/'/g, "%27");
-    const d = popup.document; d.open(); d.write(`<!doctype html><html lang="ko" data-theme="${sourceDoc.documentElement?.dataset?.theme || "light"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><base href="${base}"><style>html,body,#cameraToolRoot{margin:0;width:100%;height:100%;overflow:hidden}body{background:var(--surface-2,#f5f7fb)}#cameraToolRoot{min-width:0;min-height:0}.toast-host,.modal-host{z-index:1000}</style></head><body class="camera-tool-window-body"><main id="cameraToolRoot"></main><div id="toastHost" class="toast-host" aria-live="polite"></div><div id="modalHost" class="modal-host hidden"></div></body></html>`); d.close();
-    for (const sheet of sourceDoc.styleSheets) { if (!sheet.href) continue; const link = d.createElement("link"); link.rel = "stylesheet"; link.href = sheet.href; d.head.append(link); }
+    const d = popup.document; d.open(); d.write(`<!doctype html><html lang="ko" data-theme="${sourceDoc.documentElement?.dataset?.theme || "light"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><base href="${base}"><style>html,body,#cameraToolRoot{margin:0;width:100%;height:100%;overflow:hidden}body{background:#f5f7fb}#cameraToolRoot{min-width:0;min-height:0;display:grid;place-items:center}.camera-tool-loading{font:700 14px/1.4 system-ui,sans-serif;color:#536174;padding:18px;text-align:center}.toast-host,.modal-host{z-index:1000}</style></head><body class="camera-tool-window-body"><main id="cameraToolRoot"><div class="camera-tool-loading">카메라 화면을 준비하고 있어요…</div></main><div id="toastHost" class="toast-host" aria-live="polite"></div><div id="modalHost" class="modal-host hidden"></div></body></html>`); d.close();
+    const styleLinks = [...sourceDoc.querySelectorAll('link[rel~="stylesheet"][href]')].map(source => new Promise(resolve => {
+      const link = d.createElement("link"); link.rel = "stylesheet"; link.href = source.href;
+      const done = () => resolve(); link.addEventListener("load", done, { once: true }); link.addEventListener("error", done, { once: true });
+      d.head.append(link); setTimeout(done, 1800);
+    }));
     cameraToolPopup = popup; cameraToolModule = module; enforceCameraPopupBounds(popup, bounds);
     const root = d.getElementById("cameraToolRoot");
     const closePopup = () => { if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; } try { popup.close(); } catch {} };
     popup.addEventListener("pagehide", () => { try { module.dispose?.(); } catch {} if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; } }, { once: true });
-    module.open(closePopup, { host: root, doc: d, separate: true });
-    try { popup.focus(); } catch {}
+    Promise.all(styleLinks).then(() => {
+      if (popup.closed || cameraToolPopup !== popup) return;
+      root.replaceChildren();
+      module.open(closePopup, { host: root, doc: d, separate: true });
+      try { popup.focus(); } catch {}
+    });
   }
 
   function render(host) {

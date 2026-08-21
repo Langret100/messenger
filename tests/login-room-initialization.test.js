@@ -13,5 +13,5 @@ ok(!shell.includes('const transport=await MiniTalk.Realtime.init(user)'),'worksp
 ok(rt.includes('if(JSON.stringify(presenceCache[s.key])===JSON.stringify(next))return'),'presence initial child replay should be deduped');
 ok(rt.includes('JSON.stringify((kind==="legacy"?legacyProfiles:currentProfiles)[key])===JSON.stringify(value)'), 'profile delta replay should be deduped');
 ok(index.includes('realtime.js?v=64.5.38')&&index.includes('app.js?v=64.5.37'),'login-room cache version stale');
-ok(sw.includes('moaru-face-memory-cleanup')&&app.includes('sw.js?v=64.5.51'),'service worker cache version stale');
+ok(sw.includes('moaru-camera-popup-task-scroll-fix')&&app.includes('sw.js?v=64.5.51'),'service worker cache version stale');
 console.log('LOGIN_ROOM_INITIALIZATION_OK');

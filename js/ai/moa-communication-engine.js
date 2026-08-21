@@ -176,30 +176,85 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     // Friendly/emphatic profanity only: never generate a slur or insult aimed at a person.
     const negative=frame.affect==="negative"||/(짜증|빡|힘들|피곤|별로|아쉽|졌|망)/.test(frame.c);
     const positive=frame.affect==="positive"||/(좋|이겼|성공|만점|칭찬|재밌)/.test(frame.c);
+    const family=negative?"negative":positive?"positive":"neutral";
     const options=negative
       ? ["아 씨, 그건 좀 빡치겠다 ㅋㅋ", "시발 그건 좀 짜증나겠다 ㅋㅋ", "아 ㅋㅋ 그건 진짜 개빡세네", "와 씨, 그건 좀 힘들었겠다."]
       : positive
         ? ["와 씨 ㅋㅋ 그건 개좋네", "오 ㅋㅋ 그건 존나 좋았겠다", "와 ㅋㅋ 그건 진짜 개쩐다", "오 씨, 그건 좀 뿌듯하겠다 ㅋㅋ"]
         : ["아 ㅋㅋ 그런 거였구나", "오 씨 ㅋㅋ 그렇구나", "ㅋㅋ 그건 좀 세네", "ㅇㅇ ㅋㅋ 알겠어."];
-    return options[Math.floor(Math.random()*options.length)]||out;
+    return chooseFreshReply(`rough.rewrite.${family}`,options,7)||out;
+  }
+  function chooseFreshReply(family,rows,limit=7){
+    const list=Array.isArray(rows)?rows.filter(Boolean):[];if(!list.length)return "";
+    const recent=recentAssistantTurns(limit),recentShapes=new Set(recent.map(v=>normalizedReplyShape(v.text||"")));
+    let fresh=list.filter(v=>!recentShapes.has(normalizedReplyShape(v)));
+    if(!fresh.length){
+      const last=recent.length?normalizedReplyShape(recent[recent.length-1].text||""):"";
+      fresh=list.filter(v=>normalizedReplyShape(v)!==last);
+    }
+    return chooseText(family,fresh.length?fresh:list);
   }
   function styleShortReply(kind){
-    const mode=toneMode(), p=profile();
-    const qOK=Number(p.questionTolerance??.5)>.32;
-    if(kind==="ellipsis")return mode==="rough"?(qOK?"ㅋㅋ 왜 말이 끊겼냐. 귀찮으면 그냥 있어도 돼.":"ㅋㅋ 말하기 귀찮은 모드네. 그냥 있어도 돼."):(mode==="gentle"?"말하기 귀찮으면 잠깐 조용히 있어도 괜찮아요.":"말하기 귀찮으면 그냥 있어도 돼.");
-    if(kind==="question")return mode==="rough"?(qOK?"왜 ㅋㅋ 뭐가 이상했어?":"ㅋㅋ 뭔가 이상했나 보네."):(qOK?"응? 뭐가 이상했어?":"응? 뭔가 걸렸구나.");
-    if(kind==="bang")return mode==="rough"?"오 ㅋㅋ 텐션 뭐냐":"오, 갑자기 텐션 올라왔네 ㅋㅋ";
-    if(kind==="semicolon")return mode==="rough"?"ㅋㅋ 뭔가 미묘하게 꼬였냐":"ㅋㅋ 뭔가 애매한 분위기네.";
-    return mode==="gentle"?"응, 보고 있어요.":"응 ㅋㅋ 보고 있어.";
+    const mode=toneMode(),p=profile(),qOK=Number(p.questionTolerance??.5)>.32,qStreak=recentQuestionStreak();
+    const pools={
+      gentle:{
+        ellipsis:["말이 끊겼네요. 천천히 말해도 괜찮아요.","음, 잠깐 말이 멈췄네요. 편하게 있어도 괜찮아요.","괜찮아요. 이어서 말하고 싶을 때 말해 주세요.","조용히 있고 싶은 순간인가 봐요. 그냥 있어도 괜찮아요."],
+        question:["응? 뭔가 이상한가요?","어, 뭔가 걸리는 게 있나요?","왜요? 제가 이상하게 답했나요?","응, 무슨 뜻인지 궁금해요.","뭔가 의아한가 보네요."],
+        questionNoAsk:["뭔가 의아한가 보네요.","제가 좀 이상하게 답했나 보네요.","응, 뭔가 걸렸나 봐요.","어, 반응을 보니 뭔가 이상했나 보네요."],
+        bang:["오, 갑자기 느낌표가 확 늘었네요 ㅎㅎ","오, 텐션이 확 올라왔네요.","앗 ㅎㅎ 갑자기 강조가 세졌네요.","오, 뭔가 강하게 말하고 싶은 느낌이네요."],
+        semicolon:["음, 뭔가 애매한 분위기네요.","ㅎㅎ 뭔가 말이 살짝 꼬인 느낌이네요.","어, 미묘한 반응이네요.","음, 뭐라고 할지 애매한 순간인가 봐요."],
+        punct:["응, 보고 있어요.","네, 여기 있어요.","응. 계속 보고 있어요.","알겠어요, 보고 있어요."]
+      },
+      casual:{
+        ellipsis:["음... 말이 끊겼네. 천천히 해도 돼.","ㅋㅋ 할 말이 잠깐 사라졌냐","그냥 조용히 있고 싶은 거면 있어도 돼.","음, 이어서 말하고 싶을 때 해.","갑자기 정적이네 ㅋㅋ"],
+        question:["응? 뭐가 이상해?","왜 ㅋㅋ 뭔가 이상했어?","응? 내가 뭐 이상하게 말했냐","뭐야 ㅋㅋ 왜 물음표가 늘어나","어, 뭔가 걸렸어?","왜왜 ㅋㅋ"],
+        questionNoAsk:["ㅋㅋ 뭔가 이상하긴 했나 보네.","어, 반응 보니까 뭔가 걸렸네.","물음표가 점점 늘어나네 ㅋㅋ","응, 뭔가 의아한가 보네."],
+        bang:["오 ㅋㅋ 갑자기 텐션 뭐야","느낌표가 확 늘었네 ㅋㅋ","오, 갑자기 강해졌는데 ㅋㅋ","ㅋㅋ 뭔가 신난 느낌인데"],
+        semicolon:["ㅋㅋ 뭔가 애매한 분위기네","세미콜론 뭐야 ㅋㅋ 묘하네","음 ㅋㅋ 뭔가 할 말이 애매하냐","뭔가 살짝 꼬인 느낌인데 ㅋㅋ"],
+        punct:["응 ㅋㅋ 보고 있어.","ㅇㅇ 여기 있어.","응, 보고 있음 ㅋㅋ","ㅋㅋ 알겠어. 보고 있어."]
+      },
+      rough:{
+        ellipsis:["ㅋㅋ 왜 갑자기 정적이냐","할 말 없어졌냐 ㅋㅋ 그냥 있어도 돼","ㅋㅋ 말하기 귀찮은 모드네","음 ㅋㅋ 이어서 말하고 싶을 때 해","갑자기 조용해졌네 ㅋㅋ"],
+        question:["왜 ㅋㅋ 뭐가 이상해?","뭐야 ㅋㅋ 왜 물음표가 늘어","내가 뭐 이상하게 말했냐 ㅋㅋ","왜왜 ㅋㅋ 뭔데","ㅋㅋ 뭔가 걸렸냐","뭐가 이상한데 ㅋㅋ"],
+        questionNoAsk:["ㅋㅋ 뭔가 이상하긴 했나 보네","물음표가 점점 늘어나네 ㅋㅋ","아 ㅋㅋ 뭔가 걸렸구나","반응 보니 좀 이상했나 보네 ㅋㅋ"],
+        bang:["오 ㅋㅋ 텐션 뭐냐","느낌표 개많네 ㅋㅋ","ㅋㅋ 갑자기 왜 이렇게 세졌냐","오 씨 ㅋㅋ 뭔가 신났네"],
+        semicolon:["ㅋㅋ 뭔가 미묘하게 꼬였네","세미콜론 뭐냐 ㅋㅋ","아 ㅋㅋ 뭔가 애매하네","ㅋㅋ 말 대신 세미콜론이냐"],
+        punct:["ㅇㅇ ㅋㅋ 보고 있어","ㅋㅋ 여기 있음","응 ㅋㅋ 뭔데","ㅇㅇ 알겠어 ㅋㅋ"]
+      }
+    };
+    const set=pools[mode]||pools.casual;
+    const key=kind==="question"&&(!qOK||qStreak>=1)?"questionNoAsk":kind;
+    let rows=(set[key]||set.punct).slice();
+    // Fast-path replies used to bypass the normal candidate quality gate entirely.
+    // Filter recent exact/shape repeats here so punctuation-only/low-effort users
+    // still get varied replies without inventing semantic context.
+    return chooseFreshReply(`style.${mode}.${kind}.${key}`,rows,7);
   }
   function profanityOnlyReply(frame){
     if(!frame.profanity)return "";
     const words=frame.text.replace(/[^0-9A-Za-z가-힣]/g," ").trim().split(/\s+/).filter(Boolean);
     const mostly=words.length<=3||frame.text.length<=14;if(!mostly)return "";
     const mode=toneMode(),prev=context().filter(v=>v.role==="assistant").slice(-1)[0];
-    if(frame.directedAbuse)return mode==="rough"?"ㅋㅋ 말 세네. 그래도 뭐가 마음에 안 들었는지는 제대로 볼게.":"말이 꽤 세네. 뭐가 마음에 안 들었는지는 제대로 볼게.";
-    if(prev)return mode==="rough"?"아 ㅋㅋ 그 정도로 빡쳤냐. 방금 뭐가 제일 별로였어?":"아, 많이 짜증났구나. 방금 뭐가 제일 별로였어?";
-    return mode==="rough"?"ㅋㅋ 시작부터 세다. 뭔 일인데":"많이 짜증났나 보네. 무슨 일 있었어?";
+    if(frame.directedAbuse){
+      const rows=mode==="rough"
+        ? ["ㅋㅋ 말 세네. 그래도 뭐가 마음에 안 들었는지는 제대로 볼게.","와 말 세다 ㅋㅋ 그래도 어디가 별로였는지는 볼게.","오케이 ㅋㅋ 화난 건 알겠어. 뭐가 문제였는지부터 보자.","ㅋㅋ 나한테 빡친 건 알겠어. 답이 뭐가 이상했는지 다시 볼게."]
+        : ["말이 꽤 세네. 뭐가 마음에 안 들었는지는 제대로 볼게.","화난 건 알겠어. 그래도 뭐가 문제였는지부터 볼게.","응, 기분 상한 건 알겠어. 답이 어디서 꼬였는지 다시 볼게.","말은 세지만 무슨 점이 별로였는지는 제대로 볼게."];
+      return chooseFreshReply(`style.profanity.directed.${mode}`,rows,7);
+    }
+    if(prev){
+      const rows=mode==="rough"
+        ? ["아 ㅋㅋ 그 정도로 빡쳤냐. 방금 뭐가 제일 별로였어?","와 ㅋㅋ 꽤 빡쳤네. 뭐 때문에 그런 건데?","아 씨 ㅋㅋ 많이 짜증났나 보네.","ㅋㅋ 반응 세네. 방금 뭔가 확 거슬렸구나.","오 ㅋㅋ 진짜 별로였나 보네."]
+        : mode==="gentle"
+          ? ["많이 답답했나 보네요. 어떤 부분이 가장 별로였나요?","기분이 꽤 상했나 봐요. 방금 뭐가 문제였는지 볼게요.","많이 짜증났나 보네요. 제가 놓친 부분이 있으면 다시 볼게요.","반응을 보니 꽤 불편했나 봐요."]
+          : ["아, 많이 짜증났구나. 방금 뭐가 제일 별로였어?","와, 꽤 빡쳤나 보네. 뭐 때문에 그래?","아 ㅋㅋ 반응 보니 진짜 별로였나 보네.","응, 많이 거슬렸구나. 방금 흐름 다시 볼게.","오, 반응이 세네. 뭔가 확 짜증났나 보네."];
+      return chooseFreshReply(`style.profanity.follow.${mode}`,rows,7);
+    }
+    const rows=mode==="rough"
+      ? ["ㅋㅋ 시작부터 세다. 뭔 일인데","오 ㅋㅋ 뭔가 빡친 일 있냐","와 ㅋㅋ 첫마디부터 세네","아 ㅋㅋ 뭔 일 있었구나"]
+      : mode==="gentle"
+        ? ["많이 화난 일이 있었나 봐요. 무슨 일인가요?","첫마디부터 꽤 강하네요. 무슨 일 있었어요?","기분이 많이 안 좋은가 봐요. 편하게 말해 주세요."]
+        : ["많이 짜증났나 보네. 무슨 일 있었어?","오, 시작부터 반응이 세네. 뭔 일인데?","아 ㅋㅋ 뭔가 화날 일이 있었나 보네.","와, 기분이 꽤 안 좋은가 보네."];
+    return chooseFreshReply(`style.profanity.first.${mode}`,rows,7);
   }
 
   const STOP=new Set("나는 난 내가 내 너 넌 니가 모아 오늘 어제 내일 모레 주말 다음주 지금 진짜 그냥 약간 좀 너무 그리고 그래서 근데 그럼 이거 그거 저거 그것 걔 거기 뭐 왜 어떻게 했다 했어 했는데 있어 없어 같아 같음 사람 이야기 얘기 뭘 뭔 뭔데 뭐를 아니 아오 으 아 야 응 오".split(" "));
@@ -416,12 +471,15 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const text=clean(raw),c=compact(text);
     // 한두 단어짜리 감탄/되묻기는 주제로 승격하지 않는다.
     if(!c || c.length>8)return "";
+    const mode=toneMode();
     if(/^(뭘|뭐|뭔데|뭐를|무슨말|무슨소리)$/.test(c)){
       const last=context().filter(v=>v.role==="assistant").slice(-1)[0]?.text||"";
-      return last?"내가 방금 말을 애매하게 했네. 어느 부분을 말한 건지 다시 정확히 말할게.":"어떤 걸 말하는지 한마디만 더 붙여줘.";
+      return last
+        ? chooseFreshReply(`short.what.after.${mode}`,mode==="gentle"?["제가 방금 말을 애매하게 했네요. 어느 부분인지 다시 정확히 말할게요.","방금 제 말이 헷갈렸나 봐요. 필요한 부분부터 다시 말할게요.","제가 설명을 애매하게 했네요. 앞부분부터 다시 맞춰볼게요."]:["내가 방금 말을 애매하게 했네. 어느 부분인지 다시 정확히 말할게.","아, 방금 내 말이 헷갈렸구나. 필요한 부분부터 다시 말할게.","내가 좀 애매하게 말했네. 앞부분부터 다시 맞춰볼게.","응, 방금 설명이 이상했나 보네. 다시 정확히 갈게."])
+        : chooseFreshReply(`short.what.first.${mode}`,mode==="gentle"?["어떤 걸 말하는지 한마디만 더 붙여 주세요.","무엇을 말하는 건지 조금만 더 알려 주세요."]:["어떤 걸 말하는지 한마디만 더 붙여줘.","뭐 말하는 건지 조금만 더 붙여줘.","뭘 말하는 건지 한 조각만 더 줘."]);
     }
-    if(/^(아오+|아휴+|에휴+|으휴+)$/.test(c))return "내가 답답하게 했네. 방금 흐름부터 다시 맞춰볼게.";
-    if(/^(아니|아니뭘|아니뭐|아니뭔데)$/.test(c))return "응, 내가 방금 잘못 알아들었어. 앞말 기준으로 다시 볼게.";
+    if(/^(아오+|아휴+|에휴+|으휴+)$/.test(c))return chooseFreshReply(`short.sigh.${mode}`,mode==="gentle"?["제가 좀 답답하게 했나 보네요. 방금 흐름부터 다시 맞춰볼게요.","아, 답답했나 봐요. 제가 앞 흐름부터 다시 볼게요.","제가 뭔가 놓쳤나 보네요. 방금 대화부터 다시 맞춰볼게요."]:["내가 답답하게 했네. 방금 흐름부터 다시 맞춰볼게.","아 ㅋㅋ 답답했구나. 내가 앞 흐름 다시 볼게.","내가 뭔가 놓쳤나 보네. 방금 대화부터 다시 맞춰볼게.","아오 나도 방금 답 별로였네 ㅋㅋ 다시 맞춰볼게."]);
+    if(/^(아니|아니뭘|아니뭐|아니뭔데)$/.test(c))return chooseFreshReply(`short.no.${mode}`,mode==="gentle"?["네, 제가 방금 잘못 알아들었네요. 앞말 기준으로 다시 볼게요.","아, 제가 포인트를 잘못 잡았네요. 앞에서 한 말 기준으로 다시 볼게요.","맞아요, 제가 잘못 받았네요. 흐름을 다시 맞춰볼게요."]:["응, 내가 방금 잘못 알아들었어. 앞말 기준으로 다시 볼게.","아, 내가 포인트를 잘못 잡았네. 앞에서 한 말로 다시 볼게.","오케이, 내가 잘못 받았어. 흐름 다시 맞출게.","아니 맞네 ㅋㅋ 내가 방금 잘못 알아들었어."]);
     return "";
   }
 

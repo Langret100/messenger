@@ -4,6 +4,7 @@
  * 실제 기능은 js/tools/* 아래에 있으므로 새 도구도 그 위치에 독립 모듈로 추가하세요.
  */
 MiniTalk.Features.Tools = (() => {
+  let activeDragList = null;
   const items = [
     { id: "tarot", icon: "✧", title: "오늘의 타로", description: "카드를 뽑아 보는 운세" },
     { id: "alarm", icon: "◉", title: "알람", description: "원하는 시간에 알림" },
@@ -22,6 +23,7 @@ MiniTalk.Features.Tools = (() => {
   };
 
   function render(host) {
+    if(activeDragList){MiniTalk.UI.DragScroll?.unbind?.(activeDragList);activeDragList=null}
     const D = MiniTalk.UI.Dom;
     const user = MiniTalk.Store.get("user") || {};
     const profile = MiniTalk.Store.get("profiles")?.[user.user_id] || {};
@@ -60,6 +62,7 @@ MiniTalk.Features.Tools = (() => {
     // PC/PiP: 도구 화면 대부분이 버튼/링크여도 세로 드래그를 시작할 수 있습니다.
     // 5px 미만 이동은 기존 클릭, 그 이상 세로 이동은 스크롤로 구분합니다.
     MiniTalk.UI.DragScroll?.bind?.(list,{allowInteractive:".profile-summary,.modern-tool,.shortcut-row",documentMouseDrag:true});
+    activeDragList=list;
   }
 
   function sectionLabel(title, description, extraClass = "") {
@@ -112,6 +115,7 @@ MiniTalk.Features.Tools = (() => {
   }
 
   function leave() {
+    if(activeDragList){MiniTalk.UI.DragScroll?.unbind?.(activeDragList);activeDragList=null}
     MiniTalk.Tools.TarotView.close();
   }
 

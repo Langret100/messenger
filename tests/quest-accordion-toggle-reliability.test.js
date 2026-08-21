@@ -4,7 +4,7 @@ const root=path.resolve(__dirname,"..");
 const read=p=>fs.readFileSync(path.join(root,p),"utf8");
 const ok=(c,m)=>{if(!c)throw new Error(m)};
 const html=read("index.html"), accordion=read("js/tasks/quest-accordion.js"), drag=read("js/ui/drag-scroll.js"), host=read("js/game-bridge/game-host.js");
-ok(html.includes("js/ui/drag-scroll.js?v=9"),"drag-scroll cache ref stale");
+ok(html.includes("js/ui/drag-scroll.js?v=10"),"drag-scroll cache ref stale");
 ok(html.includes("js/tasks/quest-accordion.js?v=23"),"quest accordion cache ref stale");
 ok(accordion.includes('"data-no-drag-scroll": "true"'),"quest toggle must opt out of drag scroll");
 ok(drag.includes(".quest-accordion-toggle"),"quest toggle missing from drag block list");

@@ -12,5 +12,5 @@ ok(css.includes('scroll-behavior:auto')&&css.includes('.message-list::-webkit-sc
 ok(guard.includes('nativeScrollSurface')&&guard.includes('.message-list,.conversation-list'),'interaction guard still blocks native scrollbar surface');
 ok(feedCss.includes('bottom:calc(-20px + 58px')&&feedCss.includes('bottom:calc(-20px + 54px'),'feed + button was not lowered consistently');
 ok(html.includes('css/app.css?v=64.5.12')&&html.includes('css/features/feed-classinfo-weekly.css?v=65.0.25')&&html.includes('js/adapters/realtime.js?v=64.5.37')&&html.includes('js/ui/shell.js?v=64.5.31')&&html.includes('js/ui/interaction-guard.js?v=64.5.1')&&html.includes('js/features/chats.js?v=64.5.21')&&html.includes('js/app.js?v=64.5.37'),'cache-bust versions stale');
-ok(sw.includes('moaru-v64.5.60-tools-pip-real-fix-v101-20260821')&&app.includes('sw.js?v=64.5.49'),'service-worker cache version stale');
+ok(sw.includes('moaru-v64.5.61-dragscroll-cleanup-v102-20260821')&&app.includes('sw.js?v=64.5.49'),'service-worker cache version stale');
 console.log('CHAT_SCROLL_INITIAL_LIST_OK');

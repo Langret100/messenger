@@ -11,5 +11,5 @@ ok(rules.includes('"roomSummaries"')&&rules.includes('"userRooms"'),'Firebase ru
 ok(css.includes('min-height:calc(100dvh + 72px);overflow-y:auto')&&css.includes('.app-shell{position:sticky;top:0}'),'mobile root scroll allowance missing');
 ok(mobile.includes('touchStartY-y>22')&&mobile.includes('nudgeBrowserChrome()'),'mobile chrome gesture assist missing');
 ok(html.includes('js/adapters/realtime.js?v=64.5.37')&&html.includes('js/adapters/mobile-immersive.js?v=57')&&html.includes('js/features/chats.js?v=64.5.21')&&html.includes('js/app.js?v=64.5.37'),'v5.24 cache versions stale');
-ok(sw.includes('moaru-v64.5.60-tools-pip-real-fix-v101-20260821')&&app.includes('sw.js?v=64.5.49'),'v5.24 service worker stale');
+ok(sw.includes('moaru-v64.5.61-dragscroll-cleanup-v102-20260821')&&app.includes('sw.js?v=64.5.49'),'v5.24 service worker stale');
 console.log('ROOM_SUMMARY_MOBILE_CHROME_OK');

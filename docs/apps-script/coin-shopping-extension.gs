@@ -218,6 +218,12 @@ function requireKnownMoaruUserFast_(userId) {
   if (foundId !== id || isMoaruGuestIdentity_(foundId, username, nickname)) return "";
   rememberKnownMoaruUser_(foundId);return foundId;
 }
+function requireKnownMoaruUserCached_(userId) {
+  const id = String(userId || "").trim();if (!id) return "";
+  try { if (CacheService.getScriptCache().get(knownMoaruUserCacheKey_(id)) === "1") return id; } catch (error) {}
+  // 정상 클라이언트는 login_에서 이 캐시가 이미 만들어집니다. 캐시가 비정상적으로 사라진 경우에만 기존 검증으로 복구합니다.
+  const found = requireKnownMoaruUser_(id);if (found) rememberKnownMoaruUser_(found);return found;
+}
 function requireAdminToken_(userId, token) {
   const auth = readShopAdminSession_(userId, token);
   return auth.ok && auth.role === "ADMIN" ? auth : { ok: false, error: auth.ok ? "ADMIN_PERMISSION_REQUIRED" : auth.error };
@@ -770,7 +776,15 @@ function writeMoaruCommands_(userId, commands) {
   properties.setProperty(key, JSON.stringify(queue));
   return queue;
 }
+function readMoaruCommandsSnapshot_(userId) {
+  // 읽기 전용 폴링 경로. 관리자 dispatch와 동시에 실행되어도 새 명령을 덮어쓰지 않습니다.
+  const properties = PropertiesService.getScriptProperties(), key = moaruCommandKey_(userId), raw = properties.getProperty(key);
+  if (!raw) return [];
+  try { return pruneMoaruCommands_(JSON.parse(raw)); }
+  catch (error) { return []; }
+}
 function readMoaruCommands_(userId) {
+  // 정리/ACK처럼 ScriptLock을 잡은 쓰기 경로에서만 사용합니다.
   const properties = PropertiesService.getScriptProperties(), key = moaruCommandKey_(userId), raw = properties.getProperty(key);
   if (!raw) return [];
   let parsed;
@@ -936,8 +950,10 @@ function handleAdminDispatch(e) {
   if (!auth.ok) return shopJson_(auth);
   let targets = [], payload = {};
   try { targets = JSON.parse(p.targets_json || "[]");payload = JSON.parse(p.payload_json || "{}"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" }); }
-  const registeredUsers = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); });
-  targets = targets.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && requireKnownMoaruUser_(id, registeredUsers); }).slice(0, 200);
+  // 대상 목록은 관리자 화면의 서버 user_directory에서 받은 user_id입니다.
+  // 관리자 토큰을 이미 검증했으므로 dispatch마다 전체 로그인 시트를 다시 읽지 않습니다.
+  // 알 수 없는 id가 들어와도 해당 큐는 실제 로그인 사용자가 조회할 수 없고 TTL 정리 대상일 뿐입니다.
+  targets = targets.map(function (id) { return String(id || "").trim(); }).filter(function (id, index, list) { return id && id.length <= 100 && list.indexOf(id) === index; }).slice(0, 200);
   const type = String(p.command_type || "NOTICE").trim().slice(0, 20), requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100);if (!targets.length) return shopJson_({ ok: false, error: "NO_TARGETS" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
@@ -999,9 +1015,11 @@ function handleAdminCoinReward(e) {
 
 /** POST mode=user_commands: 본인 큐 조회 및 처리 완료 항목 삭제 */
 function handleUserCommands(e) {
-  const p = (e && e.parameter) || {}, userId = requireKnownMoaruUser_(p.user_id);if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  const p = (e && e.parameter) || {}, userId = requireKnownMoaruUserCached_(p.user_id);if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   const ack = String(p.ack_ids || "").split(",").filter(Boolean);
-  if (!ack.length) return shopJson_({ ok: true, commands: readMoaruCommands_(userId) });
+  // 정상 로그인은 login_에서 6시간 사용자 캐시를 만들므로 10초 폴링마다 로그인 시트를 다시 읽지 않습니다.
+  // 단순 조회는 읽기 전용 snapshot을 사용해 관리자 dispatch와의 Properties race도 피합니다.
+  if (!ack.length) return shopJson_({ ok: true, commands: readMoaruCommandsSnapshot_(userId) });
   const lock = LockService.getScriptLock();if (!lock.tryLock(2500)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     const queue = readMoaruCommands_(userId), remaining = queue.filter(function (command) { return ack.indexOf(String(command.id)) < 0; });

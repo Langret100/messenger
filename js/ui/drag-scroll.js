@@ -2,10 +2,13 @@
    터치 기기는 브라우저의 기본 스와이프를 그대로 사용하고, 실제 클릭/입력은 방해하지 않습니다. */
 MiniTalk.UI.DragScroll=(()=>{
   const bound=new WeakSet();
-  let styleReady=false;
+  const cleanupByScroller=new WeakMap();
+  const styledDocuments=new WeakSet();
   function ensureStyle(doc=document){
-    if(styleReady||!doc?.head)return;
-    styleReady=true;
+    if(!doc?.head)return;
+    if(styledDocuments.has(doc)&&doc.getElementById?.("dragScrollSurfaceStyle"))return;
+    const existing=doc.getElementById?.("dragScrollSurfaceStyle");
+    if(existing){styledDocuments.add(doc);return}
     const style=doc.createElement("style");
     style.id="dragScrollSurfaceStyle";
     style.textContent=`
@@ -16,6 +19,7 @@ MiniTalk.UI.DragScroll=(()=>{
       .drag-scroll-surface.drag-scrolling{cursor:grabbing;user-select:none}
     `;
     doc.head.appendChild(style);
+    styledDocuments.add(doc);
   }
   const BLOCKED="button,input,textarea,select,a,iframe,video,[contenteditable='true'],[data-no-drag-scroll],.feed-heart,.feed-comment-trigger,.feed-comment-send,.feed-comment-input,.feed-video-play,.feed-fab,.shop-inventory-fab,.shop-inventory-panel button,.quest-accordion-toggle,.message-avatar,.profile-image,.media-bubble img";
   function bind(scroller,options={}){
@@ -70,15 +74,26 @@ MiniTalk.UI.DragScroll=(()=>{
         if(moved){suppressClick=true;setTimeout(()=>{suppressClick=false},180)}
         active=false;moved=false;startTarget=null;scroller.classList.remove("drag-scroll-ready","drag-scrolling");
       };
-      scroller.addEventListener("mousedown",down);
-      doc.addEventListener("mousemove",move,{passive:false});
-      doc.addEventListener("mouseup",up);
-      scroller.addEventListener("dragstart",event=>{if(active){event.preventDefault()}},true);
-      scroller.addEventListener("click",event=>{
+      const dragstart=event=>{if(active){event.preventDefault()}};
+      const click=event=>{
         if(!suppressClick)return;
         event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();
         suppressClick=false;
-      },true);
+      };
+      scroller.addEventListener("mousedown",down);
+      doc.addEventListener("mousemove",move,{passive:false});
+      doc.addEventListener("mouseup",up);
+      scroller.addEventListener("dragstart",dragstart,true);
+      scroller.addEventListener("click",click,true);
+      cleanupByScroller.set(scroller,()=>{
+        active=false;moved=false;startTarget=null;suppressClick=false;
+        scroller.classList.remove("drag-scroll-ready","drag-scrolling");
+        scroller.removeEventListener("mousedown",down);
+        doc.removeEventListener("mousemove",move,{passive:false});
+        doc.removeEventListener("mouseup",up);
+        scroller.removeEventListener("dragstart",dragstart,true);
+        scroller.removeEventListener("click",click,true);
+      });
       return scroller;
     }
 
@@ -126,5 +141,15 @@ MiniTalk.UI.DragScroll=(()=>{
     },true);
     return scroller;
   }
-  return{bind};
+  function unbind(scroller){
+    if(!scroller)return;
+    const cleanup=cleanupByScroller.get(scroller);
+    if(cleanup){
+      cleanup();
+      cleanupByScroller.delete(scroller);
+    }
+    bound.delete(scroller);
+    scroller.classList?.remove("drag-scroll-surface","drag-scroll-keep-scrollbar","drag-scroll-ready","drag-scrolling");
+  }
+  return{bind,unbind};
 })();

@@ -12,5 +12,5 @@ ok(feed.includes('while(rows.length>MAX_COMMENTS)'),'comment cap cleanup missing
 ok(css.includes('.feed-comments')&&css.includes('.feed-comment-compose')&&css.includes('.feed-comment-input'),'comment styles missing');
 ok(css.includes('.feed-comments.compose-open .feed-comment-compose')&&css.includes('font-size:12px')&&css.includes('font-size:11px'),'comment collapse/size styles missing');
 ok(html.includes('feed-classinfo-weekly.css?v=65.0.25')&&html.includes('js/features/feed.js?v=65.0.21'),'comment asset cache versions missing');
-ok(sw.includes('moaru-v64.5.60-tools-pip-real-fix-v101-20260821')&&app.includes('sw.js?v=64.5.49'),'v5.38 service worker version missing');
+ok(sw.includes('moaru-v64.5.61-dragscroll-cleanup-v102-20260821')&&app.includes('sw.js?v=64.5.49'),'v5.38 service worker version missing');
 console.log('FEED_SHORT_COMMENTS_OK');

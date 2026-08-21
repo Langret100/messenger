@@ -1,0 +1,14 @@
+const fs=require('fs');
+const assert=require('assert');
+const src=fs.readFileSync('docs/apps-script/coin-shopping-extension.gs','utf8');
+const block=(name,next)=>{const start=src.indexOf(`function ${name}`);assert(start>=0,`${name} missing`);const end=next?src.indexOf(`function ${next}`,start+1):-1;return src.slice(start,end>start?end:undefined)};
+const dispatch=block('handleAdminDispatch','handleAdminUserBalances');
+const userCommands=block('handleUserCommands','moaruTaskStore_');
+const snapshot=block('readMoaruCommandsSnapshot_','readMoaruCommands_');
+assert(!/moaruRegisteredUserMap_\s*\(/.test(dispatch),'admin dispatch still reads full login sheet');
+assert(/requireShopAdminToken_/.test(dispatch),'admin token validation removed');
+assert(/requireKnownMoaruUserCached_\s*\(p\.user_id\)/.test(userCommands),'user command polling does not use cached known-user fast path');
+assert(/readMoaruCommandsSnapshot_\s*\(userId\)/.test(userCommands),'read-only command polling snapshot missing');
+assert(!/setProperty|deleteProperty/.test(snapshot),'read-only snapshot mutates PropertiesService');
+assert(/getProperty/.test(snapshot),'snapshot does not read command property');
+console.log('V103_ADMIN_COMMAND_FASTPATH_OK');

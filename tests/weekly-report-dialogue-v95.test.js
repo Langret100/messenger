@@ -15,5 +15,5 @@ for(const token of ['whatdoing:[','hungry:[','nervous:[','confused:['])ok(engine
 ok(html.includes('feed-classinfo-weekly.css?v=65.0.25'),'weekly report CSS cache bust missing');
 ok(html.includes('friday-grade6-mission.js?v=65.0.14'),'weekly mission cache bust missing');
 ok(html.includes('moa-communication-engine.js?v=11'),'MOA local dialogue cache bust missing');
-ok(sw.includes('moaru-v64.5.60-tools-pip-real-fix-v101-20260821'),'v95 SW cache missing');
+ok(sw.includes('moaru-v64.5.61-dragscroll-cleanup-v102-20260821'),'v95 SW cache missing');
 console.log('WEEKLY_REPORT_DIALOGUE_V95_OK');

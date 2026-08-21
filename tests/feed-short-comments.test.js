@@ -11,6 +11,6 @@ ok(feed.includes('patchHeart(id,previous);patchComments(id);return'),'realtime c
 ok(feed.includes('while(rows.length>MAX_COMMENTS)'),'comment cap cleanup missing');
 ok(css.includes('.feed-comments')&&css.includes('.feed-comment-compose')&&css.includes('.feed-comment-input'),'comment styles missing');
 ok(css.includes('.feed-comments.compose-open .feed-comment-compose')&&css.includes('font-size:12px')&&css.includes('font-size:11px'),'comment collapse/size styles missing');
-ok(html.includes('feed-classinfo-weekly.css?v=65.0.18')&&html.includes('js/features/feed.js?v=65.0.18'),'comment asset cache versions missing');
-ok(sw.includes('moaru-v64.5.48-moa-solo-public-learning-v91-20260820')&&app.includes('sw.js?v=64.5.48'),'v5.38 service worker version missing');
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.20')&&html.includes('js/features/feed.js?v=65.0.18'),'comment asset cache versions missing');
+ok(sw.includes('moaru-v64.5.49-task-reward-shopping-audit-v91-20260821')&&app.includes('sw.js?v=64.5.48'),'v5.38 service worker version missing');
 console.log('FEED_SHORT_COMMENTS_OK');

@@ -74,13 +74,30 @@ function moaTrimAnswer_(text,max){
 function moaWeatherCodeText_(code){
   var c=Number(code);if(c===0)return "맑음";if(c<=3)return "구름 조금";if(c===45||c===48)return "안개";if(c>=51&&c<=67)return "비";if(c>=71&&c<=77)return "눈";if(c>=80&&c<=82)return "소나기";if(c>=85&&c<=86)return "눈 소나기";if(c>=95)return "뇌우";return "날씨 변화";
 }
+
+function moaKnownPlace_(place){
+  var q=String(place||"").trim().replace(/특별시$|광역시$|특별자치시$|특별자치도$|도$/g,"");
+  var map={
+    "서울":{name:"서울",admin1:"서울특별시",latitude:37.5665,longitude:126.9780,timezone:"Asia/Seoul"},
+    "부산":{name:"부산",admin1:"부산광역시",latitude:35.1796,longitude:129.0756,timezone:"Asia/Seoul"},
+    "대구":{name:"대구",admin1:"대구광역시",latitude:35.8714,longitude:128.6014,timezone:"Asia/Seoul"},
+    "인천":{name:"인천",admin1:"인천광역시",latitude:37.4563,longitude:126.7052,timezone:"Asia/Seoul"},
+    "광주":{name:"광주",admin1:"광주광역시",latitude:35.1595,longitude:126.8526,timezone:"Asia/Seoul"},
+    "대전":{name:"대전",admin1:"대전광역시",latitude:36.3504,longitude:127.3845,timezone:"Asia/Seoul"},
+    "울산":{name:"울산",admin1:"울산광역시",latitude:35.5384,longitude:129.3114,timezone:"Asia/Seoul"},
+    "세종":{name:"세종",admin1:"세종특별자치시",latitude:36.4800,longitude:127.2890,timezone:"Asia/Seoul"},
+    "제주":{name:"제주",admin1:"제주특별자치도",latitude:33.4996,longitude:126.5312,timezone:"Asia/Seoul"},
+    "제주시":{name:"제주",admin1:"제주특별자치도",latitude:33.4996,longitude:126.5312,timezone:"Asia/Seoul"}
+  };
+  return map[q]||null;
+}
+
 function moaWeatherSearch_(text){
   var raw=String(text||"");if(!/(날씨|기온|몇\s*도)/.test(raw))return null;
   var normalized=raw.replace(/^(오늘|지금|내일)\s+/,"");
   var m=normalized.match(/(.{1,40}?)(?:\s*(?:의|은|는))?\s*(?:오늘|지금|내일)?\s*(?:날씨|기온|몇\s*도)/);if(!m)return {reply:"어느 지역 날씨를 볼까? 예: 서울 오늘 날씨 알려줘",source:"open-meteo",kind:"weather"};
   var place=String(m[1]||"").replace(/^(오늘|지금|내일)\s*/,"").replace(/\s*(오늘|지금|내일)$/,"").trim();if(!place||place.length>40)return null;
-  var geo=moaFetchJson_("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(place)+"&count=1&language=ko&format=json");
-  var loc=geo&&geo.results&&geo.results[0];if(!loc)return {reply:place+" 위치를 정확히 못 찾았어. 지역 이름을 조금 더 구체적으로 말해줘.",source:"open-meteo",kind:"weather"};
+  var loc=moaGeoPlace_(place);if(!loc)return {reply:place+" 위치를 정확히 못 찾았어. 지역 이름을 조금 더 구체적으로 말해줘.",source:"open-meteo",kind:"weather"};
   var forecast=moaFetchJson_("https://api.open-meteo.com/v1/forecast?latitude="+encodeURIComponent(loc.latitude)+"&longitude="+encodeURIComponent(loc.longitude)+"&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2");
   if(!forecast||!forecast.current)return null;
   var cur=forecast.current,d=forecast.daily||{}, name=[loc.name,loc.admin1].filter(Boolean).join(" "), tomorrow=/내일/.test(text), idx=tomorrow?1:0;
@@ -94,7 +111,12 @@ function moaWeatherSearch_(text){
 
 function moaGeoPlace_(place){
   var q=String(place||"").trim();if(!q)return null;
+  var known=moaKnownPlace_(q);if(known)return known;
   var geo=moaFetchJson_("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(q)+"&count=1&language=ko&format=json");
+  var loc=geo&&geo.results&&geo.results[0];if(loc)return loc;
+  var aliases={"서울":"Seoul","부산":"Busan","대구":"Daegu","인천":"Incheon","광주":"Gwangju","대전":"Daejeon","울산":"Ulsan","세종":"Sejong","제주":"Jeju"};
+  var fallback=aliases[q];if(!fallback)return null;
+  geo=moaFetchJson_("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(fallback)+"&count=1&language=ko&format=json");
   return geo&&geo.results&&geo.results[0]||null;
 }
 function moaAirQualitySearch_(text){
@@ -383,5 +405,5 @@ function moaRunLearningMaintenance_(){
 function moaInstallMaintenanceTrigger_(){moaRemoveMaintenanceTrigger_();ScriptApp.newTrigger("moaRunLearningMaintenance_").timeBased().everyWeeks(1).create();}
 function moaRemoveMaintenanceTrigger_(){ScriptApp.getProjectTriggers().forEach(function(t){if(t.getHandlerFunction()==="moaRunLearningMaintenance_")ScriptApp.deleteTrigger(t)});}
 
-/* Optional one-time cleanup after v91 is fully deployed. */
-function moaV91CleanupLegacySheets_(){var ss=SpreadsheetApp.getActiveSpreadsheet();["모아_학습후보","모아_반응학습","모아_주제학습"].forEach(function(n){var s=ss.getSheetByName(n);if(s)ss.deleteSheet(s);});}
+/** 더 이상 사용하지 않는 모아 AI 레거시 시트를 필요할 때 한 번 정리합니다. */
+function moaCleanupLegacySheets(){var ss=SpreadsheetApp.getActiveSpreadsheet();["모아_학습후보","모아_반응학습","모아_주제학습"].forEach(function(n){var s=ss.getSheetByName(n);if(s)ss.deleteSheet(s);});}

@@ -17,7 +17,7 @@ MiniTalk.UI.DragScroll=(()=>{
     `;
     doc.head.appendChild(style);
   }
-  const BLOCKED="input,textarea,select,a,iframe,video,[contenteditable='true'],[data-no-drag-scroll],.feed-heart,.feed-comment-send,.feed-comment-input,.feed-video-play,.feed-fab,.shop-inventory-fab,.shop-inventory-panel button,.quest-accordion-toggle";
+  const BLOCKED="button,input,textarea,select,a,iframe,video,[contenteditable='true'],[data-no-drag-scroll],.feed-heart,.feed-comment-send,.feed-comment-input,.feed-video-play,.feed-fab,.shop-inventory-fab,.shop-inventory-panel button,.quest-accordion-toggle";
   function bind(scroller,options={}){
     if(!scroller||bound.has(scroller))return scroller;
     ensureStyle(scroller.ownerDocument||document);

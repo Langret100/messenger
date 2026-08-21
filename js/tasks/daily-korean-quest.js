@@ -122,7 +122,7 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
         if (answer !== current.answer) { D.all(".quest-choice",choices).forEach(button=>{button.disabled=true});selected.classList.add("wrong");feedback.textContent="아쉬워요. 새 문제로 바꿀게요.";feedback.className="quest-feedback wrong";progress.attempts[missionId]=(Number(progress.attempts?.[missionId])||0)+1;saveProgress(progress);setTimeout(()=>{questions=generate(missionId,progress.attempts[missionId]);renderQuestion()},420);return; }
         D.all(".quest-choice", choices).forEach(button => { button.disabled = true; }); selected.classList.add("correct"); progress.correct[missionId] = index + 1;
         if (progress.correct[missionId] >= 5) progress.completed[missionId] = true;
-        saveProgress(progress); onProgress?.(); if (MISSIONS.every(item => progress.completed[item.id])) MiniTalk.Events.emit("quest:subject-complete", { subject: "korean", date: progress.date, userId: progress.userId });
+        saveProgress(progress); if (progress.completed[missionId] === true) onProgress?.(); if (MISSIONS.every(item => progress.completed[item.id])) MiniTalk.Events.emit("quest:subject-complete", { subject: "korean", date: progress.date, userId: progress.userId });
         const missionFinished = progress.completed[missionId] === true;
         MiniTalk.Tasks.QuestAccordion.celebrate(body, () => {
           if (!missionFinished) return renderQuestion();

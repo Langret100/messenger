@@ -2,13 +2,13 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),chat=read('js/features/moa-chat.js'),css=read('css/features/moa-chat.css'),gs=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
-ok(html.includes('moa-chat.css?v=5')&&html.includes('moa-communication-engine.js?v=6')&&html.includes('moa-chat.js?v=8'),'v90 cache bust missing');
-ok(sw.includes('moa-solo-public-learning-v91-20260820'),'v90 service worker cache missing');
+ok(html.includes('moa-chat.css?v=5')&&html.includes('moa-communication-engine.js?v=6')&&html.includes('moa-chat.js?v=9'),'v90 cache bust missing');
+ok(sw.includes('moaru-v64.5.49-task-reward-shopping-audit-v91-20260821'),'v90 service worker cache missing');
 for(const token of ['maybeInitiate','proactiveCandidates','dueOpenLoop','strongestInterest','starterSuggestions','initiativeSettings','PROACTIVE_DAILY_MAX'])ok(engine.includes(token),'v90 proactive engine missing '+token);
 for(const token of ['refreshProactive','moa-proactive-unread','먼저 말 걸기','unread:true'])ok(chat.includes(token),'v90 proactive chat UI missing '+token);
 ok(css.includes('.moa-proactive-unread'),'v90 unread style missing');
 ok(gs.includes('"initiative","updated_at"')&&gs.includes('initiative:moaProfileNum_'),'v90 profile initiative persistence missing');
-ok(gs.includes('moaV91CleanupLegacySheets_'),'v90 compatibility cleanup helper missing');
+ok(gs.includes('function moaCleanupLegacySheets()'),'cleanup function missing');
 
 const store={};let commits=[];const fakeMath=Object.create(Math);fakeMath.random=()=>0;
 const sandbox={console,Date,Math:fakeMath,setTimeout:()=>1,clearTimeout:()=>{},MiniTalk:{AI:{},Store:{get:()=>({user_id:'u1',isGuest:false})},Persistence:{get:(k,d)=>k in store?store[k]:d,set:(k,v)=>store[k]=v,remove:k=>delete store[k]},AuthApi:{

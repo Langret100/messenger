@@ -238,7 +238,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
           progress.completed[missionId] = true;
         }
         saveProgress(progress);
-        onProgress?.();
+        if (progress.completed[missionId] === true) onProgress?.();
         if (MISSIONS.every(item => progress.completed[item.id])) MiniTalk.Events.emit("quest:subject-complete", { subject: "math", date: progress.date, userId: progress.userId });
         const missionFinished = progress.completed[missionId] === true;
         MiniTalk.Tasks.QuestAccordion.celebrate(body, () => {

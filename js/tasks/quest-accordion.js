@@ -1,9 +1,37 @@
 /* 수학·국어 퀘스트가 공유하는 접이식 과목 카드 */
 MiniTalk.Tasks = MiniTalk.Tasks || {};
 MiniTalk.Tasks.QuestAccordion = (() => {
+  let activeKey = null;
+
+  function active() { return activeKey; }
+
+  function applyState(doc = MiniTalk.UI.Dom.doc()) {
+    doc?.querySelectorAll?.(".quest-accordion[data-subject]").forEach(section => {
+      const key = section.dataset.subject || "";
+      const open = activeKey === key;
+      section.classList.toggle("expanded", open);
+      section.querySelector(".quest-accordion-toggle")?.setAttribute("aria-expanded", String(open));
+      section.querySelector(".quest-accordion-panel")?.classList.toggle("hidden", !open);
+    });
+    doc?.querySelectorAll?.('.friday-mission-card[data-quest-key="weekly"]').forEach(card => {
+      const compact = Boolean(activeKey && activeKey !== "weekly");
+      card.classList.toggle("quest-compact", compact);
+      card.classList.toggle("quest-focused", activeKey === "weekly");
+    });
+  }
+
+  function activate(key) {
+    const normalized = String(key || "");
+    activeKey = activeKey === normalized ? null : normalized;
+    applyState();
+    MiniTalk.Events?.emit?.("quest:accordion-change", { activeKey });
+    return activeKey;
+  }
+
   function wrap({ subject, icon, title, subtitle, completed, total, content }) {
     const D = MiniTalk.UI.Dom;
-    const section = D.el("section", { class: "quest-accordion section-card", "data-subject": subject });
+    const subjectDone = total > 0 && completed >= total;
+    const section = D.el("section", { class: `quest-accordion section-card${subjectDone ? " completed" : ""}`, "data-subject": subject });
     const panelId = `quest-panel-${subject}`;
     const toggle = D.el("button", {
       class: "quest-accordion-toggle",
@@ -17,23 +45,21 @@ MiniTalk.Tasks.QuestAccordion = (() => {
         D.el("strong", { text: title }),
         D.el("small", { text: subtitle })
       ]),
-      D.el("span", { class: "quest-subject-progress", text: `${completed}/${total}` }),
+      D.el("span", { class: `quest-subject-progress${subjectDone ? " completed" : ""}`, text: subjectDone ? "완료" : `${completed}/${total}` }),
+      ...(subjectDone ? [D.el("img", { class: "quest-subject-stamp", src: "assets/ui/quest-stamp.png", alt: "과목 완료 도장" })] : []),
       D.el("span", { class: "quest-accordion-arrow", text: "⌄", "aria-hidden": "true" })
     ]);
-    const panel = D.el("div", { id: panelId, class: "quest-accordion-panel hidden" }, [content]);
+    const initiallyOpen = activeKey === subject;
+    toggle.setAttribute("aria-expanded", String(initiallyOpen));
+    section.classList.toggle("expanded", initiallyOpen);
+    const panel = D.el("div", { id: panelId, class: `quest-accordion-panel${initiallyOpen ? "" : " hidden"}` }, [content]);
 
-    toggle.onclick = () => {
-      const opening = toggle.getAttribute("aria-expanded") !== "true";
-      D.all(".quest-accordion.expanded").forEach(item => {
-        if (item === section) return;
-        item.classList.remove("expanded");
-        item.querySelector(".quest-accordion-toggle")?.setAttribute("aria-expanded", "false");
-        item.querySelector(".quest-accordion-panel")?.classList.add("hidden");
-      });
-      section.classList.toggle("expanded", opening);
-      toggle.setAttribute("aria-expanded", String(opening));
-      panel.classList.toggle("hidden", !opening);
-      if (opening) requestAnimationFrame(() => section.scrollIntoView({ block: "nearest", behavior: "auto" }));
+    toggle.onclick = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const wasOpen = activeKey === subject;
+      activate(subject);
+      if (!wasOpen) requestAnimationFrame(() => section.scrollIntoView({ block: "nearest", behavior: "auto" }));
     };
 
     section.append(toggle, panel);
@@ -57,5 +83,5 @@ MiniTalk.Tasks.QuestAccordion = (() => {
     }, 820);
   }
 
-  return { wrap, celebrate };
+  return { wrap, celebrate, active, activate, applyState };
 })();

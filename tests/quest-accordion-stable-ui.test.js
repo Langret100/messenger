@@ -1,0 +1,18 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const accordion=fs.readFileSync(path.join(root,'js/tasks/quest-accordion.js'),'utf8');
+const drag=fs.readFileSync(path.join(root,'js/ui/drag-scroll.js'),'utf8');
+const friday=fs.readFileSync(path.join(root,'js/tasks/friday-grade6-mission.js'),'utf8');
+const css=fs.readFileSync(path.join(root,'css/features/feed-classinfo-weekly.css'),'utf8');
+const math=fs.readFileSync(path.join(root,'js/tasks/daily-math-quest.js'),'utf8');
+const korean=fs.readFileSync(path.join(root,'js/tasks/daily-korean-quest.js'),'utf8');
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+ok(/let activeKey\s*=\s*null/.test(accordion)&&/function activate\(key\)/.test(accordion)&&/initiallyOpen\s*=\s*activeKey === subject/.test(accordion),'accordion open state is not persistent');
+ok(/button,input,textarea/.test(drag),'buttons are still captured by drag-scroll');
+ok(friday.includes('friday-mission-compact-toggle')&&friday.includes('data-quest-key":"weekly')&&friday.includes('accordion?.activate?.("weekly")'),'weekly compact restore control missing');
+ok(css.includes('.friday-mission-card.quest-compact')&&css.includes('.friday-mission-compact-toggle'),'weekly compact layout missing');
+ok(math.includes('if (progress.completed[missionId] === true) onProgress?.()'),'math still rerenders task page on every correct answer');
+ok(korean.includes('if (progress.completed[missionId] === true) onProgress?.()'),'Korean still rerenders task page on every correct answer');
+ok(html.includes('quest-accordion.css?v=25')&&html.includes('drag-scroll.js?v=5')&&html.includes('friday-grade6-mission.js?v=65.0.9'),'quest UI cache refs stale');
+console.log('QUEST_ACCORDION_STABLE_UI_OK');

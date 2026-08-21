@@ -9,6 +9,6 @@ ok(tools.includes('class: "card-list tools-screen"'), 'tools scroll surface chan
 ok(drag.includes('button,input,textarea,select,a,iframe,video'), 'interactive controls must remain blocked from drag start');
 ok(drag.includes('.profile-image')&&drag.includes('.media-bubble img'), 'profile/media click safeguards regressed');
 ok(drag.includes('overscroll-behavior:none'), 'PiP overscroll safeguard regressed');
-ok(html.includes('js/features/tools.js?v=64.5.13'), 'tools asset cache-bust missing');
+ok(html.includes('js/features/tools.js?v=64.5.14'), 'tools asset cache-bust missing');
 ok(sw.includes('moaru-camera-popup-task-scroll-fix'), 'v94 SW cache missing');
 console.log('TOOLS_DRAG_SCROLL_V94_OK');

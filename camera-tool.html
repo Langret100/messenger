@@ -16,22 +16,5 @@
   </main>
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
   <div id="modalHost" class="modal-host hidden"></div>
-  <script>
-  (() => {
-    const params = new URLSearchParams(location.search);
-    const payload = {
-      type: "moaru-camera-tool-ready",
-      token: params.get("token") || "",
-      tool: params.get("tool") || "camera"
-    };
-    const notify = () => {
-      try {
-        if (window.opener && !window.opener.closed) window.opener.postMessage(payload, location.origin);
-      } catch {}
-    };
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", notify, { once: true });
-    else notify();
-  })();
-  </script>
 </body>
 </html>

@@ -91,94 +91,85 @@ MiniTalk.Features.Tools = (() => {
     }
 
     /*
-     * PC/Chromebook 카메라 도구는 same-origin 전용 셸(camera-tool.html)을 사용한다.
-     * 이전 구현은 window.open() 직후 load 리스너를 붙였기 때문에 대상 문서가 아주 빨리
-     * 로드되면 load 이벤트를 놓쳐 로딩 문구에서 영구 정지할 수 있었다.
-     * 이제 자식 셸이 DOM 준비 완료를 postMessage로 알려 주는 명시적 handshake를 사용한다.
-     * 부모는 창을 열기 전에 메시지 리스너를 등록하므로 캐시/빠른 로드 여부와 무관하다.
+     * PC/Chromebook 카메라 도구는 실제 same-origin 문서(camera-tool.html)에서 실행한다.
+     * 핵심은 "실제 문서의 load를 놓치지 않는 것"이다.
+     *
+     * 1) about:blank 팝업 핸들을 먼저 동기적으로 만든다.
+     * 2) 그 팝업 핸들에 load 리스너를 먼저 등록한다.
+     * 3) 그 뒤 camera-tool.html로 이동시킨다.
+     *
+     * 예전 document.write 방식처럼 빈 문서에 UI/CSS를 복제하지 않고, postMessage/ready
+     * handshake에도 의존하지 않는다. 따라서 빠른 캐시 로드나 PiP/일반창의 opener 차이와
+     * 상관없이 실제 camera-tool.html의 load가 끝난 뒤 정확히 한 번 마운트된다.
      */
     const sourceDoc = MiniTalk.UI.Dom.doc();
     const sourceView = sourceDoc.defaultView || window;
     const bounds = cameraPopupBounds(sourceView);
     const toolId = cameraToolId(module);
     const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-    const expectedOrigin = (() => { try { return new URL(sourceDoc.baseURI || document.baseURI).origin; } catch { return location.origin; } })();
+    const url = cameraToolUrl(toolId, token);
     let popup = null;
     let started = false;
-    let readyTimer = 0;
 
-    const cleanupListener = () => {
-      try { sourceView.removeEventListener("message", onReadyMessage); } catch {}
-      if (readyTimer) { sourceView.clearTimeout?.(readyTimer); readyTimer = 0; }
-    };
-    const cleanupPopupState = () => {
-      cleanupListener();
+    const clearState = () => {
       try { module.dispose?.(); } catch {}
       if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; }
     };
     const closePopup = () => {
-      cleanupListener();
       if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; }
       try { popup?.close(); } catch {}
     };
-    const mount = () => {
-      if (started || !popup || popup.closed || cameraToolPopup !== popup) return false;
+    const mountLoadedDocument = () => {
+      if (started || !popup || popup.closed || cameraToolPopup !== popup) return;
       let d, root;
       try {
         d = popup.document;
+        if (!/\/camera-tool\.html$/i.test(d.location?.pathname || "")) return;
         root = d.getElementById("cameraToolRoot");
-      } catch { return false; }
-      if (!root) return false;
+      } catch { return; }
+      if (!root) return;
       started = true;
-      cleanupListener();
       d.title = title || "카메라 놀이";
       root.replaceChildren();
-      module.open(closePopup, { host: root, doc: d, separate: true });
+      Promise.resolve(module.open(closePopup, { host: root, doc: d, separate: true })).catch(error => {
+        console.error("카메라 도구 실행 실패", error);
+        try {
+          root.innerHTML = '<div class="camera-tool-loading camera-tool-error">카메라 도구를 열지 못했어요.<br><button type="button" id="cameraToolRetry">다시 시도</button></div>';
+          root.querySelector("#cameraToolRetry")?.addEventListener("click", () => popup.location.reload());
+        } catch {}
+      });
       try { popup.focus(); } catch {}
-      return true;
     };
-    function onReadyMessage(event) {
-      if (!popup || event.source !== popup) return;
-      if (event.origin !== expectedOrigin) return;
-      const data = event.data || {};
-      if (data.type !== "moaru-camera-tool-ready" || data.token !== token || data.tool !== toolId) return;
-      mount();
-    }
 
-    /* 자식이 ready를 보내기 전에 반드시 수신 준비를 끝낸다. */
-    sourceView.addEventListener("message", onReadyMessage);
     try {
+      /* 빈 팝업을 먼저 확보해야 실제 페이지의 load 전에 리스너를 걸 수 있다. */
       popup = sourceView.open(
-        cameraToolUrl(toolId, token),
+        "about:blank",
         "MoaruCameraPlay",
         `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`
       );
     } catch {}
-    if (!popup) {
-      cleanupListener();
-      return module.open(refreshIfVisible);
-    }
+    if (!popup) return module.open(refreshIfVisible);
 
     cameraToolPopup = popup;
     cameraToolModule = module;
+    popup.addEventListener("load", mountLoadedDocument);
+    popup.addEventListener("pagehide", () => {
+      /* camera-tool.html로 이동하는 첫 pagehide는 무시하고, 실제 도구 문서가 닫힐 때만 정리한다. */
+      if (started) clearState();
+    });
     enforceCameraPopupBounds(popup, bounds);
-    popup.addEventListener("pagehide", cleanupPopupState, { once: true });
 
-    /*
-     * 메시지는 정상 경로다. 아래 2.5초 확인은 브라우저 확장/정책이 postMessage를 막은 경우의
-     * 실패 복구용이며, DOM이 준비된 같은-origin 셸일 때만 동일 mount를 한 번 호출한다.
-     */
-    readyTimer = sourceView.setTimeout?.(() => {
-      readyTimer = 0;
-      if (!started) mount();
-      if (!started) {
-        cleanupListener();
-        try {
-          const root = popup.document?.getElementById("cameraToolRoot");
-          if (root) root.innerHTML = '<div class="camera-tool-loading camera-tool-error">카메라 화면을 연결하지 못했어요.<br><button type="button" onclick="location.reload()">다시 시도</button></div>';
-        } catch {}
+    try {
+      popup.location.replace(url);
+    } catch {
+      try { popup.location.href = url; }
+      catch {
+        clearState();
+        try { popup.close(); } catch {}
+        return module.open(refreshIfVisible);
       }
-    }, 2500) || 0;
+    }
   }
 
   function render(host) {

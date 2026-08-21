@@ -7,8 +7,8 @@
   <title>카메라 놀이</title>
   <link rel="stylesheet" href="css/tokens.css?v=7">
   <link rel="stylesheet" href="css/app.css?v=64.5.13">
-  <link rel="stylesheet" href="css/features/face-toy.css?v=5">
-  <link rel="stylesheet" href="css/features/lookalike-play.css?v=4">
+  <link rel="stylesheet" href="css/features/face-toy.css?v=6">
+  <link rel="stylesheet" href="css/features/lookalike-play.css?v=5">
 </head>
 <body class="camera-tool-window-body">
   <main id="cameraToolRoot" class="camera-tool-root">
@@ -16,5 +16,22 @@
   </main>
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
   <div id="modalHost" class="modal-host hidden"></div>
+  <script>
+  (() => {
+    const params = new URLSearchParams(location.search);
+    const payload = {
+      type: "moaru-camera-tool-ready",
+      token: params.get("token") || "",
+      tool: params.get("tool") || "camera"
+    };
+    const notify = () => {
+      try {
+        if (window.opener && !window.opener.closed) window.opener.postMessage(payload, location.origin);
+      } catch {}
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", notify, { once: true });
+    else notify();
+  })();
+  </script>
 </body>
 </html>

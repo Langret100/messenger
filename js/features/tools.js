@@ -65,9 +65,21 @@ MiniTalk.Features.Tools = (() => {
     apply(); setTimeout(apply, 80); setTimeout(apply, 260);
   }
 
-  function cameraToolUrl() {
-    try { return new URL("camera-tool.html", document.baseURI || location.href).href; }
-    catch { return "camera-tool.html"; }
+  function cameraToolUrl(toolId, token) {
+    try {
+      const url = new URL("camera-tool.html", document.baseURI || location.href);
+      url.searchParams.set("tool", toolId || "camera");
+      url.searchParams.set("token", token || "");
+      return url.href;
+    } catch {
+      return `camera-tool.html?tool=${encodeURIComponent(toolId || "camera")}&token=${encodeURIComponent(token || "")}`;
+    }
+  }
+
+  function cameraToolId(module) {
+    if (module === MiniTalk.Tools.FaceToy) return "face-toy";
+    if (module === MiniTalk.Tools.LookalikePlay) return "lookalike";
+    return "camera";
   }
 
   function openCameraTool(module, title) {
@@ -79,51 +91,94 @@ MiniTalk.Features.Tools = (() => {
     }
 
     /*
-     * 카메라 도구는 about:blank에 document.write()로 앱을 복제하지 않습니다.
-     * Document PiP 안에서는 원본 <link>가 없고 스타일이 snapshot <style>로만 존재할 수 있어
-     * 기존 방식이 무스타일 새 창을 만들었습니다. 또한 카메라 요청도 숨은 원본 문서의
-     * navigator에서 실행되어 브라우저에 따라 권한 요청이 실패할 수 있었습니다.
-     * 별도 same-origin 셸을 실제 URL로 열고, 그 문서의 navigator를 사용하도록 통일합니다.
+     * PC/Chromebook 카메라 도구는 same-origin 전용 셸(camera-tool.html)을 사용한다.
+     * 이전 구현은 window.open() 직후 load 리스너를 붙였기 때문에 대상 문서가 아주 빨리
+     * 로드되면 load 이벤트를 놓쳐 로딩 문구에서 영구 정지할 수 있었다.
+     * 이제 자식 셸이 DOM 준비 완료를 postMessage로 알려 주는 명시적 handshake를 사용한다.
+     * 부모는 창을 열기 전에 메시지 리스너를 등록하므로 캐시/빠른 로드 여부와 무관하다.
      */
-    const sourceDoc = MiniTalk.UI.Dom.doc(), sourceView = sourceDoc.defaultView || window, bounds = cameraPopupBounds(sourceView);
+    const sourceDoc = MiniTalk.UI.Dom.doc();
+    const sourceView = sourceDoc.defaultView || window;
+    const bounds = cameraPopupBounds(sourceView);
+    const toolId = cameraToolId(module);
+    const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const expectedOrigin = (() => { try { return new URL(sourceDoc.baseURI || document.baseURI).origin; } catch { return location.origin; } })();
     let popup = null;
-    try {
-      popup = sourceView.open(cameraToolUrl(), "MoaruCameraPlay", `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`);
-    } catch {}
-    if (!popup) return module.open(refreshIfVisible);
-
-    cameraToolPopup = popup;
-    cameraToolModule = module;
-    enforceCameraPopupBounds(popup, bounds);
-
     let started = false;
+    let readyTimer = 0;
+
+    const cleanupListener = () => {
+      try { sourceView.removeEventListener("message", onReadyMessage); } catch {}
+      if (readyTimer) { sourceView.clearTimeout?.(readyTimer); readyTimer = 0; }
+    };
     const cleanupPopupState = () => {
+      cleanupListener();
       try { module.dispose?.(); } catch {}
       if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; }
     };
     const closePopup = () => {
+      cleanupListener();
       if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; }
-      try { popup.close(); } catch {}
+      try { popup?.close(); } catch {}
     };
-    const start = () => {
-      if (started || popup.closed || cameraToolPopup !== popup) return;
+    const mount = () => {
+      if (started || !popup || popup.closed || cameraToolPopup !== popup) return false;
       let d, root;
       try {
         d = popup.document;
         root = d.getElementById("cameraToolRoot");
-      } catch { return; }
-      if (!root) return;
+      } catch { return false; }
+      if (!root) return false;
       started = true;
+      cleanupListener();
       d.title = title || "카메라 놀이";
       root.replaceChildren();
       module.open(closePopup, { host: root, doc: d, separate: true });
       try { popup.focus(); } catch {}
+      return true;
     };
+    function onReadyMessage(event) {
+      if (!popup || event.source !== popup) return;
+      if (event.origin !== expectedOrigin) return;
+      const data = event.data || {};
+      if (data.type !== "moaru-camera-tool-ready" || data.token !== token || data.tool !== toolId) return;
+      mount();
+    }
 
+    /* 자식이 ready를 보내기 전에 반드시 수신 준비를 끝낸다. */
+    sourceView.addEventListener("message", onReadyMessage);
+    try {
+      popup = sourceView.open(
+        cameraToolUrl(toolId, token),
+        "MoaruCameraPlay",
+        `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`
+      );
+    } catch {}
+    if (!popup) {
+      cleanupListener();
+      return module.open(refreshIfVisible);
+    }
+
+    cameraToolPopup = popup;
+    cameraToolModule = module;
+    enforceCameraPopupBounds(popup, bounds);
     popup.addEventListener("pagehide", cleanupPopupState, { once: true });
-    popup.addEventListener("load", start, { once: true });
-    /* 이미 캐시에서 로드가 끝난 극단적으로 빠른 경우도 놓치지 않습니다. */
-    try { if (popup.document?.readyState === "complete") start(); } catch {}
+
+    /*
+     * 메시지는 정상 경로다. 아래 2.5초 확인은 브라우저 확장/정책이 postMessage를 막은 경우의
+     * 실패 복구용이며, DOM이 준비된 같은-origin 셸일 때만 동일 mount를 한 번 호출한다.
+     */
+    readyTimer = sourceView.setTimeout?.(() => {
+      readyTimer = 0;
+      if (!started) mount();
+      if (!started) {
+        cleanupListener();
+        try {
+          const root = popup.document?.getElementById("cameraToolRoot");
+          if (root) root.innerHTML = '<div class="camera-tool-loading camera-tool-error">카메라 화면을 연결하지 못했어요.<br><button type="button" onclick="location.reload()">다시 시도</button></div>';
+        } catch {}
+      }
+    }, 2500) || 0;
   }
 
   function render(host) {

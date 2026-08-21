@@ -26,3 +26,22 @@ body.camera-tool-window-body{background:var(--surface-2);color:var(--text)}
 .camera-tool-window-body .face-toy-effects{gap:10px;padding:2px 4px 5px}.camera-tool-window-body .face-effect{min-width:108px;height:66px;font-size:10px;grid-template-columns:32px auto}.camera-tool-window-body .face-effect-icon{width:31px;height:31px;font-size:17px}
 .camera-tool-window-body .face-toy-capture-row{min-height:76px}.camera-tool-window-body .face-toy-shutter{width:70px;height:70px}.camera-tool-window-body .face-toy-side-action>span{width:44px;height:44px}
 .camera-tool-window-body .face-toy-result-actions{max-width:720px;width:100%;align-self:center}.camera-tool-window-body .face-toy-result-actions .button{min-height:44px;font-size:11px}
+
+/* PC/Chromebook separate-window responsive layout */
+html:has(body.camera-tool-window-body),body.camera-tool-window-body{margin:0;width:100%;height:100%;min-width:0;min-height:0;overflow:hidden}
+body.camera-tool-window-body{background:var(--surface-2);color:var(--text)}
+.camera-tool-root{width:100%;height:100%;min-width:0;min-height:0;display:block;overflow:hidden}
+.camera-tool-loading{height:100%;display:grid;place-items:center;padding:18px;box-sizing:border-box;text-align:center;font:700 14px/1.4 system-ui,sans-serif;color:var(--muted)}
+.camera-tool-loading.camera-tool-error{gap:12px;color:var(--text)}.camera-tool-loading.camera-tool-error button{justify-self:center;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);padding:9px 14px;font:800 12px/1 system-ui,sans-serif;cursor:pointer}
+.camera-tool-window-body .face-toy-view{box-sizing:border-box;height:100dvh;min-height:0;padding:14px clamp(14px,2.2vw,26px) 16px;gap:10px}
+.camera-tool-window-body .face-toy-topbar,.camera-tool-window-body .face-toy-stage,.camera-tool-window-body .face-toy-effects,.camera-tool-window-body .face-toy-capture-row,.camera-tool-window-body .face-toy-result-actions{width:min(100%,920px);align-self:center;box-sizing:border-box}
+.camera-tool-window-body .face-toy-topbar{grid-template-columns:44px 1fr 44px;min-height:46px}.camera-tool-window-body .face-toy-back,.camera-tool-window-body .face-toy-camera-switch{width:42px;height:42px;border-radius:14px}.camera-tool-window-body .face-toy-title strong{font-size:16px}.camera-tool-window-body .face-toy-title small{font-size:10px}
+.camera-tool-window-body .face-toy-stage{flex:1 1 0;min-height:0;max-height:none;border-radius:24px}
+.camera-tool-window-body .face-toy-status{font-size:11px;padding:8px 13px;bottom:12px}
+.camera-tool-window-body .face-toy-effects{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:visible;gap:8px;padding:0}
+.camera-tool-window-body .face-effect{min-width:0;width:100%;height:58px;font-size:10px;grid-template-columns:30px minmax(0,auto);padding:7px 8px}.camera-tool-window-body .face-effect-icon{width:29px;height:29px;font-size:16px}
+.camera-tool-window-body .face-toy-capture-row{grid-template-columns:1fr 82px 1fr;gap:18px;min-height:68px}.camera-tool-window-body .face-toy-shutter{width:66px;height:66px}.camera-tool-window-body .face-toy-side-action>span{width:42px;height:42px}.camera-tool-window-body .face-toy-side-action small{font-size:9px}
+.camera-tool-window-body .face-toy-result-actions{grid-template-columns:1fr 1fr minmax(180px,1.5fr);gap:9px}.camera-tool-window-body .face-toy-result-actions .button{min-height:42px;font-size:10px}
+@media (max-width:720px){.camera-tool-window-body .face-toy-view{padding:10px 12px 12px;gap:8px}.camera-tool-window-body .face-toy-effects{grid-template-columns:repeat(5,minmax(92px,1fr));overflow-x:auto;padding-bottom:3px}.camera-tool-window-body .face-effect{height:54px}.camera-tool-window-body .face-toy-capture-row{min-height:62px}.camera-tool-window-body .face-toy-shutter{width:60px;height:60px}}
+@media (max-height:690px){.camera-tool-window-body .face-toy-view{padding-top:8px;padding-bottom:9px;gap:6px}.camera-tool-window-body .face-toy-topbar{min-height:38px}.camera-tool-window-body .face-toy-back,.camera-tool-window-body .face-toy-camera-switch{width:36px;height:36px}.camera-tool-window-body .face-toy-title small{display:none}.camera-tool-window-body .face-effect{height:46px}.camera-tool-window-body .face-toy-capture-row{min-height:52px}.camera-tool-window-body .face-toy-shutter{width:52px;height:52px}.camera-tool-window-body .face-toy-side-action>span{width:34px;height:34px}.camera-tool-window-body .face-toy-result-actions .button{min-height:36px}}
+

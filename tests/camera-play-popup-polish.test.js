@@ -7,9 +7,16 @@ const faceCss=read('css/features/face-toy.css'),lookCss=read('css/features/looka
 ok(tools.includes('icon: "?"')&&tools.includes('title: "닮은 생물 찾기"'),'lookalike card icon should be question mark');
 ok(tools.includes('openCameraTool(MiniTalk.Tools.FaceToy')&&tools.includes('openCameraTool(MiniTalk.Tools.LookalikePlay'),'camera tools must use desktop popup helper');
 ok(tools.includes('gap = 42')&&tools.includes('scrollbars=no')&&tools.includes('MoaruCameraPlay'),'camera popup must avoid messenger with 42px gap and hide chrome scrollbars');
-ok(tools.includes('sourceView.open(cameraToolUrl()')&&!tools.includes('d.write(`<!doctype html>'),'camera popup must open a real same-origin shell instead of about:blank document.write cloning');
-ok(cameraShell.includes('id="cameraToolRoot"')&&cameraShell.includes('face-toy.css?v=5')&&cameraShell.includes('lookalike-play.css?v=4'),'same-origin camera shell must own its root and styles');
+ok(tools.includes('sourceView.open(')&&tools.includes('cameraToolUrl(toolId, token)')&&!tools.includes('d.write(`<!doctype html>'),'camera popup must open a real same-origin shell instead of about:blank document.write cloning');
+ok(cameraShell.includes('id="cameraToolRoot"')&&cameraShell.includes('face-toy.css?v=6')&&cameraShell.includes('lookalike-play.css?v=5'),'same-origin camera shell must own its root and styles');
 ok(cameraShell.includes('카메라 화면을 준비하고 있어요…'),'camera popup should show a styled loading state while the module mounts');
+
+ok(tools.includes('sourceView.addEventListener("message", onReadyMessage)')&&tools.indexOf('sourceView.addEventListener("message", onReadyMessage)')<tools.indexOf('sourceView.open('),'ready listener must be installed before popup navigation starts');
+ok(cameraShell.includes('window.opener.postMessage(payload, location.origin)')&&cameraShell.includes('moaru-camera-tool-ready'),'camera shell must explicitly handshake after DOM readiness');
+ok(tools.includes('event.source !== popup')&&tools.includes('data.token !== token')&&tools.includes('data.tool !== toolId'),'camera popup handshake must validate source/token/tool');
+ok(faceCss.includes('grid-template-columns:repeat(5,minmax(0,1fr))'),'desktop face effects must remain visible in one responsive control row');
+ok(faceCss.includes('flex:1 1 0;min-height:0;max-height:none')&&lookCss.includes('flex:1 1 0;min-height:0;max-height:none'),'desktop camera stages must yield space to controls instead of pushing UI offscreen');
+ok(lookCss.includes('grid-template-columns:minmax(120px,1fr) 88px minmax(120px,1fr)'),'desktop lookalike controls need size-aware spacing');
 ok(sw.includes('./camera-tool.html'),'camera popup shell must be available offline');
 ok(face.includes('activeDoc?.defaultView?.navigator?.mediaDevices')&&look.includes('activeDoc?.defaultView?.navigator?.mediaDevices'),'camera permission requests must originate from the visible camera window document');
 ok(tools.includes('MobileImmersive?.isMobile?.()')&&tools.includes('/CrOS/i'),'mobile must remain inline while Chromebook/desktop uses popup');
@@ -18,7 +25,7 @@ ok(faceCss.includes('.face-toy-effects.dragging')&&faceCss.includes('scroll-snap
 ok(face.includes('isSeparate: () => separateWindow')&&look.includes('isSeparate:()=>separateWindow'),'camera tools must expose separate-window state');
 ok(faceCss.includes('.camera-tool-window-body .face-toy-stage')&&lookCss.includes('.camera-tool-window-body .lookalike-stage'),'desktop popup needs large camera layouts');
 ok(gameCss.includes('.game-library{overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:none')&&gameCss.includes('.game-library::-webkit-scrollbar'),'mini-game chooser scrollbar must be hidden while scrolling remains');
-ok(html.includes('face-toy.css?v=5')&&html.includes('lookalike-play.css?v=4')&&html.includes('game-community.css?v=19')&&html.includes('tools.js?v=64.5.12'),'cache refs stale');
+ok(html.includes('face-toy.css?v=6')&&html.includes('lookalike-play.css?v=5')&&html.includes('game-community.css?v=19')&&html.includes('tools.js?v=64.5.13'),'cache refs stale');
 
 // 관성 드래그 런타임: 손을 뗀 뒤에도 짧게 이동하고 매 프레임 감속해야 한다.
 const sandbox={console,Date,window:{},navigator:{},Image:function(){},FileReader:function(){},URL:{},crypto:{},MiniTalk:{Tools:{},UI:{Dom:{}},Store:{get:()=>({})},Realtime:{}}};

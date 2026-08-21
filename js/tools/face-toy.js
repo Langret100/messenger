@@ -31,6 +31,7 @@ MiniTalk.Tools.FaceToy = (() => {
   let warpStart = null;
   let lastRandom = "";
   let audioContext = null;
+  let effectDragCleanup = null;
 
   function audio() {
     try {
@@ -62,6 +63,56 @@ MiniTalk.Tools.FaceToy = (() => {
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const doc = () => MiniTalk.UI?.Dom?.doc?.() || document;
+
+  /* 효과 버튼 위에서 시작해도 PC에서는 좌우로 끌어 목록을 넘길 수 있게 한다.
+     모바일은 CSS touch-action:pan-x + native overflow scroll을 그대로 사용한다. */
+  function bindEffectDrag(scroller) {
+    if (!scroller) return () => {};
+    const owner = scroller.ownerDocument || doc();
+    let tracking = false, dragged = false, blockClick = false;
+    let startX = 0, startY = 0, startScroll = 0;
+
+    const down = event => {
+      if (event.button !== 0) return;
+      tracking = true; dragged = false;
+      startX = event.clientX; startY = event.clientY; startScroll = scroller.scrollLeft;
+    };
+    const move = event => {
+      if (!tracking) return;
+      const dx = event.clientX - startX, dy = event.clientY - startY;
+      if (!dragged) {
+        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+        if (Math.abs(dy) > Math.abs(dx) * 1.15) { tracking = false; return; }
+        dragged = true; scroller.classList.add("dragging");
+      }
+      event.preventDefault?.();
+      scroller.scrollLeft = startScroll - dx;
+    };
+    const up = () => {
+      if (dragged) blockClick = true;
+      tracking = false; dragged = false; scroller.classList.remove("dragging");
+    };
+    const click = event => {
+      if (!blockClick) return;
+      blockClick = false;
+      event.preventDefault?.(); event.stopImmediatePropagation?.(); event.stopPropagation?.();
+    };
+    const dragstart = event => event.preventDefault?.();
+
+    scroller.addEventListener("mousedown", down);
+    owner.addEventListener("mousemove", move);
+    owner.addEventListener("mouseup", up);
+    scroller.addEventListener("dragstart", dragstart, true);
+    scroller.addEventListener("click", click, true);
+    return () => {
+      scroller.removeEventListener("mousedown", down);
+      owner.removeEventListener("mousemove", move);
+      owner.removeEventListener("mouseup", up);
+      scroller.removeEventListener("dragstart", dragstart, true);
+      scroller.removeEventListener("click", click, true);
+      scroller.classList.remove("dragging");
+    };
+  }
 
   function stopCamera() {
     if (stream) stream.getTracks().forEach(track => track.stop());
@@ -117,8 +168,8 @@ MiniTalk.Tools.FaceToy = (() => {
     const D = MiniTalk.UI.Dom;
     view = D.el("section", { class: "view face-toy-view view-enter" });
     const top = D.el("div", { class: "face-toy-topbar" });
-    const back = D.el("button", { class: "face-toy-back", type: "button", "aria-label": "얼굴 장난감 나가기", text: "‹" });
-    const title = D.el("div", { class: "face-toy-title" }, [D.el("strong", { text: "얼굴 장난감" }), D.el("small", { text: "사진은 이 기기에서만 편집돼요" })]);
+    const back = D.el("button", { class: "face-toy-back", type: "button", "aria-label": "페이스 체인지 나가기", text: "‹" });
+    const title = D.el("div", { class: "face-toy-title" }, [D.el("strong", { text: "페이스 체인지" }), D.el("small", { text: "사진은 이 기기에서만 편집돼요" })]);
     switchButton = D.el("button", { class: "face-toy-camera-switch", type: "button", "aria-label": "전후면 카메라 전환", title: "카메라 전환", text: "↻" });
     back.onclick = close;
     switchButton.onclick = async () => {
@@ -143,6 +194,8 @@ MiniTalk.Tools.FaceToy = (() => {
       button.onclick = () => applyEffect(effect.id);
       effectsNode.append(button);
     });
+    effectDragCleanup?.();
+    effectDragCleanup = bindEffectDrag(effectsNode);
 
     const captureRow = D.el("div", { class: "face-toy-capture-row" });
     picker = D.el("input", { type: "file", accept: "image/*", class: "hidden", "aria-label": "사진 불러오기" });
@@ -180,6 +233,8 @@ MiniTalk.Tools.FaceToy = (() => {
   }
 
   function dispose() {
+    effectDragCleanup?.();
+    effectDragCleanup = null;
     stopCamera();
     manualResolve?.([]);
     manualResolve = null;
@@ -502,7 +557,7 @@ MiniTalk.Tools.FaceToy = (() => {
   async function sendCanvasToRoom(roomId) {
     const dataUrl = await chatSizedImage();
     if (!dataUrl || dataUrl.length > CHAT_DATA_LIMIT) throw new Error("채팅용 사진 크기를 줄이지 못했어요.");
-    return MiniTalk.Realtime.sendMessage(roomId, { type: "image", text: "[얼굴 장난감]", image: dataUrl });
+    return MiniTalk.Realtime.sendMessage(roomId, { type: "image", text: "[페이스 체인지]", image: dataUrl });
   }
 
   async function chatSizedImage() {
@@ -523,5 +578,5 @@ MiniTalk.Tools.FaceToy = (() => {
 
   function blobToDataUrl(blob) { return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result || "")); r.onerror = reject; r.readAsDataURL(blob); }); }
 
-  return { open, close, dispose, _test: { normalizeFace, memberRooms, sound } };
+  return { open, close, dispose, _test: { normalizeFace, memberRooms, sound, bindEffectDrag } };
 })();

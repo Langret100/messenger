@@ -3,7 +3,7 @@ const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),feature=read('js/features/moa-chat.js'),api=read('js/adapters/auth-api.js'),code=read('docs/apps-script/Code.gs'),ai=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
 ok(html.includes('js/ai/moa-communication-engine.js?v=17')&&!html.includes('moa-dialogue-core.js')&&!html.includes('moa-chat-engine.js'),'v87 compatibility engine asset mismatch');
-ok(sw.includes('moaru-face-play-polish')&&sw.includes('./js/ai/moa-communication-engine.js'),'v87 compatibility SW asset mismatch');
+ok(sw.includes('moaru-face-play-facechange-drag')&&sw.includes('./js/ai/moa-communication-engine.js'),'v87 compatibility SW asset mismatch');
 ok(feature.includes('MoaCommunicationEngine.reply')&&feature.includes('MoaCommunicationEngine.warmup'),'feature not wired to v87 engine');
 for(const route of ['moa_sync','moa_commit','moa_search'])ok(code.includes(`case "${route}"`),`missing ${route}`);
 for(const gone of ['moa_chat','moa_feedback','moa_topic_observe','moa_reaction_observe','moa_reaction_lexicon','moa_learn','moa_memory_get','moa_memory_set'])ok(!code.includes(`case "${gone}"`),`legacy route remains ${gone}`);

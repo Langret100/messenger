@@ -9,7 +9,7 @@ MiniTalk.Features.Tools = (() => {
     { id: "tarot", icon: "✧", title: "오늘의 타로", description: "카드를 뽑아 보는 운세" },
     { id: "alarm", icon: "◉", title: "알람", description: "원하는 시간에 알림" },
     { id: "lookalike", icon: "◌", title: "닮은 생물 찾기", description: "3·2·1 찍고 닮은 동식물 보기" },
-    { id: "face-toy", icon: "☺", title: "얼굴 장난감", description: "찍고 바꾸고 크게 놀기" },
+    { id: "face-toy", icon: "☺", title: "페이스 체인지", description: "찍고 바꾸고 크게 놀기" },
     { id: "timetable", icon: "▦", title: "오늘의 시간표", description: "이미지로 함께 갱신" },
     { id: "lunch", icon: "☰", title: "오늘의 급식표", description: "TXT에서 오늘 급식 보기" }
   ];

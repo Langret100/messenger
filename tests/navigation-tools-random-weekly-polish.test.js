@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..');
 const read=f=>fs.readFileSync(path.join(root,f),'utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const tools=read('js/features/tools.js'),config=read('js/config.js'),registry=read('js/core/registry.js'),shell=read('js/ui/shell.js'),shop=read('js/features/shopping.js'),shopCss=read('css/features/shopping-store.css'),friday=read('js/tasks/friday-grade6-mission.js'),weeklyCss=read('css/features/feed-classinfo-weekly.css'),html=read('index.html');
-ok(tools.includes('id: "face-toy"')&&tools.includes('title: "얼굴 장난감"'),'face toy must replace motion game in main tools');
+ok(tools.includes('id: "face-toy"')&&tools.includes('title: "페이스 체인지"'),'face toy must replace motion game in main tools');
 ok(!tools.includes('id: "motion-math"')&&!tools.includes('https://langret100.github.io/Math-in-Math/'),'motion game must not remain in main tools');
 ok(config.includes('{name:"동작 인식 게임",url:"https://langret100.github.io/Math-in-Math/"}'),'motion recognition game related link missing');
 ok(config.includes('{name:"온라인 놀이터",url:"https://langret100.github.io/multiroom-playground/"}'),'online playground related link missing');
@@ -19,5 +19,5 @@ ok(shop.includes('setTimeout(movePrizeToInventory,1100)')&&shop.includes('invent
 ok(shopCss.includes('.shop-random-overlay.insufficient .shop-random-strip')&&shopCss.includes('{display:none}')&&shopCss.includes('.shop-random-cost-divider'),'random insufficient visual cleanup missing');
 ok(friday.includes('friday-mission-compact-toggle')&&weeklyCss.includes('.friday-mission-card.quest-compact{display:block'),'pre-patch weekly compact structure missing');
 ok(weeklyCss.includes('.friday-mission-card.open:not(.quest-compact)')&&!weeklyCss.includes('.friday-mission-card.open::before'),'open weekly polish must not override compact mode');
-for(const ref of ['shopping-store.css?v=64.5.15','feed-classinfo-weekly.css?v=65.0.31','js/core/registry.js?v=3','js/ui/shell.js?v=64.5.34','friday-grade6-mission.js?v=65.0.19','js/features/tools.js?v=64.5.8','js/features/shopping.js?v=64.5.34'])ok(html.includes(ref),`cache ref missing ${ref}`);
+for(const ref of ['shopping-store.css?v=64.5.15','feed-classinfo-weekly.css?v=65.0.31','js/core/registry.js?v=3','js/ui/shell.js?v=64.5.34','friday-grade6-mission.js?v=65.0.19','js/features/tools.js?v=64.5.9','js/features/shopping.js?v=64.5.34'])ok(html.includes(ref),`cache ref missing ${ref}`);
 console.log('NAV_TOOLS_RANDOM_WEEKLY_POLISH_OK');

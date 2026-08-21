@@ -65,6 +65,11 @@ MiniTalk.Features.Tools = (() => {
     apply(); setTimeout(apply, 80); setTimeout(apply, 260);
   }
 
+  function cameraToolUrl() {
+    try { return new URL("camera-tool.html", document.baseURI || location.href).href; }
+    catch { return "camera-tool.html"; }
+  }
+
   function openCameraTool(module, title) {
     if (!module?.open) return;
     if (mobileCameraTool()) return module.open(refreshIfVisible);
@@ -72,27 +77,53 @@ MiniTalk.Features.Tools = (() => {
       if (cameraToolModule === module) { try { cameraToolPopup.focus(); } catch {} return; }
       try { cameraToolModule?.dispose?.(); cameraToolPopup.close(); } catch {}
     }
+
+    /*
+     * 카메라 도구는 about:blank에 document.write()로 앱을 복제하지 않습니다.
+     * Document PiP 안에서는 원본 <link>가 없고 스타일이 snapshot <style>로만 존재할 수 있어
+     * 기존 방식이 무스타일 새 창을 만들었습니다. 또한 카메라 요청도 숨은 원본 문서의
+     * navigator에서 실행되어 브라우저에 따라 권한 요청이 실패할 수 있었습니다.
+     * 별도 same-origin 셸을 실제 URL로 열고, 그 문서의 navigator를 사용하도록 통일합니다.
+     */
     const sourceDoc = MiniTalk.UI.Dom.doc(), sourceView = sourceDoc.defaultView || window, bounds = cameraPopupBounds(sourceView);
     let popup = null;
-    try { popup = sourceView.open("", "MoaruCameraPlay", `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`); } catch {}
+    try {
+      popup = sourceView.open(cameraToolUrl(), "MoaruCameraPlay", `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`);
+    } catch {}
     if (!popup) return module.open(refreshIfVisible);
-    const base = String(sourceDoc.baseURI || document.baseURI).replace(/'/g, "%27");
-    const d = popup.document; d.open(); d.write(`<!doctype html><html lang="ko" data-theme="${sourceDoc.documentElement?.dataset?.theme || "light"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><base href="${base}"><style>html,body,#cameraToolRoot{margin:0;width:100%;height:100%;overflow:hidden}body{background:#f5f7fb}#cameraToolRoot{min-width:0;min-height:0;display:grid;place-items:center}.camera-tool-loading{font:700 14px/1.4 system-ui,sans-serif;color:#536174;padding:18px;text-align:center}.toast-host,.modal-host{z-index:1000}</style></head><body class="camera-tool-window-body"><main id="cameraToolRoot"><div class="camera-tool-loading">카메라 화면을 준비하고 있어요…</div></main><div id="toastHost" class="toast-host" aria-live="polite"></div><div id="modalHost" class="modal-host hidden"></div></body></html>`); d.close();
-    const styleLinks = [...sourceDoc.querySelectorAll('link[rel~="stylesheet"][href]')].map(source => new Promise(resolve => {
-      const link = d.createElement("link"); link.rel = "stylesheet"; link.href = source.href;
-      const done = () => resolve(); link.addEventListener("load", done, { once: true }); link.addEventListener("error", done, { once: true });
-      d.head.append(link); setTimeout(done, 1800);
-    }));
-    cameraToolPopup = popup; cameraToolModule = module; enforceCameraPopupBounds(popup, bounds);
-    const root = d.getElementById("cameraToolRoot");
-    const closePopup = () => { if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; } try { popup.close(); } catch {} };
-    popup.addEventListener("pagehide", () => { try { module.dispose?.(); } catch {} if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; } }, { once: true });
-    Promise.all(styleLinks).then(() => {
-      if (popup.closed || cameraToolPopup !== popup) return;
+
+    cameraToolPopup = popup;
+    cameraToolModule = module;
+    enforceCameraPopupBounds(popup, bounds);
+
+    let started = false;
+    const cleanupPopupState = () => {
+      try { module.dispose?.(); } catch {}
+      if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; }
+    };
+    const closePopup = () => {
+      if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; }
+      try { popup.close(); } catch {}
+    };
+    const start = () => {
+      if (started || popup.closed || cameraToolPopup !== popup) return;
+      let d, root;
+      try {
+        d = popup.document;
+        root = d.getElementById("cameraToolRoot");
+      } catch { return; }
+      if (!root) return;
+      started = true;
+      d.title = title || "카메라 놀이";
       root.replaceChildren();
       module.open(closePopup, { host: root, doc: d, separate: true });
       try { popup.focus(); } catch {}
-    });
+    };
+
+    popup.addEventListener("pagehide", cleanupPopupState, { once: true });
+    popup.addEventListener("load", start, { once: true });
+    /* 이미 캐시에서 로드가 끝난 극단적으로 빠른 경우도 놓치지 않습니다. */
+    try { if (popup.document?.readyState === "complete") start(); } catch {}
   }
 
   function render(host) {

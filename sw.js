@@ -8,6 +8,7 @@ const CACHE = "moaru-camera-popup-task-scroll-fix";
 const CORE = [
   "./",
   "./index.html",
+  "./camera-tool.html",
   "./css/tokens.css",
   "./css/app.css",
   "./css/features/tools.css",

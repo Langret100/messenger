@@ -113,14 +113,15 @@ MiniTalk.Tools.LookalikePlay = (() => {
   }
 
   async function startCamera(nextFacing=facing){
-    if(!navigator.mediaDevices?.getUserMedia){setStatus("카메라를 쓸 수 없어요.",true);return false}
+    const mediaDevices=activeDoc?.defaultView?.navigator?.mediaDevices;
+    if(!mediaDevices?.getUserMedia){setStatus("카메라를 쓸 수 없어요.",true);return false}
     stopCamera();
     facing=nextFacing;
     const exact={audio:false,video:{facingMode:{exact:facing},width:{ideal:1280},height:{ideal:1280}}};
     const ideal={audio:false,video:{facingMode:{ideal:facing},width:{ideal:1280},height:{ideal:1280}}};
-    try{stream=await navigator.mediaDevices.getUserMedia(exact)}catch{
-      try{stream=await navigator.mediaDevices.getUserMedia(ideal)}catch{
-        try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:true})}catch{setStatus("카메라 권한을 확인해 줘.",true);return false}
+    try{stream=await mediaDevices.getUserMedia(exact)}catch{
+      try{stream=await mediaDevices.getUserMedia(ideal)}catch{
+        try{stream=await mediaDevices.getUserMedia({audio:false,video:true})}catch{setStatus("카메라 권한을 확인해 줘.",true);return false}
       }
     }
     const actual=stream.getVideoTracks?.()[0]?.getSettings?.().facingMode;

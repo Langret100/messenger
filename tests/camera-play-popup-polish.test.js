@@ -3,19 +3,22 @@ const ROOT=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(ROOT,p),'utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const tools=read('js/features/tools.js'),face=read('js/tools/face-toy.js'),look=read('js/tools/lookalike-play.js');
-const faceCss=read('css/features/face-toy.css'),lookCss=read('css/features/lookalike-play.css'),gameCss=read('css/features/game-community.css'),html=read('index.html');
+const faceCss=read('css/features/face-toy.css'),lookCss=read('css/features/lookalike-play.css'),gameCss=read('css/features/game-community.css'),html=read('index.html'),cameraShell=read('camera-tool.html'),sw=read('sw.js');
 ok(tools.includes('icon: "?"')&&tools.includes('title: "닮은 생물 찾기"'),'lookalike card icon should be question mark');
 ok(tools.includes('openCameraTool(MiniTalk.Tools.FaceToy')&&tools.includes('openCameraTool(MiniTalk.Tools.LookalikePlay'),'camera tools must use desktop popup helper');
 ok(tools.includes('gap = 42')&&tools.includes('scrollbars=no')&&tools.includes('MoaruCameraPlay'),'camera popup must avoid messenger with 42px gap and hide chrome scrollbars');
-ok(tools.includes("querySelectorAll('link[rel~=\"stylesheet\"][href]')")&&tools.includes('Promise.all(styleLinks).then'),'camera popup must wait for copied stylesheets before rendering camera UI');
-ok(tools.includes('카메라 화면을 준비하고 있어요…'),'camera popup should show a styled loading state instead of raw controls while CSS loads');
+ok(tools.includes('sourceView.open(cameraToolUrl()')&&!tools.includes('d.write(`<!doctype html>'),'camera popup must open a real same-origin shell instead of about:blank document.write cloning');
+ok(cameraShell.includes('id="cameraToolRoot"')&&cameraShell.includes('face-toy.css?v=5')&&cameraShell.includes('lookalike-play.css?v=4'),'same-origin camera shell must own its root and styles');
+ok(cameraShell.includes('카메라 화면을 준비하고 있어요…'),'camera popup should show a styled loading state while the module mounts');
+ok(sw.includes('./camera-tool.html'),'camera popup shell must be available offline');
+ok(face.includes('activeDoc?.defaultView?.navigator?.mediaDevices')&&look.includes('activeDoc?.defaultView?.navigator?.mediaDevices'),'camera permission requests must originate from the visible camera window document');
 ok(tools.includes('MobileImmersive?.isMobile?.()')&&tools.includes('/CrOS/i'),'mobile must remain inline while Chromebook/desktop uses popup');
 ok(face.includes('velocity *= .91')&&face.includes('raf(step)'),'face JS should implement inertial horizontal drag');
 ok(faceCss.includes('.face-toy-effects.dragging')&&faceCss.includes('scroll-snap-type:none'),'dragging should temporarily disable snap for smooth inertia');
 ok(face.includes('isSeparate: () => separateWindow')&&look.includes('isSeparate:()=>separateWindow'),'camera tools must expose separate-window state');
 ok(faceCss.includes('.camera-tool-window-body .face-toy-stage')&&lookCss.includes('.camera-tool-window-body .lookalike-stage'),'desktop popup needs large camera layouts');
 ok(gameCss.includes('.game-library{overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:none')&&gameCss.includes('.game-library::-webkit-scrollbar'),'mini-game chooser scrollbar must be hidden while scrolling remains');
-ok(html.includes('face-toy.css?v=4')&&html.includes('lookalike-play.css?v=3')&&html.includes('game-community.css?v=19')&&html.includes('tools.js?v=64.5.11'),'cache refs stale');
+ok(html.includes('face-toy.css?v=5')&&html.includes('lookalike-play.css?v=4')&&html.includes('game-community.css?v=19')&&html.includes('tools.js?v=64.5.12'),'cache refs stale');
 
 // 관성 드래그 런타임: 손을 뗀 뒤에도 짧게 이동하고 매 프레임 감속해야 한다.
 const sandbox={console,Date,window:{},navigator:{},Image:function(){},FileReader:function(){},URL:{},crypto:{},MiniTalk:{Tools:{},UI:{Dom:{}},Store:{get:()=>({})},Realtime:{}}};

@@ -38,7 +38,7 @@ MiniTalk.Tools.FaceToy = (() => {
 
   function audio() {
     try {
-      const C = window.AudioContext || window.webkitAudioContext; if (!C) return null;
+      const w = viewWindow(); const C = w.AudioContext || w.webkitAudioContext; if (!C) return null;
       if (!audioContext) audioContext = new C();
       if (audioContext.state === "suspended") audioContext.resume().catch(() => {});
       return audioContext;
@@ -66,6 +66,8 @@ MiniTalk.Tools.FaceToy = (() => {
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const doc = () => activeDoc || MiniTalk.UI?.Dom?.doc?.() || document;
+  const viewWindow = () => doc().defaultView || window;
+  const mediaDevices = () => viewWindow().navigator?.mediaDevices;
   const dom = () => MiniTalk.UI.Dom.forDocument(doc());
   const shell = () => MiniTalk.UI.Shell.forDocument(doc());
 
@@ -134,8 +136,8 @@ MiniTalk.Tools.FaceToy = (() => {
   }
 
   async function startCamera(nextFacing = facing) {
-    const mediaDevices = activeDoc?.defaultView?.navigator?.mediaDevices;
-    if (!mediaDevices?.getUserMedia) {
+    const media = mediaDevices();
+    if (!media?.getUserMedia) {
       setStatus("이 기기에서는 카메라를 열 수 없어요. 사진을 불러와 주세요.", true);
       return false;
     }
@@ -146,13 +148,13 @@ MiniTalk.Tools.FaceToy = (() => {
     const ideal = { audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 1280 } } };
     try {
       /* 휴대폰에서는 exact를 먼저 써야 전/후면 전환 요청이 같은 카메라로 무시되는 경우가 줄어듭니다. */
-      stream = await mediaDevices.getUserMedia(exact);
+      stream = await media.getUserMedia(exact);
     } catch (exactError) {
       try {
-        stream = await mediaDevices.getUserMedia(ideal);
+        stream = await media.getUserMedia(ideal);
       } catch (idealError) {
         try {
-          stream = await mediaDevices.getUserMedia({ audio: false, video: true });
+          stream = await media.getUserMedia({ audio: false, video: true });
         } catch (error) {
           setStatus("카메라를 열지 못했어요. 권한을 확인하거나 사진을 불러와 주세요.", true);
           return false;
@@ -389,9 +391,10 @@ MiniTalk.Tools.FaceToy = (() => {
 
   async function detectFaces(target) {
     if (!target?.width) return [];
-    if (typeof window.FaceDetector === "function") {
+    const FaceDetectorCtor = viewWindow().FaceDetector;
+    if (typeof FaceDetectorCtor === "function") {
       try {
-        const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 4 });
+        const detector = new FaceDetectorCtor({ fastMode: true, maxDetectedFaces: 4 });
         const found = await detector.detect(target);
         return found.map(item => {
           const b = item.boundingBox;

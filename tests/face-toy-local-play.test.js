@@ -9,8 +9,8 @@ const face=read('js/tools/face-toy.js'),tools=read('js/features/tools.js'),confi
 ok(tools.includes('id: "face-toy"')&&tools.includes('openCameraTool(MiniTalk.Tools.FaceToy, \"페이스 체인지\")'),'face toy tool entry missing');
 ok(!tools.includes('id: "motion-math"'),'motion game must leave main tools grid');
 ok(config.includes('{name:"동작 인식 게임",url:"https://langret100.github.io/Math-in-Math/"}'),'motion game related link missing');
-ok(html.includes('css/features/face-toy.css?v=6')&&html.includes('js/tools/face-toy.js?v=6'),'face toy assets not loaded');
-ok(html.indexOf('js/tools/face-toy.js?v=6')<html.indexOf('js/tools/lookalike-play.js?v=4')&&html.indexOf('js/tools/lookalike-play.js?v=4')<html.indexOf('js/features/tools.js?v=64.5.14'),'face toy module must load before tools feature');
+ok(html.includes('css/features/face-toy.css?v=6')&&html.includes('js/tools/face-toy.js?v=7'),'face toy assets not loaded');
+ok(html.indexOf('js/tools/face-toy.js?v=7')<html.indexOf('js/tools/lookalike-play.js?v=5')&&html.indexOf('js/tools/lookalike-play.js?v=5')<html.indexOf('js/features/tools.js?v=64.5.15'),'face toy module must load before tools feature');
 ok(sw.includes('./css/features/face-toy.css')&&sw.includes('./js/tools/face-toy.js'),'face toy offline assets missing');
 
 // 로컬 전용: 자체 fetch/API/Firebase 경로가 없어야 하며, 공유 시 기존 Realtime.sendMessage만 재사용한다.
@@ -24,6 +24,7 @@ ok(face.includes('CHAT_DATA_LIMIT = 60 * 1024')&&face.includes('44 * 1024'),'cha
 ok(face.includes('let facing = "user"'),'front camera is not default');
 ok(face.includes('startCamera("user")'),'open must start front camera');
 ok(face.includes('facing === "user" ? "environment" : "user"'),'front/rear switch missing');
+ok(face.includes('const media = mediaDevices()')&&face.includes('doc().defaultView || window'),'popup camera must use active document mediaDevices');
 ok(face.includes('facingMode: { exact: facing }')&&face.includes('facingMode: { ideal: facing }'),'camera switch fallback chain missing');
 ok(face.includes('stream.getTracks().forEach(track => track.stop())'),'old camera stream is not stopped');
 ok(face.includes('video.classList.toggle("is-mirrored", facing === "user")'),'front preview mirror missing');
@@ -40,7 +41,7 @@ ok(css.includes('@media(max-width:340px)'),'290px/PiP responsive rules missing')
 
 
 // 놀이 피드백 효과음: 외부 음원 다운로드 없이 WebAudio 합성으로 촬영/효과/완료 피드백.
-ok(face.includes('window.AudioContext || window.webkitAudioContext'),'face toy local audio synth missing');
+ok(face.includes('w.AudioContext || w.webkitAudioContext'),'face toy local audio synth missing');
 ok(face.includes('sound("shutter")')&&face.includes('sound("effect")')&&face.includes('sound("warp")')&&face.includes('sound("done")'),'face toy sound cues missing');
 ok(!/new Audio\(|assets\/sounds\//.test(face),'face toy should not add downloadable sound assets');
 

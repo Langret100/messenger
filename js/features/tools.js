@@ -85,91 +85,39 @@ MiniTalk.Features.Tools = (() => {
   function openCameraTool(module, title) {
     if (!module?.open) return;
     if (mobileCameraTool()) return module.open(refreshIfVisible);
+
     if (cameraToolPopup && !cameraToolPopup.closed) {
       if (cameraToolModule === module) { try { cameraToolPopup.focus(); } catch {} return; }
       try { cameraToolModule?.dispose?.(); cameraToolPopup.close(); } catch {}
     }
 
     /*
-     * PC/Chromebook 카메라 도구는 실제 same-origin 문서(camera-tool.html)에서 실행한다.
-     * 핵심은 "실제 문서의 load를 놓치지 않는 것"이다.
-     *
-     * 1) about:blank 팝업 핸들을 먼저 동기적으로 만든다.
-     * 2) 그 팝업 핸들에 load 리스너를 먼저 등록한다.
-     * 3) 그 뒤 camera-tool.html로 이동시킨다.
-     *
-     * 예전 document.write 방식처럼 빈 문서에 UI/CSS를 복제하지 않고, postMessage/ready
-     * handshake에도 의존하지 않는다. 따라서 빠른 캐시 로드나 PiP/일반창의 opener 차이와
-     * 상관없이 실제 camera-tool.html의 load가 끝난 뒤 정확히 한 번 마운트된다.
+     * PC/Chromebook은 camera-tool.html이 자기 자신을 부팅한다.
+     * 부모가 새창의 load/postMessage 타이밍을 붙잡아 UI를 주입하는 구조를 사용하지 않는다.
+     * tools.js는 팝업 생성과 크기/위치만 맡고, 실제 도구 마운트는 camera-tool.js가
+     * 같은 origin의 opener에 있는 모듈을 가져와 새 문서에 직접 실행한다.
      */
     const sourceDoc = MiniTalk.UI.Dom.doc();
     const sourceView = sourceDoc.defaultView || window;
     const bounds = cameraPopupBounds(sourceView);
     const toolId = cameraToolId(module);
-    const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-    const url = cameraToolUrl(toolId, token);
+    const url = cameraToolUrl(toolId, "");
     let popup = null;
-    let started = false;
-
-    const clearState = () => {
-      try { module.dispose?.(); } catch {}
-      if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; }
-    };
-    const closePopup = () => {
-      if (cameraToolPopup === popup) { cameraToolPopup = null; cameraToolModule = null; }
-      try { popup?.close(); } catch {}
-    };
-    const mountLoadedDocument = () => {
-      if (started || !popup || popup.closed || cameraToolPopup !== popup) return;
-      let d, root;
-      try {
-        d = popup.document;
-        if (!/\/camera-tool\.html$/i.test(d.location?.pathname || "")) return;
-        root = d.getElementById("cameraToolRoot");
-      } catch { return; }
-      if (!root) return;
-      started = true;
-      d.title = title || "카메라 놀이";
-      root.replaceChildren();
-      Promise.resolve(module.open(closePopup, { host: root, doc: d, separate: true })).catch(error => {
-        console.error("카메라 도구 실행 실패", error);
-        try {
-          root.innerHTML = '<div class="camera-tool-loading camera-tool-error">카메라 도구를 열지 못했어요.<br><button type="button" id="cameraToolRetry">다시 시도</button></div>';
-          root.querySelector("#cameraToolRetry")?.addEventListener("click", () => popup.location.reload());
-        } catch {}
-      });
-      try { popup.focus(); } catch {}
-    };
 
     try {
-      /* 빈 팝업을 먼저 확보해야 실제 페이지의 load 전에 리스너를 걸 수 있다. */
-      popup = sourceView.open(
-        "about:blank",
+      /* 반드시 원래 앱 window가 opener가 되게 한다. Document PiP window를 opener로 쓰지 않는다. */
+      popup = window.open(
+        url,
         "MoaruCameraPlay",
         `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`
       );
     } catch {}
-    if (!popup) return module.open(refreshIfVisible);
 
+    if (!popup) return module.open(refreshIfVisible);
     cameraToolPopup = popup;
     cameraToolModule = module;
-    popup.addEventListener("load", mountLoadedDocument);
-    popup.addEventListener("pagehide", () => {
-      /* camera-tool.html로 이동하는 첫 pagehide는 무시하고, 실제 도구 문서가 닫힐 때만 정리한다. */
-      if (started) clearState();
-    });
     enforceCameraPopupBounds(popup, bounds);
-
-    try {
-      popup.location.replace(url);
-    } catch {
-      try { popup.location.href = url; }
-      catch {
-        clearState();
-        try { popup.close(); } catch {}
-        return module.open(refreshIfVisible);
-      }
-    }
+    try { popup.focus(); } catch {}
   }
 
   function render(host) {

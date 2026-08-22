@@ -10,5 +10,5 @@ ok(drag.includes('doc.addEventListener("mousemove",move,{passive:false})'),'docu
 ok(wm.includes('preferInitialWindowPlacement:true'),'PiP must prefer requested initial placement/size');
 ok(!wm.includes('pipWindow.resizeTo?.(')&&!wm.includes('resizeTo(PIP_BOUNDS.width'),'PiP must not resize after requestWindow');
 ok(wm.includes('body{visibility:hidden!important}')&&wm.includes('await copyStyles(doc)')&&wm.includes('boot.remove()'),'PiP single-paint boot guard missing');
-ok(html.includes('drag-scroll.js?v=11')&&html.includes('tools.js?v=64.5.14')&&html.includes('window-mode.js?v=64.5.40'),'v101 cache refs stale');
+ok(html.includes('drag-scroll.js?v=11')&&html.includes('tools.js?v=64.5.15')&&html.includes('window-mode.js?v=64.5.40'),'v101 cache refs stale');
 console.log('V101_TOOLS_PIP_REAL_FIX_OK');

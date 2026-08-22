@@ -10,8 +10,8 @@ ok(tools.includes('id: "lookalike"')&&tools.includes('openCameraTool(MiniTalk.To
 ok(!tools.includes('id: "playground"'),'online playground must be moved out of main tool grid');
 ok(config.includes('{name:"온라인 놀이터",url:"https://langret100.github.io/multiroom-playground/"}'),'online playground related link missing');
 ok(config.includes('{name:"동작 인식 게임",url:"https://langret100.github.io/Math-in-Math/"}'),'motion game related link missing');
-ok(html.includes('css/features/lookalike-play.css?v=5')&&html.includes('js/tools/lookalike-play.js?v=4'),'lookalike assets missing');
-ok(html.indexOf('js/tools/lookalike-play.js?v=4')<html.indexOf('js/features/tools.js?v=64.5.14'),'lookalike module must load before tools feature');
+ok(html.includes('css/features/lookalike-play.css?v=5')&&html.includes('js/tools/lookalike-play.js?v=5'),'lookalike assets missing');
+ok(html.indexOf('js/tools/lookalike-play.js?v=5')<html.indexOf('js/features/tools.js?v=64.5.15'),'lookalike module must load before tools feature');
 ok(sw.includes('./css/features/lookalike-play.css')&&sw.includes('./js/tools/lookalike-play.js'),'lookalike offline shell assets missing');
 
 // 프라이버시: 로컬 영구 저장/기존 서버 업로드 금지. 온라인 요청은 Commons 공개 검색어만 사용.
@@ -27,6 +27,7 @@ ok(!code.includes('toDataURL(')&&!code.includes('toBlob('),'captured face must n
 // 모바일 카메라: 전면 기본, 전/후면 전환, 이전 stream 종료, 미리보기만 mirror.
 ok(code.includes('let facing = "user"')&&code.includes('startCamera("user")'),'front camera default missing');
 ok(code.includes('facing==="user"?"environment":"user"'),'camera switch missing');
+ok(code.includes('const media=mediaDevices()')&&code.includes('doc().defaultView || window'),'popup camera must use active document mediaDevices');
 ok(code.includes('facingMode:{exact:facing}')&&code.includes('facingMode:{ideal:facing}'),'camera facing fallback missing');
 ok(code.includes('stream.getTracks().forEach(track=>track.stop())'),'camera stream stop missing');
 ok(code.includes('video.classList.toggle("is-mirrored",facing==="user")'),'front mirror preview missing');

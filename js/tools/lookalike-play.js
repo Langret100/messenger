@@ -33,7 +33,7 @@ MiniTalk.Tools.LookalikePlay = (() => {
 
   function audio(){
     try{
-      const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
+      const w=viewWindow(),C=w.AudioContext||w.webkitAudioContext;if(!C)return null;
       if(!audioContext) audioContext=new C();
       if(audioContext.state==="suspended") audioContext.resume().catch(()=>{});
       return audioContext;
@@ -102,6 +102,8 @@ MiniTalk.Tools.LookalikePlay = (() => {
   ];
 
   const doc = () => activeDoc || MiniTalk.UI?.Dom?.doc?.() || document;
+  const viewWindow = () => doc().defaultView || window;
+  const mediaDevices = () => viewWindow().navigator?.mediaDevices;
   const dom = () => MiniTalk.UI.Dom.forDocument(doc());
   const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -113,15 +115,14 @@ MiniTalk.Tools.LookalikePlay = (() => {
   }
 
   async function startCamera(nextFacing=facing){
-    const mediaDevices=activeDoc?.defaultView?.navigator?.mediaDevices;
-    if(!mediaDevices?.getUserMedia){setStatus("카메라를 쓸 수 없어요.",true);return false}
+    const media=mediaDevices();if(!media?.getUserMedia){setStatus("카메라를 쓸 수 없어요.",true);return false}
     stopCamera();
     facing=nextFacing;
     const exact={audio:false,video:{facingMode:{exact:facing},width:{ideal:1280},height:{ideal:1280}}};
     const ideal={audio:false,video:{facingMode:{ideal:facing},width:{ideal:1280},height:{ideal:1280}}};
-    try{stream=await mediaDevices.getUserMedia(exact)}catch{
-      try{stream=await mediaDevices.getUserMedia(ideal)}catch{
-        try{stream=await mediaDevices.getUserMedia({audio:false,video:true})}catch{setStatus("카메라 권한을 확인해 줘.",true);return false}
+    try{stream=await media.getUserMedia(exact)}catch{
+      try{stream=await media.getUserMedia(ideal)}catch{
+        try{stream=await media.getUserMedia({audio:false,video:true})}catch{setStatus("카메라 권한을 확인해 줘.",true);return false}
       }
     }
     const actual=stream.getVideoTracks?.()[0]?.getSettings?.().facingMode;

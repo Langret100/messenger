@@ -10,7 +10,7 @@ ok(tools.includes('openCameraTool(MiniTalk.Tools.FaceToy')&&tools.includes('open
 ok(tools.includes('gap = 42')&&tools.includes('scrollbars=no')&&tools.includes('MoaruCameraPlay'),'camera popup must avoid messenger with 42px gap and hide chrome scrollbars');
 ok(tools.includes('popup = window.open(')&&!tools.includes('sourceView.open('),'popup must be opened by the original app window so camera-tool gets the real app as opener');
 ok(!tools.includes('popup.addEventListener("load"')&&!tools.includes('.postMessage(')&&!tools.includes('.write(`<!doctype html>'),'parent must not mount camera UI through load/postMessage/document.write timing');
-ok(cameraShell.includes('id="cameraToolRoot"')&&cameraShell.includes('camera-tool-window.css?v=1')&&cameraShell.includes('js/tools/camera-tool.js?v=1'),'same-origin camera shell must load its own responsive shell and bootstrap');
+ok(cameraShell.includes('id="cameraToolRoot"')&&cameraShell.includes('camera-tool-window.css?v=1')&&cameraShell.includes('js/tools/camera-tool.js?v=2'),'same-origin camera shell must load its own responsive shell and bootstrap');
 ok(cameraBoot.includes('window.opener')&&cameraBoot.includes('owner.location.origin !== location.origin'),'camera shell must self-bootstrap only from same-origin opener');
 ok(cameraBoot.includes('module.open(() => window.close(), { host: root, doc: document, separate: true })'),'camera shell must mount the selected tool into its own document');
 ok(cameraBoot.includes('module?.dispose?.()')&&cameraBoot.includes('pagehide'),'camera shell must dispose the camera stream when its window closes');

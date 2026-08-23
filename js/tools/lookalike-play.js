@@ -76,6 +76,11 @@ MiniTalk.Tools.LookalikePlay = (() => {
     { id:"ferret", kind:"animal", ko:"페럿", emoji:"🐾", query:"ferret animal portrait", vibe:"날렵하고 장난기 있는 느낌" },
     { id:"fennec", kind:"animal", ko:"사막여우", emoji:"🦊", query:"fennec fox animal portrait", vibe:"귀가 쫑긋한 듯 또렷한 느낌" },
     { id:"sloth", kind:"animal", ko:"나무늘보", emoji:"🦥", query:"sloth animal portrait", vibe:"여유롭고 느긋한 분위기" },
+    { id:"pigbutt-worm", kind:"animal", ko:"돼지엉덩이벌레", emoji:"🪱", query:"Chaetopterus pugaporcinus pigbutt worm", vibe:"이름부터 결과 화면을 두 번 보게 만드는 심해 생물" },
+    { id:"pitted-leucothoid", kind:"animal", ko:"곰보병신옆새우", emoji:"🦐", query:"Paranamixis denticulus amphipod", vibe:"실제 국명이 맞나 다시 확인하게 되는 조그만 옆새우" },
+    { id:"polemistus-abnormis", kind:"animal", ko:"병신꼬마구멍벌", emoji:"🐝", query:"Polemistus abnormis wasp", vibe:"이름은 강렬하지만 실제로 존재하는 꼬마구멍벌" },
+    { id:"dog-fly", kind:"animal", ko:"개이파리", emoji:"🪰", query:"Hippobosca longipennis dog fly", vibe:"듣자마자 식물인지 동물인지 헷갈리는 이름" },
+    { id:"chirolophis-japonicus", kind:"animal", ko:"괴도라치", emoji:"🐟", query:"Chirolophis japonicus fish", vibe:"괴도처럼 들리지만 진짜 물고기 이름" },
     { id:"sunflower", kind:"plant", ko:"해바라기", emoji:"🌻", query:"sunflower flower", vibe:"밝고 에너지 넘치는 분위기" },
     { id:"daisy", kind:"plant", ko:"데이지", emoji:"🌼", query:"daisy flower", vibe:"가볍고 맑은 느낌" },
     { id:"lavender", kind:"plant", ko:"라벤더", emoji:"🪻", query:"lavender flowers", vibe:"차분하고 부드러운 분위기" },
@@ -98,7 +103,13 @@ MiniTalk.Tools.LookalikePlay = (() => {
     { id:"moss", kind:"plant", ko:"이끼", emoji:"🌱", query:"green moss plant macro", vibe:"조용하고 포근한 자연 느낌" },
     { id:"waterlily", kind:"plant", ko:"수련", emoji:"🪷", query:"water lily flower", vibe:"잔잔하고 몽글한 분위기" },
     { id:"poppy", kind:"plant", ko:"양귀비", emoji:"🌺", query:"poppy flower", vibe:"선명하고 자유로운 느낌" },
-    { id:"bluebell", kind:"plant", ko:"블루벨", emoji:"🪻", query:"bluebell flowers", vibe:"맑고 살짝 신비로운 느낌" }
+    { id:"bluebell", kind:"plant", ko:"블루벨", emoji:"🪻", query:"bluebell flowers", vibe:"맑고 살짝 신비로운 느낌" },
+    { id:"spiraea", kind:"plant", ko:"조팝나무", emoji:"🌼", query:"Spiraea prunifolia var. simpliciflora flowers", vibe:"하얀 꽃이 소복하게 피는 밝고 포근한 분위기" },
+    { id:"sonnenschirm", kind:"plant", ko:"존넨쉬름", emoji:"🌹", query:"Sonnenschirm rose Tantau", vibe:"한국어로 읽으면 괜히 한 번 더 웃게 되는 장미 이름" },
+    { id:"viburnum-odoratissimum", kind:"plant", ko:"아왜나무", emoji:"🌿", query:"Viburnum odoratissimum var. awabuki plant flowers", vibe:"결과가 뜨면 자동으로 ‘아 왜?’가 나올 것 같은 이름" },
+    { id:"lycopus-ramosissimus", kind:"plant", ko:"개쉽싸리", emoji:"🌱", query:"Lycopus ramosissimus plant", vibe:"소리 내어 읽을수록 묘하게 강해지는 실제 식물 이름" },
+    { id:"centipeda-minima", kind:"plant", ko:"중대가리풀", emoji:"🌱", query:"Centipeda minima plant", vibe:"작고 동그란 꽃차례 때문에 이름까지 범상치 않은 풀" },
+    { id:"persicaria-perfoliata", kind:"plant", ko:"며느리배꼽", emoji:"🌿", query:"Persicaria perfoliata plant fruit", vibe:"이름의 사연까지 궁금해지는 독특한 덩굴식물" }
   ];
 
   const doc = () => activeDoc || MiniTalk.UI?.Dom?.doc?.() || document;

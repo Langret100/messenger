@@ -127,7 +127,7 @@ MiniTalk.AuthApi = (() => {
         user_id: userId,
         random_purchase: randomPurchase ? "1" : "",
         product_id: product?.id || "",
-        price: randomPurchase ? Number(price || 3) : product?.price,
+        price: randomPurchase ? Number(price || 5) : product?.price,
         expected_name: product?.name || "",
         expected_description: product?.description || "",
         expected_updated_at: product?.updatedAt || 0,

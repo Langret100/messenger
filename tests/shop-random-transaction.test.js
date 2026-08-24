@@ -9,7 +9,7 @@ const normalize=p=>({id:String(p?.id||''),name:String(p?.name||''),description:S
 const ctx={
   console,
   Math:Object.create(Math),
-  SHOP_RANDOM_PURCHASE_PRICE:3,
+  SHOP_RANDOM_PURCHASE_PRICE:5,
   requireRegisteredShopUser_:id=>String(id||''),
   shopJson_:x=>x,
   LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},
@@ -29,16 +29,16 @@ const reset=(coin=10)=>{state.catalog={};state.coin=coin;state.logs=[];state.inv
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 
 reset(10);state.catalog={a:{id:'a',name:'싼상품',price:2,active:true},b:{id:'b',name:'비싼상품',price:9,active:true}};ctx.Math.random=()=>0.99;
-let r=call({user_id:'u',random_purchase:'1',price:'3',purchase_key:'k1'});
-ok(r.ok&&r.price===3&&r.original_price===9,'random purchase did not award current-catalog product at 3 coin');
-ok(state.coin===7&&state.deductions===1&&state.inventory.size===1,'3 coin deduction/inventory write mismatch');
-let d=call({user_id:'u',random_purchase:'1',price:'3',purchase_key:'k1'});
-ok(d.ok&&d.applied===false&&state.coin===7&&state.deductions===1&&state.inventory.size===1,'duplicate random purchase charged twice');
+let r=call({user_id:'u',random_purchase:'1',price:'5',purchase_key:'k1'});
+ok(r.ok&&r.price===5&&r.original_price===9,'random purchase did not award current-catalog product at 5 coin');
+ok(state.coin===5&&state.deductions===1&&state.inventory.size===1,'5 coin deduction/inventory write mismatch');
+let d=call({user_id:'u',random_purchase:'1',price:'5',purchase_key:'k1'});
+ok(d.ok&&d.applied===false&&state.coin===5&&state.deductions===1&&state.inventory.size===1,'duplicate random purchase charged twice');
 
-reset(2);state.catalog={a:{id:'a',name:'상품',price:1,active:true}};r=call({user_id:'u',random_purchase:'1',price:'3',purchase_key:'lowcoin'});
+reset(2);state.catalog={a:{id:'a',name:'상품',price:1,active:true}};r=call({user_id:'u',random_purchase:'1',price:'5',purchase_key:'lowcoin'});
 ok(!r.ok&&r.error==='INSUFFICIENT_COIN'&&state.coin===2&&state.inventory.size===0,'insufficient coin path is unsafe');
 
-reset(10);state.catalog={};r=call({user_id:'u',random_purchase:'1',price:'3',purchase_key:'empty'});
+reset(10);state.catalog={};r=call({user_id:'u',random_purchase:'1',price:'5',purchase_key:'empty'});
 ok(!r.ok&&r.error==='NO_RANDOM_PRODUCTS'&&state.coin===10,'empty catalog charged coins');
 
 reset(10);state.catalog={a:{id:'a',name:'일반',description:'d',price:5,updatedAt:7,active:true}};

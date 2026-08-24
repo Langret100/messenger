@@ -93,13 +93,13 @@ MiniTalk.Features.Shopping = (() => {
       D.el("span", { class: "shop-market-mark random-mark", text: "?" }),
       D.el("div", { class: "shop-market-copy" }, [
         D.el("strong", { text: "랜덤구매" }),
-        D.el("small", { text: guest ? "로그인하고 3코인 랜덤구매를 이용해보세요" : "3코인으로 등록 상품 하나를 무작위로 뽑아요" })
+        D.el("small", { text: guest ? "로그인하고 5코인 랜덤구매를 이용해보세요" : "5코인으로 등록 상품 하나를 무작위로 뽑아요" })
       ]),
       D.el("span", { class: "shop-market-count", text: count ? `${count}개 상품` : "준비 중" })
     ]);
   }
 
-  const RANDOM_COST = 3;
+  const RANDOM_COST = 5;
   let randomAudioContext = null;
 
   function randomAudio() {
@@ -164,7 +164,7 @@ MiniTalk.Features.Shopping = (() => {
     ]);
     const windowEl=D.el("div", { class:"shop-random-window" });
     const strip=D.el("div", { class:"shop-random-strip" });
-    const tap=D.el("div", { class:"shop-random-tap" }, [D.el("strong",{text:"눌러서 뽑기"}),D.el("small",{text:"3코인 · 한 번 뽑기"})]);
+    const tap=D.el("div", { class:"shop-random-tap" }, [D.el("strong",{text:"눌러서 뽑기"}),D.el("small",{text:"5코인 · 한 번 뽑기"})]);
     const status=D.el("div", { class:"shop-random-status" }, [D.el("strong",{text:""}),D.el("small",{text:""})]);
     const footer=D.el("small",{class:"shop-random-foot",text:`현재 ${products.length}개 상품 중 하나가 나와요`});
     windowEl.append(strip,tap); card.append(top,windowEl,status,footer); overlay.append(card);

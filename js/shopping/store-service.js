@@ -106,7 +106,7 @@ MiniTalk.Shopping.StoreService = (() => {
     pendingPurchaseKeys.set(pendingKey,purchaseKey);
     let result;
     try {
-      result=await MiniTalk.AuthApi.shopPurchase({userId:current.user_id,product:null,purchaseKey,randomPurchase:true,price:3});
+      result=await MiniTalk.AuthApi.shopPurchase({userId:current.user_id,product:null,purchaseKey,randomPurchase:true,price:5});
     } catch(error) {
       if(["PRODUCT_NOT_AVAILABLE","NO_RANDOM_PRODUCTS"].includes(error?.code))await refreshCatalog(true).catch(()=>{});
       if(error?.code!=="REQUEST_TIMEOUT")pendingPurchaseKeys.delete(pendingKey);
@@ -117,10 +117,10 @@ MiniTalk.Shopping.StoreService = (() => {
       name:result.product_name||result.item?.name,
       description:result.product_description||result.item?.description||"",
       imageUrl:result.product_image_url||result.item?.imageUrl||"",
-      price:result.original_price||result.item?.originalPrice||result.item?.price||3,
+      price:result.original_price||result.item?.originalPrice||result.item?.price||5,
       updatedAt:result.product_updated_at||0
     });
-    const stored=result.item||{productId:won.id,name:won.name,description:won.description,imageUrl:won.imageUrl,price:3,purchaseKey,purchasedAt:Date.now(),createdAt:Date.now()};
+    const stored=result.item||{productId:won.id,name:won.name,description:won.description,imageUrl:won.imageUrl,price:5,purchaseKey,purchasedAt:Date.now(),createdAt:Date.now()};
     await MiniTalk.Realtime.addShopInventory(current.user_id,stored);
     await refreshInventory(true).catch(()=>{});
     const balance=result.newCoin??result.coin??result.balance;

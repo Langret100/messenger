@@ -2,6 +2,8 @@ const fs=require('fs'),path=require('path'),root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
 const admin=read('js/features/admin.js'),index=read('index.html');
 ok(admin.includes("querySelectorAll('link[rel~=\"stylesheet\"][href]')"),'admin popup does not clone stylesheet link elements from the source document');
+ok(admin.includes('styles=adminPopupStyles(document)'),'admin popup must source stylesheet links from the canonical app document, not the PiP host document');
+ok(admin.includes('baseHref=String(document.baseURI||sourceDoc.baseURI)'),'admin popup asset base must prefer the canonical app document');
 ok(admin.includes('function waitForAdminPopupStyles(doc)'),'admin popup does not wait for stylesheet loading');
 ok(admin.includes('link.addEventListener("load",done,{once:true})'),'stylesheet load completion is not observed');
 ok(admin.includes('<style>${critical}</style>${styles}</head>'),'critical popup CSS and stylesheet links are not part of the initial popup head');

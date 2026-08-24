@@ -25,23 +25,16 @@ MiniTalk.Features.Admin=(()=>{
   }
   function waitForAdminPopupStyles(doc){
     const links=[...doc.querySelectorAll('link[rel~="stylesheet"]')];
-    const waitPaint=()=>new Promise(resolve=>{
-      const view=doc.defaultView;
-      if(!view?.requestAnimationFrame)return resolve();
-      view.requestAnimationFrame(()=>view.requestAnimationFrame(resolve));
-    });
-    if(!links.length)return waitPaint();
+    if(!links.length)return Promise.resolve();
     return Promise.allSettled(links.map(link=>new Promise(resolve=>{
-      let finished=false,timer=0;
-      const done=()=>{if(finished)return;finished=true;clearTimeout(timer);link.removeEventListener("load",done);link.removeEventListener("error",done);resolve()};
-      const ready=()=>{try{return Boolean(link.sheet&&link.sheet.cssRules)}catch{return false}};
+      if(link.sheet)return resolve();
+      const done=()=>resolve();
       link.addEventListener("load",done,{once:true});link.addEventListener("error",done,{once:true});
-      if(ready())return done();
-      timer=setTimeout(done,1800)
-    }))).then(waitPaint).then(()=>undefined)
+      setTimeout(done,1800)
+    }))).then(()=>undefined)
   }
   function buildAdminPopup(host,popup,bounds,{loading=false}={}){
-    const sourceDoc=host?.ownerDocument||MiniTalk.UI.Dom.doc(),doc=popup.document,theme=sourceDoc.documentElement?.dataset?.theme||"light",styles=adminPopupStyles(sourceDoc),baseHref=String(sourceDoc.baseURI||document.baseURI).replace(/&/g,"&amp;").replace(/'/g,"%27"),critical="html,body{width:100%;min-height:100%;margin:0}body.admin-window-body{min-height:100vh;overflow:hidden;background:#edf1f7;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.admin-window-shell{width:100%;height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden}.admin-window-shell .app-header{min-height:52px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#fff;border-bottom:1px solid #e3e7ee}.admin-window-shell .header-title{display:flex;align-items:center;gap:7px;min-width:0}.admin-window-shell .view-host{min-width:0;min-height:0;overflow:auto}.admin-window-shell #adminWindowView:empty::before{content:\"관리자 화면 불러오는 중…\";display:block;margin:18px;padding:16px;border-radius:14px;background:#fff;color:#667085;font-size:13px}";
+    const sourceDoc=host?.ownerDocument||MiniTalk.UI.Dom.doc(),doc=popup.document,theme=sourceDoc.documentElement?.dataset?.theme||"light",styles=adminPopupStyles(document),baseHref=String(document.baseURI||sourceDoc.baseURI).replace(/&/g,"&amp;").replace(/'/g,"%27"),critical="html,body{width:100%;min-height:100%;margin:0}body.admin-window-body{min-height:100vh;overflow:hidden;background:#edf1f7;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.admin-window-shell{width:100%;height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden}.admin-window-shell .app-header{min-height:52px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#fff;border-bottom:1px solid #e3e7ee}.admin-window-shell .header-title{display:flex;align-items:center;gap:7px;min-width:0}.admin-window-shell .view-host{min-width:0;min-height:0;overflow:auto}.admin-window-shell #adminWindowView:empty::before{content:\"관리자 화면 불러오는 중…\";display:block;margin:18px;padding:16px;border-radius:14px;background:#fff;color:#667085;font-size:13px}";
     doc.open();doc.write(`<!doctype html><html lang="ko" data-theme="${theme}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><base href="${baseHref}"><style>${critical}</style>${styles}</head><body class="admin-window-body"><section class="app-shell admin-window-shell"><header class="app-header"><button id="backBtn" class="icon-button" aria-label="관리자 창 닫기">‹</button><div class="header-title"><strong id="headerTitle">관리자</strong><span id="connectionBadge" class="connection-badge">온라인</span></div><div id="headerActions" class="header-actions"></div></header><main id="adminWindowView" class="view-host"></main></section><div id="toastHost" class="toast-host" aria-live="polite"></div><div id="notificationHost" class="notification-host" aria-live="assertive"></div><div id="overlayHost" class="overlay-host" aria-live="assertive"></div><div id="modalHost" class="modal-host hidden"></div></body></html>`);doc.close();
     adminPopup=popup;adminPopupRoot=doc.getElementById("adminWindowView");
     if(loading)adminPopupRoot.replaceChildren(MiniTalk.UI.Dom.forDocument(doc).el("section",{class:"view"},[MiniTalk.UI.Dom.forDocument(doc).el("div",{class:"card-list"},[MiniTalk.UI.Dom.forDocument(doc).el("section",{class:"tool-card"},[MiniTalk.UI.Dom.forDocument(doc).el("strong",{text:"관리자 인증 중…"}),MiniTalk.UI.Dom.forDocument(doc).el("small",{class:"muted",text:"인증이 끝나면 이 창에서 관리자 화면을 엽니다."})])])]))

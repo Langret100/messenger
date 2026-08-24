@@ -16,7 +16,7 @@ ctx.MiniTalk.Economy={CoinWallet:{refresh:async()=>{calls.push(['coin-refresh'])
 ctx.MiniTalk.Tools={Notifications:{notifyGift:item=>calls.push(['gift-notify',item.id])}};
 ctx.MiniTalk.Persistence={get:(key,fallback)=>persisted.has(key)?persisted.get(key):fallback,set:(key,value)=>persisted.set(key,value)};
 ctx.MiniTalk.AuthApi={
-  shopPurchase:async payload=>{calls.push(['purchase',payload]);if(rejectPurchase)throw new Error('server rejected');return{ok:true,newCoin:75}},
+  shopPurchase:async payload=>{calls.push(['purchase',payload]);if(rejectPurchase)throw new Error('server rejected');const product=payload.product||{id:'random',name:'랜덤',price:5};return{ok:true,newCoin:75,item:{id:'server-inv-'+product.id,productId:product.id,name:product.name,description:product.description||'',price:product.price||5,purchaseKey:payload.purchaseKey,createdAt:Date.now()}}},
   shopCatalog:async()=>[{id:'server-product',name:'서버 상품',price:40,description:'서버 저장',image_url:'https://example.com/product.webp'}],
   shopSaveProduct:async(userId,token,product)=>{calls.push(['save-product',userId,token,product]);return{ok:true,product}},
   shopDeleteProduct:async(userId,token,id)=>{calls.push(['delete-product',userId,token,id]);return{ok:true}},
@@ -74,7 +74,8 @@ ctx.MiniTalk.Events.on('state:shopInventory',()=>{inventoryStateChanges++});
   if(service.recipients().map(x=>x.user_id).join(',')!=='user-b')throw new Error('gift recipients must exclude self and guests');
 
   await service.purchase({id:'cheap',name:'연필',description:'연필 한 자루',price:25,updatedAt:12345});
-  if(!calls.some(x=>x[0]==='purchase')||!calls.some(x=>x[0]==='add'&&x[1]==='user-a'))throw new Error('approved purchase must add inventory');
+  if(!calls.some(x=>x[0]==='purchase'))throw new Error('approved purchase was not sent to Apps Script');
+  if(calls.some(x=>x[0]==='add'))throw new Error('authoritative purchase must not create a persistent Realtime mirror');
   const purchaseCall=calls.find(x=>x[0]==='purchase');
   if(purchaseCall[1].product?.updatedAt!==12345||purchaseCall[1].product?.description!=='연필 한 자루')throw new Error('purchase must send the visible product snapshot');
   if(calls.some(x=>x[0]==='coin-refresh'))throw new Error('purchase must not make a redundant balance request before the authoritative server purchase');

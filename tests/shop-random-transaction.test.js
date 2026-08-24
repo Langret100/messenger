@@ -10,7 +10,7 @@ const ctx={
   console,
   Math:Object.create(Math),
   SHOP_RANDOM_PURCHASE_PRICE:5,
-  requireRegisteredShopUser_:id=>String(id||''),
+  requireRegisteredShopUser_:id=>String(id||''),requireKnownMoaruUser_:id=>String(id||''),requireKnownMoaruUserCached_:id=>String(id||''),
   shopJson_:x=>x,
   LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},
   getOrCreateShopPurchaseLogSheet_:()=>({appendRow:r=>state.logs.push({purchaseKey:r[0],userId:r[1],productId:r[2],productName:r[3],price:r[4],beforeCoin:r[5],newCoin:r[6]})}),
@@ -21,9 +21,12 @@ const ctx={
   clearPendingShopPurchase_:()=>{},rememberPendingShopPurchase_:()=>{},
   getRewardUserData_:()=>({coin:state.coin}),
   moaruCoinChangeGuarded_:(_,op,amount)=>{if(op==='remove'){if(state.coin<amount)return{success:false};state.coin-=amount;state.deductions++;return{success:true,newCoin:state.coin}}state.coin+=amount;state.adds++;return{success:true,newCoin:state.coin}},
+  moaruSpreadsheetRetry_:fn=>fn(),
   isNaN,parseInt,Number,String,Object,Date,
 };
 vm.createContext(ctx);vm.runInContext(code,ctx);
+ctx.findRewardUserForShop_=()=>({coin:state.coin});
+ctx.setRewardCoinForShopGuarded_=(_,newCoin)=>{const next=Number(newCoin);if(next<state.coin)state.deductions++;else if(next>state.coin)state.adds++;state.coin=next;return{success:true,newCoin:next}};
 const call=(params)=>ctx.handleShopPurchase({parameter:params});
 const reset=(coin=10)=>{state.catalog={};state.coin=coin;state.logs=[];state.inventory=new Map();state.deductions=0;state.adds=0};
 const ok=(v,m)=>{if(!v)throw new Error(m)};

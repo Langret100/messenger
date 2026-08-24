@@ -564,8 +564,8 @@ function writeShopInventoryItem_(userId, item, rowHint) {
   return hydrateShopInventoryItem_(compact, readShopCatalog_());
 }
 
-function deleteShopInventoryItem_(userId, inventoryId) {
-  const sheet = getOrCreateShopInventorySheet_(), row = findShopInventorySheetRow_(sheet, inventoryId);
+function deleteShopInventoryItem_(userId, inventoryId, rowHint) {
+  const sheet = getOrCreateShopInventorySheet_(), hinted = Math.floor(Number(rowHint) || 0), row = hinted >= 2 ? hinted : findShopInventorySheetRow_(sheet, inventoryId);
   if (!row) return false;
   const owner = String(sheet.getRange(row, 2).getValue() || "");
   if (owner !== String(userId || "")) return false;
@@ -647,7 +647,7 @@ function requireKnownMoaruUser_(userId, registeredUsers) {
 }
 function requireRegisteredShopUser_(userId, registeredUsers) {
   const id = requireKnownMoaruUser_(userId, registeredUsers);
-  return id && moaruSpreadsheetRetry_(function () { return getRewardUserData_(id); }) ? id : "";
+  return id && moaruSpreadsheetRetry_(function () { return findRewardUserForShop_(id); }) ? id : "";
 }
 
 /** POST mode=shop_inventory */
@@ -671,7 +671,10 @@ function handleShopGift(e) {
     if (receiptKey) { try { receipt = JSON.parse(receipts.getProperty(receiptKey) || "null"); } catch (error) { receipt = null; } }
     if (receipt && (receipt.userId !== userId || receipt.targetId !== targetId || receipt.inventoryId !== inventoryId)) return shopJson_({ ok: false, error: "GIFT_REQUEST_CONFLICT" });
     if (receipt && receipt.status === "done") return shopJson_(receipt.result);
-    let source = readShopInventory_(userId).filter(function (item) { return item.id === inventoryId; })[0];
+    // 선물 대상은 inventory_id가 이미 있으므로 사용자 보관함 전체를 읽지 않고 실제 시트의 해당 행만 확인합니다.
+    // 캐시된 보관함 상태가 아니라 현재 delivery/used 상태를 검증해 선물과 배송 상태가 엇갈리지 않게 합니다.
+    const sourceFound = findShopInventoryItemFresh_(userId, inventoryId);
+    let source = sourceFound && sourceFound.item;
     // v58까지 기기에만 남은 구매품은 구매로그로 소유권을 검증한 뒤 한 번만 서버 보관함으로 가져옵니다.
     if (!source && p.item_json) {
       try {
@@ -690,7 +693,7 @@ function handleShopGift(e) {
     const gift = Object.assign({}, source, { id: giftId, ownerId: targetId, giftedBy: userId, giftedByNickname: String(p.nickname || "").trim().slice(0, 30), giftedAt: now, createdAt: now });
     delete gift.usedAt;gift.deliveryStatus = "owned";delete gift.deliveryRequestedAt;delete gift.deliveryCompletedAt;delete gift.deliveryCancelledAt;delete gift.deliveryHandledBy;
     const savedGift = writeShopInventoryItem_(targetId, gift);
-    deleteShopInventoryItem_(userId, inventoryId);
+    deleteShopInventoryItem_(userId, inventoryId, sourceFound && sourceFound.row);
     setPurchaseOwner_(gift.purchaseKey, targetId, giftId);
     enqueueMoaruCommand_(targetId, "SHOP_GIFT", { itemId: savedGift.id, name: savedGift.name, giftedByNickname: savedGift.giftedByNickname }, userId, requestId ? "shop-gift-" + requestId : "");
     const result = { ok: true, item: savedGift, target_user_id: targetId };if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify({ status: "done", userId: userId, targetId: targetId, inventoryId: inventoryId, createdAt: now, result: result }));return shopJson_(result);
@@ -1293,10 +1296,31 @@ function pickWeightedShopProduct_(products) {
   return rows[rows.length - 1];
 }
 
+function findRewardUserForShop_(userId) {
+  const id = String(userId || "").trim(), sheet = getSheet_(REWARD_SHEET), lastRow = sheet.getLastRow();
+  if (!id || lastRow < 2) return null;
+  const match = sheet.getRange(2, COL_REWARD_USER_ID, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
+  if (!match) return null;
+  const row = match.getRow(), values = sheet.getRange(row, 1, 1, 3).getValues()[0];
+  if (String(values[COL_REWARD_USER_ID - 1] || "").trim() !== id) return null;
+  return { sheet: sheet, row: row, userId: id, username: String(values[COL_REWARD_USERNAME - 1] || ""), coin: parseInt(values[COL_REWARD_COIN - 1], 10) || 0 };
+}
+function setRewardCoinForShopGuarded_(reward, newCoin) {
+  const expected = Math.max(0, Math.floor(Number(newCoin) || 0));
+  try { reward.sheet.getRange(reward.row, COL_REWARD_COIN).setValue(expected);return { success: true, newCoin: expected }; }
+  catch (error) {
+    const message = String(error && error.message || error || "");
+    if (!/(?:Spreadsheet service|Service Spreadsheets|스프레드시트 서비스|문서에 액세스)/i.test(message)) throw error;
+    const actual = parseInt(moaruSpreadsheetRetry_(function () { return reward.sheet.getRange(reward.row, COL_REWARD_COIN).getValue(); }), 10) || 0;
+    if (actual === expected) return { success: true, newCoin: actual, recovered: true };
+    throw new Error("COIN_SHEET_TEMPORARY_ERROR");
+  }
+}
+
 /** POST mode=shop_purchase */
 function handleShopPurchase(e) {
   const p = (e && e.parameter) || {};
-  const userId = requireRegisteredShopUser_(p.user_id);
+  const userId = requireKnownMoaruUser_(p.user_id);
   const randomMode = String(p.random_purchase || "") === "1";
   const productId = String(p.product_id || "").trim();
   const purchaseKey = String(p.purchase_key || "").trim();
@@ -1339,16 +1363,16 @@ function handleShopPurchase(e) {
       chargePrice = product.price;
     }
 
-    const userData = getRewardUserData_(userId);
-    if (!userData) return shopJson_({ ok: false, error: "NO_REWARD_USER" });
-    const beforeCoin = parseInt(userData.coin, 10) || 0;
+    const reward = moaruSpreadsheetRetry_(function () { return findRewardUserForShop_(userId); });
+    // 기존 shop_purchase 계약 유지: 가입자는 있어도 보상(코인) 계정이 없으면 구매 자격 미충족으로 처리합니다.
+    if (!reward) return shopJson_({ ok: false, error: "MISSING_PARAM" });
+    const beforeCoin = reward.coin;
     if (beforeCoin < chargePrice) return shopJson_({ ok: false, error: "INSUFFICIENT_COIN", coin: beforeCoin });
-    const result = moaruCoinChangeGuarded_(userId, "remove", chargePrice);
-    if (!result || !result.success) return shopJson_({ ok: false, error: "COIN_DEDUCTION_FAILED" });
+    const result = setRewardCoinForShopGuarded_(reward, beforeCoin - chargePrice);
 
     try { logSheet.appendRow([purchaseKey, userId, product.id, product.name, chargePrice, beforeCoin, result.newCoin, new Date()]); }
     catch (logError) {
-      try { moaruCoinChangeGuarded_(userId, "add", chargePrice); } catch (rollbackError) { console.error("SHOP_ROLLBACK_FAILED", rollbackError); }
+      try { setRewardCoinForShopGuarded_(reward, beforeCoin); } catch (rollbackError) { console.error("SHOP_ROLLBACK_FAILED", rollbackError); }
       return shopJson_({ ok: false, error: "PURCHASE_LOG_FAILED" });
     }
 

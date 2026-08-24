@@ -8,7 +8,7 @@ const auth=fs.readFileSync(path.join(root,'js/adapters/auth-api.js'),'utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 ok(server.includes('SHOP_RANDOM_PURCHASE_PRICE = 5'),'random price must be 5');
 ok(server.includes('if (value <= 2) return 1.6')&&server.includes('if (value <= 5) return 1.0')&&server.includes('return 0.55'),'price-tier weights missing');
-ok(server.includes('moaruCoinChangeGuarded_(userId, "remove", chargePrice)'),'server coin deduction missing');
+ok(server.includes('setRewardCoinForShopGuarded_(reward, beforeCoin - chargePrice)'),'server coin deduction missing');
 ok(server.includes('createPurchasedInventory_(userId, inventoryProduct, purchaseKey)'),'server inventory award missing');
 ok(auth.includes('random_purchase: randomPurchase ? "1" : ""'),'random flag missing');
 ok(service.includes('MiniTalk.AuthApi.shopPurchase({userId:current.user_id,product:null,purchaseKey,randomPurchase:true,price:5})'),'client random purchase API missing');

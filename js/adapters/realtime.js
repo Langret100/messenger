@@ -576,6 +576,7 @@ MiniTalk.Realtime=(()=>{
   async function syncPendingShopInventory(){if(mode!=="firebase"||!firebaseAuthenticated)return;const inventory=localGet(`shop.inventory.${user.user_id}`,{}),pending=Object.values(inventory).filter(item=>item?.id&&item.pendingSync);for(const item of pending){const value={...item};delete value.pendingSync;await db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}/${item.id}`).set(value);delete inventory[item.id]}if(pending.length)localSet(`shop.inventory.${user.user_id}`,inventory)}
   async function addShopInventory(ownerId,item){
     await awaitTransport();
+    if(String(user?.user_id||"")!==String(ownerId||""))return null;
     requireWritableUser();
     const id=String(item.id||crypto.randomUUID()),value={...item,id,ownerId,createdAt:Number(item.createdAt)||Date.now()};
     if(mode==="firebase"&&firebaseAuthenticated&&!shopInventoryFallback){try{await db.ref(`${MiniTalkConfig.paths.shopInventory}/${ownerId}/${id}`).set(value);return value}catch(error){console.warn("보관함 서버 저장 실패, 동기화 대기열에 보존",error);enableShopInventoryFallback()}}
@@ -590,11 +591,24 @@ MiniTalk.Realtime=(()=>{
     const inventory=localShopInventory(user.user_id);if(!inventory[id])throw new Error("보관함 상품을 찾을 수 없습니다.");inventory[id]={...inventory[id],usedAt,pendingSync:true};localSet(`shop.inventory.${user.user_id}`,inventory);emit("shop-inventory",inventory);
     return usedAt;
   }
-  async function removeShopInventory(id){
+  function pruneShopInventoryMirror(ownerId,purchaseKeys){
+    const expectedOwner=String(ownerId||"");if(!expectedOwner||String(user?.user_id||"")!==expectedOwner)return 0;
+    const keys=new Set((purchaseKeys||[]).map(value=>String(value||"")).filter(Boolean));if(!keys.size)return 0;
+    const stored=localGet(`shop.inventory.${expectedOwner}`,{});let removed=0;
+    Object.keys(stored).forEach(id=>{if(keys.has(String(stored[id]?.purchaseKey||""))){delete stored[id];removed++}});
+    if(removed)localSet(`shop.inventory.${expectedOwner}`,stored);
+    return removed
+  }
+  async function removeShopInventory(id,ownerId){
     await awaitTransport();
+    const explicitOwner=String(ownerId||""),expectedOwner=explicitOwner||String(user?.user_id||"");
+    if(!expectedOwner||String(user?.user_id||"")!==expectedOwner)return false;
     if(user?.isGuest)throw new Error("로그인이 필요합니다.");
-    if(mode==="firebase"&&firebaseAuthenticated&&!shopInventoryFallback){try{await db.ref(`${MiniTalkConfig.paths.shopInventory}/${user.user_id}/${id}`).remove();return true}catch(error){console.warn("Firebase 보관함 항목 제거 실패",error);enableShopInventoryFallback()}}
-    const inventory=localShopInventory(user.user_id);delete inventory[id];localSet(`shop.inventory.${user.user_id}`,inventory);emit("shop-inventory",inventory);return true
+    if(mode==="firebase"&&firebaseAuthenticated&&!shopInventoryFallback){try{await db.ref(`${MiniTalkConfig.paths.shopInventory}/${expectedOwner}/${id}`).remove();return true}catch(error){console.warn("Firebase 보관함 항목 제거 실패",error);enableShopInventoryFallback()}}
+    // 명시적 ownerId는 Apps Script 선물 성공 후의 '구형 로컬 mirror 청소' 용도입니다.
+    // 현재 화면의 authoritative 보관함과 합치지 않고 로컬 mirror에서 해당 항목만 제거해야 오래된 항목이 재유입되지 않습니다.
+    if(explicitOwner){const stored=localGet(`shop.inventory.${expectedOwner}`,{});if(Object.prototype.hasOwnProperty.call(stored,id)){delete stored[id];localSet(`shop.inventory.${expectedOwner}`,stored)}return true}
+    const inventory=localShopInventory(expectedOwner);delete inventory[id];localSet(`shop.inventory.${expectedOwner}`,inventory);emit("shop-inventory",inventory);return true
   }
   async function giftShopInventory(id,targetId,targetNickname){
     await awaitTransport();
@@ -651,5 +665,5 @@ MiniTalk.Realtime=(()=>{
     })
   }
 
-  return{init,cleanup,startRoomListSubscription,stopRoomListSubscription,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,loadOlderMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,notifyCommandTargets,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,removeShopInventory,giftShopInventory,cloudGet,cloudKeys,cloudSet,cloudUpdate,cloudRemove,cloudPush,cloudTransaction,cloudQueryChildren,cloudSubscribe,cloudSubscribeChildren,cloudSubscribeDelta,serverTimestamp};
+  return{init,cleanup,startRoomListSubscription,stopRoomListSubscription,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,loadOlderMessages,sendMessage,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,notifyCommandTargets,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,removeShopInventory,pruneShopInventoryMirror,giftShopInventory,cloudGet,cloudKeys,cloudSet,cloudUpdate,cloudRemove,cloudPush,cloudTransaction,cloudQueryChildren,cloudSubscribe,cloudSubscribeChildren,cloudSubscribeDelta,serverTimestamp};
 })();

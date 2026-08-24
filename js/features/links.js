@@ -8,6 +8,11 @@ MiniTalk.Features.Links=(()=>{
     activeList=null;
   }
 
+  function openExternal(event,url){
+    event?.preventDefault?.();
+    try{window.open(url,"_blank","noopener,noreferrer")}catch(error){console.warn("외부 링크 열기 실패",error)}
+  }
+
   function render(host){
     cleanup();
     MiniTalk.UI.Shell.setHeader("관련 링크",[],{back:()=>MiniTalk.Router.go("tools")});
@@ -20,7 +25,8 @@ MiniTalk.Features.Links=(()=>{
       href:s.url,
       target:"_blank",
       rel:"noopener noreferrer",
-      text:s.name
+      text:s.name,
+      onclick:event=>openExternal(event,s.url)
     })));
     list.append(grid);
     view.append(list);

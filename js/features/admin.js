@@ -25,13 +25,20 @@ MiniTalk.Features.Admin=(()=>{
   }
   function waitForAdminPopupStyles(doc){
     const links=[...doc.querySelectorAll('link[rel~="stylesheet"]')];
-    if(!links.length)return Promise.resolve();
+    const waitPaint=()=>new Promise(resolve=>{
+      const view=doc.defaultView;
+      if(!view?.requestAnimationFrame)return resolve();
+      view.requestAnimationFrame(()=>view.requestAnimationFrame(resolve));
+    });
+    if(!links.length)return waitPaint();
     return Promise.allSettled(links.map(link=>new Promise(resolve=>{
-      if(link.sheet)return resolve();
-      const done=()=>resolve();
+      let finished=false,timer=0;
+      const done=()=>{if(finished)return;finished=true;clearTimeout(timer);link.removeEventListener("load",done);link.removeEventListener("error",done);resolve()};
+      const ready=()=>{try{return Boolean(link.sheet&&link.sheet.cssRules)}catch{return false}};
       link.addEventListener("load",done,{once:true});link.addEventListener("error",done,{once:true});
-      setTimeout(done,1800)
-    }))).then(()=>undefined)
+      if(ready())return done();
+      timer=setTimeout(done,1800)
+    }))).then(waitPaint).then(()=>undefined)
   }
   function buildAdminPopup(host,popup,bounds,{loading=false}={}){
     const sourceDoc=host?.ownerDocument||MiniTalk.UI.Dom.doc(),doc=popup.document,theme=sourceDoc.documentElement?.dataset?.theme||"light",styles=adminPopupStyles(sourceDoc),baseHref=String(sourceDoc.baseURI||document.baseURI).replace(/&/g,"&amp;").replace(/'/g,"%27"),critical="html,body{width:100%;min-height:100%;margin:0}body.admin-window-body{min-height:100vh;overflow:hidden;background:#edf1f7;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.admin-window-shell{width:100%;height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden}.admin-window-shell .app-header{min-height:52px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#fff;border-bottom:1px solid #e3e7ee}.admin-window-shell .header-title{display:flex;align-items:center;gap:7px;min-width:0}.admin-window-shell .view-host{min-width:0;min-height:0;overflow:auto}.admin-window-shell #adminWindowView:empty::before{content:\"관리자 화면 불러오는 중…\";display:block;margin:18px;padding:16px;border-radius:14px;background:#fff;color:#667085;font-size:13px}";

@@ -20,6 +20,6 @@ ok(feed.includes('doc?.activeElement===oldInput')&&feed.includes('setSelectionRa
 ok(html.includes('css/features/tools.css?v=23'),'tools css cache-bust missing');
 ok(html.includes('js/features/feed.js?v=65.0.21'),'feed cache-bust missing');
 ok(html.includes('js/features/settings.js?v=45'),'settings cache-bust missing');
-ok(html.includes('js/features/admin.js?v=64.5.30'),'admin cache-bust missing');
+ok(html.includes('js/features/admin.js?v=64.5.31'),'admin cache-bust missing');
 ok(sw.includes('moaru-camera-popup-task-scroll-fix'),'v97 service worker cache missing');
 console.log('V97_TOOLS_ADMIN_FEED_STABILITY_OK');

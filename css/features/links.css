@@ -1,0 +1,36 @@
+/* 관련 링크는 도구 화면과 동일한 폭/스크롤 계약을 사용합니다.
+   Windows Chromium의 기본 세로 스크롤바가 콘텐츠 폭을 차지해
+   화면이 15~17px 좁아지는 레이아웃 변화를 막습니다. */
+.links-view{
+  min-width:0;
+  width:100%;
+  max-width:100%;
+  overflow:hidden;
+}
+.links-screen{
+  flex:1 1 0;
+  min-width:0;
+  min-height:0;
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
+  overflow-y:auto;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+  overscroll-behavior-y:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.links-screen::-webkit-scrollbar{
+  display:none;
+  width:0;
+  height:0;
+}
+.links-grid{
+  width:100%;
+  min-width:0;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.links-grid .site-link{
+  min-width:0;
+  overflow-wrap:anywhere;
+}

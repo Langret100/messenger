@@ -1,0 +1,11 @@
+const fs=require('fs'),path=require('path'),root=path.resolve(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
+const admin=read('js/features/admin.js'),index=read('index.html');
+ok(admin.includes("querySelectorAll('link[rel~=\"stylesheet\"][href]')"),'admin popup does not clone stylesheet link elements from the source document');
+ok(admin.includes('function waitForAdminPopupStyles(doc)'),'admin popup does not wait for stylesheet loading');
+ok(admin.includes('link.addEventListener("load",done,{once:true})'),'stylesheet load completion is not observed');
+ok(admin.includes('<style>${critical}</style>${styles}</head>'),'critical popup CSS and stylesheet links are not part of the initial popup head');
+ok(admin.includes('waitForAdminPopupStyles(popup.document).then'),'admin UI is still rendered before popup styles settle');
+ok(!admin.includes('for(const sheet of sourceDoc.styleSheets)'),'fragile post-document styleSheets cloning path is still present');
+ok(index.includes('js/features/admin.js?v=64.5.31'),'admin cache-busting version was not updated');
+console.log('ADMIN_POPUP_STYLE_LOAD_OK');

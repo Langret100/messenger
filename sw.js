@@ -12,6 +12,7 @@ const CORE = [
   "./css/tokens.css",
   "./css/app.css",
   "./css/features/tools.css",
+  "./css/features/links.css",
   "./css/features/face-toy.css",
   "./css/features/lookalike-play.css",
   "./css/features/camera-tool-window.css",

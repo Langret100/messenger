@@ -1,7 +1,7 @@
 const fs=require('fs'),path=require('path');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),chat=read('js/features/moa-chat.js'),css=read('css/features/moa-chat.css'),gs=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
-ok(html.includes('moa-communication-engine.js?v=17')&&html.includes('moa-chat.js?v=14')&&html.includes('moa-chat.css?v=6'),'v93 cache bust missing');
+ok(html.includes('moa-communication-engine.js?v=20')&&html.includes('moa-chat.js?v=14')&&html.includes('moa-chat.css?v=6'),'v93 cache bust missing');
 ok(sw.includes('moaru-camera-popup-task-scroll-fix'),'v93 service worker cache missing');
 ok(gs.includes('function moaWikiSummary_')&&gs.includes('/api/rest_v1/page/summary/'),'wikipedia summary fallback missing');
 ok(gs.includes('function moaImageKnowledge_')&&gs.includes('image_url')&&gs.includes('image_search_url'),'image answer metadata missing');

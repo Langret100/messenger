@@ -103,11 +103,16 @@ const ordinary=[
   const events=commits.flatMap(v=>v.events||[]);
   ok(events.length>0,'no feedback events queued');
   for(const ev of events){
-    ok(ev.type==='policy_feedback','unexpected event type');
-    ok(/^e[a-z0-9]+$/.test(ev.expressionKey||''),'expression hash missing');
-    ok(Array.isArray(ev.featureKeys),'feature keys missing');
-    ok(!('reply' in ev)&&!('trigger' in ev)&&!('text' in ev),'raw dialogue leaked in feedback');
-    ok((ev.featureKeys||[]).every(k=>/^f:[a-z0-9-]+$/.test(k)),'unsafe feature key');
+    ok(['policy_feedback','dialogue_example'].includes(ev.type),'unexpected event type');
+    if(ev.type==='policy_feedback'){
+      ok(/^e[a-z0-9]+$/.test(ev.expressionKey||''),'expression hash missing');
+      ok(Array.isArray(ev.featureKeys),'feature keys missing');
+      ok(!('reply' in ev)&&!('trigger' in ev)&&!('text' in ev),'raw dialogue leaked in policy feedback');
+      ok((ev.featureKeys||[]).every(k=>/^f:[a-z0-9-]+$/.test(k)),'unsafe feature key');
+    }else{
+      ok(typeof ev.trigger==='string'&&typeof ev.reply==='string','common example text missing');
+      ok(!('profile' in ev)&&!('memory' in ev)&&!('userId' in ev),'personal state leaked in common example');
+    }
   }
 
   // Personal memory remains local.

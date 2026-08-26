@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const engine=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('js/ai/moa-communication-engine.js?v=17'),'v107 cache bust v14 missing');
+ok(html.includes('js/ai/moa-communication-engine.js?v=20'),'v107 cache bust v14 missing');
 ok(engine.includes('function everydayContextReply(raw)'),'everyday context reply missing');
 ok(engine.includes('function correctionReply(frame)'),'correction reply missing');
 function make(uid){

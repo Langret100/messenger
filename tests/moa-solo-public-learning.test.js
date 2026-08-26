@@ -7,7 +7,7 @@ const sw=fs.readFileSync('sw.js','utf8');
 ok(engine.includes('const VERSION = 91'),'v91 engine version missing');
 ok(engine.includes('feedbackEvidenceKey')&&engine.includes('evidenceKey'),'v91 evidence key missing');
 ok(engine.includes('tier==="solo"')&&engine.includes('tier==="growing"'),'v91 client tier weighting missing');
-ok(html.includes('moa-communication-engine.js?v=17'),'v91 engine cache bust missing');
+ok(html.includes('moa-communication-engine.js?v=20'),'v91 engine cache bust missing');
 ok(sw.includes('moaru-camera-popup-task-scroll-fix'),'v91 service worker cache missing');
 for(const token of ['moaPolicyLearningTier_','positive_score','negative_score','evidence_hashes','learning_tier','moa-public-learning-'])ok(gs.includes(token),'public policy learning missing '+token);
 ok(gs.includes('function moaCleanupLegacySheets()')&&!gs.includes('moaV91CleanupLegacySheets'),'stable cleanup function missing');

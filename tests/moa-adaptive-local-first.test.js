@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),feature=read('js/features/moa-chat.js'),api=read('js/adapters/auth-api.js'),code=read('docs/apps-script/Code.gs'),ai=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
-ok(html.includes('js/ai/moa-communication-engine.js?v=17')&&!html.includes('moa-dialogue-core.js')&&!html.includes('moa-chat-engine.js'),'v87 compatibility engine asset mismatch');
+ok(html.includes('js/ai/moa-communication-engine.js?v=20')&&!html.includes('moa-dialogue-core.js')&&!html.includes('moa-chat-engine.js'),'v87 compatibility engine asset mismatch');
 ok(sw.includes('moaru-camera-popup-task-scroll-fix')&&sw.includes('./js/ai/moa-communication-engine.js'),'v87 compatibility SW asset mismatch');
 ok(feature.includes('MoaCommunicationEngine.reply')&&feature.includes('MoaCommunicationEngine.warmup'),'feature not wired to v87 engine');
 for(const route of ['moa_sync','moa_commit','moa_search'])ok(code.includes(`case "${route}"`),`missing ${route}`);
@@ -26,7 +26,7 @@ vm.createContext(sandbox);vm.runInContext(engine,sandbox);
  r=await e.reply('안녕');ok(/^local/.test(r.source)&&!r.reply.startsWith('SEARCH:'),'small talk incorrectly searched');
  r=await e.reply('오늘 학교 힘들었어');ok(/힘들|신경|별로|기분|상했/.test(r.reply),'local response regressed: '+r.reply);
  await e.reply('맞아');const snap=e.debugSnapshot();ok(snap.profile.questionTolerance<.5 || snap.profile.brevity!==.6,'local style profile did not adapt');
- await e.flushCommit();ok(commits.length===1&&commits[0].events.every(v=>v.type==='policy_feedback')&&!('profile' in commits[0]),'public-only commit boundary failed');
+ await e.flushCommit();const sent=commits.flatMap(x=>x.events||[]);ok(sent.some(v=>v.type==='policy_feedback')&&sent.every(v=>['policy_feedback','dialogue_example'].includes(v.type))&&!('profile' in commits[0]),'public common-learning commit boundary failed');ok(sent.filter(v=>v.type==='dialogue_example').every(v=>!('userId' in v)&&!('profile' in v)&&!('memory' in v)),'dialogue example carried personal profile data');
  await e.reply('나는 보드게임 좋아해');r=await e.reply('내가 뭐 좋아한다고 했지?');ok(/보드게임/.test(r.reply),'local personal memory missing');
  await e.reply('규칙이 어려웠어');r=await e.reply('아까 뭐 얘기했지?');ok(/규칙이 어려웠어/.test(r.reply),'episodic recall missing: '+r.reply);
  for(let i=0;i<4;i++){r=await e.reply('오늘 별일 없었어');ok(!/어떤 느낌/.test(r.reply),'generic grammar regression');}

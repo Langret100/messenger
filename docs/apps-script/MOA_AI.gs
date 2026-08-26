@@ -3,15 +3,17 @@
 
    Hard ownership boundary
    - Browser/local cache owns every user-specific memory and style profile.
-   - Apps Script stores only reusable aggregate policy evidence.
-   - moa_sync returns public policy only.
-   - moa_commit accepts policy_feedback only.
+   - Apps Script stores reusable aggregate policy evidence plus privacy-scrubbed
+     short dialogue examples that are safe for common learning.
+   - moa_sync returns public policy/expression weights and eligible common examples.
+   - moa_commit accepts policy_feedback and privacy-scrubbed dialogue_example events.
    - moa_search performs transient external lookup; chat history is not stored.
 
    No per-user MOA profile or personal memory is created/read/written here.
    ============================================================ */
 var MOA_POLICY_SHEET = "모아_대화정책";
 var MOA_EXPRESSION_SHEET = "모아_표현가중치";
+var MOA_EXAMPLE_SHEET = "모아_대화예시";
 var MOA_ACTIVITY_PROPERTY = "MOA_ACTIVITY_SERIAL";
 var MOA_SYNC_VERSION_PROPERTY = "MOA_SYNC_VERSION";
 var MOA_MAINTENANCE_ACTIVITY_STEP = 800;
@@ -365,7 +367,7 @@ function moaSearchAssist_(data){
 
 function moaUserHash_(userId){return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,String(userId||""))).slice(0,18);}
 function moaHashList_(v){return String(v||"").split(",").map(function(x){return x.trim()}).filter(Boolean);}
-function moaAppendUniqueHash_(v,h){var a=moaHashList_(v),added=false;if(h&&a.indexOf(h)<0){a.push(h);added=true;}return {value:a.join(","),added:added};}
+function moaAppendUniqueHash_(v,h){var a=moaHashList_(v),added=false;if(h&&a.indexOf(h)<0){a.push(h);added=true;}if(a.length>120)a=a.slice(a.length-120);return {value:a.join(","),added:added};}
 function moaEvidenceHash_(uid,event){
   var raw=[moaUserHash_(uid),String(event&&event.evidenceKey||""),String(event&&event.type||""),String(event&&event.strategy||"")].join("|");
   return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,raw)).slice(0,18);
@@ -412,16 +414,76 @@ function moaPublicExpressionWeights_(){
     out[key]={positive:pos,negative:neg,positiveScore:posScore,negativeScore:negScore,evidenceCount:evidenceCount,tier:tier};
   });return out;
 }
+function moaExampleSheet_(){return moaEnsureSheet_(MOA_EXAMPLE_SHEET,["example_key","trigger","reply","act","affect","strategy","positive_users","negative_users","positive_hashes","negative_hashes","updated_at","last_activity_serial","state","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
+function moaEnsureExampleWidth_(){return moaEnsureHeaders_(moaExampleSheet_(),["example_key","trigger","reply","act","affect","strategy","positive_users","negative_users","positive_hashes","negative_hashes","updated_at","last_activity_serial","state","positive_score","negative_score","evidence_hashes","evidence_count","learning_tier"]);}
+function moaPublicDialogueText_(text,maxLen){
+  var s=String(text||"").replace(/\s+/g," ").trim();if(s.length<2||s.length>Number(maxLen||120))return "";
+  // Defense in depth: common learning must not retain direct identifiers, account data,
+  // school/location details, health/sexual content, or other sensitive personal facts.
+  if(/https?:\/\/|www\.|@[A-Za-z0-9_.-]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/i.test(s))return "";
+  if(/(?:01[016789])[- .]?\d{3,4}[- .]?\d{4}|\d{2,4}[- ]\d{3,4}[- ]\d{4}/.test(s))return "";
+  if(/(?:비밀번호|패스워드|주민(?:등록)?번호|계좌번호|카드번호|전화번호|휴대폰번호|집주소|주소는|사는곳|사는 곳|내이름|내 이름|이름은|학교이름|학교 이름|반번호|학번|생년월일|생일은)/i.test(s))return "";
+  if(/^(?:나는|난|제가|저는)\s*.{1,24}(?:이야|야|예요|입니다)[.!?]?$/i.test(s))return "";
+  if(/[가-힣A-Za-z0-9]{2,20}(?:초등학교|중학교|고등학교|학교)\b/.test(s))return "";
+  if(/(?:우리집|우리 집|집은|사는 동네|사는동네|사는 지역|사는지역)\s*(?:은|는|이|가)?\s*[^,.!?]{1,30}/.test(s))return "";
+  if(/(?:진단|병원|처방|복용|약먹|약 먹|자해|죽고싶|죽고 싶|성관계|성적관계|성적 관계)/i.test(s))return "";
+  if(/(?:\b\d{5,}\b|[가-힣]+(?:로|길)\s*\d{1,4}(?:-\d{1,4})?)/.test(s))return "";
+  // Exact numbers are rarely useful for conversational style and can become identifiers.
+  s=s.replace(/\d+/g,"#");
+  return s.slice(0,Number(maxLen||120));
+}
+function moaDialogueExampleKey_(trigger,reply,strategy){
+  var raw=[moaNormalize_(trigger),moaNormalize_(reply),String(strategy||"")].join("|"),bytes=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,raw);
+  return "x"+Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9]/g,"").slice(0,20);
+}
+function moaPublicExamples_(){
+  var sh=moaEnsureExampleWidth_(),last=sh.getLastRow(),out=[];if(last<=1)return out;
+  sh.getRange(2,1,last-1,18).getValues().forEach(function(r){
+    var key=String(r[0]||""),trigger=String(r[1]||""),reply=String(r[2]||""),act=String(r[3]||""),affect=String(r[4]||"neutral"),strategy=String(r[5]||"direct"),pos=Number(r[6]||0),neg=Number(r[7]||0),state=String(r[12]||"active"),posScore=Number(r[13]||pos||0),negScore=Number(r[14]||neg||0),evidenceCount=Number(r[16]||0);
+    if(!key||!trigger||!reply||state==="dormant")return;
+    var tier=moaPolicyLearningTier_(pos,neg,posScore,negScore,evidenceCount);if(tier==="observing")return;
+    var confidence=moaClamp_((posScore+1)/(posScore+negScore+2),.05,.97);
+    out.push({id:key,trigger:trigger,reply:reply,act:act,affect:affect,strategy:strategy,confidence:confidence,tier:tier,evidenceCount:evidenceCount});
+  });
+  out.sort(function(a,b){var tr={confirmed:3,growing:2,solo:1};return (tr[b.tier]||0)-(tr[a.tier]||0)||Number(b.evidenceCount||0)-Number(a.evidenceCount||0);});
+  var triggerCounts={},strategyCounts={},diverse=[];
+  for(var i=0;i<out.length&&diverse.length<220;i++){
+    var item=out[i],tk=moaNormalize_(item.trigger).slice(0,80),sk=String(item.strategy||"direct");
+    if(Number(triggerCounts[tk]||0)>=3||Number(strategyCounts[sk]||0)>=80)continue;
+    triggerCounts[tk]=Number(triggerCounts[tk]||0)+1;strategyCounts[sk]=Number(strategyCounts[sk]||0)+1;diverse.push(item);
+  }
+  return diverse;
+}
+function moaStoreDialogueEvents_(uid,events){
+  var sh=moaEnsureExampleWidth_(),last=sh.getLastRow(),rows=last>1?sh.getRange(2,1,last-1,18).getValues():[],originalCount=rows.length,index={},dirty={},publicChanged=false;
+  rows.forEach(function(r,i){index[String(r[0]||"")]=i;});
+  var userHash=moaUserHash_(uid),now=new Date(),activity=moaCurrentActivitySerial_();
+  (events||[]).forEach(function(ev){
+    if(!ev||ev.type!=="dialogue_example"||["positive","negative"].indexOf(String(ev.signal||""))<0)return;
+    var trigger=moaPublicDialogueText_(ev.trigger,90),reply=moaPublicDialogueText_(ev.reply,140);if(!trigger||!reply)return;
+    var act=String(ev.act||"statement").slice(0,28),affect=String(ev.affect||"neutral").slice(0,20),strategy=String(ev.strategy||"direct").slice(0,30),key=moaDialogueExampleKey_(trigger,reply,strategy),i=index[key],r;
+    if(i==null){i=rows.length;index[key]=i;r=[key,trigger,reply,act,affect,strategy,0,0,"","",now,activity,"active",0,0,"",0,"observing"];rows.push(r);}else r=rows[i];while(r.length<18)r.push("");
+    var signal=String(ev.signal||""),beforeTier=moaPolicyLearningTier_(r[6],r[7],Number(r[13]||r[6]||0),Number(r[14]||r[7]||0),Number(r[16]||0));
+    var col=signal==="positive"?8:9,res=moaAppendUniqueHash_(String(r[col]||""),userHash);if(res.added){r[col]=res.value;r[signal==="positive"?6:7]=Number(r[signal==="positive"?6:7]||0)+1;}
+    var eh=moaEvidenceHash_(uid,{evidenceKey:String(ev.evidenceKey||"")+"|"+key,type:"dialogue_example",strategy:strategy}),er=moaAppendUniqueHash_(String(r[15]||""),eh),changed=!!res.added;
+    if(er.added){var w=moaEvidenceWeight_(ev);r[15]=er.value;r[16]=Number(r[16]||0)+1;if(signal==="positive")r[13]=Number(r[13]||0)+w;else r[14]=Number(r[14]||0)+w;changed=true;}
+    var tier=moaPolicyLearningTier_(r[6],r[7],r[13],r[14],r[16]);if(String(r[17]||"")!==tier){r[17]=tier;changed=true;}
+    if(!changed)return;if(beforeTier!==tier||tier!=="observing")publicChanged=true;r[10]=now;r[11]=activity;r[12]="active";dirty[i]=true;
+  });
+  Object.keys(dirty).map(Number).filter(function(i){return i<originalCount}).forEach(function(i){sh.getRange(i+2,1,1,18).setValues([rows[i]]);});
+  var appended=rows.slice(originalCount);if(appended.length)sh.getRange(originalCount+2,1,appended.length,18).setValues(appended);
+  return publicChanged;
+}
 function moaPublicSnapshot_(){
   var version=moaCurrentSyncVersion_(),key="moa-public-learning-"+version,cache=CacheService.getScriptCache(),hit=cache.get(key);
   if(hit){try{return JSON.parse(hit)}catch(e){}}
-  var snapshot={policy:moaPublicPolicy_(),expressionWeights:moaPublicExpressionWeights_()};
+  var snapshot={policy:moaPublicPolicy_(),expressionWeights:moaPublicExpressionWeights_(),patterns:moaPublicExamples_()};
   try{cache.put(key,JSON.stringify(snapshot),300)}catch(e){}
   return snapshot;
 }
 function moaSync_(data){
   var known=Number(data.known_version||0),version=moaCurrentSyncVersion_(),out={ok:true,version:version};
-  if(known!==version){var pub=moaPublicSnapshot_();out.policy=pub.policy;out.expressionWeights=pub.expressionWeights;}
+  if(known!==version){var pub=moaPublicSnapshot_();out.policy=pub.policy;out.expressionWeights=pub.expressionWeights;out.patterns=pub.patterns;}
   return jsonResponse_(out);
 }
 
@@ -467,13 +529,14 @@ function moaStoreExpressionEvents_(uid,events){
 function moaCommit_(data){
   var uid=String(data.user_id||"").trim();if(!uid)return jsonResponse_({ok:false,error:"MOA_COMMIT_USER_REQUIRED"});
   var events=moaJson_(data.events_json,[]);if(!Array.isArray(events))events=[];
-  events=events.filter(function(ev){return ev&&ev.type==="policy_feedback";}).slice(0,30);
+  events=events.filter(function(ev){return ev&&(ev.type==="policy_feedback"||ev.type==="dialogue_example");}).slice(0,30);
   var lock=LockService.getScriptLock();if(!lock.tryLock(4500))return jsonResponse_({ok:false,error:"MOA_COMMIT_BUSY"});
   try{
     moaActivityTick_();
     var changedPublic=moaStorePolicyEvents_(uid,events);
     var changedExpressions=moaStoreExpressionEvents_(uid,events);
-    if(changedPublic||changedExpressions)moaBumpSyncVersion_();
+    var changedExamples=moaStoreDialogueEvents_(uid,events);
+    if(changedPublic||changedExpressions||changedExamples)moaBumpSyncVersion_();
     return jsonResponse_({ok:true,stored:events.length,version:moaCurrentSyncVersion_()});
   }finally{lock.releaseLock();}
 }
@@ -484,12 +547,23 @@ function moaRemoveLegacyPersonalDataSheets_(){
   return {ok:true,removed:removed};
 }
 
+function moaMaintainLearningSheet_(sh,width,posCol,negCol,lastActCol,stateCol,posScoreCol,negScoreCol,evidenceCol,tierCol,activity,out){
+  var last=sh.getLastRow();if(last<=1)return false;var rows=sh.getRange(2,1,last-1,width).getValues(),del=[],changed=false;
+  for(var i=rows.length-1;i>=0;i--){
+    var r=rows[i],pos=Number(r[posCol]||0),neg=Number(r[negCol]||0),lastAct=Number(r[lastActCol]||0),state=String(r[stateCol]||"active");
+    if(!lastAct){sh.getRange(i+2,lastActCol+1).setValue(activity);continue;}
+    var tier=moaPolicyLearningTier_(pos,neg,Number(r[posScoreCol]||pos||0),Number(r[negScoreCol]||neg||0),Number(r[evidenceCol]||0));
+    if(String(r[tierCol]||"")!==tier){sh.getRange(i+2,tierCol+1).setValue(tier);changed=true;}
+    if(activity-lastAct<MOA_MAINTENANCE_ACTIVITY_STEP||tier!=="observing")continue;
+    if(state==="dormant"){del.push(i+2);out.deleted++;changed=true;}else{sh.getRange(i+2,stateCol+1).setValue("dormant");out.dormant++;changed=true;}
+  }
+  del.forEach(function(row){sh.deleteRow(row);});return changed;
+}
 function moaRunLearningMaintenance_(){
   var activity=moaCurrentActivitySerial_(),out={ok:true,dormant:0,deleted:0},changed=false;
-  var ps=moaEnsurePolicyWidth_(),pl=ps.getLastRow();if(pl>1){var rows=ps.getRange(2,1,pl-1,14).getValues(),del=[];
-    for(var i=rows.length-1;i>=0;i--){var r=rows[i],pos=Number(r[2]||0),neg=Number(r[3]||0),lastAct=Number(r[7]||0),state=String(r[8]||"active");if(!lastAct){ps.getRange(i+2,8).setValue(activity);continue;}var tier=moaPolicyLearningTier_(pos,neg,Number(r[9]||pos||0),Number(r[10]||neg||0),Number(r[12]||0));if(activity-lastAct<MOA_MAINTENANCE_ACTIVITY_STEP||tier!=="observing")continue;if(state==="dormant"){del.push(i+2);out.deleted++;changed=true;}else{ps.getRange(i+2,8,1,2).setValues([[activity,"dormant"]]);out.dormant++;changed=true;}}
-    del.forEach(function(row){ps.deleteRow(row);});
-  }
+  changed=moaMaintainLearningSheet_(moaEnsurePolicyWidth_(),14,2,3,7,8,9,10,12,13,activity,out)||changed;
+  changed=moaMaintainLearningSheet_(moaEnsureExpressionWidth_(),13,1,2,6,7,8,9,11,12,activity,out)||changed;
+  changed=moaMaintainLearningSheet_(moaEnsureExampleWidth_(),18,6,7,11,12,13,14,16,17,activity,out)||changed;
   if(changed)moaBumpSyncVersion_();return out;
 }
 function moaInstallMaintenanceTrigger_(){moaRemoveMaintenanceTrigger_();ScriptApp.newTrigger("moaRunLearningMaintenance_").timeBased().everyWeeks(1).create();}

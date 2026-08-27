@@ -683,10 +683,9 @@ function moaLanguagePublicRow_(r){
   var occ=Number(r[8]||0),sources=moaHashList_(r[9]).length,tier=String(r[13]||moaLanguageTier_(occ,sources));
   if(String(r[12]||"active")==="dormant"||!r[0]||!r[1]||!r[2]||moaLearnedRowHasUrl_(r[1])||moaLearnedRowHasUrl_(r[2]))return null;
   var trigger=moaNaturalizeLearnedText_(r[1]),reply=moaNaturalizeLearnedText_(r[2]);if(!trigger||!reply)return null;
-  // Keep every scrubbed pair in the learning table, but do not let one person's
-  // one-off phrase become a public reply. It becomes usable from growing upward.
-  if(tier==="solo")return null;
-  var confidence=tier==="confirmed"?.86:.72;
+  // Keep scrubbed human dialogue usable from the first observation.
+  // Tier changes weight only; it is not a hard publication gate.
+  var confidence=tier==="confirmed"?.86:tier==="growing"?.72:.60;
   return {id:String(r[0]),trigger:trigger,reply:reply,act:String(r[3]||"inform:statement"),affect:String(r[4]||"neutral"),strategy:String(r[5]||"direct"),confidence:confidence,tier:tier,evidenceCount:occ,semantic:{tokens:String(r[6]||"").split("|").filter(Boolean),categories:String(r[7]||"").split("|").filter(Boolean),intent:String(r[3]||"")},humanChat:true};
 }
 function moaPublicHumanPatterns_(){

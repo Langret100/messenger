@@ -328,7 +328,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/(고마워|고맙|감사|땡큐|thanks|ㄱㅅ)/i.test(c))return "thanks";
     if(/(ㅋㅋ|ㅎㅎ|하하|크크)/.test(raw)&&c.length<18)return "laughter";
     if(/^(응|ㅇㅇ|맞아|맞음|그치|그렇지|그래|그랭|ㅇㅋ|오케이|좋아|굿)$/.test(c))return "agreement";
-    if(/(그게아니라|아니야|아닌데|잘못알았|잘못알아들|뭔소리|무슨소리|말이안돼|아니라고|내말은|내가말한건)/.test(c)||/^아니.+(?:라고|다고|라니까|다니까)$/.test(c))return "correction";
+    if(/(그게아니라|아니야|아닌데|잘못알았|잘못알아들|뭔소리|무슨소리|말이안돼|아니라고|내말은|내가말한건|단어가아니잖아|그런단어없|그런말없)/.test(c)||/^아니.+(?:라고|다고|라니까|다니까)$/.test(c))return "correction";
     if(/(멍청|바보|답답|똥멍청|왜이래|헛소리|등신|한심|대답이상|답이상|이상하잖|엉망|왜이렇게답|대답왜|못알아듣|못알아먹)/.test(c))return "insult";
     if(/^(아오+|아휴+|에휴+|으휴+|아이씨+|아씨+)$/.test(c))return "frustration";
     if(/^(아니|아니뭘|아니뭔데|아니뭐)$/.test(c))return "correction";
@@ -351,7 +351,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const text=clean(raw),c=compact(text),cs=concepts(text);
     const decisionCue=/(뭐먹지|뭐먹을까|뭘먹지|뭘먹을까|뭐먹을지|뭘먹을지|뭐할까|뭐하지|어디갈까|어디가지|뭘고를까|뭐고르지|어떤게좋을까|뭐가좋을까|뭐부터하지)/.test(c);
     const repairCue=/(물었는데|물어봤는데|물었잖아|물어봤잖아|대답해|대답안|말했잖아|뭐가그렇구나|뭘듣고있|뭘듣고|엉뚱|딴소리|한심|답답|왜이래|못알아듣|왜이렇게답)/.test(c);
-    const explicitQuestion=/[?？]$/.test(text)||decisionCue||/^(왜|어떻게|어디|언제|누구|뭐|뭘|무슨|몇|얼마)/.test(c)||/(뭐야|누구야|어디야|언제야|왜|어떻게|어때|알아|알려줘|설명해줘|몇|얼마|맞아|어떡해|어떡하지|할까|해야해|해야돼|좋을까|괜찮을까|맞을까|하지)$/.test(c);
+    const explicitQuestion=/[?？]$/.test(text)||decisionCue||/^(왜|어떻게|어디|언제|누구|뭐|뭘|무슨|몇|얼마)/.test(c)||/(뭐야|누구야|어디야|언제야|왜|어떻게|어때|알아|알려줘|설명해줘|몇|얼마|맞아|어떡해|어떡하지|할까|해야해|해야돼|좋을까|괜찮을까|맞을까|하지|까|니|냐|나요)$/.test(c);
     const referenceCue=/^(그래서|그다음|그리고|그럼|근데|왜|어떻게|그게|그거|그건|그걸|걔|걔가|거기|그사람|아까)/.test(c);
     const searchCue=/(검색해|검색해줘|찾아줘|찾아봐|알아봐|확인해줘|더자세히|자세히알려|최신|최근|뉴스|날씨|기온|몇도|온도|습도|비와|비올|눈와|눈올|미세먼지|공기질|환율|현지시간|추천해줘|비교해줘)/.test(c);
     let affect="neutral";
@@ -368,7 +368,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const opinionQuestion=explicitQuestion&&/(어때|어떻게생각|생각은|괜찮아|좋아보여)/.test(c);
     const factQuestion=explicitQuestion&&!reasonQuestion&&!opinionQuestion&&/(누구|뭐야|무엇|어디|언제|몇|얼마|뜻|알려줘|설명|정의|유래|역사|차이)/.test(c);
     const knowledgeCue=searchCue||factQuestion||reasonQuestion||/(무슨뜻|뜻이뭐|어떤사람|어떤곳|어떤거|차이가뭐|장단점|원리|유래|역사|왜그런|어떻게작동|추천해줘|비교해줘|정리해줘)/.test(c);
-    const speechAct=reaction?`social:${reaction}`:plan?"inform:plan":preference?"inform:preference":event?"inform:event":reasonQuestion?"ask:reason":opinionQuestion?"ask:opinion":factQuestion?"ask:fact":act==="followup"?"followup":"inform:statement";
+    const speechAct=reaction?`social:${reaction}`:plan?"inform:plan":preference?"inform:preference":event?"inform:event":reasonQuestion?"ask:reason":opinionQuestion?"ask:opinion":factQuestion?"ask:fact":act==="followup"?"followup":act==="question"?"ask:question":"inform:statement";
     const punctuation=punctuationOnly(text),profanity=PROFANITY.test(text),directedAbuse=DIRECTED_ABUSE.test(text);
     return {text,c,concepts:cs,topic:topicFrom(text,cs),affect,act,speechAct,reaction,event,plan,scheduledCue,preference,question:explicitQuestion||act==="followup",searchCue,knowledgeCue,referenceCue,decisionCue,repairCue,punctuation,profanity,directedAbuse};
   }
@@ -496,6 +496,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
   function math(raw){
     let s=clean(raw).toLowerCase().replace(/[?？]/g,"").replace(/계산해줘|계산해|얼마야|얼마|답은|결과는/g,"").replace(/더하기|플러스/g,"+").replace(/빼기|마이너스/g,"-").replace(/곱하기|×|x/g,"*").replace(/나누기|÷/g,"/").replace(/,/g,"").replace(/\s+/g,"");
+    // 구어체 계산 질문: "1+1은?", "3*4는?", "10/2가?"처럼 식 뒤에 붙은 조사만 제거한다.
+    s=s.replace(/(?<=[0-9)%])(?:은|는|이|가)$/u,"");
     if(!/[+\-*/()%]/.test(s)||!/^[0-9+\-*/().%]+$/.test(s))return "";
     try{const v=Function(`"use strict";return (${s})`)();return Number.isFinite(v)?`${Math.round(v*1e6)/1e6}이야.`:"";}catch{return "계산식이 조금 헷갈려. 12+7처럼 적어줘.";}
   }
@@ -508,7 +510,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function selfReply(raw){
     const c=compact(raw);
     if(/(너이름|이름뭐|누구야너|넌누구|너누구야|너는누구)/.test(c))return "난 모아야. 여기서 편하게 얘기하면 돼.";
-    if(/(?:너)?(?:밥|아침|점심|저녁)?먹었어|너뭐먹었어|뭐먹었어/.test(c))return "나는 밥을 먹진 않지만 ㅋㅋ 너는 뭐 먹었어?";
+    if(/(?:너(?:밥|아침|점심|저녁)?먹었어|너뭐먹었어|뭐먹었어)/.test(c))return "나는 밥을 먹진 않지만 ㅋㅋ 너는 뭐 먹었어?";
     if(/오늘뭐했어/.test(c))return "나는 오늘도 여기서 얘기 듣고 답해주고 있었지 ㅋㅋ 너는 오늘 뭐 했어?";
     if(/내일뭐해|내일뭐할거/.test(c))return "나는 내일도 여기 있지 ㅋㅋ 네가 오면 또 얘기하면 돼.";
     if(/(몇살|나이가)/.test(c))return "나는 사람처럼 나이가 있는 건 아니야 ㅋㅋ 그냥 모아라고 생각하면 돼.";
@@ -590,6 +592,23 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/(?:이제)?집이야|집도착|집왔어/.test(c)&&recentUserMentions(/학교|학원|버스|지하철|가는중|이동/,5))return chooseText("context.home.now",["오 이제 집이네. 밖에서 들어오면 확 풀리지.","집 도착했구나 ㅋㅋ 이제 좀 편하게 있어.","오케이, 이제 진짜 쉬어도 되겠다."]);
     if(/(?:내일|나중에).*(?:얘기해볼까|말해볼까|사과해볼까)/.test(c)&&recentUserMentions(/친구.*싸|무시|서운|짜증/,5))return "응, 감정 좀 가라앉은 다음에 내일 차분하게 얘기해보는 건 괜찮아. 네가 서운했던 부분부터 짧게 말해봐.";
     if(/배고프/.test(c)&&recentUserMentions(/일어났|깼어|졸려|피곤/,4))return chooseText("context.hungry",["일어나고 나면 배고프지 ㅋㅋ 뭐라도 간단히 먹자.","아 졸린데 배까지 고프네. 간단한 거라도 먼저 먹는 게 낫겠다.","배고프기도 하구나. 먹을 거 하나 챙기고 천천히 깨자."]);
+    if(/^(?:간식|과자|빵|아이스크림|초콜릿|초코)$/.test(c)&&recentUserMentions(/배고프|뭐먹|먹고싶|간식/,4))return chooseText("context.snack.short",["간식 쪽이구나 ㅋㅋ 과자나 빵 같은 거 땡겨?","오 간식! 지금은 달달한 거랑 짭짤한 거 중 뭐가 더 땡겨?","간식이면 부담 없이 하나 먹기 좋지 ㅋㅋ"]);
+    if(/(?:간식|과자|빵|아이스크림|초콜릿).*(?:먹고프|먹고싶|땡겨|땡긴)/.test(c))return chooseText("context.snack.want",["ㅋㅋ 간식 땡기는구나. 집에 있는 거 하나 집어먹자.","오 간식 먹고 싶구나. 뭐 있는지부터 한번 보자 ㅋㅋ","그럴 때 있지 ㅋㅋ 과자나 빵 하나 있으면 딱인데."]);
+    return "";
+  }
+
+  function casualEverydayQuestionReply(frame){
+    const c=frame.c;if(!frame.question)return "";
+    // 실제 급식표를 모르는 상태에서 사실처럼 꾸며내지 않고, "뭐 나올까"는 가벼운 추측 대화로 받는다.
+    if(/급식.*(?:뭐나올까|뭐나오려나|뭐나올지|뭐일까|메뉴뭘까)/.test(c)){
+      return chooseText("everyday.lunch.guess",[
+        "오늘은 왠지 제육이나 카레 같은 거 나올 것 같은데 ㅋㅋ 그냥 내 촉이야.",
+        "급식은 진짜 열어봐야 알지 ㅋㅋ 굳이 찍자면 오늘은 돈까스나 볶음밥 쪽에 한 표.",
+        "내가 급식표를 아는 건 아니라 정확히는 못 맞혀 ㅋㅋ 그래도 오늘은 면이나 덮밥류 나올 것 같은 느낌.",
+        "그냥 감으로 찍어보면 제육덮밥 같은 든든한 거 ㅋㅋ 맞으면 내가 괜히 뿌듯할 듯."
+      ]);
+    }
+    if(/급식.*(?:뭐야|메뉴뭐|뭐나와|뭐나오니|뭐나옴)/.test(c))return "정확한 급식 메뉴는 학교랑 날짜를 알아야 확인할 수 있어. 학교를 말해주면 찾아볼 수 있어.";
     return "";
   }
 
@@ -975,27 +994,54 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     let task=learnedCacheReady.get(key);if(!task){task=(async()=>{const cached=await cachedLearnedPatterns(key),initial=mergeLearnedPatterns([],cached);if(!learnedByUser.has(key)){learnedByUser.set(key,{patterns:initial});rebuildLearnedIndex(key,initial)}})().finally(()=>learnedCacheReady.delete(key));learnedCacheReady.set(key,task)}
     try{await task}catch(e){console.warn("모아 첫 응답 학습 캐시 준비 실패",e)}
   }
-  function rebuildLearnedIndex(key,patterns){const map=new Map(),add=(k,p)=>{if(!k)return;const row=map.get(k)||[];row.push(p);map.set(k,row)};(patterns||[]).forEach(p=>{const sem=p.semantic||{},tokens=Array.isArray(sem.tokens)&&sem.tokens.length?sem.tokens:semanticTokens(p.trigger||""),cats=Array.isArray(sem.categories)&&sem.categories.length?sem.categories:semanticCategories(tokens,p.trigger||""),act=String(sem.intent||p.act||"");add(`a:${act}`,p);tokens.slice(0,5).forEach(t=>add(`t:${t}`,p));cats.forEach(c=>add(`c:${c}`,p))});learnedIndexByUser.set(key,map)}
-  function learnedPatternPool(frame){const key=userKey(),data=learnedByUser.get(key)||{patterns:[]};let index=learnedIndexByUser.get(key);if(!index){rebuildLearnedIndex(key,data.patterns);index=learnedIndexByUser.get(key)}const ts=semanticTokens(frame.text),cats=semanticCategories(ts,frame.text),intent=semanticIntent(frame),seen=new Set(),out=[];const take=k=>(index?.get(k)||[]).forEach(p=>{if(!seen.has(p.id)){seen.add(p.id);out.push(p)}});take(`a:${intent}`);take(`a:${frame.act}`);cats.forEach(c=>take(`c:${c}`));ts.slice(0,4).forEach(t=>take(`t:${t}`));if(out.length<18)(data.patterns||[]).slice(0,60).forEach(p=>{if(!seen.has(p.id)){seen.add(p.id);out.push(p)}});return out.slice(0,180)}
+  function rebuildLearnedIndex(key,patterns){const map=new Map(),add=(k,p)=>{if(!k)return;const row=map.get(k)||[];row.push(p);map.set(k,row)};(patterns||[]).forEach(p=>{const sem=p.semantic||{},tokens=Array.isArray(sem.tokens)&&sem.tokens.length?sem.tokens:semanticTokens(p.trigger||""),cats=Array.isArray(sem.categories)&&sem.categories.length?sem.categories:semanticCategories(tokens,p.trigger||""),act=String(sem.intent||p.act||"");add(`x:${compact(p.trigger||"")}`,p);tokens.slice(0,5).forEach(t=>add(`t:${t}`,p));cats.forEach(c=>add(`c:${c}`,p));add(`a:${act}`,p)});learnedIndexByUser.set(key,map)}
+  function learnedPatternPool(frame,ts,cats){
+    const key=userKey(),data=learnedByUser.get(key)||{patterns:[]};let index=learnedIndexByUser.get(key);if(!index){rebuildLearnedIndex(key,data.patterns);index=learnedIndexByUser.get(key)}
+    ts=Array.isArray(ts)?ts:semanticTokens(frame.text);cats=Array.isArray(cats)?cats:semanticCategories(ts,frame.text);
+    const seen=new Set(),out=[];const take=(k,limit=Infinity)=>{let n=0;for(const p of (index?.get(k)||[])){if(seen.has(p.id))continue;seen.add(p.id);out.push(p);if(++n>=limit)break;}};
+    // Exact/token/category indexes are sufficient for a pattern to reach the score gate.
+    // Intent-only buckets mostly add dozens of irrelevant rows and cost CPU without ever
+    // becoming viable replies, so they are deliberately not scanned on every turn.
+    take(`x:${compact(frame.text)}`,8);ts.slice(0,4).forEach(t=>take(`t:${t}`,12));cats.forEach(c=>take(`c:${c}`,10));
+    return out.slice(0,48);
+  }
   function personalTopicBoostForPattern(ptn){const l=personalLearning(),hay=`${ptn.trigger||""} ${ptn.reply||""}`;let best=0;Object.entries(l.topics||{}).forEach(([topic,row])=>{if(!topic||!hay.includes(topic))return;const score=Math.min(7,(Number(row.turns||0)*.18)+(Number(row.positive||0)-Number(row.negative||0))*.8);if(score>best)best=score});return best}
-  function adaptLearnedReply(ptn,frame){let reply=String(ptn.reply||"");if(!ptn.humanChat)return reply;const pTokens=Array.isArray(ptn.semantic?.tokens)?ptn.semantic.tokens:semanticTokens(ptn.trigger||""),cTokens=semanticTokens(frame.text),pCats=semanticCategories(pTokens,ptn.trigger||""),cCats=semanticCategories(cTokens,frame.text);const commonCat=pCats.find(x=>cCats.includes(x));if(!commonCat)return reply;const verbs=new Set(["좋아하다","싫어하다","먹다","마시다","피곤하다","지치다","졸리다","재미있다","맛있다","이기다","지다","오다","가다"]);const pAnchor=pTokens.find(t=>!verbs.has(t)&&String(ptn.reply||"").includes(t)),cAnchor=cTokens.find(t=>!verbs.has(t));if(pAnchor&&cAnchor&&pAnchor!==cAnchor&&pAnchor.length>=2){reply=reply.replace(new RegExp(pAnchor.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g"),cAnchor)}return reply}
+  function personalStyleBoostForPattern(ptn){const p=profile(),text=String(ptn.reply||"");let score=0;if(text.length<=26)score+=(p.brevity-.5)*5;if(/ㅋㅋ|ㅎㅎ/.test(text))score+=(p.playfulness-.5)*4;if(String(ptn.strategy||"")==="empathy")score+=(p.empathy-.5)*5;if(String(ptn.strategy||"")==="direct")score+=(p.directness-.5)*4;return score}
+  function adaptLearnedReply(ptn,frame){let reply=String(ptn.reply||"");if(!ptn.humanChat||String(ptn.tier||"")==="solo")return reply;const pTokens=Array.isArray(ptn.semantic?.tokens)?ptn.semantic.tokens:semanticTokens(ptn.trigger||""),cTokens=semanticTokens(frame.text),pCats=semanticCategories(pTokens,ptn.trigger||""),cCats=semanticCategories(cTokens,frame.text);const commonCat=pCats.find(x=>cCats.includes(x));if(!commonCat)return reply;const verbs=new Set(["좋아하다","싫어하다","먹다","마시다","피곤하다","지치다","졸리다","재미있다","맛있다","이기다","지다","오다","가다"]);const pAnchor=pTokens.find(t=>!verbs.has(t)&&String(ptn.reply||"").includes(t)),cAnchor=cTokens.find(t=>!verbs.has(t));if(pAnchor&&cAnchor&&pAnchor!==cAnchor&&pAnchor.length>=2){reply=reply.replace(new RegExp(pAnchor.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g"),cAnchor)}return reply}
 
   function learnedCandidates(frame,policy,ref){
-    const data=learnedByUser.get(userKey())||{patterns:[]},input=frame.c,out=[],eligible=responseMoveEligibility(frame,ref);
-    for(const ptn of learnedPatternPool(frame)){
-      const trig=compact(ptn.trigger),strategy=ptn.strategy||policy.strategy;if(!trig||!ptn.reply||eligible[strategy]===false)continue;if(ptn.humanChat&&frame.knowledgeCue)continue;let score=0;
-      if(input===trig)score=94;else if(input.includes(trig)||trig.includes(input))score=50;
+    const data=learnedByUser.get(userKey())||{patterns:[]},input=frame.c,out=[],eligible=responseMoveEligibility(frame,ref),fTokens=semanticTokens(frame.text),fCats=semanticCategories(fTokens,frame.text),fIntent=semanticIntent(frame);
+    for(const ptn of learnedPatternPool(frame,fTokens,fCats)){
+      const trig=compact(ptn.trigger);if(!trig||!ptn.reply)continue;if(ptn.humanChat&&frame.knowledgeCue)continue;
+      const exact=input===trig;let strategy=ptn.strategy||policy.strategy;
+      // A human-chat reply strategy is descriptive metadata, not a hard routing rule.
+      // Exact learned phrases must remain usable even when the current affect classifier
+      // would normally disable that strategy (for example "버스 왜 안 와" learned as empathy).
+      if(eligible[strategy]===false){if(ptn.humanChat&&exact)strategy=policy.strategy;else continue;}
+      let score=0;
+      if(exact)score=94;else if(input.includes(trig)||trig.includes(input))score=50;
       const pw=concepts(ptn.trigger),overlap=frame.concepts.filter(v=>pw.includes(v)).length;score+=overlap*11;
-      const pSem=ptn.semantic||{},pTokens=Array.isArray(pSem.tokens)?pSem.tokens:semanticTokens(ptn.trigger),fTokens=semanticTokens(frame.text),semOverlap=fTokens.filter(v=>pTokens.includes(v)).length,pCats=Array.isArray(pSem.categories)?pSem.categories:semanticCategories(pTokens,ptn.trigger),fCats=semanticCategories(fTokens,frame.text),catOverlap=fCats.filter(v=>pCats.includes(v)).length,pIntent=String(pSem.intent||"");
-      score+=semOverlap*13+catOverlap*10;if(pIntent&&pIntent===semanticIntent(frame))score+=20;if(ptn.humanChat&&pIntent===semanticIntent(frame)&&catOverlap>0)score+=18;
+      const pSem=ptn.semantic||{},pTokens=Array.isArray(pSem.tokens)?pSem.tokens:semanticTokens(ptn.trigger),semOverlap=fTokens.filter(v=>pTokens.includes(v)).length,pCats=Array.isArray(pSem.categories)?pSem.categories:semanticCategories(pTokens,ptn.trigger),catOverlap=fCats.filter(v=>pCats.includes(v)).length,pIntent=String(pSem.intent||"");
+      score+=semOverlap*13+catOverlap*10;if(pIntent&&pIntent===fIntent)score+=20;if(ptn.humanChat&&pIntent===fIntent&&catOverlap>0)score+=18;
       score+=(Number(ptn.confidence||0)-.5)*26;
-      const tier=String(ptn.tier||"confirmed");if(tier==="solo")score-=12;else if(tier==="growing")score-=2;else if(tier==="confirmed")score+=4;
+      const tier=String(ptn.tier||"confirmed");if(tier==="solo")score-=4;else if(tier==="growing")score+=1;else if(tier==="confirmed")score+=4;
       if(ptn.act&&ptn.act!==frame.act&&(!pIntent||pIntent!==semanticIntent(frame)))score-=24;if(ptn.affect&&ptn.affect!=="neutral"&&ptn.affect!==frame.affect)score-=18;
       if(input!==trig&&overlap===0&&semOverlap===0&&catOverlap===0)score-=16;
-      if(score>=62){score+=personalTopicBoostForPattern(ptn);out.push(candidate(adaptLearnedReply(ptn,frame),ptn.id||"learned",strategy,score,{source:ptn.humanChat?"learned-human":"learned",learningTier:tier}));}
+      if(score>=62){score+=personalTopicBoostForPattern(ptn)+personalStyleBoostForPattern(ptn);out.push(candidate(adaptLearnedReply(ptn,frame),ptn.id||"learned",strategy,score,{source:ptn.humanChat?"learned-human":"learned",learningTier:tier}));}
     }
     return out.sort((a,b)=>b.score-a.score).slice(0,4);
   }
+  function learnedConversationChoice(frame,ref,answer,source,strategy,socialText){
+    if(!answer||frame.knowledgeCue||frame.searchCue)return null;
+    const safeSocial=source==="local"&&socialText&&answer===socialText&&!/(insult|frustration)/.test(String(frame.reaction||""));
+    if(!(source==="local-everyday"||source==="local-decision"||safeSocial))return null;
+    const policy=pickStrategy(frame,ref),learned=learnedCandidates(frame,policy,ref);if(!learned.length)return null;
+    const localScore=source==="local-decision"?94:source==="local-everyday"?90:92;
+    const local=candidate(answer,`soft-local:${source}:${strategy}`,strategy,localScore,{source});
+    const chosen=weightedPick([local,...learned],v=>v.score,Math.random);
+    return chosen&&chosen.source==="learned-human"?chosen:null;
+  }
+
   function recentAssistantTurns(limit=4){return context().filter(v=>v.role==="assistant").slice(-limit);}
   function normalizedReplyShape(text){
     return compact(text).replace(/[0-9]+/g,"#").replace(/ㅋㅋ+/g,"ㅋ").replace(/ㅎㅎ+/g,"ㅎ");
@@ -1033,6 +1079,22 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const best=weightedPick(pool,v=>v.score,Math.random)||pool[0];
     if(best){recentChoices.set(userKey(),[best.id,...used.filter(v=>v!==best.id)].slice(0,16));}
     return best;
+  }
+
+  function spontaneousAside(answer,frame,source,random=Math.random){
+    const src=String(source||"");
+    // 사실/계산/검색/수정/부정 감정에는 돌발 멘트를 붙이지 않는다. 생활 잡담에서만 낮은 확률로 사용한다.
+    if(!answer||frame.question||frame.knowledgeCue||frame.affect==="negative"||!(src==="local-everyday"||src==="local-decision"||src==="local"))return answer;
+    if(Number(random())>=.12)return answer;
+    const c=frame.c;let rows=[];
+    if(/급식|점심|밥|먹|간식|라면|치킨|피자/.test(c))rows=["급식이나 메뉴는 진짜 한 끼로 기분 갈리긴 해 ㅋㅋ","먹는 얘기 나오면 갑자기 메뉴 고민 시작됨 ㅋㅋ"];
+    else if(/게임|롤|마크|축구|농구|경기/.test(c))rows=["이런 얘기 들으면 한 판만 더가 왜 생기는지 알겠다 ㅋㅋ","게임 얘기는 결과보다 중간 사건이 더 웃길 때 많더라 ㅋㅋ"];
+    else if(/학교|학원|수업|숙제|시험/.test(c))rows=["학교 얘기는 하루만 지나도 사건 하나씩 생기네 ㅋㅋ","학교는 별일 없는 날도 은근 얘깃거리가 생김 ㅋㅋ"];
+    else if(frame.affect==="positive")rows=["오 이런 건 괜히 나까지 기분 좋네 ㅋㅋ","이런 소식은 갑자기 분위기 좋아지지 ㅋㅋ"];
+    if(!rows.length)return answer;
+    const aside=rows[Math.min(rows.length-1,Math.floor(Math.max(0,Math.min(.999999,Number(random())||0))*rows.length))];
+    if(!aside||recentAssistantTurns(3).some(v=>normalizedReplyShape(v.text||"")===normalizedReplyShape(aside)))return answer;
+    return `${answer} ${aside}`;
   }
 
   function qualityGate(answer,frame,source,strategy){
@@ -1482,8 +1544,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="";
 
     const manner=mannerQuestion(text)?mannerAdviceText():null;
-    const dt=dateTime(text),calc=math(text),game=rps(text),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayDialogue=everydayDialogueReply(frame),broadEveryday=broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc)answer=calc;else if(game)answer=game;else if(punct){answer=punct;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social){answer=social;source="local";strategy="social";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    const dt=dateTime(text),calc=math(text),game=rps(text),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),broadEveryday=broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
+    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(game)answer=game;else if(punct){answer=punct;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social){answer=social;source="local";strategy="social";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
     const memQ=memoryQuestion(text);
@@ -1501,6 +1563,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       answer="날씨 정보를 바로 못 가져왔어. 지역을 붙여서 '서울 오늘 날씨'처럼 말해주면 다시 확인할게.";source="local-repair";strategy="direct";
     }
 
+    if(answer){
+      const learnedChoice=learnedConversationChoice(frame,ref,answer,source,strategy,social);
+      if(learnedChoice){answer=learnedChoice.text;source=learnedChoice.source;candidateId=learnedChoice.id;strategy=learnedChoice.strategy||strategy;}
+    }
+
     if(!answer){
       const policy=pickStrategy(frame,ref);strategy=policy.strategy;policyKeyValue=policy.policyKey;
       const chosen=chooseCandidate(frame,policy,[...generateCandidates(frame,ref,policy),...learnedCandidates(frame,policy,ref)]);
@@ -1509,6 +1576,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
     answer=qualityGate(answer,frame,source,strategy);
     answer=roughFriendlyRewrite(answer,frame,source);
+    answer=spontaneousAside(answer,frame,source);
     const m=inferMemory(text);if(m){if(m.multi)rememberPreference(m.key,m.value,m.label);else{memories()[m.key]={value:m.value,label:m.label,updatedAt:Date.now()};saveMemories();}}
     const s=state();s.strategyHistory.push(strategy);while(s.strategyHistory.length>12)s.strategyHistory.shift();
     if(frame.question)s.initiative.userQuestions=Number(s.initiative.userQuestions||0)+1;

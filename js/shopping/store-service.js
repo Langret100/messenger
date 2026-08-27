@@ -164,19 +164,43 @@ MiniTalk.Shopping.StoreService = (() => {
     if(!item)throw new Error("배송 요청할 상품을 찾을 수 없습니다.");
     if(item.usedAt||item.deliveryStatus==="completed")throw new Error("이미 배송이 완료된 상품입니다.");
     if(item.deliveryStatus==="requested"||item.deliveryStatus==="shipping")throw new Error("이미 배송이 진행 중입니다.");
-    const pendingKey=`${current.user_id}:${id}`,requestId=pendingDeliveryKeys.get(pendingKey)||crypto.randomUUID();
+    const pendingKey=`${current.user_id}:${id}`,requestId=pendingDeliveryKeys.get(pendingKey)||crypto.randomUUID(),previous={...item};
     pendingDeliveryKeys.set(pendingKey,requestId);
+    // 클릭 직후 보관함 카드부터 요청 상태로 바꿔 서버 왕복 시간을 UI 반응시간으로 느끼지 않게 합니다. 실패하면 원래 상태로 되돌립니다.
+    putLocalInventory(current,{...item,deliveryStatus:"requested",deliveryRequestedAt:Date.now(),deliveryPending:true});
     try {
       const result=await MiniTalk.AuthApi.shopRequestDelivery({userId:current.user_id,inventoryId:id,item,requestId});
-      putLocalInventory(current,result.item||{...item,deliveryStatus:result.deliveryStatus||"requested",deliveryRequestedAt:Number(result.deliveryRequestedAt)||Date.now()});
-      // 서버 성공이 곧 배송요청 확정입니다. 재조회는 화면 응답을 막지 않고 같은 로그인 사용자일 때만 뒤에서 검증합니다.
+      putLocalInventory(current,{...(result.item||item),deliveryStatus:result.deliveryStatus||result.item?.deliveryStatus||"requested",deliveryRequestedAt:Number(result.deliveryRequestedAt||result.item?.deliveryRequestedAt)||Date.now(),deliveryPending:false});
+      // 서버 재검증은 화면 응답을 막지 않고 백그라운드에서 수행합니다.
       if(isActiveUser(current))refreshInventory(true).catch(()=>{});
       return result;
+    } catch(error) {
+      putLocalInventory(current,previous);
+      throw error;
     } finally {
       pendingDeliveryKeys.delete(pendingKey);
     }
   }
-  async function gift(id,targetId) { const current=requireLogin(),item=inventory().find(row=>row.id===id);if(!item||item.usedAt)throw new Error("선물할 수 없는 상품입니다.");const target=recipients().find(row=>row.user_id===targetId);if(!target)throw new Error("선물할 사용자를 찾을 수 없습니다.");const pendingKey=`${current.user_id}:${id}:${target.user_id}`,requestId=pendingGiftKeys.get(pendingKey)||crypto.randomUUID();pendingGiftKeys.set(pendingKey,requestId);await MiniTalk.AuthApi.shopGift({userId:current.user_id,nickname:current.nickname,targetId:target.user_id,inventoryId:id,item,requestId});pendingGiftKeys.delete(pendingKey);if(!isActiveUser(current))return{targetId:target.user_id,targetNickname:target.nickname};removeLocalInventory(current,id);MiniTalk.Realtime.notifyCommandTargets?.([target.user_id]);syncInventoryLater([async()=>{if(!isActiveUser(current))return;await MiniTalk.Realtime.removeShopInventory?.(id,current.user_id);if(isActiveUser(current))await refreshInventory(true)}]);return{targetId:target.user_id,targetNickname:target.nickname}; }
+  async function gift(id,targetId) {
+    const current=requireLogin(),item=inventory().find(row=>row.id===id);
+    if(!item||item.usedAt||item.deliveryStatus==="completed"||item.deliveryStatus==="requested"||item.deliveryStatus==="shipping")throw new Error("선물할 수 없는 상품입니다.");
+    const target=recipients().find(row=>row.user_id===targetId);if(!target)throw new Error("선물할 사용자를 찾을 수 없습니다.");
+    const pendingKey=`${current.user_id}:${id}:${target.user_id}`,requestId=pendingGiftKeys.get(pendingKey)||crypto.randomUUID(),previous={...item};pendingGiftKeys.set(pendingKey,requestId);
+    // 선물 버튼을 누른 즉시 보관함에서 감춰 체감 지연을 없애고, 서버 실패 시 그대로 복구합니다.
+    removeLocalInventory(current,id);
+    try {
+      await MiniTalk.AuthApi.shopGift({userId:current.user_id,nickname:current.nickname,targetId:target.user_id,inventoryId:id,item,requestId});
+    } catch(error) {
+      putLocalInventory(current,previous);
+      // 실패 재시도는 같은 requestId를 재사용해야 서버의 중복 선물 방지 영수증과 정합성이 맞습니다.
+      throw error;
+    }
+    pendingGiftKeys.delete(pendingKey);
+    if(!isActiveUser(current))return{targetId:target.user_id,targetNickname:target.nickname};
+    MiniTalk.Realtime.notifyCommandTargets?.([target.user_id]);
+    syncInventoryLater([async()=>{if(!isActiveUser(current))return;await MiniTalk.Realtime.removeShopInventory?.(id,current.user_id);if(isActiveUser(current))await refreshInventory(true)}]);
+    return{targetId:target.user_id,targetNickname:target.nickname};
+  }
 
   return{products,refreshCatalog,refreshInventory,start,enter,leave,saveProduct,deleteProduct,inventory,recipients,purchase,randomPurchase,use,requestDelivery,gift,normalizeProduct,normalizeInventory,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
 })();

@@ -21,5 +21,5 @@ ok(html.includes('css/features/tools.css?v=23'),'tools css cache-bust missing');
 ok(html.includes('js/features/feed.js?v=65.0.21'),'feed cache-bust missing');
 ok(html.includes('js/features/settings.js?v=45'),'settings cache-bust missing');
 ok(html.includes('js/features/admin.js?v=64.5.37'),'admin cache-bust missing');
-ok(sw.includes('moaru-moa-admin-isolation-url-filter-v10'),'v97 service worker cache missing');
+ok(sw.includes('moaru-moa-dialogue-fusion-final'),'v97 service worker cache missing');
 console.log('V97_TOOLS_ADMIN_FEED_STABILITY_OK');

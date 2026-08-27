@@ -687,11 +687,12 @@ function handleShopGift(e) {
       } catch (error) { console.error("LEGACY_GIFT_IMPORT_FAILED", error); }
     }
     if (!source && receipt && receipt.source) source = receipt.source;
-    if (!source || source.usedAt || (source.deliveryStatus && source.deliveryStatus !== "owned")) return shopJson_({ ok: false, error: "GIFT_ITEM_NOT_AVAILABLE" });
+    const sourceStatus = source ? normalizeDeliveryStatus_(source) : "";
+    if (!source || source.usedAt || (sourceStatus !== "owned" && sourceStatus !== "cancelled")) return shopJson_({ ok: false, error: "GIFT_ITEM_NOT_AVAILABLE" });
     const giftId = requestId ? "gift-" + requestId : "gift-" + Utilities.getUuid(), now = Number(receipt && receipt.createdAt) || Date.now();
     if (receiptKey && !receipt) { receipt = { status: "pending", userId: userId, targetId: targetId, inventoryId: inventoryId, giftId: giftId, source: source, createdAt: now };receipts.setProperty(receiptKey, JSON.stringify(receipt)); }
     const gift = Object.assign({}, source, { id: giftId, ownerId: targetId, giftedBy: userId, giftedByNickname: String(p.nickname || "").trim().slice(0, 30), giftedAt: now, createdAt: now });
-    delete gift.usedAt;gift.deliveryStatus = "owned";delete gift.deliveryRequestedAt;delete gift.deliveryCompletedAt;delete gift.deliveryCancelledAt;delete gift.deliveryHandledBy;
+    delete gift.usedAt;gift.deliveryStatus = "owned";delete gift.deliveryRequestedAt;delete gift.deliveryShippingAt;delete gift.deliveryCompletedAt;delete gift.deliveryCancelledAt;delete gift.deliveryHandledBy;
     const savedGift = writeShopInventoryItem_(targetId, gift);
     deleteShopInventoryItem_(userId, inventoryId, sourceFound && sourceFound.row);
     setPurchaseOwner_(gift.purchaseKey, targetId, giftId);

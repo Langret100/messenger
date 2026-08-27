@@ -381,15 +381,33 @@ MiniTalk.Features.Shopping = (() => {
   }
 
   async function openGift(item) {
-    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "modal-stack" }, [D.el("p", { class: "muted modal-note", text: "가입자 닉네임 명단을 불러오는 중입니다." })]);
+    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "modal-stack" }, [D.el("p", { class: "muted modal-note", text: "선물할 사용자를 준비하고 있습니다." })]);
     MiniTalk.UI.Shell.modal("선물하기", body);
-    try { await MiniTalk.UserDirectory.refresh(); } catch (error) { body.replaceChildren(empty("가입자 명단을 불러오지 못했어요", error.message || "Apps Script 배포 상태를 확인하세요."));return; }
-    const users = Service.recipients(), search = D.el("input", { class: "search", placeholder: "닉네임 검색", "aria-label": "선물할 사용자 검색" }), list = D.el("div", { class: "gift-user-list" });
-    let selected = "";
-    const draw = () => { const q = search.value.trim().toLowerCase(), shown = users.filter(row => row.nickname.toLowerCase().includes(q));list.replaceChildren(...shown.map(row => { const radio = D.el("input", { type: "radio", name: "giftTarget", value: row.user_id, "aria-label": `${row.nickname} 선택` });radio.checked = selected === row.user_id;radio.onchange = () => { selected = row.user_id;draw(); };return D.el("label", { class: `gift-user-option${selected === row.user_id ? " selected" : ""}` }, [D.el("span", { class: "gift-user-avatar", text: row.nickname.slice(0, 1) }), D.el("strong", { text: row.nickname }), radio]); }));if (!shown.length) list.append(empty("검색 결과가 없어요", "다른 닉네임으로 검색해보세요.")); };
-    const send = D.el("button", { class: "button primary", type: "button", text: "선물 보내기" });
-    send.onclick = async () => { if (!selected) return MiniTalk.UI.Shell.toast("사용자를 선택하세요.");send.disabled = true;try { const result = await Service.gift(item.id, selected);MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast(`${result.targetNickname}님에게 선물했습니다.`); } catch (error) { MiniTalk.UI.Shell.toast(error.message);send.disabled = false; } };
-    search.oninput = draw;body.replaceChildren(D.el("p", { text: `${item.name}을(를) 누구에게 선물할까요?` }), search, list, send);draw();setTimeout(() => search.focus(), 30);
+    let users = Service.recipients(), selected = "", search = null, list = null, send = null;
+    const draw = () => {
+      if (!search || !list) return;
+      const q = search.value.trim().toLowerCase(), shown = users.filter(row => row.nickname.toLowerCase().includes(q));
+      list.replaceChildren(...shown.map(row => { const radio = D.el("input", { type: "radio", name: "giftTarget", value: row.user_id, "aria-label": `${row.nickname} 선택` });radio.checked = selected === row.user_id;radio.onchange = () => { selected = row.user_id;draw(); };return D.el("label", { class: `gift-user-option${selected === row.user_id ? " selected" : ""}` }, [D.el("span", { class: "gift-user-avatar", text: row.nickname.slice(0, 1) }), D.el("strong", { text: row.nickname }), radio]); }));
+      if (!shown.length) list.append(empty("검색 결과가 없어요", "다른 닉네임으로 검색해보세요."));
+    };
+    const mount = () => {
+      search = D.el("input", { class: "search", placeholder: "닉네임 검색", "aria-label": "선물할 사용자 검색" });list = D.el("div", { class: "gift-user-list" });send = D.el("button", { class: "button primary", type: "button", text: "선물 보내기" });
+      send.onclick = async () => {
+        if (!selected) return MiniTalk.UI.Shell.toast("사용자를 선택하세요.");
+        const original = send.textContent;send.disabled = true;send.textContent = "보내는 중…";
+        try { const result = await Service.gift(item.id, selected);MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast(`${result.targetNickname}님에게 선물했습니다.`); }
+        catch (error) { MiniTalk.UI.Shell.toast(error.message);if(send?.isConnected){send.disabled = false;send.textContent = original;} }
+      };
+      search.oninput = draw;body.replaceChildren(D.el("p", { text: `${item.name}을(를) 누구에게 선물할까요?` }), search, list, send);draw();setTimeout(() => search?.focus(), 30);
+    };
+    // 이미 받아둔 가입자 명단이 있으면 즉시 선물창을 열고, 최신 명단 확인은 뒤에서 합니다.
+    if (users.length || MiniTalk.UserDirectory?.loaded?.()) {
+      mount();
+      MiniTalk.UserDirectory.refresh().then(() => { users = Service.recipients();draw(); }).catch(error => console.warn("가입자 명단 백그라운드 갱신 실패", error));
+      return;
+    }
+    try { await MiniTalk.UserDirectory.refresh();users = Service.recipients();mount(); }
+    catch (error) { body.replaceChildren(empty("가입자 명단을 불러오지 못했어요", error.message || "Apps Script 배포 상태를 확인하세요.")); }
   }
 
   function adminPanel(onChanged, context = {}) {
@@ -466,39 +484,47 @@ MiniTalk.Features.Shopping = (() => {
     const head = D.el("div", { class: "admin-shop-head" }), title = D.el("div", {}, [D.el("strong", { text: "배송 요청 관리" }), D.el("small", { class: "muted", text: "학생이 요청한 상품의 배송 상태를 처리합니다." })]);
     const refresh = D.el("button", { class: "mini-action", type: "button", text: "새로고침" }), list = D.el("div", { class: "admin-delivery-list" });
     head.append(title, refresh);panel.append(head, list);
-    let loading = false;
+    let loading = false, rows = [];
+    const current = MiniTalk.Store.get("user") || {};
+    const draw = () => {
+      list.replaceChildren();
+      if (!rows.length) { list.append(empty("대기 중인 배송이 없어요", "새 배송 요청이 들어오면 여기에 표시됩니다."));return; }
+      rows.forEach(row => {
+        const status = String(row.deliveryStatus || row.status || "requested"), item = D.el("article", { class: `admin-delivery-row status-${status}` });
+        const copy = D.el("div", { class: "admin-delivery-copy" }, [D.el("strong", { text: row.name || "상품" }), D.el("span", { text: row.nickname || row.ownerNickname || row.owner_id || row.ownerId || "학생" }), D.el("small", { class: "muted", text: status === "shipping" ? "배송중" : "배송 요청" })]);
+        const buttons = D.el("div", { class: "button-row compact-row" });
+        const action = async (kind, button) => {
+          if (button.disabled) return;
+          const group = [...buttons.querySelectorAll("button")], original = button.textContent;group.forEach(value => value.disabled = true);button.textContent = kind === "completed" ? "완료 처리 중…" : kind === "cancelled" ? "취소 중…" : "변경 중…";
+          try {
+            const payload = { userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("SHOP"), ownerId: row.ownerId || row.owner_id, inventoryId: row.id || row.inventoryId || row.inventory_id };
+            let result;
+            if (kind === "shipping") result = await MiniTalk.AuthApi.shopDeliveryShipping(payload);
+            else if (kind === "completed") result = await MiniTalk.AuthApi.shopDeliveryComplete(payload);
+            else result = await MiniTalk.AuthApi.shopDeliveryCancel(payload);
+            if (String(result?.deliveryStatus || "") !== kind) throw new Error("서버 배송 상태를 확인하지 못했습니다. 다시 새로고침해주세요.");
+            MiniTalk.Realtime.notifyCommandTargets?.([payload.ownerId]);
+            Shell.toast(kind === "completed" ? "배송완료로 처리했습니다." : kind === "cancelled" ? "배송을 취소했습니다." : "배송중으로 변경했습니다.");
+            // 상태변경 성공 뒤 배송목록 전체를 다시 읽지 않습니다. 현재 행만 즉시 반영하고 수동 새로고침은 별도 버튼으로 유지합니다.
+            if (kind === "shipping") rows = rows.map(value => value === row ? {...value,status:"shipping",deliveryStatus:"shipping"} : value);
+            else rows = rows.filter(value => value !== row);
+            draw();
+          } catch (error) {
+            if (["ADMIN_SESSION_EXPIRED","ADMIN_AUTH_REQUIRED","SHOP_MANAGER_PERMISSION_REQUIRED"].includes(String(error?.code || ""))) MiniTalk.AdminSession.clear?.();
+            Shell.toast(error.message || "배송 상태를 변경하지 못했습니다.");
+            if (button?.isConnected) { group.forEach(value => value.disabled = false);button.textContent = original; }
+          }
+        };
+        if (status === "requested") { const shipping = D.el("button", { class: "button secondary compact-button", type: "button", text: "배송 시작" });shipping.onclick = () => action("shipping", shipping);buttons.append(shipping); }
+        const complete = D.el("button", { class: "button primary compact-button", type: "button", text: "배송완료" }), cancel = D.el("button", { class: "button secondary compact-button", type: "button", text: "취소" });
+        complete.onclick = () => action("completed", complete);cancel.onclick = () => action("cancelled", cancel);buttons.append(complete, cancel);item.append(copy, buttons);list.append(item);
+      });
+    };
     const load = async () => {
-      if (loading) return;loading = true;refresh.disabled = true;list.replaceChildren(D.el("p", { class: "muted", text: "배송 요청을 불러오는 중입니다." }));
-      try {
-        const current = MiniTalk.Store.get("user") || {}, rows = await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP"));
-        list.replaceChildren();
-        if (!rows.length) list.append(empty("대기 중인 배송이 없어요", "새 배송 요청이 들어오면 여기에 표시됩니다."));
-        rows.forEach(row => {
-          const status = String(row.deliveryStatus || row.status || "requested"), item = D.el("article", { class: `admin-delivery-row status-${status}` });
-          const copy = D.el("div", { class: "admin-delivery-copy" }, [D.el("strong", { text: row.name || "상품" }), D.el("span", { text: row.nickname || row.ownerNickname || row.owner_id || row.ownerId || "학생" }), D.el("small", { class: "muted", text: status === "shipping" ? "배송중" : "배송 요청" })]);
-          const buttons = D.el("div", { class: "button-row compact-row" });
-          const action = async (kind, button) => {
-            if (button.disabled) return;button.disabled = true;
-            try {
-              const payload = { userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("SHOP"), ownerId: row.ownerId || row.owner_id, inventoryId: row.id || row.inventoryId || row.inventory_id };
-              let result;
-              if (kind === "shipping") result = await MiniTalk.AuthApi.shopDeliveryShipping(payload);
-              else if (kind === "completed") result = await MiniTalk.AuthApi.shopDeliveryComplete(payload);
-              else result = await MiniTalk.AuthApi.shopDeliveryCancel(payload);
-              if (String(result?.deliveryStatus || "") !== kind) throw new Error("서버 배송 상태를 확인하지 못했습니다. 다시 새로고침해주세요.");
-              MiniTalk.Realtime.notifyCommandTargets?.([payload.ownerId]);
-              Shell.toast(kind === "completed" ? "배송완료로 처리했습니다." : kind === "cancelled" ? "배송을 취소했습니다." : "배송중으로 변경했습니다.");
-              await load();
-            } catch (error) {
-              if (["ADMIN_SESSION_EXPIRED","ADMIN_AUTH_REQUIRED","SHOP_MANAGER_PERMISSION_REQUIRED"].includes(String(error?.code || ""))) MiniTalk.AdminSession.clear?.();
-              Shell.toast(error.message || "배송 상태를 변경하지 못했습니다.");button.disabled = false;
-            }
-          };
-          if (status === "requested") { const shipping = D.el("button", { class: "button secondary compact-button", type: "button", text: "배송 시작" });shipping.onclick = () => action("shipping", shipping);buttons.append(shipping); }
-          const complete = D.el("button", { class: "button primary compact-button", type: "button", text: "배송완료" }), cancel = D.el("button", { class: "button secondary compact-button", type: "button", text: "취소" });
-          complete.onclick = () => action("completed", complete);cancel.onclick = () => action("cancelled", cancel);buttons.append(complete, cancel);item.append(copy, buttons);list.append(item);
-        });
-      } catch (error) { list.replaceChildren(D.el("p", { class: "muted", text: error.message || "배송 요청을 불러오지 못했습니다." })); }
+      if (loading) return;loading = true;refresh.disabled = true;
+      if (!rows.length) list.replaceChildren(D.el("p", { class: "muted", text: "배송 요청을 불러오는 중입니다." }));
+      try { rows = await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP"));draw(); }
+      catch (error) { if (!rows.length) list.replaceChildren(D.el("p", { class: "muted", text: error.message || "배송 요청을 불러오지 못했습니다." }));else Shell.toast(error.message || "배송 요청을 새로고침하지 못했습니다."); }
       finally { loading = false;refresh.disabled = false; }
     };
     refresh.onclick = load;load();return panel;

@@ -17,7 +17,7 @@ const props=new Map(),ctx={console,Date,Math,JSON,String,Number,Object,Array,Map
   ContentService:{MimeType:{JSON:'json'},createTextOutput:v=>({value:v,setMimeType(){return this}})}
 };
 vm.createContext(ctx);vm.runInContext(server,ctx,{filename:'coin-shopping-extension.gs'});
-ctx.moaruSpreadsheetRetry_=fn=>fn();ctx.moaruRegisteredUserMap_=()=>({u1:'보내는이',u2:'받는이'});ctx.requireRegisteredShopUser_=id=>String(id||'');
+ctx.moaruSpreadsheetRetry_=fn=>fn();ctx.moaruRegisteredUserMap_=()=>({u1:'보내는이',u2:'받는이'});ctx.requireRegisteredShopUser_=id=>String(id||'');ctx.findRewardUsersForShop_=ids=>Object.fromEntries(ids.map(id=>[id,{userId:id,coin:10}]));
 ctx.findShopInventoryItemFresh_=()=>({row:7,item:{id:'c1',ownerId:'u1',productId:'p1',name:'취소상품',purchaseKey:'pk1',deliveryStatus:'cancelled',deliveryRequestedAt:10,deliveryShippingAt:20,deliveryCancelledAt:30}});
 let saved=null,deleted=false;ctx.writeShopInventoryItem_=(owner,item)=>{saved={...item,ownerId:owner};return saved};ctx.deleteShopInventoryItem_=()=>{deleted=true};ctx.setPurchaseOwner_=()=>{};ctx.enqueueMoaruCommand_=()=>{};
 const giftResult=JSON.parse(ctx.handleShopGift({parameter:{user_id:'u1',target_user_id:'u2',inventory_id:'c1',nickname:'보내는이'}}).value);

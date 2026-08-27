@@ -20,7 +20,7 @@ const MOARU_SHOP_INVENTORY_HEADERS = ["inventory_id","owner_id","product_id","na
 const SHOP_ADMIN_TOKEN_SECONDS = 21600; // 6시간
 const SHOP_PRODUCT_MAX_BYTES = 8500;
 const SHOP_IMAGE_MAX_CHARS = 7200;
-const SHOP_RANDOM_PURCHASE_PRICE = 5;
+const SHOP_RANDOM_PURCHASE_PRICE = 3;
 const SHOP_INVENTORY_PROPERTY_PREFIX = "MOARU_SHOP_INV_";
 const MOARU_COMMAND_PROPERTY_PREFIX = "MOARU_COMMANDS_";
 const SHOP_PURCHASE_OWNER_PROPERTY_PREFIX = "MOARU_PURCHASE_OWNER_";
@@ -553,14 +553,18 @@ function readShopInventory_(userId) {
   return items;
 }
 
-function writeShopInventoryItem_(userId, item, rowHint) {
-  const compact = Object.assign({}, item, { ownerId: String(userId || item.ownerId || "") });
+function writeShopInventoryItem_(userId, item, rowHint, options) {
+  const original = Object.assign({}, item), compact = Object.assign({}, item, { ownerId: String(userId || item.ownerId || "") }), opts = options || {};
   delete compact.imageUrl;
   if (!compact.id || !compact.ownerId) throw new Error("INVALID_SHOP_INVENTORY_ITEM");
-  const sheet = getOrCreateShopInventorySheet_(), hinted = Math.floor(Number(rowHint) || 0), row = hinted >= 2 ? hinted : findShopInventorySheetRow_(sheet, compact.id), values = shopInventoryItemToRow_(compact);
+  const sheet = getOrCreateShopInventorySheet_(), hinted = Math.floor(Number(rowHint) || 0), row = opts.knownNewId === true ? 0 : (hinted >= 2 ? hinted : findShopInventorySheetRow_(sheet, compact.id)), values = shopInventoryItemToRow_(compact);
   if (row) sheet.getRange(row, 1, 1, values.length).setValues([values]);
   else sheet.appendRow(values);
   clearShopInventoryCache_(compact.ownerId);
+  const knownProduct = opts.knownProduct, knownProductId = knownProduct && String(knownProduct.id || knownProduct.productId || "");
+  if (knownProduct && knownProductId === String(compact.productId || "")) {
+    return Object.assign({}, compact, { imageUrl: String(knownProduct.imageUrl || original.imageUrl || "") });
+  }
   return hydrateShopInventoryItem_(compact, readShopCatalog_());
 }
 
@@ -580,7 +584,19 @@ function createPurchasedInventory_(userId, product, purchaseKey) {
     name: product.name, description: product.description || "", price: product.price,
     purchaseKey: purchaseKey, purchasedAt: now, createdAt: now, deliveryStatus: "owned"
   };
-  return writeShopInventoryItem_(userId, item);
+  return writeShopInventoryItem_(userId, item, 0, { knownProduct: product });
+}
+
+function createFreshPurchasedInventory_(userId, product, purchaseKey) {
+  // 신규 결제는 이미 purchase log의 purchaseKey 중복검사를 통과한 뒤에만 이 함수로 들어옵니다.
+  // 그래서 사용자 보관함 전체 재조회와 새 UUID의 중복 행 검색을 생략해 Spreadsheet I/O를 줄입니다.
+  // 서버 쓰기가 실패하면 pending으로 보존되고, 같은 purchaseKey 재시도는 위 createPurchasedInventory_ 경로로 복구됩니다.
+  const now = Date.now(), item = {
+    id: "inv-" + Utilities.getUuid(), ownerId: userId, productId: product.id,
+    name: product.name, description: product.description || "", price: product.price,
+    purchaseKey: purchaseKey, purchasedAt: now, createdAt: now, deliveryStatus: "owned"
+  };
+  return writeShopInventoryItem_(userId, item, 0, { knownNewId: true, knownProduct: product });
 }
 
 /*
@@ -693,7 +709,7 @@ function handleShopGift(e) {
     if (receiptKey && !receipt) { receipt = { status: "pending", userId: userId, targetId: targetId, inventoryId: inventoryId, giftId: giftId, source: source, createdAt: now };receipts.setProperty(receiptKey, JSON.stringify(receipt)); }
     const gift = Object.assign({}, source, { id: giftId, ownerId: targetId, giftedBy: userId, giftedByNickname: String(p.nickname || "").trim().slice(0, 30), giftedAt: now, createdAt: now });
     delete gift.usedAt;gift.deliveryStatus = "owned";delete gift.deliveryRequestedAt;delete gift.deliveryShippingAt;delete gift.deliveryCompletedAt;delete gift.deliveryCancelledAt;delete gift.deliveryHandledBy;
-    const savedGift = writeShopInventoryItem_(targetId, gift);
+    const savedGift = writeShopInventoryItem_(targetId, gift, 0, { knownProduct: source });
     deleteShopInventoryItem_(userId, inventoryId, sourceFound && sourceFound.row);
     setPurchaseOwner_(gift.purchaseKey, targetId, giftId);
     enqueueMoaruCommand_(targetId, "SHOP_GIFT", { itemId: savedGift.id, name: savedGift.name, giftedByNickname: savedGift.giftedByNickname }, userId, requestId ? "shop-gift-" + requestId : "");
@@ -1279,22 +1295,32 @@ function handleAdminTaskBulkDelete(e) {
 }
 
 function shopRandomWeight_(price) {
-  const value = Number(price) || 0;
-  if (value <= 2) return 1.6;
-  if (value <= 5) return 1.0;
-  return 0.55;
+  const value = Math.max(1, Number(price) || 1);
+  // 같은 가격군 안에서도 가치(가격)가 높을수록 당첨 확률이 계속 낮아집니다.
+  return 1 / value;
+}
+
+function pickWeightedShopProductFromGroup_(rows) {
+  const items = (rows || []).filter(function (product) { return product && product.id && product.active && Number(product.price) > 0; });
+  if (!items.length) return null;
+  const total = items.reduce(function (sum, product) { return sum + shopRandomWeight_(product.price); }, 0);
+  let cursor = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    cursor -= shopRandomWeight_(items[i].price);
+    if (cursor <= 0) return items[i];
+  }
+  return items[items.length - 1];
 }
 
 function pickWeightedShopProduct_(products) {
   const rows = (products || []).filter(function (product) { return product && product.id && product.active && Number(product.price) > 0; });
   if (!rows.length) return null;
-  const total = rows.reduce(function (sum, product) { return sum + shopRandomWeight_(product.price); }, 0);
-  let cursor = Math.random() * total;
-  for (let i = 0; i < rows.length; i++) {
-    cursor -= shopRandomWeight_(rows[i].price);
-    if (cursor <= 0) return rows[i];
-  }
-  return rows[rows.length - 1];
+  const low = rows.filter(function (product) { const price = Number(product.price) || 0;return price >= 1 && price <= 3; });
+  const high = rows.filter(function (product) { return Number(product.price) >= 4; });
+  if (!low.length) return pickWeightedShopProductFromGroup_(high);
+  if (!high.length) return pickWeightedShopProductFromGroup_(low);
+  // 가격군 확률을 상품 개수와 무관하게 먼저 70% / 30%로 고정합니다.
+  return Math.random() < 0.70 ? pickWeightedShopProductFromGroup_(low) : pickWeightedShopProductFromGroup_(high);
 }
 
 function findRewardUserForShop_(userId) {
@@ -1379,7 +1405,7 @@ function handleShopPurchase(e) {
 
     const inventoryProduct = randomMode ? normalizeShopProduct_(Object.assign({}, product, { price: chargePrice })) : product;
     let inventoryItem = null, inventoryPending = false;
-    try { inventoryItem = createPurchasedInventory_(userId, inventoryProduct, purchaseKey); clearPendingShopPurchase_(purchaseKey); }
+    try { inventoryItem = createFreshPurchasedInventory_(userId, inventoryProduct, purchaseKey); clearPendingShopPurchase_(purchaseKey); }
     catch (inventoryError) {
       inventoryPending = true;
       try { rememberPendingShopPurchase_(userId, inventoryProduct, purchaseKey); } catch (pendingError) { console.error("SHOP_PENDING_PURCHASE_SAVE_FAILED", pendingError); }

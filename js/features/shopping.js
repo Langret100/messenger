@@ -284,13 +284,17 @@ MiniTalk.Features.Shopping = (() => {
     const D = MiniTalk.UI.Dom, body = D.el("div", { class: "modal-stack purchase-confirm" });
     const confirm = D.el("button", { class: "button primary purchase-confirm-button", type: "button" }, [coinAmount(product.price, "coin-amount button-coin"), D.el("span", { text: "으로 구매" })]);
     confirm.onclick = async () => {
+      if (confirm.disabled) return;
       confirm.disabled = true;
+      confirm.classList.add("is-pending");
+      const original = confirm.innerHTML;
+      confirm.textContent = "구매 처리 중…";
       try { await Service.purchase(product); MiniTalk.UI.Shell.closeModal(); MiniTalk.UI.Shell.toast(`${product.name}을(를) 구매했습니다.`); }
       catch (error) {
         if (error.productChanged) {
           MiniTalk.UI.Shell.closeModal();
           refreshVisible();
-        } else confirm.disabled = false;
+        } else { confirm.disabled = false; confirm.classList.remove("is-pending"); confirm.innerHTML = original; }
         MiniTalk.UI.Shell.toast(error.message);
       }
     };
@@ -341,11 +345,15 @@ MiniTalk.Features.Shopping = (() => {
     const actions = D.el("div", { class: "shop-inventory-actions" });
     const status = String(item.deliveryStatus || (used ? 'completed' : 'owned'));
     if (!used) {
-      const giftButton = D.el("button", { class: "button secondary compact-button", type: "button", text: "선물", onclick: () => openGift(item) });
-      const deliveryButtonText = status === 'requested' || status === 'shipping' ? '배송중' : (status === 'cancelled' ? '다시 배송' : '배송');
-      const deliveryButton = D.el("button", { class: "button primary compact-button", type: "button", text: deliveryButtonText, disabled: status === 'requested' || status === 'shipping' });
+      const deliveryLocked = status === 'requested' || status === 'shipping';
+      if (!deliveryLocked) {
+        const giftButton = D.el("button", { class: "button secondary compact-button", type: "button", text: "선물", onclick: () => openGift(item) });
+        actions.append(giftButton);
+      }
+      const deliveryButtonText = deliveryLocked ? '배송중' : (status === 'cancelled' ? '다시 배송' : '배송');
+      const deliveryButton = D.el("button", { class: "button primary compact-button", type: "button", text: deliveryButtonText, disabled: deliveryLocked });
       deliveryButton.onclick = () => requestDelivery(item, deliveryButton);
-      actions.append(giftButton, deliveryButton);
+      actions.append(deliveryButton);
     }
     const arrived = randomArrivalId && String(item.id || "") === String(randomArrivalId);
     return D.el("article", { class: `shop-inventory-item${used ? " used" : ""}${status ? ` status-${status}` : ''}${arrived ? " random-arrived" : ""}` }, [
@@ -381,6 +389,11 @@ MiniTalk.Features.Shopping = (() => {
   }
 
   async function openGift(item) {
+    const status = String(item?.deliveryStatus || (item?.usedAt ? "completed" : "owned"));
+    if (item?.usedAt || status === "completed" || status === "requested" || status === "shipping") {
+      MiniTalk.UI.Shell.toast("배송 중인 상품은 선물할 수 없어요.");
+      return;
+    }
     const D = MiniTalk.UI.Dom, body = D.el("div", { class: "modal-stack" }, [D.el("p", { class: "muted modal-note", text: "선물할 사용자를 준비하고 있습니다." })]);
     MiniTalk.UI.Shell.modal("선물하기", body);
     let users = Service.recipients(), selected = "", search = null, list = null, send = null;

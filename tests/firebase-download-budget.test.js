@@ -26,5 +26,5 @@ ok(rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 61440')&&rul
 
 ok((rules.rules.moaru.v3.feedState.posts['.indexOn']||[]).includes('createdAt'),'feed createdAt query index missing');
 for(const ref of ['data-cache.js?v=64.5.24','realtime.js?v=64.5.42','attachments.js?v=65.0.1','chats.js?v=64.5.21','feed.js?v=65.0.21','profile-editor.js?v=64.4.2'])ok(html.includes(ref),`cache version missing: ${ref}`);
-ok(sw.includes('moaru-camera-popup-task-scroll-fix')&&app.includes('sw.js?v=64.5.51'),'service worker version missing');
+ok(sw.includes('moaru-moa-performance-audit-v9')&&app.includes('sw.js?v=64.5.56'),'service worker version missing');
 console.log('FIREBASE_DOWNLOAD_BUDGET_OK');

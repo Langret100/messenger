@@ -10,6 +10,6 @@ ok(enter.indexOf('await MiniTalk.Router.go("chats")')>=0,'chat first render miss
 ok(enter.indexOf('await MiniTalk.Router.go("chats")')<enter.indexOf('MiniTalk.Realtime.init(user)'),'first chat DOM must be built before realtime bootstrap');
 ok(enter.includes('requestAnimationFrame(()=>setTimeout(()=>startWorkspaceBackground(user),0))'),'noncritical workspace services must start after first paint');
 ok(!enter.includes('await MiniTalk.Economy.CoinWallet')&&!enter.includes('await MiniTalk.UserDirectory'),'noncritical server reads must not gate first workspace paint');
-ok(html.includes('js/features/auth.js?v=64.5.35')&&html.includes('js/ui/shell.js?v=64.5.34')&&html.includes('js/app.js?v=64.5.37'),'login first-paint asset versions stale');
-ok(app.includes('sw.js?v=64.5.51')&&sw.includes('moaru-camera-popup-task-scroll-fix'),'login first-paint service worker version stale');
+ok(html.includes('js/features/auth.js?v=64.5.35')&&html.includes('js/ui/shell.js?v=64.5.34')&&html.includes('js/app.js?v=64.5.42'),'login first-paint asset versions stale');
+ok(app.includes('sw.js?v=64.5.56')&&sw.includes('moaru-moa-performance-audit-v9'),'login first-paint service worker version stale');
 console.log('LOGIN_FIRST_PAINT_OK');

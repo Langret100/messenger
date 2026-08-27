@@ -126,7 +126,7 @@ const ordinary=[
   ok(gs.includes('moaPublicExpressionWeights_'),'public expression snapshot missing');
   ok(gs.includes('moaStoreExpressionEvents_'),'expression feedback storage missing');
   ok(gs.includes('"모아_개인기억","모아_사용자성향","모아_표현학습"'),'legacy personal cleanup missing');
-  ok(gs.includes('preserved:[MOA_POLICY_SHEET,MOA_EXPRESSION_SHEET]'),'public sheets not protected in cleanup');
+  ok(gs.includes('preserved:[MOA_POLICY_SHEET,MOA_EXPRESSION_SHEET,MOA_EXAMPLE_SHEET,MOA_LANGUAGE_SHEET,MOA_LANGUAGE_REBUILD_SHEET,MOA_LANGUAGE_DELTA_SHEET]'),'public sheets not protected in cleanup');
   ok(!/MOA_MEMORY_SHEET|MOA_PROFILE_SHEET/.test(gs),'personal sheet runtime constants returned');
 
   console.log(`MOA_WEIGHTED_DIALOGUE_STRESS_OK scenarios=${ordinary.length} diversity=${new Set(variants).size} neutralQuestions=${q} multiUserTurns=${multiTurns} feedback=${events.length}`);

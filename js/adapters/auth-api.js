@@ -38,10 +38,10 @@ MiniTalk.AuthApi = (() => {
     NO_TASKS_SELECTED: "과제를 선택하세요.",
     TASK_DELETE_CONFLICT: "보상 처리 중인 과제는 삭제할 수 없습니다. 잠시 후 다시 확인해주세요."
   };
-  async function post(payload) {
+  async function post(payload, timeoutMs = 20000) {
     const body = new URLSearchParams();
     Object.entries(payload).forEach(([key, value]) => body.set(key, String(value ?? "")));
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs || 20000)));
     let response;
     try {
       response = await fetch(MiniTalkConfig.sheetUrl, {
@@ -202,6 +202,12 @@ MiniTalk.AuthApi = (() => {
     async adminTaskBulkDelete({ userId, adminToken, taskIds }) {
       return post({ mode: "admin_task_bulk_delete", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []) });
     },
+    async adminMoaLearningStatus(userId, adminToken) {
+      return post({ mode: "moa_admin_learning_status", user_id: userId, admin_token: adminToken });
+    },
+    async adminMoaLearnChats({ userId, adminToken, reset = false, batchLimit = 260, cleanup = false }) {
+      return post({ mode: "moa_admin_learn_chats", user_id: userId, admin_token: adminToken, reset: reset ? "1" : "", cleanup: cleanup ? "1" : "", batch_limit: batchLimit }, 45000);
+    },
     async userTaskList(userId) {
       const data = await post({ mode: "user_task_list", user_id: userId });
       return Array.isArray(data.tasks) ? data.tasks : [];
@@ -216,8 +222,8 @@ MiniTalk.AuthApi = (() => {
     /* MOA_CHAT_INTEGRATION_START
        MOA ownership: personal memory/style stays local.
        Apps Script receives public policy feedback and search requests only. */
-    async moaSync(userId, knownVersion = 0) {
-      return post({ mode: "moa_sync", user_id: userId, known_version: Number(knownVersion || 0) });
+    async moaSync(userId, knownVersion = 0, knownCoreVersion = 0) {
+      return post({ mode: "moa_sync", user_id: userId, known_version: Number(knownVersion || 0), known_core_version: Number(knownCoreVersion || 0), client_caps: "delta-v1" });
     },
     async moaCommit({ userId, events = [] }) {
       return post({

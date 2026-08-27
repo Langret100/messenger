@@ -14,6 +14,6 @@ ok(engine.includes('return "whatdoing"')&&engine.includes('return "hungry"')&&en
 for(const token of ['whatdoing:[','hungry:[','nervous:[','confused:['])ok(engine.includes(token),`new local dialogue pool missing: ${token}`);
 ok(html.includes('feed-classinfo-weekly.css?v=65.0.31'),'weekly report CSS cache bust missing');
 ok(html.includes('friday-grade6-mission.js?v=65.0.19'),'weekly mission cache bust missing');
-ok(html.includes('moa-communication-engine.js?v=20'),'MOA local dialogue cache bust missing');
-ok(sw.includes('moaru-camera-popup-task-scroll-fix'),'v95 SW cache missing');
+ok(html.includes('moa-communication-engine.js?v=29'),'MOA local dialogue cache bust missing');
+ok(sw.includes('moaru-moa-performance-audit-v9'),'v95 SW cache missing');
 console.log('WEEKLY_REPORT_DIALOGUE_V95_OK');

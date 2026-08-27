@@ -245,6 +245,8 @@ function doPost(e) {
       case "moa_sync": return moaSync_(data);
       case "moa_commit": return moaCommit_(data);
       case "moa_search": return moaSearchAssist_(data);
+      case "moa_admin_learning_status": return moaAdminLearningStatus_(data);
+      case "moa_admin_learn_chats": return moaAdminLearnChats_(data);
       // MOA_CHAT_INTEGRATION_END
 
       // 🔹 소통 채팅 시트 기록 추가 ★여기 추가
@@ -508,6 +510,16 @@ function signup_(data) {
   }
   try { CacheService.getScriptCache().remove("moaru-user-directory-v1"); } catch (cacheError) {}
   try { CacheService.getScriptCache().remove("moaru-registered-users-v2"); } catch (cacheError) {}
+  try {
+    const moaNickCache = CacheService.getScriptCache();
+    moaNickCache.remove("moa.registered.nicknames.v1");
+    moaNickCache.remove("moa.registered.nicknames.v2.m");
+    // Chunk keys are removed defensively; missing keys are harmless.
+    const moaNickParts = [];
+    for (let i = 0; i < 40; i++) moaNickParts.push("moa.registered.nicknames.v2.p" + i);
+    if (typeof moaNickCache.removeAll === "function") moaNickCache.removeAll(moaNickParts);
+    else moaNickParts.forEach(function(k){ try { moaNickCache.remove(k); } catch (_) {} });
+  } catch (cacheError) {}
   try { if (typeof rememberKnownMoaruUser_ === "function") rememberKnownMoaruUser_(userId); } catch (cacheError) {}
 
   return jsonResponse_({

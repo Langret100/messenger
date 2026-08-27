@@ -97,7 +97,19 @@ function cleanupSocialChatSheet() {
     return; // 마지막 메시지 이후 1시간이 지나지 않음
   }
 
-  // 헤더(1행)를 제외한 모든 메시지 행 삭제
+  // 헤더(1행)를 제외한 메시지를 지우기 전에, 아직 공통학습에 반영되지 않은
+  // 구간이 있으면 백그라운드에서 먼저 언어패턴으로 보존합니다.
+  // 학습 백로그가 너무 크거나 보존에 실패하면 이번 정리는 건너뛰어 원문 손실을 막습니다.
+  try {
+    if (typeof moaLearnGlobalBeforeCleanup_ === "function") {
+      var learnBeforeDelete = moaLearnGlobalBeforeCleanup_(sheet);
+      if (learnBeforeDelete && learnBeforeDelete.ok === false) return;
+    }
+  } catch (learnError) {
+    console.warn("소통 정리 전 모아 학습 보존 실패 - 원문 삭제를 미룹니다.", learnError);
+    return;
+  }
+
   sheet.deleteRows(2, dataRows);
 }
 

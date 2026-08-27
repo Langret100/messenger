@@ -14,7 +14,7 @@
    ============================================================ */
 MiniTalk.AI = MiniTalk.AI || {};
 MiniTalk.AI.MoaCommunicationEngine = (() => {
-  const VERSION = 91;
+  const VERSION = 92;
   const MAX_CONTEXT = 28;
   const MAX_EPISODES = 36;
   const MAX_TIMELINE = 24;
@@ -45,11 +45,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     mannerTurns: 0
   });
 
-  const ctxByUser = new Map(), stateByUser = new Map(), learnedByUser = new Map();
+  const ctxByUser = new Map(), stateByUser = new Map(), learnedByUser = new Map(), learnedIndexByUser = new Map();
   const policyByUser = new Map(), expressionByUser = new Map(), profileByUser = new Map(), memoriesByUser = new Map();
   const personalLearningByUser = new Map();
   const recentChoices = new Map(), syncAt = new Map(), syncVersion = new Map();
-  const commitQueues = new Map(), commitTimers = new Map(), rpsByUser = new Map();
+  const commitQueues = new Map(), commitTimers = new Map(), commitRetryByUser = new Map(), rpsByUser = new Map(), learnedCacheReady = new Map();
 
   const clean = v => String(v || "").replace(/\s+/g," ").trim();
   const compact = v => (clean(v).normalize?.("NFC") || clean(v)).toLowerCase().replace(/[\s~!！?？.,。·…'"“”‘’]/g,"");
@@ -58,23 +58,29 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   const isGuest = () => !!MiniTalk.Store.get("user")?.isGuest || userKey()==="guest";
   const pget = (k,d) => MiniTalk.Persistence.get(k,d), pset=(k,v)=>MiniTalk.Persistence.set(k,v), premove=k=>MiniTalk.Persistence.remove(k);
   const sk = suffix => `moa.v91.${suffix}.${userKey()}`;
+  function firstPersisted(keys,fallback,accept){
+    for(const key of keys){const value=pget(key,null);if(value!==null&&value!==undefined&&(!accept||accept(value)))return value;}
+    return fallback;
+  }
+  const storedObject=(suffix,key,versions=[91,90,89,88,87])=>firstPersisted(versions.map(v=>`moa.v${v}.${suffix}.${key}`),{},v=>v&&typeof v==="object"&&!Array.isArray(v));
+  const storedArray=(suffix,key,versions=[91,90,89,88,87])=>firstPersisted(versions.map(v=>`moa.v${v}.${suffix}.${key}`),[],Array.isArray);
 
   function profile(){
     const key=userKey();
-    if(!profileByUser.has(key))profileByUser.set(key,{...PROFILE_DEFAULTS,...(pget(`moa.v91.profile.${key}`,{})||pget(`moa.v90.profile.${key}`,{})||pget(`moa.v89.profile.${key}`,{})||pget(`moa.v88.profile.${key}`,{})||pget(`moa.v87.profile.${key}`,{})||{})});
+    if(!profileByUser.has(key))profileByUser.set(key,{...PROFILE_DEFAULTS,...storedObject("profile",key)});
     return profileByUser.get(key);
   }
   function saveProfile(){if(!isGuest())pset(sk("profile"),profile());}
   function memories(){
     const key=userKey();
-    if(!memoriesByUser.has(key))memoriesByUser.set(key,pget(`moa.v91.memories.${key}`,{})||pget(`moa.v90.memories.${key}`,{})||pget(`moa.v89.memories.${key}`,{})||pget(`moa.v88.memories.${key}`,{})||pget(`moa.v87.memories.${key}`,{})||{});
+    if(!memoriesByUser.has(key))memoriesByUser.set(key,storedObject("memories",key));
     return memoriesByUser.get(key);
   }
   function saveMemories(){if(!isGuest())pset(sk("memories"),memories());}
   function personalLearning(){
     const key=userKey();
     if(!personalLearningByUser.has(key)){
-      const legacy=pget(`moa.v91.personalLearning.${key}`,{})||{};
+      const legacy=storedObject("personalLearning",key,[91,90,89,88,87]);
       personalLearningByUser.set(key,{turns:0,features:{},strategies:{},topics:{},...legacy});
     }
     const l=personalLearningByUser.get(key);
@@ -84,7 +90,21 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     l.turns=Math.max(0,Number(l.turns||0));
     return l;
   }
-  function savePersonalLearning(){if(!isGuest())pset(sk("personalLearning"),personalLearning());}
+  const personalLearningSaveTimers=new Map();
+  function flushPersonalLearningSave(key){
+    const timer=personalLearningSaveTimers.get(key);if(timer!=null){try{clearTimeout(timer)}catch(e){}personalLearningSaveTimers.delete(key);}
+    if(!key||key==="guest")return;const value=personalLearningByUser.get(key);if(value)pset(`moa.v91.personalLearning.${key}`,value);
+  }
+  function savePersonalLearning(){
+    if(isGuest())return;const key=userKey();if(personalLearningSaveTimers.has(key))return;
+    // A single turn can reinforce strategy + several expression features + topic.
+    // Coalesce those synchronous localStorage writes into one end-of-turn write.
+    // Sandboxed/test hosts can omit timers; keep compatibility by flushing immediately.
+    if(typeof setTimeout!=="function"){flushPersonalLearningSave(key);return;}
+    personalLearningSaveTimers.set(key,setTimeout(()=>flushPersonalLearningSave(key),0));
+  }
+  function flushAllPersonalLearningSaves(){for(const key of [...personalLearningSaveTimers.keys()])flushPersonalLearningSave(key);}
+  try{globalThis?.addEventListener?.("pagehide",flushAllPersonalLearningSaves);}catch(e){}
   function learnedLocalScore(bucket,key){
     const row=personalLearning()?.[bucket]?.[key];if(!row)return 0;
     const pos=Number(row.positive||0),neg=Number(row.negative||0),uses=Number(row.uses||0);
@@ -127,12 +147,12 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function saveEngagement(e=engagement()){pset(sk("engagement"),e);}
   function context(){
     const key=userKey();
-    if(!ctxByUser.has(key))ctxByUser.set(key,pget(`moa.v91.context.${key}`,[])||pget(`moa.v90.context.${key}`,[])||pget(`moa.v89.context.${key}`,[])||pget(`moa.v88.context.${key}`,[])||pget(`moa.v87.context.${key}`,[])||[]);
+    if(!ctxByUser.has(key))ctxByUser.set(key,storedArray("context",key));
     return ctxByUser.get(key);
   }
   function state(){
     const key=userKey();
-    if(!stateByUser.has(key))stateByUser.set(key,pget(`moa.v91.state.${key}`,{})||pget(`moa.v90.state.${key}`,{})||pget(`moa.v89.state.${key}`,{})||pget(`moa.v88.state.${key}`,{})||pget(`moa.v87.state.${key}`,{})||{});
+    if(!stateByUser.has(key))stateByUser.set(key,storedObject("state",key));
     const s=stateByUser.get(key);
     if(!Array.isArray(s.entities))s.entities=[];
     if(!Array.isArray(s.episodes))s.episodes=[];
@@ -913,17 +933,66 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return out;
   }
 
+  function semanticLemma(token){
+    let t=clean(token).toLowerCase().replace(/[^0-9a-z가-힣ㅋㅎㅜㅠ]/gi,"");if(!t)return "";
+    const direct={좋아해:"좋아하다",좋아함:"좋아하다",좋아한다:"좋아하다",좋아하는:"좋아하다",좋음:"좋아하다",싫어해:"싫어하다",싫어함:"싫어하다",먹었어:"먹다",먹었다:"먹다",먹음:"먹다",먹고:"먹다",피곤해:"피곤하다",피곤함:"피곤하다",지쳤어:"지치다",졸려:"졸리다",재밌어:"재미있다",재밌다:"재미있다",맛있어:"맛있다",맛있다:"맛있다",끝났어:"끝나다",끝남:"끝나다",왔어:"오다",갔어:"가다",이겼어:"이기다",졌어:"지다"};
+    if(direct[t])return direct[t];t=t.replace(/(?:에게|한테|에서|으로|이랑|랑|하고|부터|까지|보다|처럼|은|는|이|가|을|를|에|도|만|의)$/g,"");return t;
+  }
+  function semanticTokens(text){const stop=new Set(["나는","난","내가","너","넌","니가","오늘","진짜","그냥","근데","그래서","그리고","이거","그거","저거","뭐","왜","어떻게","좀","너무","완전"]),seen=new Set(),out=[];clean(text).replace(/\[[^\]]+\]/g," ").replace(/[^0-9A-Za-z가-힣ㅋㅎㅜㅠ ]/g," ").split(/\s+/).forEach(x=>{const t=semanticLemma(x);if(t.length<2||stop.has(t)||seen.has(t))return;seen.add(t);out.push(t)});return out.slice(0,12)}
+  function semanticCategories(tokens,text=""){const s=` ${tokens.join(" ")} ${clean(text).toLowerCase()}`,out=[];const defs={fruit:/사과|복숭아|딸기|포도|수박|참외|바나나|귤|오렌지|과일/,food:/치킨|피자|떡볶이|라면|김밥|햄버거|밥|급식|과자|빵|음식|먹다|마시다|맛있다/,school:/학교|학원|수업|숙제|시험|공부|선생|급식/,game:/게임|플레이|랭크|승리|패배|이기다|지다|캐릭터/,friend:/친구|친구들|반친구|짝꿍/,travel:/버스|지하철|택시|기차|정류장|역|귀가|오다|가다/,emotion:/피곤하다|지치다|졸리다|기쁘|속상|짜증|화나|신나|재미있다|웃기다/,preference:/좋아하다|싫어하다|취향|선호/};Object.entries(defs).forEach(([k,re])=>{if(re.test(s))out.push(k)});return out}
+  function semanticIntent(frame){const ts=semanticTokens(frame.text),joined=ts.join(" ");if(/좋아하다|싫어하다|취향|선호/.test(joined)&&frame.question)return "ask:preference";if(frame.question)return "ask:question";if(/좋아하다|싫어하다|취향|선호/.test(joined))return "inform:preference";if(frame.affect!=="neutral")return "inform:emotion";return frame.speechAct||frame.act||"inform:statement"}
+  function learnedSemanticKey(p){const sem=p?.semantic||{},tokens=(Array.isArray(sem.tokens)&&sem.tokens.length?sem.tokens:semanticTokens(p?.trigger||"")).slice(0,8),replyTokens=semanticTokens(p?.reply||"").slice(0,8),intent=String(sem.intent||p?.act||""),strategy=String(p?.strategy||"direct");return [intent,tokens.join("|"),replyTokens.join("|"),strategy].join("\u001f")}
+  function mergeLearnedPatterns(base,delta){const byId=new Map(),bySemantic=new Map(),rank={confirmed:3,growing:2,solo:1,observing:0};const put=p=>{if(!p||!p.id)return;const old=byId.get(p.id),chosen=!old||((rank[p.tier]||0)>(rank[old.tier]||0))||Number(p.evidenceCount||0)>=Number(old.evidenceCount||0)?p:old;byId.set(p.id,chosen)};(base||[]).forEach(put);(delta||[]).forEach(put);const out=[];[...byId.values()].forEach(p=>{const skey=learnedSemanticKey(p),old=bySemantic.get(skey);if(!old){bySemantic.set(skey,p);return}const better=((rank[p.tier]||0)>(rank[old.tier]||0))||((rank[p.tier]||0)===(rank[old.tier]||0)&&Number(p.evidenceCount||0)>Number(old.evidenceCount||0));if(better)bySemantic.set(skey,p)});bySemantic.forEach(p=>out.push(p));out.sort((a,b)=>(rank[b.tier]||0)-(rank[a.tier]||0)||Number(b.evidenceCount||0)-Number(a.evidenceCount||0));return out.slice(0,1400)}
+  const PUBLIC_PATTERN_CACHE_KEY="__public__";
+  async function cachedLearnedPatterns(key){
+    // The corpus is public/common learning, not personal memory. Store one shared device
+    // copy so account switching on a classroom/shared device does not duplicate 1,400
+    // patterns in IndexedDB. Personal scores and memories remain keyed per user.
+    try{const shared=await MiniTalk.DataCache?.get?.("moa-learning-patterns",PUBLIC_PATTERN_CACHE_KEY,null);if(Array.isArray(shared))return shared}catch(e){console.warn("모아 IndexedDB 학습 캐시 읽기 실패",e)}
+    try{const oldPerUser=await MiniTalk.DataCache?.get?.("moa-learning-patterns",key,null);if(Array.isArray(oldPerUser)){await MiniTalk.DataCache?.put?.("moa-learning-patterns",PUBLIC_PATTERN_CACHE_KEY,oldPerUser);MiniTalk.DataCache?.remove?.("moa-learning-patterns",key).catch?.(()=>{});return oldPerUser}}catch(e){}
+    let legacy=[];for(const v of [92,91,90,89,88,87]){const value=pget(`moa.v${v}.patterns.${key}`,null);if(Array.isArray(value)){legacy=value;break}}
+    if(legacy.length){try{await MiniTalk.DataCache?.put?.("moa-learning-patterns",PUBLIC_PATTERN_CACHE_KEY,legacy)}catch(e){};for(const v of [92,91,90,89,88,87])premove(`moa.v${v}.patterns.${key}`)}
+    return legacy;
+  }
+  async function withPublicCacheWriteLock(work){
+    const locks=globalThis?.navigator?.locks;
+    if(locks?.request){
+      let entered=false;
+      try{return await locks.request("moa-public-learning-cache",{mode:"exclusive"},async()=>{entered=true;return work();})}
+      catch(e){if(entered)throw e;console.warn("모아 공통학습 캐시 잠금 시작 실패 - 안전 fallback 사용",e)}
+    }
+    return work();
+  }
+  async function persistLearnedPatterns(key,patterns){
+    const safe=Array.isArray(patterns)?patterns.slice(0,1400):[];
+    try{if(MiniTalk.DataCache?.put){await MiniTalk.DataCache.put("moa-learning-patterns",PUBLIC_PATTERN_CACHE_KEY,safe);MiniTalk.DataCache?.remove?.("moa-learning-patterns",key).catch?.(()=>{});for(const v of [92,91,90,89,88,87])premove(`moa.v${v}.patterns.${key}`);return true}}catch(e){console.warn("모아 IndexedDB 학습 캐시 저장 실패",e)}
+    // Very old/private-browser fallback: keep only a compact emergency subset so MOA
+    // never crowds other features out of localStorage.
+    try{for(const v of [91,90,89,88,87])premove(`moa.v${v}.patterns.${key}`);pset(`moa.v92.patterns.${key}`,safe.slice(0,180));return true}catch(e){console.warn("모아 축소 학습 캐시 저장 실패",e);return false}
+  }
+  async function ensureCachedLearningReady(){
+    const key=userKey();if(learnedByUser.has(key))return;
+    let task=learnedCacheReady.get(key);if(!task){task=(async()=>{const cached=await cachedLearnedPatterns(key),initial=mergeLearnedPatterns([],cached);if(!learnedByUser.has(key)){learnedByUser.set(key,{patterns:initial});rebuildLearnedIndex(key,initial)}})().finally(()=>learnedCacheReady.delete(key));learnedCacheReady.set(key,task)}
+    try{await task}catch(e){console.warn("모아 첫 응답 학습 캐시 준비 실패",e)}
+  }
+  function rebuildLearnedIndex(key,patterns){const map=new Map(),add=(k,p)=>{if(!k)return;const row=map.get(k)||[];row.push(p);map.set(k,row)};(patterns||[]).forEach(p=>{const sem=p.semantic||{},tokens=Array.isArray(sem.tokens)&&sem.tokens.length?sem.tokens:semanticTokens(p.trigger||""),cats=Array.isArray(sem.categories)&&sem.categories.length?sem.categories:semanticCategories(tokens,p.trigger||""),act=String(sem.intent||p.act||"");add(`a:${act}`,p);tokens.slice(0,5).forEach(t=>add(`t:${t}`,p));cats.forEach(c=>add(`c:${c}`,p))});learnedIndexByUser.set(key,map)}
+  function learnedPatternPool(frame){const key=userKey(),data=learnedByUser.get(key)||{patterns:[]};let index=learnedIndexByUser.get(key);if(!index){rebuildLearnedIndex(key,data.patterns);index=learnedIndexByUser.get(key)}const ts=semanticTokens(frame.text),cats=semanticCategories(ts,frame.text),intent=semanticIntent(frame),seen=new Set(),out=[];const take=k=>(index?.get(k)||[]).forEach(p=>{if(!seen.has(p.id)){seen.add(p.id);out.push(p)}});take(`a:${intent}`);take(`a:${frame.act}`);cats.forEach(c=>take(`c:${c}`));ts.slice(0,4).forEach(t=>take(`t:${t}`));if(out.length<18)(data.patterns||[]).slice(0,60).forEach(p=>{if(!seen.has(p.id)){seen.add(p.id);out.push(p)}});return out.slice(0,180)}
+  function personalTopicBoostForPattern(ptn){const l=personalLearning(),hay=`${ptn.trigger||""} ${ptn.reply||""}`;let best=0;Object.entries(l.topics||{}).forEach(([topic,row])=>{if(!topic||!hay.includes(topic))return;const score=Math.min(7,(Number(row.turns||0)*.18)+(Number(row.positive||0)-Number(row.negative||0))*.8);if(score>best)best=score});return best}
+  function adaptLearnedReply(ptn,frame){let reply=String(ptn.reply||"");if(!ptn.humanChat)return reply;const pTokens=Array.isArray(ptn.semantic?.tokens)?ptn.semantic.tokens:semanticTokens(ptn.trigger||""),cTokens=semanticTokens(frame.text),pCats=semanticCategories(pTokens,ptn.trigger||""),cCats=semanticCategories(cTokens,frame.text);const commonCat=pCats.find(x=>cCats.includes(x));if(!commonCat)return reply;const verbs=new Set(["좋아하다","싫어하다","먹다","마시다","피곤하다","지치다","졸리다","재미있다","맛있다","이기다","지다","오다","가다"]);const pAnchor=pTokens.find(t=>!verbs.has(t)&&String(ptn.reply||"").includes(t)),cAnchor=cTokens.find(t=>!verbs.has(t));if(pAnchor&&cAnchor&&pAnchor!==cAnchor&&pAnchor.length>=2){reply=reply.replace(new RegExp(pAnchor.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g"),cAnchor)}return reply}
+
   function learnedCandidates(frame,policy,ref){
     const data=learnedByUser.get(userKey())||{patterns:[]},input=frame.c,out=[],eligible=responseMoveEligibility(frame,ref);
-    for(const ptn of data.patterns||[]){
-      const trig=compact(ptn.trigger),strategy=ptn.strategy||policy.strategy;if(!trig||!ptn.reply||eligible[strategy]===false)continue;let score=0;
+    for(const ptn of learnedPatternPool(frame)){
+      const trig=compact(ptn.trigger),strategy=ptn.strategy||policy.strategy;if(!trig||!ptn.reply||eligible[strategy]===false)continue;if(ptn.humanChat&&frame.knowledgeCue)continue;let score=0;
       if(input===trig)score=94;else if(input.includes(trig)||trig.includes(input))score=50;
       const pw=concepts(ptn.trigger),overlap=frame.concepts.filter(v=>pw.includes(v)).length;score+=overlap*11;
+      const pSem=ptn.semantic||{},pTokens=Array.isArray(pSem.tokens)?pSem.tokens:semanticTokens(ptn.trigger),fTokens=semanticTokens(frame.text),semOverlap=fTokens.filter(v=>pTokens.includes(v)).length,pCats=Array.isArray(pSem.categories)?pSem.categories:semanticCategories(pTokens,ptn.trigger),fCats=semanticCategories(fTokens,frame.text),catOverlap=fCats.filter(v=>pCats.includes(v)).length,pIntent=String(pSem.intent||"");
+      score+=semOverlap*13+catOverlap*10;if(pIntent&&pIntent===semanticIntent(frame))score+=20;if(ptn.humanChat&&pIntent===semanticIntent(frame)&&catOverlap>0)score+=18;
       score+=(Number(ptn.confidence||0)-.5)*26;
       const tier=String(ptn.tier||"confirmed");if(tier==="solo")score-=12;else if(tier==="growing")score-=2;else if(tier==="confirmed")score+=4;
-      if(ptn.act&&ptn.act!==frame.act)score-=24;if(ptn.affect&&ptn.affect!=="neutral"&&ptn.affect!==frame.affect)score-=18;
-      if(input!==trig&&overlap===0)score-=16;
-      if(score>=62)out.push(candidate(ptn.reply,ptn.id||"learned",strategy,score,{source:"learned",learningTier:tier}));
+      if(ptn.act&&ptn.act!==frame.act&&(!pIntent||pIntent!==semanticIntent(frame)))score-=24;if(ptn.affect&&ptn.affect!=="neutral"&&ptn.affect!==frame.affect)score-=18;
+      if(input!==trig&&overlap===0&&semOverlap===0&&catOverlap===0)score-=16;
+      if(score>=62){score+=personalTopicBoostForPattern(ptn);out.push(candidate(adaptLearnedReply(ptn,frame),ptn.id||"learned",strategy,score,{source:ptn.humanChat?"learned-human":"learned",learningTier:tier}));}
     }
     return out.sort((a,b)=>b.score-a.score).slice(0,4);
   }
@@ -968,7 +1037,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
   function qualityGate(answer,frame,source,strategy){
     let out=clean(answer);if(!out)return out;
-    if(!String(source||"").startsWith("local")||source==="local-utility"||source==="local-style")return out;
+    const gateSource=String(source||"");
+    if(!(gateSource.startsWith("local")||gateSource==="learned-human")||source==="local-utility"||source==="local-style")return out;
     const recent=recentAssistantTurns(5),shape=normalizedReplyShape(out),qStreak=recentQuestionStreak();
     const repeated=recent.some(v=>normalizedReplyShape(v.text||"")===shape);
     const neutralShort=!frame.question&&!frame.event&&!frame.plan&&!frame.preference&&frame.affect==="neutral"&&frame.text.length<=12;
@@ -1087,7 +1157,13 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   async function flushCommit(){
     if(isGuest()||!MiniTalk.AuthApi.moaCommit)return;
     const key=userKey(),q=commitQueues.get(key)||[];if(!q.length)return;commitQueues.set(key,[]);
-    try{await MiniTalk.AuthApi.moaCommit({userId:key,events:q});syncAt.set(key,0);}catch(e){console.warn("모아 학습 묶음 저장 실패",e);commitQueues.set(key,[...q,...(commitQueues.get(key)||[])].slice(-30));}
+    try{await MiniTalk.AuthApi.moaCommit({userId:key,events:q});commitRetryByUser.set(key,0);syncAt.set(key,0);}catch(e){
+      console.warn("모아 학습 묶음 저장 실패",e);commitQueues.set(key,[...q,...(commitQueues.get(key)||[])].slice(-30));
+      // Admin batch learning deliberately owns the MOA write lease. Do not lose normal
+      // user feedback while it runs; retry in the background without blocking replies.
+      const attempt=Math.min(5,Number(commitRetryByUser.get(key)||0)+1);commitRetryByUser.set(key,attempt);
+      if(!commitTimers.get(key)){const delay=Math.min(30000,1500*Math.pow(2,attempt-1));commitTimers.set(key,setTimeout(()=>{commitTimers.delete(key);flushCommit();},delay));}
+    }
   }
   function observePreviousTurn(currentFrame){
     const ex=previousExchange();if(!ex)return;
@@ -1377,18 +1453,30 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(isGuest()||!MiniTalk.AuthApi.moaSync)return;
     const key=userKey(),last=syncAt.get(key)||0;if(!force&&Date.now()-last<SYNC_TTL)return;syncAt.set(key,Date.now());
     try{
-      const known=syncVersion.get(key)||Number(pget(`moa.v91.syncVersion.${key}`,0)||pget(`moa.v90.syncVersion.${key}`,0)||pget(`moa.v89.syncVersion.${key}`,0)||pget(`moa.v88.syncVersion.${key}`,0)||pget(`moa.v87.syncVersion.${key}`,0)||0);
-      const d=await MiniTalk.AuthApi.moaSync(key,known);
-      if(Array.isArray(d?.patterns)){learnedByUser.set(key,{patterns:d.patterns});pset(`moa.v91.patterns.${key}`,d.patterns);}else if(!learnedByUser.has(key))learnedByUser.set(key,{patterns:pget(`moa.v91.patterns.${key}`,[])||pget(`moa.v90.patterns.${key}`,[])||pget(`moa.v89.patterns.${key}`,[])||pget(`moa.v88.patterns.${key}`,[])||pget(`moa.v87.patterns.${key}`,[])||[]});
-      if(d?.policy&&typeof d.policy==="object"){policyByUser.set(key,d.policy);pset(`moa.v91.policy.${key}`,d.policy);}else if(!policyByUser.has(key))policyByUser.set(key,pget(`moa.v91.policy.${key}`,{})||pget(`moa.v90.policy.${key}`,{})||pget(`moa.v89.policy.${key}`,{})||pget(`moa.v88.policy.${key}`,{})||{});
-      if(d?.expressionWeights&&typeof d.expressionWeights==="object"){expressionByUser.set(key,d.expressionWeights);pset(`moa.v91.expressionWeights.${key}`,d.expressionWeights);}else if(!expressionByUser.has(key))expressionByUser.set(key,pget(`moa.v91.expressionWeights.${key}`,{})||{});
-      if(Number(d?.version||0)){syncVersion.set(key,Number(d.version));pset(`moa.v91.syncVersion.${key}`,Number(d.version));}
+      await ensureCachedLearningReady();const cached=(learnedByUser.get(key)||{patterns:[]}).patterns||[],storedKnown=Number(pget(`moa.v92.syncVersion.${key}`,0)||pget(`moa.v91.syncVersion.${key}`,0)||pget(`moa.v90.syncVersion.${key}`,0)||pget(`moa.v89.syncVersion.${key}`,0)||pget(`moa.v88.syncVersion.${key}`,0)||pget(`moa.v87.syncVersion.${key}`,0)||0),publicKnown=Number(pget("moa.v93.publicPatternVersion",0)||0),known=syncVersion.get(key)||((cached&&cached.length)?(publicKnown||storedKnown):0),storedCore=Number(pget(`moa.v92.coreSyncVersion.${key}`,0)||0);
+      const d=await MiniTalk.AuthApi.moaSync(key,known,storedCore),responseVersion=Number(d?.version||0);
+      if(Array.isArray(d?.patterns)||Array.isArray(d?.patternDelta)){
+        await withPublicCacheWriteLock(async()=>{
+          const sharedVersion=Number(pget("moa.v93.publicPatternVersion",0)||0);
+          // Another tab may have completed a newer sync while this request was in flight.
+          // Never let the late/older response overwrite the shared IndexedDB corpus.
+          if(responseVersion&&sharedVersion>responseVersion){const latest=await cachedLearnedPatterns(key),fresh=mergeLearnedPatterns([],latest);learnedByUser.set(key,{patterns:fresh});rebuildLearnedIndex(key,fresh);return;}
+          const latestShared=await cachedLearnedPatterns(key),current=(latestShared&&latestShared.length)?latestShared:((learnedByUser.get(key)||{patterns:cached}).patterns||[]),next=Array.isArray(d?.patterns)?mergeLearnedPatterns([],d.patterns):mergeLearnedPatterns(current,d.patternDelta),saved=await persistLearnedPatterns(key,next);
+          learnedByUser.set(key,{patterns:next});rebuildLearnedIndex(key,next);
+          if(saved&&responseVersion)pset("moa.v93.publicPatternVersion",Math.max(sharedVersion,responseVersion));
+        });
+      }
+      if(d?.policy&&typeof d.policy==="object"){policyByUser.set(key,d.policy);pset(`moa.v92.policy.${key}`,d.policy);}else if(!policyByUser.has(key)){let cachedPolicy={};for(const v of [92,91,90,89,88]){const value=pget(`moa.v${v}.policy.${key}`,null);if(value&&typeof value==="object"&&Object.keys(value).length){cachedPolicy=value;break}}policyByUser.set(key,cachedPolicy)}
+      if(d?.expressionWeights&&typeof d.expressionWeights==="object"){expressionByUser.set(key,d.expressionWeights);pset(`moa.v92.expressionWeights.${key}`,d.expressionWeights);}else if(!expressionByUser.has(key)){let cachedExpression={};for(const v of [92,91]){const value=pget(`moa.v${v}.expressionWeights.${key}`,null);if(value&&typeof value==="object"&&Object.keys(value).length){cachedExpression=value;break}}expressionByUser.set(key,cachedExpression)}
+      if(Number.isFinite(Number(d?.coreVersion))){pset(`moa.v92.coreSyncVersion.${key}`,Number(d.coreVersion));}
+      if(responseVersion){const effective=Math.max(responseVersion,Number(pget("moa.v93.publicPatternVersion",0)||0));syncVersion.set(key,effective);pset(`moa.v92.syncVersion.${key}`,effective);}
     }catch(e){console.warn("모아 학습 동기화 실패",e);syncAt.set(key,Date.now()-SYNC_TTL+30000);}
   }
   function warmup(){sync(false);}
 
   async function reply(raw){
     const text=clean(raw);if(!text)return {reply:"응?",source:"local"};
+    await ensureCachedLearningReady();
     const frame=analyze(text);observePreviousTurn(frame);localStyleObservation(text);updateDialogueState(frame);remember("user",text,{intent:frame.act,affect:frame.affect,topic:frame.topic});
     const ref=resolveReference(frame);const searchMode=searchPolicy(frame,ref);
     let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="";

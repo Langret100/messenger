@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const engine=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('js/ai/moa-communication-engine.js?v=20'),'MOA personal learning cache bust missing');
+ok(html.includes('js/ai/moa-communication-engine.js?v=29'),'MOA personal learning cache bust missing');
 const store={}; const commits=[]; const fakeMath=Object.create(Math); fakeMath.random=()=>0.01;
 const sandbox={console,Date,Math:fakeMath,setTimeout:()=>1,clearTimeout:()=>{},MiniTalk:{AI:{},Store:{get:()=>({user_id:'learn-u',isGuest:false})},Persistence:{get:(k,d)=>k in store?store[k]:d,set:(k,v)=>store[k]=JSON.parse(JSON.stringify(v)),remove:k=>delete store[k]},AuthApi:{moaSync:async()=>({ok:true}),moaSearch:async()=>({}),moaCommit:async p=>{commits.push(p);return {ok:true}}}}};
 vm.createContext(sandbox);vm.runInContext(engine,sandbox);

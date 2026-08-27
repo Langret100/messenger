@@ -573,8 +573,13 @@ function deleteShopInventoryItem_(userId, inventoryId, rowHint) {
 }
 
 function createPurchasedInventory_(userId, product, purchaseKey) {
-  const existing = readShopInventory_(userId).filter(function (item) { return item.purchaseKey === purchaseKey; })[0];
-  if (existing) return existing;
+  // handleShopPurchase가 방금 코인 차감 + 구매로그까지 새로 확정한 건은 이미 purchaseKey 중복검사를
+  // 통과했으므로 보관함 전체를 다시 읽지 않습니다. 재시도/복구 경로에는 이 표식이 없어 기존 중복검사를 유지합니다.
+  const freshPurchase = !!(product && String(product.__moaruFreshPurchaseKey || "") === String(purchaseKey || ""));
+  if (!freshPurchase) {
+    const existing = readShopInventory_(userId).filter(function (item) { return item.purchaseKey === purchaseKey; })[0];
+    if (existing) return existing;
+  }
   const now = Date.now(), item = {
     id: "inv-" + Utilities.getUuid(), ownerId: userId, productId: product.id,
     name: product.name, description: product.description || "", price: product.price,
@@ -1300,10 +1305,20 @@ function pickWeightedShopProduct_(products) {
 function findRewardUserForShop_(userId) {
   const id = String(userId || "").trim(), sheet = getSheet_(REWARD_SHEET), lastRow = sheet.getLastRow();
   if (!id || lastRow < 2) return null;
-  const match = sheet.getRange(2, COL_REWARD_USER_ID, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
-  if (!match) return null;
-  const row = match.getRow(), values = sheet.getRange(row, 1, 1, 3).getValues()[0];
-  if (String(values[COL_REWARD_USER_ID - 1] || "").trim() !== id) return null;
+  const cache = CacheService.getScriptCache(), cacheKey = "SHOP_REWARD_ROW_" + moaruSafeKey_(id);
+  let row = 0, values = null;
+  try { row = parseInt(cache.get(cacheKey), 10) || 0; } catch (error) { row = 0; }
+  if (row >= 2 && row <= lastRow) {
+    values = sheet.getRange(row, 1, 1, 3).getValues()[0];
+    if (String(values[COL_REWARD_USER_ID - 1] || "").trim() !== id) { row = 0;values = null; }
+  }
+  if (!row) {
+    const match = sheet.getRange(2, COL_REWARD_USER_ID, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
+    if (!match) return null;
+    row = match.getRow();values = sheet.getRange(row, 1, 1, 3).getValues()[0];
+    if (String(values[COL_REWARD_USER_ID - 1] || "").trim() !== id) return null;
+    try { cache.put(cacheKey, String(row), 1800); } catch (error) {}
+  }
   return { sheet: sheet, row: row, userId: id, username: String(values[COL_REWARD_USERNAME - 1] || ""), coin: parseInt(values[COL_REWARD_COIN - 1], 10) || 0 };
 }
 function setRewardCoinForShopGuarded_(reward, newCoin) {
@@ -1377,13 +1392,17 @@ function handleShopPurchase(e) {
       return shopJson_({ ok: false, error: "PURCHASE_LOG_FAILED" });
     }
 
-    const inventoryProduct = randomMode ? normalizeShopProduct_(Object.assign({}, product, { price: chargePrice })) : product;
+    const inventoryProduct = randomMode ? normalizeShopProduct_(Object.assign({}, product, { price: chargePrice })) : Object.assign({}, product);
+    // 신규 구매만 fast path. 실패/중복 재시도에는 남지 않도록 finally에서 즉시 제거합니다.
+    inventoryProduct.__moaruFreshPurchaseKey = purchaseKey;
     let inventoryItem = null, inventoryPending = false;
     try { inventoryItem = createPurchasedInventory_(userId, inventoryProduct, purchaseKey); clearPendingShopPurchase_(purchaseKey); }
     catch (inventoryError) {
       inventoryPending = true;
       try { rememberPendingShopPurchase_(userId, inventoryProduct, purchaseKey); } catch (pendingError) { console.error("SHOP_PENDING_PURCHASE_SAVE_FAILED", pendingError); }
       console.error("SHOP_INVENTORY_WRITE_DEFERRED", purchaseKey, inventoryError);
+    } finally {
+      try { delete inventoryProduct.__moaruFreshPurchaseKey; } catch (cleanupError) { inventoryProduct.__moaruFreshPurchaseKey = ""; }
     }
     return shopJson_({ ok: true, applied: true, random_purchase: randomMode, product_id: product.id, product_name: product.name, product_description: product.description || "", product_image_url: product.imageUrl || "", product_updated_at: Number(product.updatedAt) || 0, original_price: originalPrice, price: chargePrice, newCoin: result.newCoin, item: inventoryItem, inventory_pending: inventoryPending });
   } catch (error) {

@@ -500,7 +500,7 @@ function moaPublicExamples_(){
   var sh=moaEnsureExampleWidth_(),last=sh.getLastRow(),out=[];if(last<=1)return out;
   sh.getRange(2,1,last-1,18).getValues().forEach(function(r){
     var key=String(r[0]||""),trigger=String(r[1]||""),reply=String(r[2]||""),act=String(r[3]||""),affect=String(r[4]||"neutral"),strategy=String(r[5]||"direct"),pos=Number(r[6]||0),neg=Number(r[7]||0),state=String(r[12]||"active"),posScore=Number(r[13]||pos||0),negScore=Number(r[14]||neg||0),evidenceCount=Number(r[16]||0);
-    if(!key||!trigger||!reply||state==="dormant")return;
+    if(!key||!trigger||!reply||state==="dormant"||moaLearnedRowHasUrl_(trigger)||moaLearnedRowHasUrl_(reply))return;
     var tier=moaPolicyLearningTier_(pos,neg,posScore,negScore,evidenceCount);if(tier==="observing")return;
     var confidence=moaClamp_((posScore+1)/(posScore+negScore+2),.05,.97);
     out.push({id:key,trigger:trigger,reply:reply,act:act,affect:affect,strategy:strategy,confidence:confidence,tier:tier,evidenceCount:evidenceCount});
@@ -557,6 +557,13 @@ function moaNicknameMeta_(names){
   var meta={root:root,set:set};try{Object.defineProperty(names,"__moaNicknameMeta",{value:meta,enumerable:false,configurable:true});}catch(e2){}
   return meta;
 }
+function moaContainsLearnableUrl_(text){
+  var s=String(text||"");if(!s)return false;
+  // Human/public dialogue learning ignores the whole message when it contains an Internet link.
+  // Cover normal schemes, www links, and bare domains such as coupang.com/product/... .
+  return /(?:https?:\/\/|www\.)\S+/i.test(s)||/(?:^|[\s(<\[{])(?:[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\.)+(?:com|net|org|io|ai|app|dev|gg|tv|me|info|biz|xyz|site|online|store|shop|co\.kr|or\.kr|go\.kr|ne\.kr|ac\.kr|kr)(?=[:\/?#\s)>\]}]|$)/i.test(s);
+}
+function moaLearnedRowHasUrl_(value){var s=String(value||"");return moaContainsLearnableUrl_(s)||/\[링크\]/.test(s);}
 function moaScrubKnownNicknames_(text,names){
   var s=String(text||"");if(!s||!Array.isArray(names)||!names.length)return s;
   var root=moaNicknameMeta_(names).root,out="",i=0;
@@ -567,7 +574,7 @@ function moaScrubKnownNicknames_(text,names){
 }
 function moaAnonymizeChatText_(text,names){
   var s=String(text||"").replace(/\s+/g," ").trim();if(s.length<1||s.length>500)return "";
-  if(/^\[\[(?:IMG|FILE)\]\]/i.test(s))return "";
+  if(/^\[\[(?:IMG|FILE)\]\]/i.test(s)||moaContainsLearnableUrl_(s))return "";
   // This runs only in admin/background learning, never on the live chat send path.
   // Every known nickname remains eligible for removal; first-character buckets only
   // skip names that cannot possibly occur in the current sentence.
@@ -674,7 +681,7 @@ function moaNaturalizeLearnedText_(text){
 }
 function moaLanguagePublicRow_(r){
   var occ=Number(r[8]||0),sources=moaHashList_(r[9]).length,tier=String(r[13]||moaLanguageTier_(occ,sources));
-  if(String(r[12]||"active")==="dormant"||!r[0]||!r[1]||!r[2])return null;
+  if(String(r[12]||"active")==="dormant"||!r[0]||!r[1]||!r[2]||moaLearnedRowHasUrl_(r[1])||moaLearnedRowHasUrl_(r[2]))return null;
   var trigger=moaNaturalizeLearnedText_(r[1]),reply=moaNaturalizeLearnedText_(r[2]);if(!trigger||!reply)return null;
   // Keep every scrubbed pair in the learning table, but do not let one person's
   // one-off phrase become a public reply. It becomes usable from growing upward.
@@ -806,6 +813,22 @@ function moaCommitRebuiltLanguage_(stage,targetVersion){
     return {patterns:rows.length,deduped:dedupe.removed||0,version:bumped};
   }finally{moaSetLanguagePublishing_(false);}
 }
+function moaDeleteLearnedRowsMatching_(sh,width,predicate){
+  if(!sh)return 0;var last=sh.getLastRow();if(last<=1)return 0;var rows=sh.getRange(2,1,last-1,width).getValues(),bad=[];
+  rows.forEach(function(r,i){if(predicate(r))bad.push(i+2);});if(!bad.length)return 0;
+  // Delete contiguous blocks from bottom so row indexes remain stable and large cleanups stay cheap.
+  var end=bad[bad.length-1],start=end;for(var i=bad.length-2;i>=-1;i--){var row=i>=0?bad[i]:-1;if(row===start-1){start=row;continue;}sh.deleteRows(start,end-start+1);if(i>=0){end=row;start=row;}}return bad.length;
+}
+function moaPurgeUrlLearnedData_(){
+  var removedLanguage=0,removedRebuild=0,removedExamples=0;
+  var language=moaEnsureLanguageWidth_();removedLanguage=moaDeleteLearnedRowsMatching_(language,16,function(r){return moaLearnedRowHasUrl_(r[1])||moaLearnedRowHasUrl_(r[2]);});
+  var rebuild=moaEnsureLanguageRebuildWidth_();removedRebuild=moaDeleteLearnedRowsMatching_(rebuild,16,function(r){return moaLearnedRowHasUrl_(r[1])||moaLearnedRowHasUrl_(r[2]);});
+  var examples=moaEnsureExampleWidth_();removedExamples=moaDeleteLearnedRowsMatching_(examples,18,function(r){return moaLearnedRowHasUrl_(r[1])||moaLearnedRowHasUrl_(r[2]);});
+  var total=removedLanguage+removedRebuild+removedExamples;if(total){
+    var next=moaCurrentSyncVersion_()+1;moaSetLanguageDeltaFloor_(next);var delta=moaLanguageDeltaSheet_(),dlast=delta.getLastRow();if(dlast>1)delta.deleteRows(2,dlast-1);var bumped=moaBumpSyncVersion_();if(removedExamples)moaMarkCoreSyncVersion_(bumped);
+  }
+  return {removed:total,language:removedLanguage,rebuild:removedRebuild,examples:removedExamples};
+}
 function moaAdminLearningStatus_(data){
   var auth=requireAdminToken_(String(data.user_id||""),String(data.admin_token||""));if(!auth.ok)return jsonResponse_(auth);
   var sources=moaLearningSources_(),state=moaChatLearnState_(),pruned=moaPruneChatLearnState_(state,sources),pending=0,total=0,bounded=sources.length>80;
@@ -818,10 +841,11 @@ function moaAdminLearnChats_(data){
   var auth=requireAdminToken_(String(data.user_id||""),String(data.admin_token||""));if(!auth.ok)return jsonResponse_(auth);
   var lease=moaAcquireLearningLease_("admin-chat-learning",240000);if(!lease)return jsonResponse_({ok:false,error:"다른 모아 학습 작업이 진행 중입니다. 잠시 후 다시 실행해 주세요."});
   try{
-  var reset=String(data.reset||"")==="1",cleanup=String(data.cleanup||"")==="1",batch=Math.max(80,Math.min(350,Number(data.batch_limit||260))),state=reset?{}:moaChatLearnState_(),sources=moaLearningSources_(),names=moaKnownChatNames_(sources),processed=0,pairs=[],privateSkipped=0,sourceDone=0,dedupe={removed:0,changed:false},resetPerformed=false,prunedState=0;
+  var reset=String(data.reset||"")==="1",cleanup=String(data.cleanup||"")==="1",batch=Math.max(80,Math.min(350,Number(data.batch_limit||260))),state=reset?{}:moaChatLearnState_(),sources=moaLearningSources_(),names=moaKnownChatNames_(sources),processed=0,pairs=[],privateSkipped=0,sourceDone=0,dedupe={removed:0,changed:false},urlPurge={removed:0,language:0,rebuild:0,examples:0},resetPerformed=false,prunedState=0;
   if(!reset)prunedState=moaPruneChatLearnState_(state,sources);
   if(reset){var stage0=moaEnsureLanguageRebuildWidth_(),stageLast=stage0.getLastRow();if(stageLast>1)stage0.getRange(2,1,stageLast-1,16).clearContent();state={__rebuild:true,__sourceCursor:0};resetPerformed=true;}
-  var rebuilding=state.__rebuild===true,targetVersion=moaCurrentSyncVersion_()+1,targetSheet=rebuilding?moaEnsureLanguageRebuildWidth_():moaEnsureLanguageWidth_();
+  var rebuilding=state.__rebuild===true;if(cleanup)urlPurge=moaPurgeUrlLearnedData_();
+  var targetVersion=moaCurrentSyncVersion_()+1,targetSheet=rebuilding?moaEnsureLanguageRebuildWidth_():moaEnsureLanguageWidth_();
   if(cleanup&&!rebuilding){dedupe=moaDedupeLanguagePatterns_(targetVersion,targetSheet);if(dedupe.changed)moaSetLanguageDeltaFloor_(targetVersion);}
   var sourceCursor=sources.length?Math.max(0,Number(state.__sourceCursor||0))%sources.length:0,lastSourceIndex=sourceCursor-1,visited=0,anyIncomplete=false;
   for(var step=0;step<sources.length&&processed<batch;step++){
@@ -834,7 +858,7 @@ function moaAdminLearnChats_(data){
   if(rebuilding&&!hasMore){var committed=moaCommitRebuiltLanguage_(targetSheet,targetVersion);rebuildCommitted=true;rebuildPatterns=committed.patterns;dedupe.removed+=committed.deduped||0;delete state.__rebuild;}
   state.__lastRun=Date.now();moaSaveChatLearnState_(state);
   if(!rebuilding){var changedPublic=(stored.changedPublic||[]).slice();if(dedupe.changed){var lsh=moaEnsureLanguageWidth_(),llast=lsh.getLastRow();if(llast>1)lsh.getRange(2,1,llast-1,16).getValues().forEach(function(r){if(Number(r[15]||0)!==targetVersion)return;var p=moaLanguagePublicRow_(r);if(p)changedPublic.push(p);});}if(changedPublic.length||dedupe.changed){moaRecordLanguageDelta_(targetVersion,changedPublic);moaBumpSyncVersion_();}}
-  return jsonResponse_({ok:true,processed:processed,pairs:pairs.length,new_patterns:stored.newPatterns,duplicates:stored.duplicates,deduped_patterns:dedupe.removed,private_skipped:privateSkipped,has_more:hasMore,sources:sources.length,reset_performed:resetPerformed,rebuilding:rebuilding&&hasMore,rebuild_committed:rebuildCommitted,rebuild_patterns:rebuildPatterns,pruned_state:prunedState,version:moaCurrentSyncVersion_()});
+  return jsonResponse_({ok:true,processed:processed,pairs:pairs.length,new_patterns:stored.newPatterns,duplicates:stored.duplicates,deduped_patterns:dedupe.removed,url_patterns_removed:Number(urlPurge.removed||0),private_skipped:privateSkipped,has_more:hasMore,sources:sources.length,reset_performed:resetPerformed,rebuilding:rebuilding&&hasMore,rebuild_committed:rebuildCommitted,rebuild_patterns:rebuildPatterns,pruned_state:prunedState,version:moaCurrentSyncVersion_()});
   }finally{moaReleaseLearningLease_(lease);}
 }
 
@@ -975,7 +999,7 @@ function moaMaintainLearningSheet_(sh,width,posCol,negCol,lastActCol,stateCol,po
 }
 function moaRunLearningMaintenance_(){
   var lease=moaAcquireLearningLease_("maintenance",240000);if(!lease)return {ok:false,error:"MOA_MAINTENANCE_BUSY",dormant:0,deleted:0};
-  try{var activity=moaCurrentActivitySerial_(),out={ok:true,dormant:0,deleted:0},changed=false;
+  try{var activity=moaCurrentActivitySerial_(),out={ok:true,dormant:0,deleted:0,urlRemoved:0},changed=false,urlPurge=moaPurgeUrlLearnedData_();out.urlRemoved=Number(urlPurge.removed||0);changed=out.urlRemoved>0;
     changed=moaMaintainLearningSheet_(moaEnsurePolicyWidth_(),14,2,3,7,8,9,10,12,13,activity,out)||changed;
     changed=moaMaintainLearningSheet_(moaEnsureExpressionWidth_(),13,1,2,6,7,8,9,11,12,activity,out)||changed;
     changed=moaMaintainLearningSheet_(moaEnsureExampleWidth_(),18,6,7,11,12,13,14,16,17,activity,out)||changed;

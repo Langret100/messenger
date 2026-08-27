@@ -59,7 +59,7 @@ ok(!/if\(reset\)[\s\S]{0,500}moaEnsureLanguageWidth_\(\)[\s\S]{0,120}clearConten
 console.log('MOA_V4_STAGED_RELEARN_OK');
 
 // Service worker must be bumped so query-versioned JS does not coexist with stale offline entries.
-ok(sw.includes('moaru-moa-performance-audit-v9'),'service-worker cache namespace not bumped');
-ok(app.includes('sw.js?v=64.5.56'),'service-worker registration version not bumped');
-ok(index.includes('js/app.js?v=64.5.42'),'app cache reference not bumped');
+ok(sw.includes('moaru-moa-admin-isolation-url-filter-v10'),'service-worker cache namespace not bumped');
+ok(app.includes('sw.js?v=64.5.57'),'service-worker registration version not bumped');
+ok(index.includes('js/app.js?v=64.5.43'),'app cache reference not bumped');
 console.log('MOA_V4_OFFLINE_CACHE_ISOLATION_OK');

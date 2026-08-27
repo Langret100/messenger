@@ -9,6 +9,6 @@ if(!admin.includes('const fallback=setInterval')||!admin.includes('30000')||!adm
 if(!shop.includes('async function enter()')||shop.includes('setInterval(()=>refreshInventory(true).catch(()=>{}),15000)')||!shop.includes('SHOP_DELIVERY_COMPLETED'))throw new Error("shopping signal-driven refresh is incomplete");
 if(feed.includes('render(MiniTalk.UI.Dom.byId("viewHost"))'))throw new Error("feed changes still trigger full-screen render");
 if(!chats.includes('startRoomListSubscription')||!chats.includes('stopRoomListSubscription'))throw new Error("room list is not route-scoped");
-for(const ref of ['realtime.js?v=64.5.42','task-service.js?v=64.5.26','features/tasks.js?v=64.5.4','features/admin.js?v=64.5.36','app.js?v=64.5.42'])if(!index.includes(ref))throw new Error(`cache-busted signal-idle asset missing: ${ref}`);
-if(!sw.includes('moaru-moa-performance-audit-v9')||!app.includes('sw.js?v=64.5.56'))throw new Error("signal-idle service worker cache bump missing");
+for(const ref of ['realtime.js?v=64.5.42','task-service.js?v=64.5.26','features/tasks.js?v=64.5.4','features/admin.js?v=64.5.37','app.js?v=64.5.43'])if(!index.includes(ref))throw new Error(`cache-busted signal-idle asset missing: ${ref}`);
+if(!sw.includes('moaru-moa-admin-isolation-url-filter-v10')||!app.includes('sw.js?v=64.5.57'))throw new Error("signal-idle service worker cache bump missing");
 console.log("FIREBASE_IDLE_APPS_SAFETY_OK");

@@ -54,5 +54,5 @@ ok(/async function reply\(raw\)[\s\S]{0,180}await ensureCachedLearningReady\(\)/
 ok(engine.includes('personalLearningByUser = new Map()'),'personal learning isolation was removed');
 console.log('MOA_V5_FIRST_REPLY_SHARED_CACHE_OK');
 
-ok(sw.includes('moaru-moa-performance-audit-v9'),'service worker namespace was not advanced for V5');
+ok(sw.includes('moaru-moa-admin-isolation-url-filter-v10'),'service worker namespace was not advanced for V5');
 console.log('MOA_V5_OFFLINE_VERSION_OK');

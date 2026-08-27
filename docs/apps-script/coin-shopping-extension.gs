@@ -82,8 +82,6 @@ function ensureMoaruCoinAccount_(account) {
 }
 
 function readShopCatalog_() {
-  const cache = CacheService.getScriptCache(), cacheKey = "moaru-shop-catalog-v2";
-  try { const cached = cache.get(cacheKey);if (cached) { const parsed = JSON.parse(cached);if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed; } } catch (error) {}
   const properties = PropertiesService.getScriptProperties();
   const values = properties.getProperties();
   const catalog = {};
@@ -103,7 +101,6 @@ function readShopCatalog_() {
       console.error("INVALID_SHOP_PRODUCT", key, error);
     }
   });
-  try { cache.put(cacheKey, JSON.stringify(catalog), 120); } catch (error) {}
   return catalog;
 }
 
@@ -401,8 +398,8 @@ function removeObsoleteMiniTalkRoomBackupSheetOnce() {
   ss.deleteSheet(obsolete);return "미니톡_대화방백업 시트를 삭제했습니다.";
 }
 
-function getOrCreateShopPurchaseLogSheet_(spreadsheet) {
-  const ss = spreadsheet || SpreadsheetApp.getActive();
+function getOrCreateShopPurchaseLogSheet_() {
+  const ss = SpreadsheetApp.getActive();
   let sheet = ss.getSheetByName(SHOP_PURCHASE_LOG_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(SHOP_PURCHASE_LOG_SHEET);
@@ -440,8 +437,8 @@ function purchaseOwnerKey_(purchaseKey) {
   return SHOP_PURCHASE_OWNER_PROPERTY_PREFIX + digest.slice(0, 12).map(function (value) { return (value & 255).toString(16).padStart(2, "0"); }).join("");
 }
 
-function getOrCreateShopInventorySheet_(spreadsheet) {
-  const ss = spreadsheet || SpreadsheetApp.openById(SHEET_ID);
+function getOrCreateShopInventorySheet_() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
   let sheet = ss.getSheetByName(MOARU_SHOP_INVENTORY_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(MOARU_SHOP_INVENTORY_SHEET);
@@ -556,16 +553,14 @@ function readShopInventory_(userId) {
   return items;
 }
 
-function writeShopInventoryItem_(userId, item, rowHint, options) {
-  const original = Object.assign({}, item), compact = Object.assign({}, item, { ownerId: String(userId || item.ownerId || "") }), opts = options || {};
+function writeShopInventoryItem_(userId, item, rowHint) {
+  const compact = Object.assign({}, item, { ownerId: String(userId || item.ownerId || "") });
   delete compact.imageUrl;
   if (!compact.id || !compact.ownerId) throw new Error("INVALID_SHOP_INVENTORY_ITEM");
-  const sheet = opts.inventorySheet || getOrCreateShopInventorySheet_(opts.spreadsheet), hinted = Math.floor(Number(rowHint) || 0), row = opts.appendNew === true ? 0 : (hinted >= 2 ? hinted : findShopInventorySheetRow_(sheet, compact.id)), values = shopInventoryItemToRow_(compact);
+  const sheet = getOrCreateShopInventorySheet_(), hinted = Math.floor(Number(rowHint) || 0), row = hinted >= 2 ? hinted : findShopInventorySheetRow_(sheet, compact.id), values = shopInventoryItemToRow_(compact);
   if (row) sheet.getRange(row, 1, 1, values.length).setValues([values]);
   else sheet.appendRow(values);
   clearShopInventoryCache_(compact.ownerId);
-  const knownProduct = opts.knownProduct;
-  if (knownProduct && String(knownProduct.id || "") === String(compact.productId || "")) return Object.assign({}, compact, { imageUrl: String(knownProduct.imageUrl || original.imageUrl || "") });
   return hydrateShopInventoryItem_(compact, readShopCatalog_());
 }
 
@@ -577,22 +572,15 @@ function deleteShopInventoryItem_(userId, inventoryId, rowHint) {
   sheet.deleteRow(row);clearShopInventoryCache_(owner);return true;
 }
 
-function createPurchasedInventory_(userId, product, purchaseKey, options) {
-  // handleShopPurchase가 방금 코인 차감 + 구매로그까지 새로 확정한 건은 이미 purchaseKey 중복검사를
-  // 통과했으므로 보관함 전체를 다시 읽지 않습니다. 재시도/복구 경로에는 이 표식이 없어 기존 중복검사를 유지합니다.
-  const freshPurchase = !!(product && String(product.__moaruFreshPurchaseKey || "") === String(purchaseKey || ""));
-  if (!freshPurchase) {
-    const existing = readShopInventory_(userId).filter(function (item) { return item.purchaseKey === purchaseKey; })[0];
-    if (existing) return existing;
-  }
+function createPurchasedInventory_(userId, product, purchaseKey) {
+  const existing = readShopInventory_(userId).filter(function (item) { return item.purchaseKey === purchaseKey; })[0];
+  if (existing) return existing;
   const now = Date.now(), item = {
     id: "inv-" + Utilities.getUuid(), ownerId: userId, productId: product.id,
     name: product.name, description: product.description || "", price: product.price,
     purchaseKey: purchaseKey, purchasedAt: now, createdAt: now, deliveryStatus: "owned"
   };
-  const opts = Object.assign({}, options || {});
-  if (freshPurchase) { opts.appendNew = true;opts.knownProduct = product; }
-  return writeShopInventoryItem_(userId, item, 0, opts);
+  return writeShopInventoryItem_(userId, item);
 }
 
 /*
@@ -1309,23 +1297,13 @@ function pickWeightedShopProduct_(products) {
   return rows[rows.length - 1];
 }
 
-function findRewardUserForShop_(userId, rewardSheet) {
-  const id = String(userId || "").trim(), sheet = rewardSheet || getSheet_(REWARD_SHEET), lastRow = sheet.getLastRow();
+function findRewardUserForShop_(userId) {
+  const id = String(userId || "").trim(), sheet = getSheet_(REWARD_SHEET), lastRow = sheet.getLastRow();
   if (!id || lastRow < 2) return null;
-  const cache = CacheService.getScriptCache(), cacheKey = "SHOP_REWARD_ROW_" + moaruSafeKey_(id);
-  let row = 0, values = null;
-  try { row = parseInt(cache.get(cacheKey), 10) || 0; } catch (error) { row = 0; }
-  if (row >= 2 && row <= lastRow) {
-    values = sheet.getRange(row, 1, 1, 3).getValues()[0];
-    if (String(values[COL_REWARD_USER_ID - 1] || "").trim() !== id) { row = 0;values = null; }
-  }
-  if (!row) {
-    const match = sheet.getRange(2, COL_REWARD_USER_ID, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
-    if (!match) return null;
-    row = match.getRow();values = sheet.getRange(row, 1, 1, 3).getValues()[0];
-    if (String(values[COL_REWARD_USER_ID - 1] || "").trim() !== id) return null;
-    try { cache.put(cacheKey, String(row), 1800); } catch (error) {}
-  }
+  const match = sheet.getRange(2, COL_REWARD_USER_ID, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
+  if (!match) return null;
+  const row = match.getRow(), values = sheet.getRange(row, 1, 1, 3).getValues()[0];
+  if (String(values[COL_REWARD_USER_ID - 1] || "").trim() !== id) return null;
   return { sheet: sheet, row: row, userId: id, username: String(values[COL_REWARD_USERNAME - 1] || ""), coin: parseInt(values[COL_REWARD_COIN - 1], 10) || 0 };
 }
 function setRewardCoinForShopGuarded_(reward, newCoin) {
@@ -1360,15 +1338,13 @@ function handleShopPurchase(e) {
   if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY", message: "잠시 후 다시 시도해주세요." });
 
   try {
-    // 한 구매 요청 안에서는 같은 Spreadsheet 객체/시트 객체를 재사용해 openById/getActive 왕복을 반복하지 않습니다.
-    const shopSpreadsheet = SpreadsheetApp.openById(SHEET_ID);
-    const logSheet = getOrCreateShopPurchaseLogSheet_(shopSpreadsheet);
+    const logSheet = getOrCreateShopPurchaseLogSheet_();
     const duplicate = findShopPurchase_(logSheet, purchaseKey);
     if (duplicate) {
       if (duplicate.userId !== userId || (!randomMode && duplicate.productId !== productId)) return shopJson_({ ok: false, error: "PURCHASE_KEY_CONFLICT" });
       const currentProduct = readShopCatalog_()[duplicate.productId] || {};
       const duplicateProduct = normalizeShopProduct_(Object.assign({}, currentProduct, { id: duplicate.productId, name: duplicate.productName || currentProduct.name || "상품", price: duplicate.price || currentProduct.price || 1 }));
-      const duplicateItem = createPurchasedInventory_(userId, duplicateProduct, purchaseKey, { spreadsheet: shopSpreadsheet });
+      const duplicateItem = createPurchasedInventory_(userId, duplicateProduct, purchaseKey);
       clearPendingShopPurchase_(purchaseKey);
       return shopJson_({ ok: true, applied: false, reason: "ALREADY_PURCHASED", newCoin: duplicate.newCoin, product_id: duplicateProduct.id, product_name: duplicateProduct.name, product_description: duplicateProduct.description || "", product_image_url: duplicateProduct.imageUrl || "", original_price: Number(currentProduct.price) || Number(duplicateProduct.price) || 0, item: duplicateItem });
     }
@@ -1388,9 +1364,7 @@ function handleShopPurchase(e) {
       chargePrice = product.price;
     }
 
-    const rewardSheet = shopSpreadsheet.getSheetByName(REWARD_SHEET);
-    if (!rewardSheet) throw new Error("시트를 찾을 수 없습니다: " + REWARD_SHEET);
-    const reward = moaruSpreadsheetRetry_(function () { return findRewardUserForShop_(userId, rewardSheet); });
+    const reward = moaruSpreadsheetRetry_(function () { return findRewardUserForShop_(userId); });
     // 기존 shop_purchase 계약 유지: 가입자는 있어도 보상(코인) 계정이 없으면 구매 자격 미충족으로 처리합니다.
     if (!reward) return shopJson_({ ok: false, error: "MISSING_PARAM" });
     const beforeCoin = reward.coin;
@@ -1403,18 +1377,13 @@ function handleShopPurchase(e) {
       return shopJson_({ ok: false, error: "PURCHASE_LOG_FAILED" });
     }
 
-    const inventoryProduct = randomMode ? normalizeShopProduct_(Object.assign({}, product, { price: chargePrice })) : Object.assign({}, product);
-    // 신규 구매만 fast path. 실패/중복 재시도에는 남지 않도록 finally에서 즉시 제거합니다.
-    inventoryProduct.__moaruFreshPurchaseKey = purchaseKey;
+    const inventoryProduct = randomMode ? normalizeShopProduct_(Object.assign({}, product, { price: chargePrice })) : product;
     let inventoryItem = null, inventoryPending = false;
-    const inventorySheet = getOrCreateShopInventorySheet_(shopSpreadsheet);
-    try { inventoryItem = createPurchasedInventory_(userId, inventoryProduct, purchaseKey, { spreadsheet: shopSpreadsheet, inventorySheet: inventorySheet }); }
+    try { inventoryItem = createPurchasedInventory_(userId, inventoryProduct, purchaseKey); clearPendingShopPurchase_(purchaseKey); }
     catch (inventoryError) {
       inventoryPending = true;
       try { rememberPendingShopPurchase_(userId, inventoryProduct, purchaseKey); } catch (pendingError) { console.error("SHOP_PENDING_PURCHASE_SAVE_FAILED", pendingError); }
       console.error("SHOP_INVENTORY_WRITE_DEFERRED", purchaseKey, inventoryError);
-    } finally {
-      try { delete inventoryProduct.__moaruFreshPurchaseKey; } catch (cleanupError) { inventoryProduct.__moaruFreshPurchaseKey = ""; }
     }
     return shopJson_({ ok: true, applied: true, random_purchase: randomMode, product_id: product.id, product_name: product.name, product_description: product.description || "", product_image_url: product.imageUrl || "", product_updated_at: Number(product.updatedAt) || 0, original_price: originalPrice, price: chargePrice, newCoin: result.newCoin, item: inventoryItem, inventory_pending: inventoryPending });
   } catch (error) {

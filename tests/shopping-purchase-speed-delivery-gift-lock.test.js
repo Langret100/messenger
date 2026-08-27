@@ -11,7 +11,7 @@ const purchaseStart=shopping.indexOf('function openPurchase'),purchaseEnd=shoppi
 ok(purchase.includes('confirm.textContent = "구매 처리 중…"'),'purchase click has no immediate pending feedback');
 ok(purchase.includes('if (confirm.disabled) return'),'purchase double-click guard missing');
 const handler=server.slice(server.indexOf('function handleShopPurchase'),server.indexOf('\n}',server.indexOf('function handleShopPurchase'))+2);
-ok(server.includes('const cache = CacheService.getScriptCache(), cacheKey = "SHOP_REWARD_ROW_" + moaruSafeKey_(id)'),'reward-row cache fast path missing');
-ok(server.includes('cache.put(cacheKey, String(row), 1800)'),'reward-row cache is not retained');
+ok(!server.includes('cacheKey = "SHOP_REWARD_ROW_"'),'regressed reward-row cache purchase fast path is still active');
+ok(/function findRewardUserForShop_\(userId\)/.test(server),'stable reward lookup contract missing');
 ok(/createPurchasedInventory_\(userId, inventoryProduct, purchaseKey(?:,|\))/.test(server),'purchase inventory award contract changed');
 console.log('SHOPPING_PURCHASE_SPEED_DELIVERY_GIFT_LOCK_OK');

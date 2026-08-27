@@ -617,7 +617,7 @@ function moaChatTokens_(text){
 }
 function moaChatCategories_(tokens,text){
   var s=" "+(tokens||[]).join(" ")+" "+String(text||"").toLowerCase(),out=[];
-  var defs={fruit:/사과|복숭아|딸기|포도|수박|참외|바나나|귤|오렌지|과일/,food:/치킨|피자|떡볶이|라면|김밥|햄버거|밥|급식|과자|빵|음식|먹다|마시다|맛있다/,school:/학교|학원|수업|숙제|시험|공부|선생|급식/,game:/게임|플레이|랭크|승리|패배|이기다|지다|캐릭터/,friend:/친구|친구들|반친구|짝꿍/,travel:/버스|지하철|택시|기차|정류장|역|집가|귀가|오다|가다/,emotion:/피곤하다|지치다|졸리다|기쁘|속상|짜증|화나|신나|재미있다|웃기다/,preference:/좋아하다|싫어하다|취향|선호/};
+  var defs={fruit:/사과|복숭아|딸기|포도|수박|참외|바나나|귤|오렌지|과일/,food:/치킨|피자|떡볶이|라면|김밥|햄버거|밥|급식|과자|빵|간식|메뉴|음식|배고프|먹다|먹을|먹고|마시다|맛있다/,school:/학교|학원|수업|숙제|시험|공부|선생|급식/,game:/게임|플레이|랭크|승리|패배|이기다|지다|캐릭터/,friend:/친구|친구들|반친구|짝꿍/,travel:/버스|지하철|택시|기차|정류장|역|집가|귀가|오다|가다/,emotion:/피곤하다|지치다|졸리다|기쁘|속상|짜증|화나|신나|재미있다|웃기다/,preference:/좋아하다|싫어하다|취향|선호/};
   Object.keys(defs).forEach(function(k){if(defs[k].test(s))out.push(k);});return out.slice(0,6);
 }
 function moaChatIntent_(text,tokens){

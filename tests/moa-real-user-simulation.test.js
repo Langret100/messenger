@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const src=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('js/ai/moa-communication-engine.js?v=32'),'MOA engine cache bust v17 missing');
+ok(html.includes('js/ai/moa-communication-engine.js?v=35'),'MOA engine cache bust v17 missing');
 let seed=0x5f3759df; const fakeMath=Object.create(Math); fakeMath.random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
 const user={user_id:'sim-base',isGuest:false},persist=new Map();
 const ctx={console,Date,Math:fakeMath,setTimeout:()=>1,clearTimeout:()=>{},MiniTalk:{AI:{},Store:{get:k=>k==='user'?user:undefined},Persistence:{get:(k,d)=>persist.has(k)?persist.get(k):d,set:(k,v)=>persist.set(k,v),remove:k=>persist.delete(k)},AuthApi:{moaSync:async()=>({ok:true}),moaSearch:async()=>({}),moaCommit:async()=>({ok:true})}}};

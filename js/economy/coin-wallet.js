@@ -8,6 +8,7 @@ MiniTalk.Economy.CoinWallet = (() => {
   const CACHE_KEY = "economy.coinSnapshot";
   const CACHE_TTL = 30000;
   let inFlight = null;
+  let balanceRevision = 0;
 
   function snapshot() {
     const saved = MiniTalk.Persistence.get(CACHE_KEY, null);
@@ -24,13 +25,20 @@ MiniTalk.Economy.CoinWallet = (() => {
     return !user?.user_id || user.isGuest === true;
   }
 
-  function setLocal(amount, source = "local") {
+  function applyLocal(amount, source = "local", bumpRevision = true) {
     const next = Math.floor(Number(amount) || 0);
     const userId = MiniTalk.Store.get("user")?.user_id || "guest";
+    if (bumpRevision) balanceRevision += 1;
     MiniTalk.Store.set("coins", next);
     MiniTalk.Persistence.set(CACHE_KEY, { userId, value: next, source, fetchedAt: Date.now() });
     syncConnectedBadges(next);
     return next;
+  }
+
+  function setLocal(amount, source = "local") {
+    // 구매/보상 응답처럼 더 최신인 확정값이 들어오면 그 전에 시작된 coinStatus
+    // 요청은 더 이상 화면 잔액을 덮어쓸 수 없다.
+    return applyLocal(amount, source, true);
   }
 
   function syncConnectedBadges(amount = value()) {
@@ -42,11 +50,18 @@ MiniTalk.Economy.CoinWallet = (() => {
   }
 
   function startServerRefresh(user, cached) {
+    const requestRevision = balanceRevision;
     const request = MiniTalk.AuthApi.coinStatus(user.user_id)
-      .then(amount => setLocal(amount, "server"))
+      .then(amount => {
+        // 요청이 시작된 뒤 구매/보상 등에서 더 최신 확정 잔액이 반영됐다면
+        // 늦게 도착한 예전 조회값은 버리고 현재 값을 유지한다.
+        if (requestRevision !== balanceRevision) return value();
+        return applyLocal(amount, "server", true);
+      })
       .catch(error => {
         console.warn("코인 잔액 조회 실패", error);
-        return setLocal(cached?.value || 0, "fallback");
+        if (requestRevision !== balanceRevision) return value();
+        return applyLocal(cached?.value || 0, "fallback", true);
       });
 
     inFlight = request;

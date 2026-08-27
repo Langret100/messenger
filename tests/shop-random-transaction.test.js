@@ -13,6 +13,7 @@ const ctx={
   requireRegisteredShopUser_:id=>String(id||''),requireKnownMoaruUser_:id=>String(id||''),requireKnownMoaruUserCached_:id=>String(id||''),
   shopJson_:x=>x,
   LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},
+  SHEET_ID:'sheet', REWARD_SHEET:'보상', SpreadsheetApp:{openById:()=>({getSheetByName:()=>({})})}, getOrCreateShopInventorySheet_:()=>({}),
   getOrCreateShopPurchaseLogSheet_:()=>({appendRow:r=>state.logs.push({purchaseKey:r[0],userId:r[1],productId:r[2],productName:r[3],price:r[4],beforeCoin:r[5],newCoin:r[6]})}),
   findShopPurchase_:(_,key)=>state.logs.find(x=>x.purchaseKey===key)||null,
   readShopCatalog_:()=>state.catalog,

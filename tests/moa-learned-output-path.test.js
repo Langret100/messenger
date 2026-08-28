@@ -24,7 +24,7 @@ ok(g.moaLanguagePublicRow_(['url','이거 봐 https://example.com','오 좋네',
 
 const store={},user={user_id:'learn-output-user',isGuest:false};
 let seed=5;const fakeMath=Object.create(Math);fakeMath.random=()=>((seed=seed*1664525+1013904223>>>0)/4294967296);
-const ctx={console,Date,Math:fakeMath,setTimeout:(fn)=>{fn();return 1},clearTimeout:()=>{},globalThis:null,MiniTalk:{AI:{},Store:{get:k=>k==='user'?user:undefined},Persistence:{get:(k,d)=>k in store?store[k]:d,set:(k,v)=>{store[k]=JSON.parse(JSON.stringify(v));return v},remove:k=>delete store[k]},DataCache:{get:async()=>null,put:async()=>true,remove:async()=>true},AuthApi:{moaSync:async()=>({ok:true,version:50,coreVersion:10,patterns,policy:{},expressionWeights:{}}),moaCommit:async()=>({ok:true}),moaSearch:async()=>({})}}};ctx.globalThis=ctx;
+const ctx={console,Date,Math:fakeMath,setTimeout:(fn)=>{fn();return 1},clearTimeout:()=>{},globalThis:null,MiniTalk:{AI:{},Store:{get:k=>k==='user'?user:undefined},Persistence:{get:(k,d)=>k in store?store[k]:d,set:(k,v)=>{store[k]=JSON.parse(JSON.stringify(v));return v},remove:k=>delete store[k]},DataCache:{get:async()=>null,put:async()=>true,remove:async()=>true},AuthApi:{moaSync:async()=>({ok:true,version:50,coreVersion:10,patterns,policy:{},expressionWeights:{}}),moaCommit:async()=>({ok:true}),moaSearch:async x=>({reply:`SEARCH:${x.query}`,source:'search'})}}};ctx.globalThis=ctx;
 vm.createContext(ctx);vm.runInContext(engine,ctx);const E=ctx.MiniTalk.AI.MoaCommunicationEngine;
 (async()=>{
   await E.sync(true);
@@ -42,6 +42,6 @@ vm.createContext(ctx);vm.runInContext(engine,ctx);const E=ctx.MiniTalk.AI.MoaCom
 
   // Hard/verified paths must never be overridden by chat learning.
   E.clearContext();let r=await E.reply('1+1은?');ok(r.source==='local-utility'&&/^2/.test(r.reply),'learned chat overrode calculator: '+JSON.stringify(r));
-  E.clearContext();r=await E.reply('세종대왕 설명해줘');ok(r.source!=='learned-human'&&/세종/.test(r.reply),'human-chat learning overrode knowledge answer: '+JSON.stringify(r));
+  E.clearContext();r=await E.reply('세종대왕 설명해줘');ok(r.source==='search'&&/세종/.test(r.reply),'human-chat learning overrode generic knowledge/search route: '+JSON.stringify(r));
   console.log('MOA_LEARNED_OUTPUT_PATH_OK',JSON.stringify({patterns:patterns.length,generalized:generalized.reply}));
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -14,7 +14,7 @@
    ============================================================ */
 MiniTalk.AI = MiniTalk.AI || {};
 MiniTalk.AI.MoaCommunicationEngine = (() => {
-  const VERSION = 93;
+  const VERSION = 94;
   const MAX_CONTEXT = 28;
   const MAX_EPISODES = 36;
   const MAX_TIMELINE = 24;
@@ -63,7 +63,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       [/어떻해/g,"어떡해"],[/어떻하지/g,"어떡하지"],[/왤케/g,"왜이렇게"],[/왜케/g,"왜이렇게"],
       [/괜찬/g,"괜찮"],[/귀찬/g,"귀찮"],[/재밋/g,"재밌"],[/잼잇/g,"재밌"],[/잼있/g,"재밌"],[/맛잇/g,"맛있"],[/멋잇/g,"멋있"],
       [/몰겟/g,"모르겠"],[/모르겟/g,"모르겠"],[/알겟/g,"알겠"],[/하겟/g,"하겠"],[/되겟/g,"되겠"],
-      [/햇어/g,"했어"],[/갓어/g,"갔어"],[/왓어/g,"왔어"],[/봣어/g,"봤어"],[/먹엇/g,"먹었"],[/삿어/g,"샀어"],[/받앗/g,"받았"],[/됫/g,"됐"],[/됬/g,"됐"],
+      [/햇어/g,"했어"],[/갓어/g,"갔어"],[/왓어/g,"왔어"],[/봣어/g,"봤어"],[/놀앗/g,"놀았"],[/먹엇/g,"먹었"],[/삿어/g,"샀어"],[/받앗/g,"받았"],[/됫/g,"됐"],[/됬/g,"됐"],[/안됌/g,"안됨"],[/컴터/g,"컴퓨터"],[/드뎌/g,"드디어"],
       [/하고옴$/g,"하고왔어"],[/갔다옴$/g,"갔다왔어"],[/다녀옴$/g,"다녀왔어"],[/끝남$/g,"끝났어"],[/끝냄$/g,"끝냈어"],
       [/했음$/g,"했어"],[/갔음$/g,"갔어"],[/왔음$/g,"왔어"],[/먹음$/g,"먹었어"],[/이김$/g,"이겼어"],[/끊김$/g,"끊겼어"],[/꺼짐$/g,"꺼졌어"],[/찾음$/g,"찾았어"],[/풀림$/g,"풀렸어"],[/재밌었음$/g,"재밌었어"],[/잘됨$/g,"잘됐어"],[/잘나옴$/g,"잘나왔어"],[/안도망감$/g,"안도망갔어"],[/다삼$/g,"다샀어"],[/깔끔해짐$/g,"깔끔해졌어"]
     ];
@@ -400,8 +400,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const repairCue=/(물었는데|물어봤는데|물었잖아|물어봤잖아|대답해|대답안|말했잖아|뭐가그렇구나|뭘듣고있|뭘듣고|엉뚱|딴소리|한심|답답|왜이래|못알아듣|왜이렇게답)/.test(c);
     const explicitQuestion=/[?？]$/.test(text)||decisionCue||/^(왜|어떻게|어디|언제|누구|뭐|뭘|무슨|몇|얼마)/.test(c)||/(뭐야|누구야|어디야|언제야|왜|어떻게|어때|알아|알려줘|설명해줘|몇|얼마|맞아|어떡해|어떡하지|할까|해야해|해야돼|좋을까|괜찮을까|맞을까|하지|까|니|냐|나요)$/.test(c);
     const referenceCue=/^(그래서|그다음|그리고|그럼|근데|왜|어떻게|그게|그거|그건|그걸|걔|걔가|거기|그사람|아까)/.test(c);
-    const searchCue=/(검색해|검색해줘|찾아줘|찾아봐|알아봐|확인해줘|더자세히|자세히알려|최신|최근|뉴스|날씨|기온|몇도|온도|습도|미세먼지|공기질|환율|현지시간|추천해줘|비교해줘)/.test(c)||
-      (explicitQuestion&&/(비와|비올|눈와|눈올)/.test(c));
+    const schoolMealLookupCue=/(?:초등학교|중학교|고등학교|초교|고교).*(?:오늘|내일)?.*급식.*(?:뭔지|뭐인지|뭐야|뭐냐|뭐나와|뭐나오는지|알아|알려줘)/.test(c);
+    const explicitLookupCue=/(검색해|검색해줘|찾아줘|찾아봐|알아봐|확인해줘|더자세히|자세히알려|최신(?!화)|최근|뉴스|환율|현지시간|추천해줘|비교해줘)/.test(c);
+    const weatherLookupCue=(explicitQuestion&&/(날씨|기온|몇도|온도|습도|미세먼지|공기질|비와|비올|눈와|눈올)/.test(c))||
+      /(?:날씨|기온|온도|습도|미세먼지|공기질).*(?:알려|확인|검색|어때|어떻게|몇도)|(?:오늘|내일|지금).*(?:날씨|기온|몇도)$/.test(c);
+    const searchCue=explicitLookupCue||schoolMealLookupCue||weatherLookupCue;
     let affect="neutral";
     if(/(좋아|재밌|이겼|역전|골넣|성공|신나|기뻐|맛있|잘됐|뿌듯|100점|만점|사줬|선물받|합격|칭찬받|기분좋)/.test(c))affect="positive";
     if(/(싫어|힘들|피곤|실패|속상|짜증|화나|어려|망했|졌어|틀렸|별로|아쉬워|아쉽|싸웠|무시|맛없|기분안좋|큰일|걱정|불안|서운)/.test(c))affect="negative";
@@ -414,7 +417,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const preference=/(좋아해|싫어해|재밌어|맛있어|좋더라|별로야|취향)/.test(c);
     const reasonQuestion=explicitQuestion&&/(왜|이유|어째서)/.test(c);
     const opinionQuestion=explicitQuestion&&/(어때|어떻게생각|생각은|괜찮아|좋아보여)/.test(c);
-    const factQuestion=explicitQuestion&&!reasonQuestion&&!opinionQuestion&&/(누구|뭐야|무엇|어디|언제|몇|얼마|뜻|알려줘|설명|정의|유래|역사|차이)/.test(c);
+    const factQuestion=explicitQuestion&&!reasonQuestion&&!opinionQuestion&&/(누구|뭐야|뭔지|뭐인지|무엇|무엇인지|어디|언제|몇|얼마|뜻|알려줘|설명|정의|유래|역사|차이)/.test(c);
     const knowledgeCue=searchCue||factQuestion||reasonQuestion||/(무슨뜻|뜻이뭐|어떤사람|어떤곳|어떤거|차이가뭐|장단점|원리|유래|역사|왜그런|어떻게작동|추천해줘|비교해줘|정리해줘)/.test(c);
     const speechAct=reaction?`social:${reaction}`:plan?"inform:plan":preference?"inform:preference":event?"inform:event":reasonQuestion?"ask:reason":opinionQuestion?"ask:opinion":factQuestion?"ask:fact":act==="followup"?"followup":act==="question"?"ask:question":"inform:statement";
     const punctuation=punctuationOnly(text),profanity=PROFANITY.test(text),directedAbuse=DIRECTED_ABUSE.test(text);
@@ -542,12 +545,61 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/^내일(?:은)?(?:며칠|몇일|날짜뭐야|몇월몇일)$/.test(c))return `내일은 ${dateReply(shifted(1))}`;
     return "";
   }
+  function koreanNumber(raw){
+    const t=compact(raw).replace(/(?:은|는|이|가|을|를)$/g,"");
+    if(!t)return null;
+    if(/^\d+(?:\.\d+)?$/.test(t))return Number(t);
+    const nativeOnes={영:0,공:0,하나:1,한:1,둘:2,두:2,셋:3,세:3,넷:4,네:4,다섯:5,여섯:6,일곱:7,여덟:8,아홉:9};
+    const nativeTens={열:10,스물:20,스무:20,서른:30,마흔:40,쉰:50,예순:60,일흔:70,여든:80,아흔:90};
+    if(Object.prototype.hasOwnProperty.call(nativeOnes,t))return nativeOnes[t];
+    for(const [word,value] of Object.entries(nativeTens)){
+      if(t===word)return value;
+      if(t.startsWith(word)){const rest=t.slice(word.length);if(Object.prototype.hasOwnProperty.call(nativeOnes,rest))return value+nativeOnes[rest];}
+    }
+    const digit={영:0,공:0,일:1,이:2,삼:3,사:4,오:5,육:6,륙:6,칠:7,팔:8,구:9};
+    if(Object.prototype.hasOwnProperty.call(digit,t))return digit[t];
+    let total=0,section=0,num=0,matched=false;
+    for(const ch of t){
+      if(Object.prototype.hasOwnProperty.call(digit,ch)){num=digit[ch];matched=true;continue;}
+      const unit=ch==='십'?10:ch==='백'?100:ch==='천'?1000:0;
+      if(unit){section+=(num||1)*unit;num=0;matched=true;continue;}
+      if(ch==='만'){total+=(section+num||1)*10000;section=0;num=0;matched=true;continue;}
+      return null;
+    }
+    return matched?total+section+num:null;
+  }
+  function spokenMath(raw){
+    let c=compact(raw).toLowerCase().replace(/[?？]/g,"").replace(/(?:계산해줘|계산해|얼마야|얼마|답은|결과는)$/g,"");
+    c=c.replace(/(?:은|는|이|가)$/g,"");
+    const ops=[['더하기','+'],['플러스','+'],['빼기','-'],['마이너스','-'],['곱하기','*'],['나누기','/']];
+    for(const [word,op] of ops){
+      const i=c.indexOf(word);if(i<=0||i+word.length>=c.length)continue;
+      if(c.indexOf(word,i+word.length)>=0)continue;
+      const a=koreanNumber(c.slice(0,i)),b=koreanNumber(c.slice(i+word.length));
+      if(a===null||b===null)return "";
+      if(op==='/'&&b===0)return "0으로 나눌 수는 없어.";
+      const v=op==='+'?a+b:op==='-'?a-b:op==='*'?a*b:a/b;
+      return Number.isFinite(v)?`${Math.round(v*1e6)/1e6}이야.`:"";
+    }
+    return "";
+  }
   function math(raw){
+    const spoken=spokenMath(raw);if(spoken)return spoken;
     let s=clean(raw).toLowerCase().replace(/[?？]/g,"").replace(/계산해줘|계산해|얼마야|얼마|답은|결과는/g,"").replace(/더하기|플러스/g,"+").replace(/빼기|마이너스/g,"-").replace(/곱하기|×|x/g,"*").replace(/나누기|÷/g,"/").replace(/,/g,"").replace(/\s+/g,"");
     // 구어체 계산 질문: "1+1은?", "3*4는?", "10/2가?"처럼 식 뒤에 붙은 조사만 제거한다.
     s=s.replace(/(?<=[0-9)%])(?:은|는|이|가)$/u,"");
     if(!/[+\-*/()%]/.test(s)||!/^[0-9+\-*/().%]+$/.test(s))return "";
     try{const v=Function(`"use strict";return (${s})`)();return Number.isFinite(v)?`${Math.round(v*1e6)/1e6}이야.`:"";}catch{return "계산식이 조금 헷갈려. 12+7처럼 적어줘.";}
+  }
+  function schoolMealInfoReply(frame){
+    if(!frame)return "";const c=frame.c;
+    const asking=/급식/.test(c)&&/(?:오늘|내일|점심|메뉴)/.test(c)&&/(?:뭔지|뭐인지|뭐야|뭐냐|뭐나와|뭐나오는지|메뉴뭐|알아|알려줘|궁금)/.test(c);
+    if(!asking)return "";
+    // 급식은 학교마다 달라서 학교 정보 없이 메뉴를 지어내면 안 된다.
+    // 학교명이 현재 문장에 명확히 들어온 경우 검색 경로에 맡기고, 없으면 필요한 정보만 자연스럽게 묻는다.
+    const hasSchoolName=/(?:초등학교|중학교|고등학교|초교|중학교|고교)/.test(frame.text);
+    if(hasSchoolName)return "";
+    return "학교마다 급식이 달라서 학교 이름이 필요해. 학교 알려주면 오늘 급식으로 찾아볼게.";
   }
   function rps(raw){
     const key=userKey(),c=compact(raw); if(c.includes("가위바위보")){rpsByUser.set(key,true);return "좋아! 가위, 바위, 보 중 하나 말해봐.";}
@@ -690,10 +742,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       ];
     const domainOf=x=>{for(const [rx,name] of domains){if(rx.test(x))return name;}return "";};
     const priorDomain=domainOf(joined),currentDomain=domainOf(c),sameDomainCue=!!priorDomain&&priorDomain===currentDomain;
-    const burstCue=/^(?:막판|마지막|아직|아직도|오늘은|오늘도|오늘드디어|어제보다|지난번보다|전보다|결국|갑자기|생각보다|하나는|자리|사람|길|바람|비|눈|배터리|앱|집에서|밤에|디저트|반찬|걔가|아빠는|엄마는|필요한건|타고싶던건|결말|방은)/.test(c);
+    const resolvedCue=/(?:다시|이제|결국|방금|지금(?:은)?).*(?:됐|됨|돼|된다|정상|괜찮아졌|괜찮|풀렸|해결)/.test(c);
+    const burstCue=/^(?:막판|마지막|아직|아직도|오늘은|오늘도|오늘드디어|어제보다|지난번보다|전보다|결국|갑자기|생각보다|하나(?:는)?|자리|사람|길|바람|비|눈|배터리|앱|집에서|밤에|디저트|반찬|걔가|아빠는|엄마는|필요한건|타고싶던건|결말|방은)/.test(c);
     const rhetoricalBridgeQuestion=/(?:왜이렇게|왜이리|왜이래).*(?:많|힘들|힘드|피곤|졸리|늦|귀찮|짜증|별로|답답)/.test(c);
     const bridgeCue=/^(?:근데|그런데|그래도|그래서|그리고|또|결국|다행히|오히려|사실|아니근데)/.test(c)||
-      /(?:생각보다|막상|알고보니|알고보니까|그러고보니)/.test(c)||frame.referenceCue||sameDomainCue||burstCue||rhetoricalBridgeQuestion;
+      /(?:생각보다|막상|알고보니|알고보니까|그러고보니)/.test(c)||frame.referenceCue||sameDomainCue||burstCue||resolvedCue||rhetoricalBridgeQuestion;
     // 질문/명령은 기존 contextual/search/self/utility 라우터가 더 정확하다.
     // 단, 메신저의 "왤케 많냐/왜 이렇게 힘드냐" 같은 수사의문은 앞 사건에 대한 반응이다.
     const explicitBridgeQuestion=!rhetoricalBridgeQuestion&&(/[?？]$/.test(frame.text)||/(?:할까|갈까|먹을까|마실까|볼까|해볼까|어떡해|어쩌지|왜|뭐야|누구야|어디야|언제야)$/.test(c));
@@ -706,10 +759,10 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
         if(meaningful&&meaningful.length<=12)label=meaningful;
       }
       if(label){
-        const improved=/(덜힘들|괜찮아|괜찮았|풀었|화해|빨리끝|잘됐|나아졌|재밌|맛있|역전|성공|칭찬|도착|찾았|끝냈|다했)/.test(c);
-        const worsened=frame.affect==="negative"&&!improved;
+        const improved=/(덜힘들|괜찮아|괜찮았|풀었|화해|빨리끝|잘됐|됐|됨|돼|정상|해결|나아졌|재밌|맛있|역전|성공|칭찬|도착|찾았|끝냈|다했)/.test(c);
+        const worsened=(frame.affect==="negative"||/(틀린|틀렸|틀림|실수|놓쳤|못했|망했|실패)/.test(c))&&!improved;
         const domainReplies={
-          school:{neg:["아 그건 좀 아쉽겠다. 학교 일은 한 번 꼬이면 계속 신경 쓰이더라.","으, 그 부분은 좀 별로였겠다. 그래도 이미 지나간 건 너무 오래 붙잡진 말자."],pos:["오 그래도 잘 풀렸네 ㅋㅋ 그럼 마음 좀 놓였겠다.","오, 생각보다 괜찮았네. 끝나고 나면 괜히 뿌듯하지 ㅋㅋ"],event:["아 그런 일이 있었구나. 학교에서 하루가 은근 길었겠네.","오, 오늘 학교에서 그런 일이 있었네."]},
+          school:{neg:["아 그건 좀 아쉽겠다. 학교 일은 한 번 꼬이면 계속 신경 쓰이더라.","으, 그 부분은 좀 별로였겠다. 그래도 이미 지나간 건 너무 오래 붙잡진 말자."],pos:["오 그래도 잘 풀렸네 ㅋㅋ 그럼 마음 좀 놓였겠다.","오, 생각보다 잘됐네. 끝나고 나면 괜히 뿌듯하지 ㅋㅋ"],event:["아 그런 일이 있었구나. 학교에서 하루가 은근 길었겠네.","오, 오늘 학교에서 그런 일이 있었네."]},
           game:{neg:["아 그건 아쉽겠다 ㅋㅋ 특히 거의 다 갔다가 그러면 더 그래.","으, 그 판은 좀 아깝네. 다음 판 생각나겠다 ㅋㅋ"],pos:["오 ㅋㅋ 그럼 재밌었겠다. 잘 풀린 판은 기억에 남지.","오 좋았네 ㅋㅋ 그 정도면 한 판 더 하고 싶었겠다."],event:["아 ㅋㅋ 그런 일이 있었구나. 게임하다 보면 별일 다 생기지.","오, 그 판은 좀 기억에 남겠네 ㅋㅋ"]},
           friend:{neg:["으, 그건 좀 신경 쓰였겠다. 친구 일은 작은 것도 오래 남을 때 있지.","아 그건 기분 좀 상했겠다. 괜히 계속 생각났겠네."],pos:["오 그래도 잘 풀렸네. 친구랑 어색한 거 풀리면 확 편해지지.","다행이다 ㅋㅋ 결국 괜찮아졌네."],event:["아 그런 일이 있었구나. 친구랑 있으면 진짜 예상 못 한 일이 많네 ㅋㅋ","오, 친구랑 그러고 왔구나 ㅋㅋ"]},
           food:{neg:["아 그럼 먹고도 좀 아쉬웠겠다 ㅋㅋ","으, 음식이 기대보다 별로면 괜히 손해 본 느낌 나지 ㅋㅋ"],pos:["오 그래도 맛있는 건 있었네 ㅋㅋ 그럼 완전 실패는 아니네.","오 맛있었구나 ㅋㅋ 그건 잘 골랐네."],event:["아 그러고 먹었구나 ㅋㅋ","오, 먹는 중에 그런 일이 있었네 ㅋㅋ"]},
@@ -890,11 +943,265 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return "";
   }
 
+
+  // Compositional everyday chat layer.
+  // This deliberately does NOT memorize individual user examples. It combines a
+  // broad daily-life topic with a conversational state (finished, delayed,
+  // awkward, relieved, annoyed, etc.) so unseen wording can still get a useful
+  // reaction. Explicit questions/utilities/search/game routes are excluded here
+  // and learned-human candidates still arbitrate after this local candidate.
+  function compositionalEverydayReply(frame){
+    if(!frame||frame.question||frame.searchCue||frame.knowledgeCue||frame.decisionCue||frame.reaction||frame.profanity||frame.directedAbuse)return "";
+    const c=frame.c;if(!c||c.length<3)return "";
+    const topicDefs=[
+      ["school",/(학교|학원|수업|교실|선생님|쌤|급식|쉬는시간|등교|하교|반친구)/],
+      ["study",/(숙제|과제|공부|시험|퀴즈|문제|발표|수행평가|성적|점수|복습|예습)/],
+      ["friend",/(친구|친한애|애들이랑|걔|짝꿍|반애|단톡|답장|연락|약속)/],
+      ["family",/(엄마|아빠|부모님|형|누나|언니|오빠|동생|할머니|할아버지|가족)/],
+      ["food",/(밥|급식|아침|점심|저녁|야식|간식|라면|김밥|떡볶이|치킨|피자|햄버거|카페|디저트|음료|배고|배불|과자|빵)/],
+      ["game",/(게임|롤|발로란트|마크|마인크래프트|로블록스|보드게임|축구|농구|배드민턴|야구|경기|플레이)/],
+      ["media",/(유튜브|영상|쇼츠|웹툰|만화|애니|영화|드라마|책|소설|방송|노래|음악|스트리밍)/],
+      ["tech",/(폰|휴대폰|핸드폰|태블릿|컴퓨터|컴터|노트북|이어폰|에어팟|와이파이|인터넷|앱|배터리|충전|키보드|마우스|업데이트)/],
+      ["transit",/(버스|지하철|택시|기차|정류장|역|환승|길|가는중|오는중|도착|출발|차막|교통)/],
+      ["home",/(집|방|침대|청소|정리|설거지|빨래|쓰레기|샤워|씻|요리|책상|옷장)/],
+      ["hobby",/(그림|낙서|사진|피아노|기타|악기|만들기|작품|코딩|연습|취미|레고|퍼즐)/],
+      ["pet",/(강아지|고양이|햄스터|반려견|반려묘|반려동물|물고기)/],
+      ["exercise",/(운동|헬스|달리기|런닝|줄넘기|체육|산책|걷기|자전거|수영)/],
+      ["shopping",/(쇼핑|택배|배송|주문|옷|신발|가방|문구|필통|샀|구매|장바구니)/],
+      ["outing",/(공원|놀이공원|바다|여행|캠핑|소풍|마트|백화점|밖에|나들이|구경)/],
+      ["weather",/(비|눈|바람|날씨|더워|덥|추워|춥|우산|습해|미세먼지)/],
+      ["sleep",/(잠|잤어|잠들|일어났|깼어|졸려|꿈|늦잠|낮잠|밤샘)/],
+      ["schedule",/(약속|일정|내일|주말|모레|다음주|예약|시간표|계획)/]
+    ];
+    let topic="";for(const [name,rx] of topicDefs){if(rx.test(c)){topic=name;break;}}
+    if(!topic)return "";
+    const stateDefs=[
+      ["relieved",/(다행|드디어|겨우|해결|풀렸|찾았|도착했|무사히|괜찮아졌|살았다|끝나서좋)/],
+      ["finished",/(다했|끝냈|끝났|완료|마쳤|치웠|정리했|제출했|해냈|성공했|다봄|다봤|해버림|다해버|해치웠|끝내버)/],
+      ["win",/(이겼|역전|승리|골넣|잘했|만점|100점|칭찬받|합격)/],
+      ["lose",/(졌|패배|망했|실패|틀렸|놓쳤|떨어졌|못했|잘못했)/],
+      ["delayed",/(늦|지연|안와|기다|밀렸|막혔|정체|아직도|오래걸)/],
+      ["broken",/(끊겼|꺼졌|멈췄|튕겼|먹통|안돼|안됨|고장|깨졌|사라졌|잃어버)/],
+      ["awkward",/(어색|민망|쪽팔|창피|애매|뻘쭘|눈치|말실수)/],
+      ["conflict",/(싸웠|화냈|무시|서운|삐졌|읽씹|잔소리|혼났|뭐라했)/],
+      ["surprise",/(갑자기|뜻밖|예상못|생각도못|알고보니|의외|깜짝)/],
+      ["tired",/(피곤|힘들|지쳤|졸려|졸리|기운없|힘빠|귀찮|하기싫)/],
+      ["anxious",/(걱정|불안|긴장|떨려|큰일|망할거같|늦을거같|지각할거같)/],
+      ["annoyed",/(짜증|빡쳐|답답|열받|귀찮|별로|싫었|마음에안들)/],
+      ["fun",/(재밌|웃겼|꿀잼|신났|좋았|맛있|마음에들|괜찮았|행복|기분좋)/],
+      ["plan",/(하려고|할거야|하기로|갈거야|볼거야|먹을거야|나중에|내일|주말에)/],
+      ["ongoing",/(하는중|하고있|가는중|오는중|기다리는중|보는중|먹는중|연습중)/],
+      ["new",/(샀어|받았어|생겼어|왔어|도착했어|선물받|새로)/],
+      ["plain",/(했어|갔어|왔어|봤어|먹었어|놀았어|다녀왔어|있었어|였어|함$|봄$|감$|옴$)/]
+    ];
+    let stateName="";for(const [name,rx] of stateDefs){if(rx.test(c)){stateName=name;break;}}
+    if(!stateName)return "";
+    const base={
+      relieved:["아 다행이다. 그거 해결되니까 마음 좀 놓였겠다.","오 다행이네 ㅋㅋ 계속 걸리던 게 풀리면 갑자기 편해지지.","드디어 됐네. 그동안 신경 쓰인 만큼 더 시원하겠다.","오, 결국 잘 넘어갔네. 이제 그건 좀 내려놔도 되겠다."],
+      finished:["오 끝냈네 ㅋㅋ 시작하기 전보다 지금이 훨씬 편하겠다.","좋네. 할 일 하나 제대로 치웠다.","오 수고했네. 끝내고 나면 괜히 숨통 트이지.","드디어 마무리했구나. 이제 좀 다른 거 해도 마음 편하겠다."],
+      win:["오 잘됐네 ㅋㅋ 그건 좀 뿌듯했겠다.","이야 결과 좋았네. 끝나고도 계속 생각날 만하다 ㅋㅋ","오 그건 제대로 건졌네. 기분 좋았겠다.","ㅋㅋ 잘 풀렸네. 그런 날은 괜히 한 번 더 떠올리게 되지."],
+      lose:["아 그건 아쉽겠다. 특히 잘될 줄 알았으면 더 그렇지.","으 결과가 그렇게 나오면 계속 한 장면 생각나지.","아깝네. 그래도 한 번 꼬였다고 전부 못한 건 아니지.","아 그건 좀 속상했겠다. 다음번엔 그 부분만 덜 걸리면 되겠네."],
+      delayed:["으 기다리는 시간이 제일 안 가는데 아직도 걸렸구나.","아 계속 늦어지면 별일 없어도 지치지.","와 그건 시간 잡아먹혀서 더 답답했겠다.","아직도 안 풀렸구나. 기다리는 쪽이 진짜 피곤하지."],
+      broken:["아 하필 하던 중에 말썽 났네. 흐름 확 끊겼겠다.","으 그 타이밍에 안 되면 진짜 맥 빠지지.","아 갑자기 먹통이면 괜히 이것저것 다 눌러보게 되지 ㅋㅋ","와 잘 쓰다가 그러면 더 짜증나겠다."],
+      awkward:["아 그 순간 좀 뻘쭘했겠다 ㅋㅋ 지나고 나면 별거 아닌데 그때는 길게 느껴지지.","으 애매한 분위기였겠네. 괜히 어디 봐야 할지도 모르겠고.","ㅋㅋ 그건 좀 민망했겠다. 그래도 대부분 생각보다 금방 잊어.","아 말이나 분위기가 살짝 꼬였구나. 그럴 때 괜히 계속 떠올라."],
+      conflict:["아 그건 기분 상했겠다. 사람 일이면 작은 것도 오래 남지.","으 그 상황은 좀 신경 쓰였겠네. 특히 가까운 사람이면 더 그렇고.","아 그건 서운하거나 짜증날 만하네. 네 입장에선 그냥 넘기기 애매했겠다.","그랬구나. 말이 꼬이면 내용보다 분위기가 더 오래 남을 때 있지."],
+      surprise:["오 갑자기 그렇게 됐구나 ㅋㅋ 예상 못 했으면 순간 멈칫했겠다.","와 그건 좀 뜻밖이었네. 생각한 흐름이랑 완전 달랐겠다.","ㅋㅋ 갑자기 방향이 바뀌었네. 그건 기억에 남겠다.","오 그런 변수가 있었구나. 예상 못 한 게 끼면 하루가 확 달라지지."],
+      tired:["아 오늘 꽤 힘들었나 보네. 지금은 좀 쉬는 게 낫겠다.","으 그 정도면 꽤 힘들었겠다. 잠깐 아무것도 안 해도 돼.","아 피곤하고 힘들 만하네. 계속 밀어붙이는 것보다 잠깐 쉬는 게 낫지.","아 힘 빠졌구나. 꽤 힘든 하루였나 보네. 오늘은 최소한만 해도 충분하겠다."],
+      anxious:["아 그거 생각하면 계속 마음이 급해지겠다. 아직 안 일어난 일까지 한꺼번에 걱정하진 말자.","긴장되겠네. 지금 할 수 있는 것 하나만 챙기면 좀 덜 복잡해져.","으 신경 쓰이겠다. 결과보다 당장 준비할 수 있는 부분부터 보면 돼.","아 마음이 좀 급한 상태구나. 하나씩 보면 생각보다 정리될 수도 있어."],
+      annoyed:["아 그건 좀 짜증날 만하네. 계속 걸리면 더 거슬리지.","으 딱 기분 상하는 포인트가 있었구나.","아 별로였구나. 괜히 참고 좋다고 할 필요는 없지.","그건 좀 답답했겠다. 같은 일이 반복되면 더 그렇고."],
+      fun:["오 좋았네 ㅋㅋ 제대로 즐겼나 보다.","ㅋㅋ 그건 시간 잘 썼네. 재밌으면 금방 지나가지.","오 마음에 들었구나. 그런 건 한동안 기억나지.","좋네 ㅋㅋ 기대한 만큼 괜찮았나 보다."],
+      plan:["오 다음에 할 것도 생각해뒀네. 계획 잡히면 마음은 좀 편하지.","좋네. 그럼 다음엔 그쪽으로 해보려는 거구나.","오케이, 다음 흐름까지 잡았네 ㅋㅋ","그렇게 해보려고 하는구나. 너무 빡빡하게만 안 잡으면 괜찮겠다."],
+      ongoing:["오 지금 한창 하고 있는 중이구나.","아 아직 진행 중이네 ㅋㅋ 끝나고 나면 느낌 또 달라지겠다.","오 지금 그거 하고 있구나. 중간에 잠깐 들어온 거네.","아 진행 중이구나. 잘 풀리면 금방 끝나겠다."],
+      new:["오 새로 생겼네 ㅋㅋ 실제로 보니까 어때?","오 기다리던 거면 꽤 반갑겠다.","새 거 생기면 괜히 한동안 계속 보게 되지 ㅋㅋ","오 좋네. 생각했던 느낌이랑 비슷해?"],
+      plain:["오 그런 일이 있었구나. 하루가 그냥 지나가진 않았네.","아 그렇게 하고 왔구나. 생각보다 괜찮았어?","오 오늘 그거 했네 ㅋㅋ 끝나고 나니 어때?","아 그러고 있었구나. 별일 없이 잘 끝났으면 됐다."]
+    };
+    const topicTail={
+      school:[" 학교 일은 끝나도 집에서 한 번 더 생각날 때 있지."," 하루 중 학교에서 생긴 일이 은근 오래 남더라."],
+      study:[" 공부 쪽은 결과보다 끝냈다는 것만으로도 숨 좀 돌릴 수 있지."," 할 게 쌓여 있으면 작은 것 하나 치우는 것도 꽤 커."],
+      friend:[" 친구 일은 말 한마디도 계속 생각날 때 있지."," 사람 사이 일은 정답이 딱 없어서 더 신경 쓰이고."],
+      family:[" 가족이랑 생긴 일은 집에 있으니까 더 오래 느껴질 때 있지."," 가까운 사이일수록 별말 아닌 것도 신경 쓰일 때 있고."],
+      food:[" 먹는 건 기대랑 다르면 바로 티 나지 ㅋㅋ"," 그래도 맛있는 한 끼면 하루 중 작은 이벤트는 되지."],
+      game:[" 게임이나 경기는 흐름 한 번 바뀌면 기분도 확 바뀌지 ㅋㅋ"," 그런 판은 끝나고도 장면 하나가 계속 생각나더라."],
+      media:[" 보고 난 뒤 느낌이 남는 게 진짜 잘 본 거지."," 끝나고도 생각나면 꽤 인상적이었던 거고."],
+      tech:[" 기계는 꼭 필요할 때 말썽이라 더 얄밉지 ㅋㅋ"," 잘 되던 게 갑자기 안 되면 원인 찾는 것부터 귀찮고."],
+      transit:[" 이동이 꼬이면 실제 시간보다 훨씬 오래 걸린 느낌 나지."," 가는 길이 편해야 도착해서도 덜 지치고."],
+      home:[" 집에서 하는 일은 끝내놓으면 확 편해지지."," 집안일은 시작이 제일 귀찮고 끝나면 은근 시원하고."],
+      hobby:[" 좋아서 하는 것도 막히는 순간은 있지."," 그래도 취미는 조금씩 나아지는 맛이 있잖아."],
+      pet:[" 얘네는 진짜 예상대로 움직여주는 법이 없지 ㅋㅋ"," 그래도 귀여우면 또 금방 풀리고 ㅋㅋ"],
+      exercise:[" 몸 쓰고 나면 힘든데 또 개운한 느낌도 있지."," 컨디션에 따라 같은 운동도 완전 다르게 느껴지고."],
+      shopping:[" 사고 나서 실제로 써볼 때 느낌이 제일 중요하지."," 기다린 만큼 마음에 들면 그걸로 성공이고."],
+      outing:[" 밖에 나가면 계획대로만 되진 않아도 기억은 남지."," 나갔다 오면 피곤해도 장면 하나쯤은 남더라."],
+      weather:[" 날씨 하나로 하루 느낌이 꽤 달라지지."," 밖에 있을 땐 날씨가 진짜 크게 느껴지고."]
+    };
+    const rows=(base[stateName]||[]).slice();if(!rows.length)return "";
+    // Occasionally add a domain-colored second thought. Because this is selected
+    // from a pool, it increases variety without forcing a question every turn.
+    const tails=topicTail[topic]||[];
+    if(tails.length){for(let i=0;i<Math.min(2,rows.length);i++)rows.push(rows[i]+tails[i%tails.length]);}
+    const recentShapes=new Set(recentAssistantTurns(4).map(v=>normalizedReplyShape(v.text||"")));
+    let h=2166136261;const key=`${userKey()}|${state().turn}|${topic}|${stateName}|${c}`;for(let i=0;i<key.length;i++){h^=key.charCodeAt(i);h=Math.imul(h,16777619);}
+    for(let step=0;step<rows.length;step++){const candidate=rows[(Math.abs(h)+step)%rows.length];if(!recentShapes.has(normalizedReplyShape(candidate)))return candidate;}
+    return rows[Math.abs(h)%rows.length]||"";
+  }
+
+
+  function expandedEverydayReactionRows(topic,stateName,c){
+    const byTopic={
+      school:["학교 얘기는 수업보다 쉬는 시간이나 사람 때문에 더 기억날 때 있지.","학교 하루가 똑같아 보여도 매일 하나씩은 꼭 얘깃거리가 생기더라.","학교에서 있었던 일은 집에 오면 갑자기 다르게 느껴질 때도 있어.","오늘 학교 쪽은 평소랑 조금 다른 날이었나 보네.","학교는 별일 없으면 긴데 뭔가 하나 생기면 또 순식간이더라 ㅋㅋ"],
+      study:["공부는 잘된 부분 하나만 있어도 다음에 다시 손대기가 좀 쉬워지지.","공부할 땐 막막하다가 끝나고 보면 생각보다 해놓은 게 있을 때도 있고.","시험이나 과제는 결과 나오기 전까지 괜히 머릿속에서 한 번씩 재생되지.","공부 쪽은 컨디션 따라 같은 양도 체감이 완전 다르더라.","하나 막히면 다 안 되는 것 같다가도 그 부분만 넘기면 또 술술 갈 때 있고."],
+      friend:["친구랑 있었던 일은 그때 표정이나 말투까지 같이 기억날 때 있지.","친구 사이에선 별말 아닌 한마디가 분위기를 확 바꾸기도 하고.","사람 얘기는 딱 잘라 정답 내리기 어려워서 더 계속 생각나는 것 같아.","친구랑 생긴 일은 결과보다 그때 분위기가 더 오래 남기도 하더라.","같은 일이어도 친한 친구랑 있으면 느낌이 완전히 달라지지 ㅋㅋ"],
+      family:["가족이랑은 매일 보니까 작은 일도 바로 다음 장면으로 이어지지.","집에서는 별일 아닌 것도 서로 컨디션 따라 크게 느껴질 때 있더라.","가족 얘기는 가까워서 편한 만큼 말 한마디가 세게 느껴질 때도 있고.","그래도 집에서 생긴 일은 며칠 지나면 또 아무렇지 않게 넘어가는 경우도 많고.","가족끼리는 평범한 일도 나중에 웃긴 얘깃거리 되는 경우 많지 ㅋㅋ"],
+      food:["먹는 얘기는 실패해도 이상하게 또 얘깃거리는 남지 ㅋㅋ","배고플 때 먹은 거랑 그냥 먹은 거랑 만족도가 완전 다르고.","한 끼 잘 먹으면 별거 아닌데 하루가 좀 덜 별로인 느낌 들지.","메뉴 고를 때 기대한 거랑 실제 맛이 맞으면 괜히 성공한 느낌이고 ㅋㅋ","먹고 나서 또 생각나면 그건 꽤 괜찮았던 거지."],
+      game:["게임은 한 장면 때문에 전체 판 기억이 확 바뀌기도 하잖아 ㅋㅋ","잘한 판은 끝나도 손맛이 좀 남고, 꼬인 판은 괜히 복기하게 되고.","같이 한 사람이 누구냐에 따라 같은 게임도 분위기가 완전 달라지지.","게임은 이기고 지는 것도 있는데 웃긴 장면 하나 나오면 그게 더 기억나더라.","막판에 흐름 바뀌면 끝나고도 '그때 그거만...' 생각나지 ㅋㅋ"],
+      media:["영상이나 작품은 다 보고 나서 누구한테 말하고 싶어지면 꽤 잘 본 거지.","한 장면이나 대사 하나가 유독 남는 작품이 있더라.","기대 없이 봤는데 괜찮으면 이상하게 더 만족스럽고.","끝나자마자 다음 걸 찾게 되면 제대로 빠진 거고 ㅋㅋ","반대로 끝나고 아무 생각 안 나면 진짜 그냥 본 거고."],
+      tech:["기기는 평소엔 조용하다가 꼭 급할 때 존재감 보여주더라 ㅋㅋ","문제 하나 해결하고 나면 원인은 별거 아니었던 경우도 많고.","기계 문제는 원인 모를 때가 제일 답답하고, 원인만 잡히면 절반은 끝난 느낌이지.","잘 쓰던 게 갑자기 이상해지면 내가 뭘 건드렸나부터 의심하게 되더라.","업데이트나 연결 문제는 기다리는 시간까지 붙어서 더 귀찮고."],
+      transit:["이동할 때 한 번 꼬이면 도착하기 전까지 계속 신경 쓰이지.","버스나 지하철은 딱 맞춰 오면 별일 아닌데 놓치면 갑자기 큰일이 되고 ㅋㅋ","가는 길이 편하면 목적지 도착했을 때 체력이 진짜 다르지.","이동 중엔 몇 분 차이도 이상하게 엄청 길게 느껴질 때 있고.","자리 있냐 없냐도 체감 난이도 꽤 크게 바꾸더라."],
+      home:["집안일은 하기 전엔 엄청 큰데 막상 시작하면 생각보다 빨리 끝날 때 있지.","방 하나만 정리돼도 집에 들어왔을 때 느낌이 달라지더라.","집에서는 '조금 있다 해야지'가 제일 위험한 말인 것 같아 ㅋㅋ","할 일 다 해놓고 침대 가는 순간이 제일 편하지.","집안일은 티가 안 나다가 안 하면 바로 티 나는 게 좀 억울해 ㅋㅋ"],
+      hobby:["취미는 잘하려고 너무 힘주면 오히려 재미가 먼저 사라질 때 있더라.","조금씩 늘었다는 게 보일 때 계속 하고 싶어지는 맛이 있지.","취미는 결과물보다 하는 동안 시간 잘 가는 게 제일 큰 장점 같아.","막히다가 갑자기 한 번 잘되면 그 맛 때문에 또 하게 되고.","전에 한 거랑 비교했을 때 달라진 게 보이면 은근 뿌듯하지."],
+      pet:["반려동물은 계획대로 움직여주지 않는 게 또 매력이긴 해 ㅋㅋ","가만히 있어도 왜 저러나 싶은 순간이 꼭 생기지 ㅋㅋ","사고쳐도 잠깐 뒤에 귀여운 짓 하면 화내기 애매해지고.","얘네는 평범하게 있어도 보고 있으면 계속 뭔가 하더라.","사진 찍으려고 하면 꼭 그 순간 자세 바꾸는 것도 국룰이고 ㅋㅋ"],
+      exercise:["운동은 시작 전 기분이랑 끝난 뒤 기분이 제일 다른 것 같아.","컨디션 좋은 날은 평소랑 같은 걸 해도 훨씬 가볍게 느껴지지.","몸 쓰고 나면 피곤한데 머리는 오히려 좀 맑아질 때도 있고.","한 번 쉬기 시작하면 계속 쉬고 싶고, 한 번 시작하면 또 생각보다 하게 되고 ㅋㅋ","운동은 기록보다 오늘 했다는 것 자체가 괜찮은 날도 많지."],
+      shopping:["사는 순간보다 받아서 실제로 써볼 때 만족도가 결정되는 것 같아.","사진이랑 실물이 비슷하면 일단 절반은 성공이지 ㅋㅋ","기다린 물건 도착하면 포장 뜯는 순간까지가 은근 이벤트고.","막상 받아보면 예상보다 크거나 작아서 당황할 때도 있고.","잘 산 건 며칠 지나도 계속 잘 샀다는 생각 들더라."],
+      outing:["밖에 나갔다 오면 피곤해도 집에만 있었을 때랑 기억 밀도가 다르지.","계획대로 안 된 장면이 오히려 나중엔 제일 기억날 때도 있고.","평소 안 가던 데 가면 사소한 것도 좀 더 눈에 들어오고.","나들이는 가기 전 준비가 귀찮은데 막상 나가면 또 괜찮을 때 많지.","돌아오는 길에 오늘 뭐가 제일 좋았나 생각하게 되더라."],
+      weather:["날씨가 애매하면 옷 고르는 것부터 하루가 꼬이기 시작하지 ㅋㅋ","비나 바람은 몇 분만 밖에 있어도 체감이 확 오고.","날씨 좋은 날은 똑같은 길도 조금 덜 지루하게 느껴지더라.","반대로 덥거나 추우면 별일 없어도 금방 지치고.","아침 날씨랑 하교할 때 날씨가 다르면 진짜 억울하고 ㅋㅋ"],
+      sleep:["잠은 한 시간 차이도 다음 날엔 두세 시간 차이처럼 느껴질 때 있지.","늦잠 자면 오래 잤는데도 이상하게 더 멍한 날 있고.","잘 잔 날은 아침부터 뭔가 덜 귀찮더라.","꿈 이상하게 생생한 날은 하루 종일 한 번씩 생각나고.","졸릴 때는 평소엔 아무렇지 않은 것도 다 귀찮아지지 ㅋㅋ"],
+      schedule:["일정 하나 있으면 그 전 시간이 괜히 애매하게 비는 느낌 들 때 있지.","약속은 준비 다 해놓으면 기다리는 시간이 갑자기 길어지고.","계획이 너무 빡빡하면 하나만 밀려도 뒤가 다 흔들리더라.","반대로 대충 시간만 잡아두면 마음은 좀 편하고.","기다리던 일정이면 전날부터 괜히 한 번씩 생각나지 ㅋㅋ"]
+    };
+    const byState={
+      good:["이런 건 괜히 한 번 더 말하고 싶을 만하지 ㅋㅋ","잘된 건 이유 분석보다 그냥 기분 좋아해도 되는 순간이지.","오, 오늘 플러스 하나 생겼네."],
+      bad:["그 상황이면 바로 기분 상하는 게 이상한 건 아니네.","이미 지나갔어도 한 번쯤 다시 떠오를 만하다.","오늘은 그 장면이 좀 마이너스였네."],
+      tired:["지금은 효율보다 체력 회복이 먼저인 타이밍 같네.","에너지 바가 거의 바닥난 느낌이네 ㅋㅋ","이럴 땐 뭘 더 잘하려고 하기보다 덜 힘들게 끝내는 것도 괜찮지."],
+      done:["끝낸 직후엔 괜히 시간 하나 되찾은 느낌 들지.","이제 '해야 하는 거'에서 '한 거'로 넘어갔네 ㅋㅋ","마무리했다는 것 자체가 꽤 크다."],
+      waiting:["기다릴 땐 할 수 있는 게 적어서 시간이 더 느리게 가는 것 같아.","이런 건 자꾸 확인할수록 더 안 오는 느낌이지 ㅋㅋ","빨리 결과라도 나오면 마음이 덜 걸릴 텐데."],
+      new:["처음 며칠은 사소한 것도 평소보다 더 눈에 들어오지.","새로운 건 익숙해지기 전까지 그 자체로 얘깃거리 생기더라.","첫 느낌 괜찮으면 시작은 좋은 거지."],
+      plan:["계획 세울 때가 실제 하기 전보다 제일 의욕 넘칠 때도 있지 ㅋㅋ","방향이 정해졌으면 이제 너무 완벽하게만 하려고 안 해도 되겠다.","다음 장면이 어느 정도 보이는 상태네."],
+      awkward:["그 장면만 머릿속에서 괜히 확대재생될 때 있지 ㅋㅋ","상대는 이미 잊었을 가능성도 꽤 큰데 나는 계속 생각나고.","이런 건 시간이 조금 지나면 급격히 별거 아니게 느껴지기도 해."],
+      surprise:["예상 못 한 게 하나 끼면 그날 기억이 확 선명해지지.","순간 머릿속에 물음표 떴을 것 같다 ㅋㅋ","계획에 없던 장면이 하나 생겼네."],
+      boring:["아무 일 없는 시간이 제일 길게 느껴지는 법이지 ㅋㅋ","그럴 땐 작은 자극 하나만 있어도 갑자기 살 것 같고.","시간 확인하면 5분밖에 안 지난 상황이 제일 억울하지."]
+    };
+    const topicSafe=!/^(?:bad|tired|waiting|awkward)$/.test(stateName);
+    const out=[...(topicSafe?(byTopic[topic]||[]):[]),...(byState[stateName]||[])];
+    if(/(?:ㅋㅋ|ㅎㅎ)/.test(c))out.push("ㅋㅋ 말투 보니까 완전 심각한 얘기라기보단 좀 어이없거나 웃긴 쪽이네.");
+    if(/(?:진짜|완전|개|엄청|너무)/.test(c))out.push("말하는 강도 보니까 체감이 꽤 컸나 보네 ㅋㅋ");
+    return out;
+  }
+
+  // General-purpose variety layer for everyday chat.
+  // It does not memorize specific user sentences. Instead it detects a broad life
+  // topic + conversational state and offers multiple kinds of reactions: simple
+  // acknowledgement, reflection, light humor, a related thought, or (when the
+  // user's profile tolerates it) one natural follow-up question. learned-human
+  // candidates still arbitrate after this local answer, so broad defaults never
+  // replace learned conversation data.
+  function diversifyEverydayAnswer(answer,frame,source){
+    if(!answer||source!=="local-everyday"||!frame||frame.question||frame.searchCue||frame.knowledgeCue||frame.decisionCue)return answer;
+    const c=frame.c||"";if(!c)return answer;
+    const topicDefs=[
+      ["school",/(학교|학원|수업|교실|쌤|선생님|급식|쉬는시간|등교|하교|반친구|체육시간)/],
+      ["study",/(숙제|과제|공부|시험|퀴즈|문제|발표|수행평가|성적|점수|복습|예습|공책|교과서)/],
+      ["friend",/(친구|친한애|애들이랑|걔|짝꿍|반애|단톡|답장|연락|약속|친구들)/],
+      ["family",/(엄마|아빠|부모님|형|누나|언니|오빠|동생|할머니|할아버지|가족|사촌)/],
+      ["food",/(밥|급식|아침|점심|저녁|야식|간식|라면|김밥|떡볶이|치킨|피자|햄버거|카페|디저트|음료|배고|배불|과자|빵)/],
+      ["game",/(게임|롤|발로란트|마크|마인크래프트|로블록스|보드게임|축구|농구|배드민턴|야구|경기|플레이)/],
+      ["media",/(유튜브|영상|쇼츠|웹툰|만화|애니|영화|드라마|책|소설|방송|노래|음악|스트리밍)/],
+      ["tech",/(폰|휴대폰|핸드폰|태블릿|컴퓨터|컴터|노트북|이어폰|에어팟|와이파이|인터넷|앱|배터리|충전|키보드|마우스|업데이트)/],
+      ["transit",/(버스|지하철|택시|기차|정류장|역|환승|길|가는중|오는중|도착|출발|차막|교통)/],
+      ["home",/(집|방|침대|청소|정리|설거지|빨래|쓰레기|샤워|씻|요리|책상|옷장)/],
+      ["hobby",/(그림|낙서|사진|피아노|기타|악기|만들기|작품|코딩|연습|취미|레고|퍼즐)/],
+      ["pet",/(강아지|고양이|햄스터|반려견|반려묘|반려동물|물고기)/],
+      ["exercise",/(운동|헬스|달리기|런닝|줄넘기|체육|산책|걷기|자전거|수영)/],
+      ["shopping",/(쇼핑|택배|배송|주문|옷|신발|가방|문구|필통|샀|구매|장바구니)/],
+      ["outing",/(공원|놀이공원|바다|여행|캠핑|소풍|마트|백화점|밖에|나들이|구경)/],
+      ["weather",/(비|눈|바람|날씨|더워|덥|추워|춥|우산|습해|미세먼지)/],
+      ["sleep",/(잠|잤어|잠들|일어났|깼어|졸려|꿈|늦잠|낮잠|밤샘)/],
+      ["schedule",/(약속|일정|내일|주말|모레|다음주|예약|시간표|계획)/]
+    ];
+    let topic="";for(const [name,rx] of topicDefs){if(rx.test(c)){topic=name;break;}}if(!topic)return answer;
+    let stateName="neutral";
+    const stateDefs=[
+      ["good",/(좋았|좋아|재밌|맛있|웃겼|신났|행복|잘됐|성공|이겼|칭찬|마음에들|개꿀|최고|괜찮았)/],
+      ["bad",/(싫|별로|망했|졌|실패|짜증|빡|서운|화났|아쉽|못했|깨졌|끊겼|고장|안돼|안됨|잃어버)/],
+      ["tired",/(피곤|힘들|지쳤|졸려|기운없|귀찮|하기싫|힘빠)/],
+      ["done",/(끝냈|끝났|다했|완료|마쳤|치웠|제출|도착했|해결|찾았)/],
+      ["waiting",/(기다|아직|안와|늦|지연|밀렸|막혔|정체)/],
+      ["new",/(새로|처음|샀어|받았어|생겼어|도착했어|처음해|처음봄)/],
+      ["plan",/(하려고|할거|하기로|갈거|볼거|먹을거|내일|주말|계획)/],
+      ["awkward",/(어색|민망|뻘쭘|창피|쪽팔|눈치|말실수|애매)/],
+      ["surprise",/(갑자기|뜻밖|의외|생각보다|알고보니|깜짝|예상못)/],
+      ["boring",/(심심|지루|노잼|할거없|재미없)/]
+    ];
+    for(const [name,rx] of stateDefs){if(rx.test(c)){stateName=name;break;}}
+    const stateRows={
+      good:["오 그건 기분 좀 좋았겠다.","ㅋㅋ 잘 풀렸네. 이런 건 짧게 말해도 신난 게 느껴진다.","오 좋네. 하루에 이런 거 하나 있으면 좀 살지 ㅋㅋ","그건 꽤 괜찮았겠다. 잘된 건 그냥 잘됐다고 즐겨도 되지.","오, 생각보다 제대로 건졌네 ㅋㅋ","좋았겠다. 그런 건 별거 아닌 것 같아도 은근 오래 기억나."],
+      bad:["아 그건 좀 별로였겠다.","으 그건 흐름 확 깨졌겠네.","아 그런 일 있으면 괜히 계속 생각나지.","그건 좀 짜증날 만하다. 특히 기대하고 있었으면 더 그렇고.","아쉽네. 오늘 그 부분은 확실히 별로였겠다.","으, 그건 그냥 기분 상할 만한 상황이네."],
+      tired:["아 꽤 힘들고 지쳤나 보네. 지금은 잠깐 쉬어도 되겠다.","으 힘 빠졌겠다. 계속 밀어붙이는 것보다 한 번 쉬는 게 낫지.","오늘 에너지 많이 썼네. 잠깐 아무것도 안 하는 시간도 필요하겠다.","피곤한 상태구나. 지금은 뭘 더 하기보다 좀 느슨하게 있어도 돼.","아 그 정도면 귀찮은 것도 당연하지 ㅋㅋ","오늘은 몸이 먼저 쉬자고 하는 느낌이네."],
+      done:["오 끝냈네. 그거 하나 없어지면 마음 확 가벼워지지.","드디어 마무리했구나 ㅋㅋ 이제 좀 편하겠다.","좋네. 할 일 하나 제대로 치웠다.","오 클리어했네. 끝난 뒤의 편한 느낌이 제일 좋지 ㅋㅋ","수고했네. 이제 그건 잠깐 머리에서 빼도 되겠다.","끝냈구나. 시작하기 전보다 지금이 훨씬 낫겠다."],
+      waiting:["아 기다리는 중이구나. 그런 시간이 제일 안 가지.","으 아직도 안 끝났네. 기다리는 것만으로도 은근 피곤하지.","아 애매하게 묶여 있는 시간이네. 빨리 넘어가면 좋겠다.","기다림 모드네 ㅋㅋ 이런 때 시간 진짜 느리게 간다.","아직도 걸려 있구나. 괜히 계속 확인하게 되지.","으, 기다리는 쪽은 할 수 있는 게 없어서 더 답답해."],
+      new:["오 새로 생겼네 ㅋㅋ 처음엔 괜히 계속 보게 되지.","오 처음 해본 거구나. 생각했던 느낌이랑 비슷했어?","새로운 거 하나 들어왔네. 첫인상이 제일 궁금하다.","오 그건 좀 신선했겠다 ㅋㅋ","새로 시작한 거면 아직 느낌 잡는 중이겠네.","오, 평소랑 다른 일이 하나 있었네."],
+      plan:["오 다음 계획까지 잡았네.","좋네. 그럼 다음엔 그쪽으로 해보려는 거구나.","계획은 잡혔네 ㅋㅋ 너무 빡빡하게만 안 가면 되겠다.","오 다음 흐름이 있구나. 벌써 조금 기대되겠다.","그렇게 해보려고 하는구나. 일단 방향은 정해졌네.","다음에 할 게 정해져 있으면 괜히 마음이 좀 편하지."],
+      awkward:["아 그 순간 좀 뻘쭘했겠다 ㅋㅋ","으 그 분위기는 생각만 해도 좀 애매하다.","아 민망했겠네. 지나고 나면 짧은데 그 순간은 길게 느껴지지.","ㅋㅋ 그런 상황은 어디 봐야 할지도 모르겠더라.","아 말이나 분위기가 살짝 꼬였구나.","그건 괜히 집에 와서 한 번 더 떠올릴 장면이다 ㅋㅋ"],
+      surprise:["오 갑자기 그렇게 됐구나 ㅋㅋ","와 그건 예상 밖이었겠다.","ㅋㅋ 흐름이 갑자기 바뀌었네.","오 그런 변수가 있었구나. 순간 좀 멈칫했겠다.","생각한 방향이랑 달라졌네. 그런 게 은근 기억에 남지.","오 의외였네. 그건 바로 반응 나오겠다 ㅋㅋ"],
+      boring:["아 심심했구나 ㅋㅋ 시간 진짜 안 갔겠다.","으 노잼 구간이었네. 그런 때는 시계만 자꾸 보게 되지.","할 거 없으면 오히려 더 피곤할 때 있지 ㅋㅋ","아 지루했겠다. 뭐라도 하나 끼워 넣고 싶은 느낌이었겠네.","심심 모드였구나. 별거 아닌 것도 괜히 찾게 되지.","아 그런 시간은 실제보다 두 배로 길게 느껴져."],
+      neutral:["오 그런 일이 있었구나.","아 오늘은 그런 흐름이었네.","오 그러고 있었구나 ㅋㅋ","아, 하루 중에 그런 일이 하나 있었네.","오케이, 무슨 느낌인지 알겠다.","그랬구나. 별말 아닌 것 같아도 이런 얘기가 대화 이어가기엔 더 좋지."]
+    };
+    const topicThoughts={
+      school:["학교에서 생긴 일은 집에 와서도 한 번씩 생각나더라.","학교 하루는 별일 없어 보여도 은근 사건이 많지.","수업 사이사이에 생긴 일이 오히려 더 기억날 때 있어."],
+      study:["공부는 한 부분만 꼬여도 전체가 어려워 보일 때 있지.","할 게 쌓여 있으면 작은 거 하나 끝내는 것도 꽤 크지.","공부 쪽은 결과보다 과정에서 기분이 확 왔다 갔다 하더라."],
+      friend:["친구 일은 말 한마디도 은근 오래 남지.","사람 사이 일은 정답이 딱 없어서 더 신경 쓰일 때 있고.","친구랑 있을 때 생긴 건 별거 아닌 것도 얘깃거리가 되지 ㅋㅋ"],
+      family:["가족이랑 생긴 일은 집에서도 계속 이어져서 더 크게 느껴질 때 있지.","가까운 사이일수록 사소한 말도 은근 신경 쓰이고.","가족끼리는 별일 아닌 것도 금방 큰 얘기가 되더라 ㅋㅋ"],
+      food:["먹는 건 기대랑 다르면 바로 티 나지 ㅋㅋ","맛있는 거 하나 걸리면 별거 아닌데 기분 확 좋아지고.","메뉴 하나로 하루 만족도가 은근 달라지지."],
+      game:["게임이나 경기는 흐름 한 번 바뀌면 기분도 바로 바뀌지 ㅋㅋ","끝나고도 장면 하나 계속 생각나는 판이 있더라.","잘 풀릴 때랑 꼬일 때 체감 차이가 진짜 크지 ㅋㅋ"],
+      media:["보고 난 뒤에도 생각나면 꽤 인상적이었던 거지.","재밌는 건 끝난 다음에 얘기할 거리까지 남더라.","영상이나 작품은 한 장면이 유독 기억에 박힐 때 있지."],
+      tech:["기계는 꼭 필요할 때 말썽이라 더 얄밉지 ㅋㅋ","잘 되던 게 갑자기 안 되면 원인 찾는 것부터 귀찮고.","기기 문제는 해결되면 별거 아닌데 안 될 때는 세상 답답하지."],
+      transit:["이동이 꼬이면 실제 시간보다 훨씬 오래 걸린 느낌 나지.","가는 길이 편해야 도착해서도 덜 지치고.","버스나 지하철은 타이밍 하나로 하루 느낌이 확 달라질 때 있어."],
+      home:["집에서 하는 일은 끝내놓으면 확 편해지지.","집에선 사소한 일도 미루다 보면 은근 크게 느껴지고.","방이나 집 정리 하나만 돼도 기분이 조금 달라지더라."],
+      hobby:["좋아서 하는 것도 막히는 순간은 있지.","취미는 결과보다 하는 동안 재밌는지가 더 크더라.","조금씩 나아지는 게 보이면 괜히 계속 하게 되지."],
+      pet:["얘네는 진짜 예상대로 움직여주는 법이 없지 ㅋㅋ","그래도 귀여우면 금방 풀리고 ㅋㅋ","반려동물은 별짓 안 해도 그냥 보고 있으면 얘깃거리가 생겨."],
+      exercise:["몸 쓰고 나면 힘든데 또 개운한 느낌도 있지.","컨디션에 따라 같은 운동도 완전 다르게 느껴지고.","운동은 시작 전이 제일 귀찮고 하고 나면 생각보다 괜찮을 때 많지."],
+      shopping:["사고 나서 실제로 써볼 때 느낌이 제일 중요하지.","기다린 만큼 마음에 들면 그걸로 성공이고.","사진으로 볼 때랑 실제로 받을 때 느낌 다른 게 제일 변수지."],
+      outing:["밖에 나가면 계획대로만 되진 않아도 기억은 남지.","나갔다 오면 피곤해도 장면 하나쯤은 남더라.","평소랑 다른 데 가면 작은 일도 좀 더 기억에 남고."],
+      weather:["날씨 하나로 하루 느낌이 꽤 달라지지.","밖에 있을 땐 날씨가 진짜 크게 느껴지고.","비나 바람 같은 건 계획까지 한 번에 바꿔버리니까."],
+      sleep:["잠 상태가 하루 컨디션 거의 다 정할 때 있지.","잘 잔 날이랑 못 잔 날은 시작부터 느낌이 다르고.","졸리면 별거 아닌 것도 귀찮아지지 ㅋㅋ"],
+      schedule:["일정 하나 있으면 하루 전체가 그걸 중심으로 움직일 때 있지.","약속이나 계획은 기다리는 동안이 더 길게 느껴질 때 있고.","시간이 정해져 있으면 괜히 계속 시계 보게 되지."]
+    };
+    const topicQuestions={
+      school:["오늘 학교에서 제일 기억나는 건 뭐였어?","수업 자체보다 쉬는 시간이 더 나았어?","오늘은 학교가 빨리 간 편이었어, 길게 느껴졌어?"],
+      study:["제일 걸린 부분은 뭐였어?","지금은 다 끝난 거야, 아직 좀 남았어?","생각보다 할 만했어?"],
+      friend:["그래서 분위기는 지금 괜찮아?","그때 너는 뭐라고 했어?","그 친구도 비슷하게 생각한 것 같아?"],
+      family:["그래서 집 분위기는 괜찮아?","그 뒤로는 별일 없었어?","너는 그때 뭐라고 했어?"],
+      food:["그래서 맛은 성공이었어?","다시 먹을 정도는 돼?","제일 괜찮았던 건 뭐였어?"],
+      game:["그래서 결과는 어땠어?","제일 웃기거나 아까운 장면은 뭐였어?","한 판 더 하고 싶을 정도였어?"],
+      media:["제일 기억나는 장면은 뭐였어?","끝까지 볼 만했어?","다른 사람한테 추천할 정도는 돼?"],
+      tech:["지금은 다시 정상으로 됐어?","특정 상황에서만 그러는 거야?","그 뒤로도 계속 말썽이야?"],
+      transit:["지금은 도착했어?","자리라도 있었어?","평소보다 많이 걸렸어?"],
+      home:["이제 좀 쉴 수 있어?","다 끝낸 거야, 아직 남았어?","하고 나니까 좀 개운해?"],
+      hobby:["하고 나서 마음에 들었어?","제일 잘된 부분은 뭐야?","다음에도 또 할 생각 있어?"],
+      pet:["뭐 하길래 그렇게 됐어? ㅋㅋ","오늘은 얌전했어, 사고쳤어?","사진 찍고 싶을 정도로 귀여웠어?"],
+      exercise:["하고 나니까 개운해, 그냥 피곤해?","오늘은 평소보다 잘 된 편이야?","어디까지 했어?"],
+      shopping:["실제로 보니까 마음에 들어?","생각했던 거랑 비슷해?","다시 고르라면 같은 걸 살 것 같아?"],
+      outing:["제일 기억나는 건 뭐였어?","또 가고 싶을 정도였어?","생각보다 사람 많았어?"],
+      weather:["밖에 있을 때 많이 불편했어?","지금은 좀 괜찮아졌어?","우산이나 겉옷은 챙겼어?"],
+      sleep:["지금은 좀 정신 들었어?","어제 늦게 잤어?","오늘은 일찍 잘 수 있을 것 같아?"],
+      schedule:["시간은 넉넉해?","준비할 건 다 챙겼어?","기대되는 쪽이야, 귀찮은 쪽이야? ㅋㅋ"]
+    };
+    const topicThoughtSafe=!/^(?:bad|tired|waiting|awkward)$/.test(stateName);
+    const rows=[...(stateRows[stateName]||stateRows.neutral),...(topicThoughtSafe?(topicThoughts[topic]||[]):[]),...expandedEverydayReactionRows(topic,stateName,c)];
+    const recentQs=recentAssistantTurns(4).filter(v=>/[?？]$/.test(clean(v.text||""))).length;
+    const p=profile();
+    if(recentQs<2&&Number(p.questionTolerance??.5)>.32){
+      const qs=topicQuestions[topic]||[];
+      // Users who like questions see more of them; others still get mostly reactions.
+      const copies=Number(p.questionTolerance||.5)>.62?qs:qs.slice(0,1);
+      rows.push(...copies);
+    }
+    if(rows.length<2)return answer;
+    // Keep the specific existing answer in the pool, but no longer make it the only
+    // possible reaction. chooseText applies user-specific expression preferences.
+    rows.push(answer);
+    return chooseFreshReply(`everyday.variety.${topic}.${stateName}`,rows,8)||answer;
+  }
+
   const COMMON_KNOWLEDGE={
-    "피카츄":"피카츄는 포켓몬스터에 등장하는 전기타입 포켓몬이야. 노란 몸, 길고 뾰족한 귀, 번개 모양 꼬리가 특징이고 포켓몬 시리즈를 대표하는 캐릭터 중 하나야.",
     "포켓몬":"포켓몬은 사람과 함께 살아가거나 배틀을 하는 여러 종류의 생물을 중심으로 한 게임·애니메이션 시리즈야. 정식 이름은 포켓몬스터야.",
-    "세종대왕":"세종대왕은 조선의 제4대 왕이야. 훈민정음 창제를 이끌었고 과학·문화·농업 같은 여러 분야의 발전을 지원한 왕으로 잘 알려져 있어.",
-    "이순신":"이순신은 조선 시대의 장군이야. 임진왜란 때 수군을 이끌며 여러 해전에서 활약한 인물로 알려져 있어.",
     "지구":"지구는 우리가 살고 있는 태양계의 세 번째 행성이야. 표면에 액체 상태의 물이 넓게 존재하고 현재까지 생명체가 사는 것으로 확인된 행성이야.",
     "태양":"태양은 태양계 중심에 있는 별이야. 지구를 포함한 행성들이 태양 주위를 돌고, 태양의 빛과 열은 지구 생명과 기후에 아주 큰 영향을 줘.",
     "달":"달은 지구 주위를 도는 자연위성이야. 스스로 빛을 내는 게 아니라 태양빛을 반사해서 밝게 보여.",
@@ -1084,7 +1391,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(frame.referenceCue&&priorSearch&&prevA&&String(prevA.source||"").includes("search"))
       baseText=clean(frame.text).replace(/그\s*사람|그분|걔|그거|그것|그곳/g,priorSearch);
     let q=clean(baseText).replace(/[?？]/g,"");
-    q=q.replace(/(?:좀\s*)?(?:검색해줘|검색해|찾아줘|찾아봐|더\s*찾아줘|더\s*찾아봐|알아봐줘|알아봐|확인해줘|설명해줘|알려줘|정리해줘|비교해줘|추천해줘|더\s*자세히(?:\s*알려줘)?|자세히\s*알려줘)$/g,"").trim();
+    q=q.replace(/(?:좀\s*)?(?:검색해줘|검색해|찾아줘|찾아봐|더\s*찾아줘|더\s*찾아봐|알아봐줘|알아봐|확인해줘|설명해줘|알려줘|정리해줘|비교해줘|추천해줘|더\s*자세히(?:\s*알려줘)?|자세히\s*알려줘|뭔지\s*알아|뭐인지\s*알아|무엇인지\s*알아)$/g,"").trim();
     q=q.replace(/\s*(?:누구야|누구냐|누구임|뭐야|뭐냐|뭐임|무엇이야|뭔데|어디야|어디냐|언제야|언제냐|뜻이야|무슨뜻이야)$/g,"").trim();
     q=q.replace(/(\S{2,})(?:은|는|이|가)$/,"$1").trim();
     const generic=/^(이거|그거|그게|그건|그걸|그사람|걔|거기|좀|더|더자세히|자세히|찾아줘|찾아봐|검색해|검색해줘|알아봐|알려줘)?$/;
@@ -1304,11 +1611,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else if(frame.event&&frame.topic)add("direct.event",frame.affect==="positive"?[`${frame.topic} 쪽은 결과가 괜찮았던 거네 ㅋㅋ`,`오, ${frame.topic} 얘기는 잘 풀렸구나.`]:frame.affect==="negative"?[`${frame.topic} 때문에 꽤 신경 쓰였겠네.`,`아, ${frame.topic} 쪽에서 일이 꼬였구나.`]:[`${frame.topic}에서 그런 일이 있었구나.`,`아, ${frame.topic} 얘기였구나.`]);
       else if(frame.plan&&frame.topic)add("direct.plan",[`그럼 다음엔 ${frame.topic} 쪽으로 해보려는 거네.`,`오케이, ${frame.topic} 계획까지 잡아둔 거구나.`]);
       else if(frame.preference&&frame.topic)add("direct.preference",frame.affect==="negative"?[`${frame.topic} 쪽은 취향이 아닌 거네.`]:[`${frame.topic} 쪽을 좋아하는구나. 그건 기억해둘게.`]);
-      else if(frame.topic&&frame.text.length>8&&frame.text.length<=24)add("direct.topic",[`응, ${frame.topic} 얘기였구나.`,`아, ${frame.topic} 쪽이구나.`]);
+      else if(frame.topic&&frame.text.length>8&&frame.text.length<=24)add("direct.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 그 뒤엔 좀 괜찮았어?","오, 그러고 있었구나 ㅋㅋ"]);
       else add("direct.general",["조금 더 말해줘. 지금 문장만으로는 뜻을 단정하지 않을게.","한마디만 더 붙여주면 거기에 맞춰 답할게.","응, 지금 말만 보고 넘겨짚진 않을게. 맥락을 조금만 더 줘.","무슨 쪽 얘긴지는 알겠는데 한 조각만 더 있으면 정확히 답할 수 있어."]);
     }
     if(!out.length){
-      if(frame.topic&&frame.text.length>8)add("fallback.topic",[`응, ${frame.topic} 얘기였구나.`,`아, ${frame.topic} 쪽이구나.`],"direct");
+      if(frame.topic&&frame.text.length>8)add("fallback.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 조금 더 얘기해봐.","오, 그러고 있었구나 ㅋㅋ"],"direct");
       else add("fallback",["조금 더 말해줘. 짧은 말만 보고 뜻을 지어내진 않을게.","한마디만 더 붙여줘. 그걸 기준으로 답할게.","응, 듣고 있어. 무슨 얘긴지 한 조각만 더 말해줘.","짧게 말해도 돼. 대상을 하나만 알려주면 바로 이어갈게."],"clarify");
     }
     return out;
@@ -1458,8 +1765,12 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     // margin, while semantic/generalized learning still needs the safer larger margin.
     if(strongest?.source==="learned-human"&&strongest.exactLearned&&strongest.score>=localScore+2)return strongest;
     if(strongest?.source==="learned-human"&&strongest.score>=localScore+8)return strongest;
+    // Public/common dialogue examples are also real learned data. An exact, well-
+    // evidenced example must not become unreachable just because the local everyday
+    // floor got broader. Keep semantic/non-exact public learning behind the safer gate.
+    if(strongest?.source==="learned"&&strongest.exactLearned&&strongest.score>=localScore+6)return strongest;
     const chosen=weightedPick([local,...learned],v=>v.score,Math.random);
-    return chosen&&chosen.source==="learned-human"?chosen:null;
+    return chosen&&(chosen.source==="learned-human"||(chosen.source==="learned"&&chosen.exactLearned))?chosen:null;
   }
 
   function recentAssistantTurns(limit=4){return context().filter(v=>v.role==="assistant").slice(-limit);}
@@ -1964,12 +2275,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="";
 
     const manner=mannerQuestion(text)?mannerAdviceText():null;
-    const dt=dateTime(text),calc=math(text),game=rps(text),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),broadEveryday=broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(game)answer=game;else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    const memQEarly=memoryQuestion(text),memAnswerEarly=memQEarly?memoryAnswer(memQEarly):"";
+    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),game=rps(text),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=compositionalEverydayReply(frame),broadEveryday=broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
+    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(game)answer=game;else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
-    const memQ=memoryQuestion(text);
-    if(!answer&&memQ){answer=memoryAnswer(memQ);source="memory";strategy="direct";}
 
     if(!answer&&searchMode!=="forbidden"){
       if(ref.ambiguous){answer="아까 말한 대상 중에서 어느 걸 말하는 거야?";source="local";strategy="clarify";}
@@ -1984,6 +2294,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     }
 
     if(answer){
+      answer=diversifyEverydayAnswer(answer,frame,source);
       const learnedChoice=learnedConversationChoice(frame,ref,answer,source,strategy,social);
       if(learnedChoice){answer=learnedChoice.text;source=learnedChoice.source;candidateId=learnedChoice.id;strategy=learnedChoice.strategy||strategy;}
     }

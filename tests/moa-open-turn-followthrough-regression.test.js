@@ -50,7 +50,7 @@ function build({contextRows=[],seed=71,searches=[]}={}){
   // Explicit knowledge/search questions must still take their dedicated paths in an active conversation.
   const searches=[];E=build({searches});
   await E.reply('친구랑 게임했어');
-  r=await E.reply('피카츄 누구냐');ok(/피카츄/.test(r.reply)&&r.source==='local-knowledge','local knowledge swallowed by continuity: '+r.source+' '+r.reply);
+  r=await E.reply('허준이 누구냐');ok(r.source==='search'&&searches.at(-1)==='허준','explicit knowledge lookup swallowed by continuity: '+r.source+' '+r.reply+' / '+searches.at(-1));
   r=await E.reply('장보고가 누구냐');ok(r.source==='search'&&searches.at(-1)==='장보고','knowledge lookup query polluted by active thread: '+searches.at(-1));
 
   // Source must remain eligible for human-chat learning competition rather than bypassing learning globally.

@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const engine=read('js/ai/moa-communication-engine.js'),gs=read('docs/apps-script/MOA_AI.gs'),html=read('index.html'),chat=read('js/features/moa-chat.js');
-ok(html.includes('moa-communication-engine.js?v=35'),'smart foundation engine cache bust missing');
+ok(html.includes('moa-communication-engine.js?v=40'),'smart foundation engine cache bust missing');
 ok(!chat.includes('moa-suggestion-row')&&!chat.includes('moa-suggestion-chip'),'removed quick buttons returned');
 for(const token of ['knowledgeCue','previousSearchAnchor','뭘 찾아볼까? 궁금한 대상이나 주제를 말해줘.','frame.knowledgeCue&&frame.question'])ok(engine.includes(token),'smart client foundation missing '+token);
 for(const token of ['moaSynthesizeSearch_','moaSentenceScore_','참고한 공개 자료','moa.search.v4.'])ok(gs.includes(token),'answer-first search backend missing '+token);

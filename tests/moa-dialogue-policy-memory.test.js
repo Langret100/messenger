@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),ai=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
-ok(html.includes('moa-communication-engine.js?v=35'),'v88 cache bust missing');
+ok(html.includes('moa-communication-engine.js?v=40'),'v88 cache bust missing');
 ok(sw.includes('moaru-moa-dialogue-fusion-final'),'v88 service worker cache missing');
 for(const token of ['strategyScores','pickStrategy','policyKey','searchPolicy','referenceConfidence','policy_feedback','strategyHistory'])ok(engine.includes(token),'v88 engine layer missing: '+token);
 ok(ai.includes('MOA_POLICY_SHEET')&&ai.includes('모아_대화정책')&&ai.includes('moaStorePolicyEvents_')&&ai.includes('moaPublicPolicy_'),'policy learning store missing');
@@ -23,6 +23,6 @@ vm.createContext(sandbox);vm.runInContext(engine,sandbox);
  for(let i=0;i<3;i++){await e.reply('그다음');}
  r=await e.reply('규칙이 어려웠어');ok(!/[?？]$/.test(r.reply),'question pressure failed: '+r.reply);
  await e.reply('맞아');await e.flushCommit();ok(commits.some(c=>c.events.some(x=>x.type==='policy_feedback')),'policy feedback not batched');
- const snap=e.debugSnapshot();ok(snap.version===92&&Array.isArray(snap.state.strategyHistory),'v88 debug/state missing');
+ const snap=e.debugSnapshot();ok(snap.version===93&&Array.isArray(snap.state.strategyHistory),'v88 debug/state missing');
  console.log('MOA_V88_DIALOGUE_POLICY_MEMORY_OK');
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -19,7 +19,7 @@ MiniTalk.Features.Chats=(()=>{
     MiniTalk.Events.on("rt:profiles",profiles=>{MiniTalk.Store.set("profiles",profiles||{});if(!isRenderedChatRoute())return;const active=MiniTalk.Store.get("activeRoom");if(active){applyChatHeader(MiniTalk.Store.get("rooms")?.[active]?.title||"대화",roomHeaderActions(active),{back:()=>backToList()});scheduleMessageRender(active)}else{applyChatHeader(homeTitle(),headerListActions());refreshRoomList()}});
     MiniTalk.Events.on("rt:presence",presence=>MiniTalk.Store.set("presence",presence||{}));
     MiniTalk.Events.on("rt:message-reset",roomId=>{messagesByRoom[roomId]=[];renderedMessageIds[roomId]=new Set();olderStateByRoom[roomId]={loading:false,hasMore:true}});
-    MiniTalk.Events.on("rt:message",message=>{const roomId=message.roomId;if(!roomId)return;const list=messagesByRoom[roomId]||(messagesByRoom[roomId]=[]),isNew=!list.some(item=>item.id===message.id);if(isNew)list.push(message);const active=isRenderedChatRoute()&&MiniTalk.Store.get("activeRoom")===roomId,room=MiniTalk.Store.get("rooms")?.[roomId],stillMember=Boolean(room&&MiniTalk.Realtime.isRoomMember(room));if(active)scheduleMessageRender(roomId);if(isNew&&!active&&stillMember&&(message.ts||0)>Date.now()-7000)MiniTalk.Features.Tools?.notifyIncoming?.(message)});
+    MiniTalk.Events.on("rt:message",message=>{MiniTalk.Chat.RoomGames?.ingest?.(message);const roomId=message.roomId;if(!roomId)return;const list=messagesByRoom[roomId]||(messagesByRoom[roomId]=[]),isNew=!list.some(item=>item.id===message.id);if(isNew)list.push(message);const active=isRenderedChatRoute()&&MiniTalk.Store.get("activeRoom")===roomId,room=MiniTalk.Store.get("rooms")?.[roomId],stillMember=Boolean(room&&MiniTalk.Realtime.isRoomMember(room));if(active)scheduleMessageRender(roomId);if(isNew&&!active&&stillMember&&(message.ts||0)>Date.now()-7000)MiniTalk.Features.Tools?.notifyIncoming?.(message)});
     MiniTalk.Events.on("chat:unread",()=>{if(isRenderedChatRoute()&&!MiniTalk.Store.get("activeRoom"))refreshRoomList()});
   }
   function scheduleMessageRender(roomId){if(renderFrame)cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(()=>{renderFrame=0;if(MiniTalk.Store.get("activeRoom")===roomId)renderMessages(roomId)})}
@@ -197,6 +197,7 @@ MiniTalk.Features.Chats=(()=>{
     addAction("◉","카메라",async()=>{const payload=await MiniTalk.Chat.Attachments.image({camera:true});if(payload)await sendPayload(roomId,payload)});
     addAction("⌁","파일",async()=>{const payload=await MiniTalk.Chat.Attachments.file();if(payload)await sendPayload(roomId,payload)});
     addAction("▣","캡처",async()=>MiniTalk.Tools.Capture.captureAndSend(roomId));
+    addAction("♟","게임",async()=>MiniTalk.Chat.RoomGames.open(roomId));
     plus.onclick=()=>{menuOpen=!menuOpen;tray.classList.toggle("hidden",!menuOpen);emojiPanel.classList.add("hidden");emojiOpen=false;plus.classList.toggle("active",menuOpen)};
     emoji.onclick=()=>{emojiOpen=!emojiOpen;emojiPanel.classList.toggle("hidden",!emojiOpen);tray.classList.add("hidden");menuOpen=false;plus.classList.remove("active")};
     const submitText=async text=>{const clean=String(text||"").trim();if(!clean)return;await sendPayload(roomId,{text:clean,type:"text"})};
@@ -208,9 +209,12 @@ MiniTalk.Features.Chats=(()=>{
   function messageNode(message){
     const D=MiniTalk.UI.Dom,current=MiniTalk.Store.get("user")||{},mine=message.user_id===current.user_id||(!message.user_id&&message.nickname&&message.nickname===current.nickname),row=D.el("article",{class:`message-row ${mine?"mine":""}`}),profile=profileForMessage(message);
     if(!mine){const avatar=D.el("img",{class:"message-avatar profile-image",src:profile.avatar||"assets/mascot-avatar.png",alt:`${message.nickname||"사용자"} 프로필`});avatar.onerror=()=>{avatar.onerror=null;avatar.src="assets/mascot-avatar.png"};avatar.setAttribute("role","button");avatar.tabIndex=0;avatar.setAttribute("data-no-drag-scroll","");avatar.onclick=event=>{event.preventDefault();event.stopPropagation();openUserProfile(message,profile)};avatar.onkeydown=event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();openUserProfile(message,profile)}};row.append(avatar)}
+    if(message.type==="game"&&MiniTalk.Chat.RoomGames?.isInternal?.(message))row.classList.add("hidden");
     const content=D.el("div",{class:"message-content"});if(!mine)content.append(D.el("small",{class:"sender-name",text:message.nickname||"익명"}));
     const bubble=D.el("div",{class:"bubble"});const type=message.type||(message.fileUrl?"file":(message.image||message.imageUrl?"image":"text"));
-    if(type==="image"){
+    if(type==="game"){
+      const gameNode=MiniTalk.Chat.RoomGames?.renderMessage?.(message,message.roomId);if(gameNode){bubble.classList.add("game-bubble");bubble.append(gameNode)}else bubble.textContent=message.text||"[대화방 게임]";
+    }else if(type==="image"){
       const src=message.imageUrl||message.image;if(src){bubble.classList.add("media-bubble");const img=D.el("img",{src,alt:"공유 이미지",loading:"lazy"});img.onerror=()=>{img.replaceWith(D.el("span",{class:"image-load-error",text:"이미지를 불러오지 못했습니다."}))};img.setAttribute("data-no-drag-scroll","");img.onclick=event=>{event.preventDefault();event.stopPropagation();openImage(src)};bubble.append(img)}
     }else if(type==="file"){
       bubble.classList.add("file-bubble");const a=D.el("a",{href:message.fileUrl||"#",target:"_blank",rel:"noopener noreferrer",class:"file-card"},[D.el("span",{text:"⌁"}),D.el("span",{},[D.el("strong",{text:message.fileName||"첨부 파일"}),D.el("small",{text:"파일 열기"})])]);bubble.append(a)

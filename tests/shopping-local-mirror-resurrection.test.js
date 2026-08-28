@@ -15,5 +15,5 @@ ok(remove.includes('if(explicitOwner){const stored=localGet(`shop.inventory.${ex
 const explicit=remove.slice(remove.indexOf('if(explicitOwner)'),remove.indexOf('const inventory=localShopInventory'));
 ok(!explicit.includes('emit("shop-inventory"'), 'explicit-owner cleanup must not re-emit stale mirror');
 ok(html.includes('js/shopping/store-service.js?v=64.5.24'), 'store-service cache version stale');
-ok(html.includes('js/adapters/realtime.js?v=64.5.42'), 'realtime cache version stale');
+ok(html.includes('js/adapters/realtime.js?v=64.5.44'), 'realtime cache version stale');
 console.log('SHOPPING_LOCAL_MIRROR_RESURRECTION_OK');

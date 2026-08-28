@@ -464,9 +464,9 @@ MiniTalk.Realtime=(()=>{
       roomId,user_id:user.user_id,nickname:user.nickname,
       type:payload.type||(payload.fileUrl?"file":(payload.image||payload.imageUrl?"image":"text")),
       text:payload.text||"",image:payload.image||null,imageUrl:payload.imageUrl||null,
-      fileUrl:payload.fileUrl||null,fileName:payload.fileName||null,emoticon:payload.emoticon||null,clientTs:Date.now(),ts:Date.now()
+      fileUrl:payload.fileUrl||null,fileName:payload.fileName||null,emoticon:payload.emoticon||null,game:payload.game&&typeof payload.game==="object"?payload.game:null,clientTs:Date.now(),ts:Date.now()
     };
-    const preview=message.type==="file"?`[파일] ${message.fileName||"파일"}`:message.type==="image"?"[사진]":message.text;
+    const preview=message.type==="file"?`[파일] ${message.fileName||"파일"}`:message.type==="image"?"[사진]":message.type==="game"?(message.text||"[대화방 게임]"):message.text;
     if(mode==="firebase"){
       const ref=db.ref(messagesPath(roomId)).push(),serverMessage={...message,ts:firebase.database.ServerValue.TIMESTAMP},roomMeta={lastMessage:preview,lastMessageEmoticon:message.emoticon||null,lastMessageAt:firebase.database.ServerValue.TIMESTAMP,lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:firebase.database.ServerValue.TIMESTAMP};
       await db.ref().update({[`${messagesPath(roomId)}/${ref.key}`]:serverMessage,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessage`]:roomMeta.lastMessage,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageEmoticon`]:roomMeta.lastMessageEmoticon,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageAt`]:roomMeta.lastMessageAt,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageUserId`]:roomMeta.lastMessageUserId,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageNickname`]:roomMeta.lastMessageNickname,[`${MiniTalkConfig.paths.rooms}/${roomId}/updatedAt`]:roomMeta.updatedAt,[`${roomSummariesPath()}/${roomId}/lastMessage`]:roomMeta.lastMessage,[`${roomSummariesPath()}/${roomId}/lastMessageEmoticon`]:roomMeta.lastMessageEmoticon,[`${roomSummariesPath()}/${roomId}/lastMessageAt`]:roomMeta.lastMessageAt,[`${roomSummariesPath()}/${roomId}/lastMessageUserId`]:roomMeta.lastMessageUserId,[`${roomSummariesPath()}/${roomId}/lastMessageNickname`]:roomMeta.lastMessageNickname,[`${roomSummariesPath()}/${roomId}/updatedAt`]:roomMeta.updatedAt});

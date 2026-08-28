@@ -102,7 +102,7 @@ MiniTalk.Chat.RoomGames=(()=>{
     return Object.values(room?.members||{}).filter(v=>v?.user_id&&!/^guest-/i.test(v.user_id));
   }
   function memberPicker(title,members,{min=2,max=99,extraBuilder=null,onSubmit,mount=null}){
-    const U=D(),body=U.el("div",{class:"modal-stack room-game-picker"}),selected=new Set(members.map(m=>String(m.user_id)));
+    const U=D(),body=U.el("div",{class:"modal-stack room-game-picker"}),selected=new Set();
     body.append(U.el("p",{class:"muted modal-note",text:`${title}에 참여할 멤버를 선택하세요.`}));
     const controls=U.el("div",{class:"room-game-picker-controls"}),all=U.el("button",{class:"mini-action",type:"button",text:"전체 선택"}),none=U.el("button",{class:"mini-action",type:"button",text:"선택 해제"}),count=U.el("span",{class:"muted room-game-count"});
     controls.append(all,none,count);body.append(controls);
@@ -110,7 +110,7 @@ MiniTalk.Chat.RoomGames=(()=>{
     const update=()=>{count.textContent=`${selected.size}명 선택`;list.querySelectorAll("input[data-game-member]").forEach(input=>input.checked=selected.has(input.dataset.gameMember))};
     members.forEach(member=>{
       const id=String(member.user_id),profile=MiniTalk.Store.get("profiles")?.[id]||{},src=profile.avatar||member.avatar||"",check=U.el("input",{type:"checkbox","data-game-member":id,"aria-label":`${member.nickname||id} 선택`});
-      check.checked=true;check.onchange=()=>{check.checked?selected.add(id):selected.delete(id);update()};
+      check.checked=false;check.onchange=()=>{check.checked?selected.add(id):selected.delete(id);update()};
       const avatar=src?U.el("img",{class:"room-member-avatar profile-image",src,alt:""}):U.el("span",{class:"room-member-avatar",text:(member.nickname||id||"?").slice(0,1)});
       list.append(U.el("label",{class:"room-member room-game-member-option"},[
         avatar,

@@ -6,10 +6,10 @@ ok(rt.includes('function roomSummaryValue(room={})')&&rt.includes('function star
 ok(rt.includes('orderByChild("lastMessageAt").startAt(1)'),'group summaries are not loaded on demand');
 ok(rt.includes('roomListRequested=true;await awaitTransport();await roomIndexReady'),'group list does not wait for summary index');
 ok(rt.includes('[`${roomSummariesPath()}/${roomId}/lastMessage`]'),'message send does not update lightweight summary');
-ok(rt.includes('async function getRoom(roomId)')&&chats.includes('verifiedRoom||await MiniTalk.Realtime.getRoom(roomId)'),'room detail is not loaded authoritatively on demand');
+ok(rt.includes('async function getRoom(roomId)')&&chats.includes('if(!room?._detail)room=await MiniTalk.Realtime.getRoom(roomId)'),'room detail is not loaded on demand');
 ok(rules.includes('"roomSummaries"')&&rules.includes('"userRooms"'),'Firebase rules missing summary/index paths');
 ok(css.includes('min-height:calc(100dvh + 72px);overflow-y:auto')&&css.includes('.app-shell{position:sticky;top:0}'),'mobile root scroll allowance missing');
 ok(mobile.includes('touchStartY-y>22')&&mobile.includes('nudgeBrowserChrome()'),'mobile chrome gesture assist missing');
-ok(html.includes('js/adapters/realtime.js?v=64.5.45')&&html.includes('js/adapters/mobile-immersive.js?v=57')&&html.includes('js/features/chats.js?v=64.5.24')&&html.includes('js/app.js?v=64.5.46'),'v5.24 cache versions stale');
+ok(html.includes('js/adapters/realtime.js?v=64.5.46')&&html.includes('js/adapters/mobile-immersive.js?v=57')&&html.includes('js/features/chats.js?v=64.5.25')&&html.includes('js/app.js?v=64.5.46'),'v5.24 cache versions stale');
 ok(sw.includes('moaru-moa-dialogue-fusion-final')&&app.includes('sw.js?v=64.5.60'),'v5.24 service worker stale');
 console.log('ROOM_SUMMARY_MOBILE_CHROME_OK');

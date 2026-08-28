@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const read=p=>fs.readFileSync(p,'utf8');
 const html=read('index.html'),engine=read('js/ai/moa-communication-engine.js'),feature=read('js/features/moa-chat.js'),api=read('js/adapters/auth-api.js'),code=read('docs/apps-script/Code.gs'),ai=read('docs/apps-script/MOA_AI.gs'),sw=read('sw.js');
-ok(html.includes('js/ai/moa-communication-engine.js?v=40')&&!html.includes('moa-dialogue-core.js')&&!html.includes('moa-chat-engine.js'),'v87 compatibility engine asset mismatch');
+ok(html.includes('js/ai/moa-communication-engine.js?v=43')&&!html.includes('moa-dialogue-core.js')&&!html.includes('moa-chat-engine.js'),'v87 compatibility engine asset mismatch');
 ok(sw.includes('moaru-moa-dialogue-fusion-final')&&sw.includes('./js/ai/moa-communication-engine.js'),'v87 compatibility SW asset mismatch');
 ok(feature.includes('MoaCommunicationEngine.reply')&&feature.includes('MoaCommunicationEngine.warmup'),'feature not wired to v87 engine');
 for(const route of ['moa_sync','moa_commit','moa_search'])ok(code.includes(`case "${route}"`),`missing ${route}`);

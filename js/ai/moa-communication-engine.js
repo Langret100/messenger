@@ -911,14 +911,21 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function localKnowledgeReply(raw){
     const text=clean(raw),c=compact(text);
     if(/(생김새|어떻게생겼|사진|이미지|모습보여|얼굴보여)/.test(c))return "";
-    if(!/(뭐야|누구야|무엇이야|설명해줘|알려줘)$/.test(c))return "";
-    let q=text.replace(/[?？.!]+$/g,"").replace(/\s*(?:뭐야|누구야|무엇이야|설명해줘|알려줘)$/g,"").trim();
+    if(!/(뭐야|뭐냐|뭐임|누구야|누구냐|누구임|무엇이야|뭔데|설명해줘|알려줘)$/.test(c))return "";
+    let q=text.replace(/[?？.!]+$/g,"").replace(/\s*(?:뭐야|뭐냐|뭐임|누구야|누구냐|누구임|무엇이야|뭔데|설명해줘|알려줘)$/g,"").trim();
     q=q.replace(/(\S{2,})(?:은|는|이|가)$/,"$1").trim();
     return COMMON_KNOWLEDGE[q]||"";
   }
 
   function practicalDecisionReply(raw){
     const text=clean(raw),c=compact(text);
+    if(/(?:인터넷|와이파이|wifi).*(?:속도|느려|느림|끊겨|끊김).*(?:개선|방법|해결|어떻게|고쳐|빠르게)|(?:인터넷|와이파이|wifi).*(?:개선방법|해결방법)/i.test(c)){
+      return chooseText("decision.tech.internet",[
+        "인터넷이 느리면 먼저 공유기 전원을 한 번 껐다 켜고, 와이파이면 공유기 가까이에서 다시 속도를 재봐. 다른 기기의 다운로드를 잠깐 끄고 5GHz/6GHz가 있으면 그쪽도 써보고, 유선 연결에서도 계속 느리면 통신사 회선 쪽을 확인하는 게 좋아.",
+        "몇 가지 순서대로 보면 돼. ① 공유기 재부팅 ② 다른 다운로드·업데이트 잠깐 중지 ③ 공유기 가까이에서 5GHz/6GHz로 테스트 ④ 가능하면 유선으로 속도 비교. 유선도 계속 느리면 통신사 회선 문제일 가능성이 커.",
+        "와이파이만 느린지 인터넷 회선 자체가 느린지 먼저 나눠보자. 공유기 가까이에서 속도를 재고, 가능하면 유선도 비교해봐. 와이파이만 느리면 위치·주파수 문제일 수 있고 유선도 느리면 통신사 쪽 확인이 필요해."
+      ]);
+    }
     const meal=/(점심|저녁|아침|야식|밥|먹지|먹을까|먹을거|먹을지)/.test(c)&&( /(뭐먹|뭘먹|메뉴|먹지|먹을까|먹을지)/.test(c) );
     if(meal){
       const slot=/아침/.test(c)?"아침":/저녁/.test(c)?"저녁":/야식/.test(c)?"야식":"점심";
@@ -955,6 +962,92 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
 
   function immediatePreviousAssistant(){return context().slice(0,-1).filter(v=>v.role==="assistant").slice(-1)[0]||null;}
+  function priorTurnPair(){
+    const rows=context().slice(0,-1),assistant=[...rows].reverse().find(v=>v.role==="assistant");
+    if(!assistant)return null;const ai=rows.lastIndexOf(assistant),user=ai>0?[...rows.slice(0,ai)].reverse().find(v=>v.role==="user"):null;
+    return {user,assistant};
+  }
+  function shortFollowSignal(frame){
+    const c=frame?.c||"";
+    if(/^(?:응|ㅇㅇ|웅|엉|어|그래|맞아|맞음|그럼|그렇지|ㅇㅋ|오케이)$/.test(c))return "yes";
+    if(/^(?:아니|ㄴㄴ|아님|아니야|아닌데|그건아니야)$/.test(c))return "no";
+    if(/^(?:해봤어|해봄|해봤음|했어|그건했어|그거했어|이미했어|확인했어|확인함|재부팅했어|바꿔봤어|써봤어)$/.test(c)||/(?:그건|그거|이미).*(?:했어|해봤|확인했|바꿔봤)/.test(c))return "done";
+    if(/^(?:안돼|안됨|안되네|안되는데|똑같아|똑같음|그대로야|변화없어|변화없음)$/.test(c)||/(?:해봤|했는데|그래도).*(?:안돼|안됨|똑같|느려|끊겨|변화없)/.test(c))return "failed";
+    if(/^(?:몰라|모름|ㅁㄹ|모르겠어|잘모르겠어|모르겠는데)$/.test(c))return "unknown";
+    return "";
+  }
+  function troubleshootingDomain(text){
+    const c=compact(text||"");
+    if(/인터넷|와이파이|wifi|공유기|회선|핑|속도/.test(c))return "internet";
+    if(/배터리|충전|광탈|방전/.test(c))return "battery";
+    if(/폰|휴대폰|핸드폰|앱.*(?:꺼|멈|튕)|앱.*(?:안돼|안됨)/.test(c))return "phone";
+    if(/컴퓨터|노트북|pc|부팅|렉|느려/.test(c))return "computer";
+    return "";
+  }
+  function nextTroubleshootingReply(domain,history,signal){
+    const h=compact(history||"");
+    const plans={
+      internet:[
+        {seen:/공유기.*(?:재부팅|껐다|전원)/,reply:"그럼 먼저 공유기 전원을 20~30초 정도 껐다가 다시 켜봐. 잠깐 느려진 상태가 풀리는 경우가 있어."},
+        {seen:/(?:다운로드|업데이트|vpn).*(?:끄|중지)|백그라운드/,reply:"다음은 다른 다운로드나 업데이트, VPN 같은 걸 잠깐 끄고 다시 속도를 재봐. 다른 작업이 회선을 잡아먹는지 확인하는 단계야."},
+        {seen:/5ghz|6ghz|공유기.*가까/,reply:"와이파이면 공유기 가까이에서 5GHz나 6GHz로 연결해서 한 번 재봐. 가까이서는 빠른데 방에서만 느리면 와이파이 거리·간섭 쪽 가능성이 커."},
+        {seen:/유선|랜선/,reply:"가능하면 랜선으로 한 번 연결해서 속도를 비교해봐. 유선은 정상인데 와이파이만 느리면 공유기·무선환경 문제로 거의 좁혀져."},
+        {seen:/다른기기|다른폰|여러기기|두기기/,reply:"같은 자리에서 다른 폰이나 노트북도 속도를 재봐. 한 기기만 느리면 그 기기 문제고, 전부 느리면 공유기나 회선 쪽으로 좁혀져."},
+        {seen:/속도측정|speedtest|핑|지연시간/,reply:"속도 측정할 때 다운로드 속도뿐 아니라 핑도 같이 봐줘. 속도는 괜찮은데 게임·영상통화만 끊기면 대역폭보다 지연이나 와이파이 간섭 문제일 수 있어."},
+        {seen:/통신사|회선.*문의|기사/,reply:"여기까지 해도 유선 포함 전부 느리면 통신사 회선 확인 단계야. 평소보다 실제 측정값이 크게 낮다고 말하면 회선 상태를 확인받기 쉬워."}
+      ],
+      battery:[
+        {seen:/배터리.*사용|사용량|설정.*배터리/,reply:"설정의 배터리 사용량에서 어떤 앱이 많이 먹는지 먼저 봐봐. 화면 꺼져 있을 때도 많이 쓰는 앱이 있으면 그게 첫 후보야."},
+        {seen:/백그라운드|위치|블루투스/,reply:"많이 쓰는 앱이 보이면 백그라운드 실행이나 위치 권한을 줄여봐. 필요 없을 때 화면 밝기·블루투스도 같이 줄이면 체감 차이가 날 수 있어."},
+        {seen:/배터리.*상태|성능최대치|수명/,reply:"그래도 빨리 닳으면 배터리 상태나 최대 용량을 확인해봐. 상태가 많이 떨어졌으면 설정 문제보다 배터리 자체 노화일 가능성이 커."}
+      ],
+      phone:[
+        {seen:/재부팅|껐다.*켜/,reply:"일단 폰을 한 번 재부팅해봐. 임시로 꼬인 앱이나 네트워크 상태면 이것만으로 풀릴 때가 있어."},
+        {seen:/업데이트|캐시|저장공간/,reply:"그다음은 앱 업데이트와 저장공간을 확인해봐. 특정 앱만 문제면 그 앱 캐시나 재설치 쪽이 더 빠를 수 있어."},
+        {seen:/재설치|초기화/,reply:"특정 앱만 계속 그러면 중요한 데이터가 동기화돼 있는지 확인한 뒤 앱 재설치를 고려해봐. 폰 전체 초기화까지 갈 필요는 없어."}
+      ],
+      computer:[
+        {seen:/작업관리자|cpu|메모리|디스크/,reply:"작업 관리자에서 CPU·메모리·디스크를 많이 쓰는 프로그램부터 확인해봐. 느릴 때 90~100%로 붙는 항목이 원인 후보야."},
+        {seen:/시작프로그램|자동실행/,reply:"그다음 시작 프로그램 중 안 쓰는 걸 꺼봐. 부팅 직후부터 여러 프로그램이 같이 뜨면 계속 느려질 수 있어."},
+        {seen:/저장공간|디스크.*여유|ssd/,reply:"저장공간도 너무 꽉 차 있지 않은지 봐줘. 특히 시스템 드라이브 여유가 거의 없으면 업데이트나 임시파일 때문에 체감이 확 느려질 수 있어."}
+      ]
+    };
+    const rows=plans[domain]||[];let next=rows.find(x=>!x.seen.test(h));
+    if(!next)return "여기까지 다 해봤다면 같은 방법을 반복하기보다 증상을 조금 좁혀보는 게 낫겠다. 언제부터, 어떤 상황에서 특히 심한지만 말해주면 다음 확인 지점을 골라볼게.";
+    if(signal==="failed")return `오케이, 그 방법으로도 그대로였구나. ${next.reply}`;
+    if(signal==="done")return `좋아, 그 단계는 이미 했네. ${next.reply}`;
+    if(signal==="unknown")return `그건 바로 확인하기 어렵다면 넘어가도 돼. ${next.reply}`;
+    return next.reply;
+  }
+  function questionFollowThroughReply(question,signal,history){
+    const q=compact(question||"");
+    if(signal!=="yes"&&signal!=="no")return "";
+    if(/이기|이겼|이김|승리/.test(q))return signal==="yes"?chooseFreshReply("follow.question.win.yes",["오 ㅋㅋ 이겼구나. 몇 대 몇이었어?","오 잘했네 ㅋㅋ 점수는 어떻게 됐어?","오 ㅋㅋ 그럼 막판까지 여유 있었어, 아니면 접전이었어?"]):chooseFreshReply("follow.question.win.no",["아 아쉽네 ㅋㅋ 그래도 재밌었어?","아 못 이겼구나. 경기는 할 만했어?","으 아깝네. 그래도 잘 풀린 장면은 있었어?"]);
+    if(/재밌|재미있/.test(q))return signal==="yes"?chooseFreshReply("follow.question.fun.yes",["오 ㅋㅋ 뭐가 제일 재밌었는데?","ㅋㅋ 그럼 꽤 괜찮았네. 제일 기억나는 게 뭐야?","오 좋았네 ㅋㅋ 또 하고 싶을 정도였어?"]):chooseFreshReply("follow.question.fun.no",["아 그럼 좀 별로였나 보네. 뭐가 제일 아쉬웠어?","아 재미는 없었구나. 기대랑 달랐어?","으 그럼 시간 좀 아까웠겠다. 어떤 부분이 별로였어?"]);
+    if(/먹었|먹어봤/.test(q))return signal==="yes"?"오 먹어봤구나 ㅋㅋ 맛은 괜찮았어?":"아 아직 안 먹어봤구나. 그럼 다른 걸로 골라도 되겠네.";
+    if(/했어|해봤|켜봤|재부팅|확인했|써봤|바꿔봤/.test(q)){
+      const d=troubleshootingDomain(history);if(d)return nextTroubleshootingReply(d,history,signal==="yes"?"done":"failed");
+      return signal==="yes"?"오, 그건 해봤구나. 그래서 결과가 어땠어?":"아직 안 해봤구나. 가능하면 그걸 먼저 해보고 결과만 말해줘.";
+    }
+    if(/괜찮|좋아|맞아|그래/.test(q))return signal==="yes"?chooseFreshReply("follow.question.confirm.yes",["오케이, 그럼 그 방향으로 이어가자.","좋아, 그건 맞는 쪽이네. 그다음 얘기 이어가면 돼.","응, 그 부분은 확인됐네. 그럼 다음으로 넘어가자."]):chooseFreshReply("follow.question.confirm.no",["아, 그건 아닌 거구나. 그럼 반대쪽으로 봐야겠네.","오케이, 그 부분은 아니네. 다른 가능성으로 좁혀보자.","아니구나. 그럼 내가 그 전제는 빼고 이어갈게."]);
+    // Only consume yes/no when the previous question is actually answerable that way.
+    if(/(?:했니|했어|였어|있어|없어|갈거|할거|맞니|맞아|좋아|괜찮아)[?？]?$/.test(q))return signal==="yes"?"오, 그렇구나. 그럼 그다음엔 어떻게 됐어?":"아, 그건 아니었구나. 그러면 실제로는 어떻게 됐어?";
+    return "";
+  }
+  function conversationFollowThroughReply(frame){
+    if(!frame||frame.searchCue||frame.knowledgeCue||frame.scheduledCue||frame.decisionCue||frame.profanity||frame.directedAbuse)return "";
+    const signal=shortFollowSignal(frame);if(!signal)return "";
+    const pair=priorTurnPair();if(!pair?.assistant)return "";
+    const priorRows=context().slice(0,-1).slice(-10),history=priorRows.map(v=>clean(v.text||"")).join(" "),domain=troubleshootingDomain(history);
+    const last=pair.assistant,lastText=clean(last.text||"");
+    if((signal==="done"||signal==="failed"||signal==="unknown")&&domain&&((last.source==="local-decision"||last.source==="local-followthrough")||/(?:해봐|켜봐|확인해|재부팅|연결|속도|설정|테스트|비교)/.test(lastText)))return nextTroubleshootingReply(domain,history,signal);
+    if(last.question===true||/[?？]$/.test(lastText)){
+      const q=questionFollowThroughReply(lastText,signal,history);if(q)return q;
+    }
+    // A bare yes/no after a plain acknowledgement should not create another empty
+    // "응, 인터넷 얘기였구나" loop. Let the normal social/short route close it.
+    return "";
+  }
   function searchPolicy(frame,ref){
     const c=frame.c;
     if(frame.reaction||frame.act==="social")return "forbidden";
@@ -992,7 +1085,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       baseText=clean(frame.text).replace(/그\s*사람|그분|걔|그거|그것|그곳/g,priorSearch);
     let q=clean(baseText).replace(/[?？]/g,"");
     q=q.replace(/(?:좀\s*)?(?:검색해줘|검색해|찾아줘|찾아봐|더\s*찾아줘|더\s*찾아봐|알아봐줘|알아봐|확인해줘|설명해줘|알려줘|정리해줘|비교해줘|추천해줘|더\s*자세히(?:\s*알려줘)?|자세히\s*알려줘)$/g,"").trim();
-    q=q.replace(/\s*(?:누구야|뭐야|무엇이야|어디야|언제야|뜻이야|무슨뜻이야)$/g,"").trim();
+    q=q.replace(/\s*(?:누구야|누구냐|누구임|뭐야|뭐냐|뭐임|무엇이야|뭔데|어디야|어디냐|언제야|언제냐|뜻이야|무슨뜻이야)$/g,"").trim();
     q=q.replace(/(\S{2,})(?:은|는|이|가)$/,"$1").trim();
     const generic=/^(이거|그거|그게|그건|그걸|그사람|걔|거기|좀|더|더자세히|자세히|찾아줘|찾아봐|검색해|검색해줘|알아봐|알려줘)?$/;
     if(!q||generic.test(compact(q))){const prior=previousSearchAnchor(),topic=clean(state().topic);q=ref.target||prior||(!generic.test(compact(topic))?topic:"");}
@@ -1116,7 +1209,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function chooseText(family,arr){
     const key=userKey(),used=recentChoices.get(key)||[],items=arr.map((text,i)=>({id:`${family}:${i}`,text}));
     let pool=items.filter(v=>!used.includes(v.id));if(!pool.length)pool=items;
-    const chosen=weightedPick(pool,v=>publicExpressionBoost(v.text)+expressionFeatureKeys(v.text).reduce((sum,k)=>sum+learnedLocalScore("features",k),0)-(used.includes(v.id)?7:0),Math.random)||items[0]; if(!chosen)return "";
+    const chosen=weightedPick(pool,v=>publicExpressionBoost(v.text)+localTextPreferenceScore(v.text)-(used.includes(v.id)?7:0),Math.random)||items[0]; if(!chosen)return "";
     recentChoices.set(key,[chosen.id,...used.filter(v=>v!==chosen.id)].slice(0,16)); return chosen.text;
   }
   function correctionReply(frame){
@@ -1303,7 +1396,28 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return out.slice(0,56);
   }
   function personalTopicBoostForPattern(ptn){const l=personalLearning(),hay=`${ptn.trigger||""} ${ptn.reply||""}`;let best=0;Object.entries(l.topics||{}).forEach(([topic,row])=>{if(!topic||!hay.includes(topic))return;const score=Math.min(7,(Number(row.turns||0)*.18)+(Number(row.positive||0)-Number(row.negative||0))*.8);if(score>best)best=score});return best}
-  function personalStyleBoostForPattern(ptn){const p=profile(),text=String(ptn.reply||"");let score=0;if(text.length<=26)score+=(p.brevity-.5)*5;if(/ㅋㅋ|ㅎㅎ/.test(text))score+=(p.playfulness-.5)*4;if(String(ptn.strategy||"")==="empathy")score+=(p.empathy-.5)*5;if(String(ptn.strategy||"")==="direct")score+=(p.directness-.5)*4;return score}
+  function localTextPreferenceScore(text){
+    const p=profile(),t=String(text||"");let score=0;const len=t.length,hasQuestion=/[?？]$/.test(t),hasLaugh=/ㅋㅋ|ㅎㅎ/.test(t),polite=/(?:요|습니다|세요)[.!?？！]*$/.test(t),slang=/(?:ㅇㅇ|ㄴㄴ|ㄹㅇ|개좋|개웃|개빡|ㅋㅋ|ㅎㅎ)/.test(t);
+    if(len<=26)score+=(Number(p.brevity??.5)-.5)*6;else if(len>=58)score-=(Number(p.brevity??.5)-.5)*5;
+    score+=(Number(p.questionTolerance??.5)-.5)*(hasQuestion?5:-.8);
+    if(hasLaugh)score+=(Number(p.playfulness??.5)-.5)*5;
+    if(polite)score+=(Number(p.formality??.5)-.5)*7;else score-=(Number(p.formality??.5)-.5)*2.5;
+    if(slang)score+=(Number(p.slang??.5)-.5)*4;
+    score+=expressionFeatureKeys(t).reduce((sum,k)=>sum+learnedLocalScore("features",k),0);
+    return Math.max(-10,Math.min(12,score));
+  }
+  function personalMemoryBoostForPattern(ptn){
+    const hay=compact(`${ptn.trigger||""} ${ptn.reply||""}`);if(!hay)return 0;const mem=memories();let score=0;
+    for(const key of ["like","interest"]){for(const row of normalizeMemoryList(mem[key])){const v=compact(row?.value||"");if(v&&hay.includes(v))score+=2.2;}}
+    for(const row of normalizeMemoryList(mem.dislike)){const v=compact(row?.value||"");if(v&&hay.includes(v))score-=1.8;}
+    return Math.max(-4,Math.min(6,score));
+  }
+  function personalFeedbackBoostForPattern(ptn){
+    let score=learnedLocalScore("strategies",String(ptn.strategy||"ack"));
+    score+=expressionFeatureKeys(String(ptn.reply||"")).reduce((sum,k)=>sum+learnedLocalScore("features",k),0)*.55;
+    return Math.max(-8,Math.min(10,score));
+  }
+  function personalStyleBoostForPattern(ptn){const p=profile(),text=String(ptn.reply||"");let score=localTextPreferenceScore(text)*.7;if(String(ptn.strategy||"")==="empathy")score+=(p.empathy-.5)*5;if(String(ptn.strategy||"")==="direct")score+=(p.directness-.5)*4;return score}
   function adaptLearnedReply(ptn,frame){let reply=String(ptn.reply||"");if(!ptn.humanChat||String(ptn.tier||"")==="solo")return reply;const pTokens=Array.isArray(ptn.semantic?.tokens)?ptn.semantic.tokens:semanticTokens(ptn.trigger||""),cTokens=semanticTokens(frame.text),pCats=semanticCategories(pTokens,ptn.trigger||""),cCats=semanticCategories(cTokens,frame.text);const commonCat=pCats.find(x=>cCats.includes(x));if(!commonCat)return reply;const verbs=new Set(["좋아하다","싫어하다","먹다","마시다","피곤하다","지치다","졸리다","재미있다","맛있다","이기다","지다","오다","가다"]);const pAnchor=pTokens.find(t=>!verbs.has(t)&&String(ptn.reply||"").includes(t)),cAnchor=cTokens.find(t=>!verbs.has(t));if(pAnchor&&cAnchor&&pAnchor!==cAnchor&&pAnchor.length>=2){reply=reply.replace(new RegExp(pAnchor.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g"),cAnchor)}return reply}
 
   function learnedCandidates(frame,policy,ref){
@@ -1325,20 +1439,24 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       const tier=String(ptn.tier||"confirmed");if(tier==="solo")score-=4;else if(tier==="growing")score+=1;else if(tier==="confirmed")score+=4;
       if(ptn.act&&ptn.act!==frame.act&&(!pIntent||pIntent!==semanticIntent(frame)))score-=24;if(ptn.affect&&ptn.affect!=="neutral"&&ptn.affect!==frame.affect)score-=18;
       if(input!==trig&&overlap===0&&semOverlap===0&&catOverlap===0&&ctxTokenOverlap===0&&ctxCatOverlap===0)score-=16;
-      if(score>=62){score+=personalTopicBoostForPattern(ptn)+personalStyleBoostForPattern(ptn);const learnedText=exact?String(ptn.reply||""):adaptLearnedReply(ptn,frame);out.push(candidate(learnedText,ptn.id||"learned",strategy,score,{source:ptn.humanChat?"learned-human":"learned",learningTier:tier}));}
+      if(score>=62){score+=personalTopicBoostForPattern(ptn)+personalStyleBoostForPattern(ptn)+personalFeedbackBoostForPattern(ptn)+personalMemoryBoostForPattern(ptn);const learnedText=exact?String(ptn.reply||""):adaptLearnedReply(ptn,frame);out.push(candidate(learnedText,ptn.id||"learned",strategy,score,{source:ptn.humanChat?"learned-human":"learned",learningTier:tier,exactLearned:exact}));}
     }
     return out.sort((a,b)=>b.score-a.score).slice(0,4);
   }
   function learnedConversationChoice(frame,ref,answer,source,strategy,socialText){
     if(!answer||frame.knowledgeCue||frame.searchCue)return null;
     const safeSocial=source==="local"&&socialText&&answer===socialText&&!/(insult|frustration)/.test(String(frame.reaction||""));
-    if(!(source==="local-everyday"||source==="local-decision"||source==="local-contextual"||source==="local-continuation"||source==="local-short"||source==="local-repair"||safeSocial))return null;
+    if(!(source==="local-everyday"||source==="local-decision"||source==="local-contextual"||source==="local-continuation"||source==="local-followthrough"||source==="local-short"||source==="local-repair"||safeSocial))return null;
     const policy=pickStrategy(frame,ref),learned=learnedCandidates(frame,policy,ref);if(!learned.length)return null;
-    const localScore=source==="local-decision"?94:source==="local-everyday"?90:source==="local-continuation"?88:source==="local-contextual"?86:source==="local-repair"?84:source==="local-short"?74:92;
+    const localScore=source==="local-decision"?94:source==="local-everyday"?90:source==="local-continuation"?88:source==="local-followthrough"?91:source==="local-contextual"?86:source==="local-repair"?84:source==="local-short"?74:92;
     const local=candidate(answer,`soft-local:${source}:${strategy}`,strategy,localScore,{source});
     // 기본 티키타카가 좋아져도 강하게 맞는 사람 대화 학습이 영원히 가려지면 안 된다.
     // exact/고신뢰 학습 후보가 로컬보다 충분히 강하면 확률에 맡기지 않고 실제 출력에 사용한다.
     const strongest=learned[0];
+    // Exact human-chat learning is the clearest evidence that this user-facing wording
+    // belongs to the current turn. Let it beat a generic local reply with only a small
+    // margin, while semantic/generalized learning still needs the safer larger margin.
+    if(strongest?.source==="learned-human"&&strongest.exactLearned&&strongest.score>=localScore+2)return strongest;
     if(strongest?.source==="learned-human"&&strongest.score>=localScore+8)return strongest;
     const chosen=weightedPick([local,...learned],v=>v.score,Math.random);
     return chosen&&chosen.source==="learned-human"?chosen:null;
@@ -1846,8 +1964,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="";
 
     const manner=mannerQuestion(text)?mannerAdviceText():null;
-    const dt=dateTime(text),calc=math(text),game=rps(text),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),broadEveryday=broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(game)answer=game;else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    const dt=dateTime(text),calc=math(text),game=rps(text),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),broadEveryday=broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
+    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(game)answer=game;else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
     const memQ=memoryQuestion(text);

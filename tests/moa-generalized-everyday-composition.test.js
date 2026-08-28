@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const src=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('js/ai/moa-communication-engine.js?v=47'),'generalized everyday cache bust missing');
+ok(html.includes('js/ai/moa-communication-engine.js?v=48'),'generalized everyday cache bust missing');
 function boot(patterns=[],seedStart=1,userId='general-daily'){
   const data={},user={user_id:userId,isGuest:false},searches=[];let seed=seedStart>>>0;
   const fakeMath=Object.create(Math);fakeMath.random=()=>((seed=seed*1664525+1013904223>>>0)/4294967296);

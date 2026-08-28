@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const src=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('js/ai/moa-communication-engine.js?v=47'),'personalization engine cache bust missing');
+ok(html.includes('js/ai/moa-communication-engine.js?v=48'),'personalization engine cache bust missing');
 
 function boot({userId,profile={},memories={},patterns=[],seedStart=1}){
   const data={

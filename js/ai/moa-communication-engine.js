@@ -1413,6 +1413,47 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/(?:했니|했어|였어|있어|없어|갈거|할거|맞니|맞아|좋아|괜찮아)[?？]?$/.test(q))return signal==="yes"?"오, 그렇구나. 그럼 그다음엔 어떻게 됐어?":"아, 그건 아니었구나. 그러면 실제로는 어떻게 됐어?";
     return "";
   }
+  function openQuestionAnswerReply(frame){
+    if(!frame||frame.question||frame.searchCue||frame.knowledgeCue||frame.scheduledCue||frame.decisionCue||frame.profanity||frame.directedAbuse)return "";
+    const pair=priorTurnPair();if(!pair?.assistant)return "";
+    const last=pair.assistant,lastText=clean(last.text||""),q=compact(lastText),raw=clean(frame.text),c=frame.c;
+    if(!(last.question===true||/[?？]$/.test(lastText)))return "";
+    // Only consume concise answers to genuinely open assistant questions.  Long turns,
+    // new events and commands should keep using the normal dialogue/feature routes.
+    if(!raw||raw.length>28||frame.act==="followup")return "";
+    if(/^(?:응|ㅇㅇ|웅|그래|맞아|아니|ㄴㄴ|몰라|모르겠어|글쎄|그런듯|그런것같아)$/.test(c))return "";
+    const answer=raw.replace(/[.!?？！]+$/g,"").trim();if(!answer)return "";
+    const plain=answer.replace(/^(?:그냥|나는|난|저는|전)\s*/,'').trim()||answer;
+    const isNone=/^(?:없어|없음|딱히|아무거나|아무거나좋아|모르겠어|몰라)$/.test(compact(plain));
+    const foodQ=/(?:뭐|뭘|무엇).*(?:먹|마시)|(?:먹|마시).*(?:싶|당기|땡기)|점심|저녁|아침|간식/.test(q);
+    if(foodQ){
+      if(isNone)return chooseFreshReply("follow.open.food.none",["아직 딱 당기는 건 없구나 ㅋㅋ 그럼 너무 고민하지 말고 가까운 데서 괜찮은 걸로 골라도 되겠다.","딱히 없으면 메뉴 고르는 게 더 어렵지 ㅋㅋ 밥류랑 면류 중 하나부터 정해볼까?","아무거나 괜찮은 쪽이네 ㅋㅋ 그러면 지금 제일 편하게 먹을 수 있는 걸로 가도 되겠다."]);
+      return chooseFreshReply(`follow.open.food.${compact(plain).slice(0,18)}`,[`오, ${plain} 먹고 싶은 거구나 ㅋㅋ 점심으로 괜찮겠다.`,`아 ${plain} 땡기는구나 ㅋㅋ 그럼 메뉴는 거의 정했네.`,`오 ${plain} 좋지 ㅋㅋ 지금 생각났으면 꽤 먹고 싶은가 본데?`,`ㅋㅋ ${plain} 쪽이구나. 그거 먹으면 만족도 높겠네.`]);
+    }
+    if(/(?:누구랑|누구하고|누구랑같이|누가같이)/.test(q)){
+      if(isNone)return chooseFreshReply("follow.open.person.none",["혼자였구나. 그럼 네 페이스대로 있었겠네.","아 혼자였네. 그러면 분위기도 좀 달랐겠다."]);
+      return chooseFreshReply(`follow.open.person.${compact(plain).slice(0,18)}`,[`${plain}랑 같이였구나. 둘이 같이 있어서 분위기도 좀 달랐겠다.`,`아 ${plain}랑 있었던 거구나 ㅋㅋ 같이 간 거면 덜 심심했겠다.`,`${plain}랑 갔구나. 같이 있으니까 좀 더 재밌었겠다.`]);
+    }
+    if(/(?:어디|어디로|어디에).*(?:가|갈|갔|있|있었|가고싶)/.test(q)){
+      return chooseFreshReply(`follow.open.place.${compact(plain).slice(0,18)}`,[`아 ${plain} 쪽이구나. 거기 생각하고 있었네.`,`${plain}로 생각하고 있구나. 꽤 괜찮은 선택 같은데.`,`오 ${plain}. 딱 그쪽이 먼저 떠올랐구나.`]);
+    }
+    if(/(?:몇시|몇 시|언제)/.test(lastText)){
+      return chooseFreshReply(`follow.open.time.${compact(plain).slice(0,18)}`,[`아 ${plain}구나. 그 시간이면 너무 촉박하진 않겠네.`,`${plain}쯤이구나. 오케이, 시간은 잡혔네.`,`오 ${plain}. 그러면 그 전까지는 좀 여유 있겠다.`]);
+    }
+    if(/(?:뭐|뭘|무엇).*(?:좋아|제일좋|재밌|재미있|기억나|하고싶|할래|했어|했니|봤어|샀어|골랐|고를|추천)/.test(q)){
+      if(isNone)return chooseFreshReply("follow.open.choice.none",["딱 떠오르는 건 없구나. 그럼 굳이 하나 정할 필요는 없지.","아직 정한 건 없네. 생각나면 그때 고르면 되겠다.","딱히 없으면 지금은 그냥 넘어가도 되지 ㅋㅋ"]);
+      return chooseFreshReply(`follow.open.choice.${compact(plain).slice(0,18)}`,[`오, ${plain} 쪽이구나 ㅋㅋ 그게 제일 먼저 떠올랐네.`,`아 ${plain}. 그게 제일 먼저 떠올랐구나 ㅋㅋ`,`${plain} 좋지. 지금은 그쪽이 제일 끌리는구나.`,`오 ${plain}로 가는구나. 꽤 확실하게 골랐네.`]);
+    }
+    if(/(?:어땠어|어때|어땠니|느낌.*어때|어떤느낌)/.test(q)){
+      if(/(?:별로|싫|최악|아쉽|노잼|재미없|힘들|피곤)/.test(c))return chooseFreshReply("follow.open.opinion.neg",["아, 별로였구나. 기대한 거랑 좀 달랐나 보네.","으 그럼 만족스럽진 않았네. 아쉬운 쪽이었구나.","아 그 느낌이면 다시 하고 싶진 않겠다 ㅋㅋ"]);
+      if(/(?:좋|재밌|괜찮|맛있|최고|만족)/.test(c))return chooseFreshReply("follow.open.opinion.pos",["오 괜찮았구나 ㅋㅋ 꽤 마음에 들었네.","오, 생각보다 만족했네 ㅋㅋ","좋았구나. 그러면 다음에도 또 할 만하겠다."]);
+      return chooseFreshReply(`follow.open.opinion.${compact(plain).slice(0,18)}`,[`아 ${plain}였구나. 그 정도 느낌이었네.`,`${plain} 쪽이었구나. 생각했던 거랑 비슷했어?`,`오, ${plain}. 느낌은 확실했네.`]);
+    }
+    if(/(?:몇|얼마|몇개|몇명|몇번|몇점|몇대몇)/.test(q)&&/[0-9일이삼사오육칠팔구십백천한두세네다섯여섯일곱여덟아홉스물서른마흔쉰]/.test(c)){
+      return chooseFreshReply(`follow.open.amount.${compact(plain).slice(0,18)}`,[`${plain}구나. 오케이, 숫자는 알겠어.`,`아 ${plain}였구나. 대충 규모가 감 잡히네.`,`${plain} 정도였네. 그럼 대충 감 오겠다.`]);
+    }
+    return "";
+  }
   function conversationFollowThroughReply(frame){
     if(!frame||frame.searchCue||frame.knowledgeCue||frame.scheduledCue||frame.decisionCue||frame.profanity||frame.directedAbuse)return "";
     const signal=shortFollowSignal(frame);if(!signal)return "";
@@ -2348,8 +2389,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
     const manner=mannerQuestion(text)?mannerAdviceText():null;
     const memQEarly=memoryQuestion(text),memAnswerEarly=memQEarly?memoryAnswer(memQEarly):"";
-    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=compositionalEverydayReply(frame),broadEveryday=broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=compositionalEverydayReply(frame),broadEveryday=broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
+    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
 

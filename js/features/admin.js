@@ -53,7 +53,7 @@ MiniTalk.Features.Admin=(()=>{
   }
 
   function users(){
-    return MiniTalk.UserDirectory?.all?.()||[]
+    return MiniTalk.UserDirectory?.all?.({includeSelf:true})||[]
   }
 
   function render(host){

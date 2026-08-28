@@ -1,0 +1,11 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..'),src=fs.readFileSync(path.join(root,'js/features/shopping.js'),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(src.includes("function appAssetUrl(path)")&&src.includes("document.baseURI || location.href"),'delivery media is not resolved from the app document URL');
+ok(src.includes("function preloadDeliveryMedia()")&&src.includes("deliveryMascotPreload.src = appAssetUrl(DELIVERY_MASCOT_URL)"),'delivery mascot is not preloaded');
+ok(src.includes("const primedAudio = primeDeliveryAudio(deliverySounds)")&&src.indexOf('const primedAudio = primeDeliveryAudio(deliverySounds)')<src.indexOf('await Service.requestDelivery(item.id)'),'delivery audio is not primed inside the click path before the async request');
+ok(src.includes("mascot.addEventListener('load', mount")&&src.includes("if (mascot.complete && mascot.naturalWidth > 0) mount()"),'delivery effect starts before mascot load readiness');
+ok(src.includes('audio.loop = true')&&src.includes('if (audio.paused || audio.ended) audio.play().catch(() => {})'),'delivery audio gesture state is not preserved across the async request');
+ok(src.includes('primedAudio.audio.pause?.()')&&src.includes('primedAudio.audio.loop = false'),'failed delivery does not release primed audio');
+for(const f of ['assets/mascot-mini-talk.png','assets/sounds/delivery-order-1.mp3','assets/sounds/delivery-order-2.mp3'])ok(fs.existsSync(path.join(root,f))&&fs.statSync(path.join(root,f)).size>1000,`missing delivery media: ${f}`);
+console.log('DELIVERY_MEDIA_WINDOW_RUNTIME_OK');

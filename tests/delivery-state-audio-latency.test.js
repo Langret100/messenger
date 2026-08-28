@@ -3,7 +3,7 @@ const ok=(v,m)=>{if(!v)throw new Error(m)};
 const shop=fs.readFileSync('js/features/shopping.js','utf8');
 const store=fs.readFileSync('js/shopping/store-service.js','utf8');
 const server=fs.readFileSync('docs/apps-script/coin-shopping-extension.gs','utf8');
-ok(shop.includes('preloadDeliveryAudio()'),'delivery audio preload hook missing');
+ok(shop.includes('preloadDeliveryMedia()'),'delivery media preload hook missing');
 ok(shop.includes("audio.play().catch(() => {})"),'delivery audio playback missing');
 const requestBlock=store.slice(store.indexOf('async function requestDelivery'),store.indexOf('async function gift'));
 const returnPos=requestBlock.indexOf('return result;');

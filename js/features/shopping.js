@@ -4,10 +4,19 @@ MiniTalk.Features.Shopping = (() => {
   let inventoryOpen = false, refreshTimer = 0, randomOverlay = null, randomArrivalId = "";
 
   const DELIVERY_AUDIO_URLS = ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'];
+  const DELIVERY_MASCOT_URL = 'assets/mascot-mini-talk.png';
   const deliveryAudioPool = new Map();
+  let deliveryMascotPreload = null;
 
-  function preloadDeliveryAudio() {
-    DELIVERY_AUDIO_URLS.forEach(src => {
+  // 쇼핑 화면이 Document PiP/별도 문서로 옮겨져도 미디어는 앱 원본 URL 기준으로 찾습니다.
+  function appAssetUrl(path) {
+    try { return new URL(String(path || ''), document.baseURI || location.href).href; }
+    catch (_) { return String(path || ''); }
+  }
+
+  function preloadDeliveryMedia() {
+    DELIVERY_AUDIO_URLS.forEach(path => {
+      const src = appAssetUrl(path);
       if (deliveryAudioPool.has(src)) return;
       try {
         const audio = new Audio(src);
@@ -16,6 +25,36 @@ MiniTalk.Features.Shopping = (() => {
         deliveryAudioPool.set(src, audio);
       } catch (_) {}
     });
+    if (!deliveryMascotPreload) {
+      try {
+        deliveryMascotPreload = new Image();
+        deliveryMascotPreload.decoding = 'async';
+        deliveryMascotPreload.src = appAssetUrl(DELIVERY_MASCOT_URL);
+      } catch (_) {}
+    }
+  }
+
+  // 네트워크 요청을 await하기 전에 사용자 클릭 제스처 안에서 오디오 엘리먼트를 한 번 활성화합니다.
+  // 볼륨 0으로 시작하므로 성공 확인 전 음성은 들리지 않습니다.
+  function primeDeliveryAudio(soundUrls = DELIVERY_AUDIO_URLS) {
+    const paths = Array.isArray(soundUrls) && soundUrls.length ? soundUrls : DELIVERY_AUDIO_URLS;
+    const sources = paths.map(appAssetUrl);
+    const src = sources[Math.floor(Math.random() * sources.length)] || sources[0];
+    if (!src) return null;
+    try {
+      // 배송 요청마다 전용 Audio 인스턴스를 사용합니다. 여러 상품을 빠르게 연속 주문해도
+      // 같은 풀 오디오의 currentTime/loop/volume을 서로 덮어쓰지 않게 합니다.
+      const preload = deliveryAudioPool.get(src);
+      const audio = preload?.cloneNode ? preload.cloneNode(true) : new Audio(src);
+      audio.preload = 'auto';
+      const prime = { audio, src, released: false };
+      try { audio.currentTime = 0; } catch (_) {}
+      audio.loop = true;
+      audio.volume = 0;
+      // 요청이 끝날 때까지 무음 재생을 유지해 사용자 클릭에서 얻은 재생 상태를 끊지 않습니다.
+      Promise.resolve(audio.play()).catch(() => {});
+      return prime;
+    } catch (_) { return null; }
   }
 
   MiniTalk.Events.on("state:shopCatalog", refreshVisible);
@@ -51,7 +90,7 @@ MiniTalk.Features.Shopping = (() => {
   }
 
   function render(host, options = {}) {
-    preloadDeliveryAudio();
+    preloadDeliveryMedia();
     const D = MiniTalk.UI.Dom, user = MiniTalk.Store.get("user") || {};
     const previousScroll = options.preserveScroll ? Number(host.querySelector(".shopping-screen")?.scrollTop || 0) : 0;
     if (options.refreshCatalog !== false) Service.enter().catch(error=>console.warn("쇼핑 데이터 갱신 실패",error));
@@ -314,10 +353,11 @@ MiniTalk.Features.Shopping = (() => {
   function renderDeliveryEffect(item, cue = {}) {
     const D = MiniTalk.UI.Dom, doc = D.doc();
     doc.querySelectorAll('.delivery-order-effect').forEach(node => node.remove());
+    const mascot = D.el('img', { class: 'delivery-order-mascot', src: appAssetUrl(DELIVERY_MASCOT_URL), alt: '모아루 배달 연출' });
     const host = D.el('div', { class: 'delivery-order-effect', 'aria-hidden': 'true' });
     const card = D.el('div', { class: 'delivery-order-card' }, [
       D.el('div', { class: 'delivery-order-runway' }, [
-        D.el('img', { class: 'delivery-order-mascot', src: 'assets/mascot-mini-talk.png', alt: '모아루 배달 연출' }),
+        mascot,
         D.el('span', { class: 'delivery-order-dust dust-a' }),
         D.el('span', { class: 'delivery-order-dust dust-b' }),
         D.el('span', { class: 'delivery-order-dust dust-c' })
@@ -326,18 +366,38 @@ MiniTalk.Features.Shopping = (() => {
       D.el('p', { text: `${item.name || '상품'} 배달을 준비하고 있어요.` })
     ]);
     host.append(card);
-    doc.body.append(host);
+
+    const primed = cue.primedAudio || null;
     const choices = Array.isArray(cue.soundUrls) && cue.soundUrls.length ? cue.soundUrls : DELIVERY_AUDIO_URLS;
-    const src = choices[Math.floor(Math.random() * choices.length)] || choices[0];
     try {
-      const audio = deliveryAudioPool.get(src) || new Audio(src);
+      const src = primed?.src || appAssetUrl(choices[Math.floor(Math.random() * choices.length)] || choices[0]);
+      const audio = primed?.audio || deliveryAudioPool.get(src) || new Audio(src);
+      if (primed) primed.released = true;
       audio.preload = 'auto';
+      audio.loop = false;
+      audio.volume = 1;
       try { audio.currentTime = 0; } catch (_) {}
-      audio.play().catch(() => {});
+      // prime이 정상적으로 유지 중이면 currentTime 재설정만으로 처음부터 소리가 납니다.
+      // 브라우저가 prime을 막은 경우에만 play()를 재시도합니다.
+      if (audio.paused || audio.ended) audio.play().catch(() => {});
       if (!deliveryAudioPool.has(src)) deliveryAudioPool.set(src, audio);
     } catch (_) {}
-    setTimeout(() => host.classList.add('leaving'), 1800);
-    setTimeout(() => host.remove(), 2350);
+
+    // 캐릭터 파일이 실제 준비된 뒤 연출 타이머를 시작해서, 로딩 중 애니메이션이 끝나는 일을 막습니다.
+    let mounted = false;
+    const mount = () => {
+      if (mounted) return;
+      mounted = true;
+      doc.body.append(host);
+      setTimeout(() => host.classList.add('leaving'), 1800);
+      setTimeout(() => host.remove(), 2350);
+    };
+    if (mascot.complete && mascot.naturalWidth > 0) mount();
+    else {
+      mascot.addEventListener('load', mount, { once: true });
+      mascot.addEventListener('error', mount, { once: true });
+      setTimeout(mount, 650);
+    }
   }
 
   function inventoryCard(item) {
@@ -368,14 +428,23 @@ MiniTalk.Features.Shopping = (() => {
   async function requestDelivery(item, button) {
     if (button?.disabled) return;
     const originalText = button?.textContent || '배송';
+    const deliverySounds = ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'];
+    const primedAudio = primeDeliveryAudio(deliverySounds);
     if (button) { button.disabled = true; button.textContent = '주문 중'; }
     try {
       const result = await Service.requestDelivery(item.id);
       MiniTalk.UI.Shell.toast(`${item.name} 배송을 요청했습니다.`);
-      renderDeliveryEffect(item, { soundUrls: ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'], ...(result?.effect || {}) });
+      renderDeliveryEffect(item, { soundUrls: deliverySounds, ...(result?.effect || {}), primedAudio });
       refreshVisible();
     }
     catch (error) {
+      if (primedAudio?.audio) {
+        primedAudio.released = true;
+        primedAudio.audio.loop = false;
+        primedAudio.audio.pause?.();
+        try { primedAudio.audio.currentTime = 0; } catch (_) {}
+        primedAudio.audio.volume = 1;
+      }
       MiniTalk.UI.Shell.toast(error.message || '배송을 요청하지 못했습니다.');
       if (button?.isConnected) { button.disabled = false; button.textContent = originalText; }
     }

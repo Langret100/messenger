@@ -1,7 +1,7 @@
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
 const shopping=read('js/features/shopping.js'),server=read('docs/apps-script/coin-shopping-extension.gs'),html=read('index.html');
-ok(html.includes('js/features/shopping.js?v=64.5.38'),'shopping cache version stale');
+ok(html.includes('js/features/shopping.js?v=64.5.41'),'shopping cache version stale');
 const cardStart=shopping.indexOf('function inventoryCard'),cardEnd=shopping.indexOf('async function requestDelivery',cardStart),card=shopping.slice(cardStart,cardEnd);
 ok(card.includes("const deliveryLocked = status === 'requested' || status === 'shipping'"),'delivery lock status missing');
 ok(card.includes('if (!deliveryLocked)'),'gift action is still rendered while delivery is active');

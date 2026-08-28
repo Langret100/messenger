@@ -14,17 +14,17 @@ function boot(){
   ok(/공유기|와이파이|유선|5GHz|6GHz/.test(r.reply),`internet advice lacks actionable content: ${r.reply}`);
   ok(!/인터넷 얘기였구나|한마디만|듣고 있어/.test(r.reply),`generic acknowledgement leaked: ${r.reply}`);
 
-  E.clearContext();r=await E.reply('피카츄 누구냐');
-  ok(r.source==='local-knowledge'&&/포켓몬/.test(r.reply),`colloquial known-entity question failed: ${r.source}/${r.reply}`);
-  E.clearContext();r=await E.reply('이순신이 누구냐');
-  ok(r.source==='local-knowledge'&&/조선/.test(r.reply)&&/장군/.test(r.reply),`particle + 누구냐 failed: ${r.source}/${r.reply}`);
+  // Colloquial knowledge questions are routed generically; no entity-specific client dialogue is required.
+  E.clearContext();r=await E.reply('허준이 누구냐');
+  ok(r.source==='search',`colloquial entity question failed: ${r.source}/${r.reply}`);
+  ok(searches.at(-1)==='허준',`particle + 누구냐 query not cleaned: ${JSON.stringify(searches)}`);
 
   E.clearContext();r=await E.reply('장보고가 누구냐');
-  ok(r.source==='search',`unknown fact should use search: ${r.source}/${r.reply}`);
+  ok(r.source==='search',`fact question should use search: ${r.source}/${r.reply}`);
   ok(searches.at(-1)==='장보고',`search query not cleaned: ${JSON.stringify(searches)}`);
 
-  // A previous failed/known entity must not contaminate a new explicit entity question.
-  E.clearContext();await E.reply('피카츄 누구냐');r=await E.reply('장보고가 누구냐');
+  // A previous entity lookup must not contaminate the next explicit entity question.
+  E.clearContext();await E.reply('허준이 누구냐');r=await E.reply('장보고가 누구냐');
   ok(searches.at(-1)==='장보고',`previous entity contaminated new query: ${JSON.stringify(searches)}`);
 
   console.log('MOA_SCREENSHOT_QUESTION_ROUTING_REGRESSION_OK');

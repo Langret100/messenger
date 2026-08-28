@@ -2,8 +2,8 @@ const fs=require('fs'),path=require('path'),root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
 const rt=read('js/adapters/realtime.js'),unread=read('js/chat/unread.js'),feed=read('js/features/feed.js'),shell=read('js/ui/shell.js'),router=read('js/core/router.js'),auth=read('js/features/auth.js'),appcss=read('css/app.css'),feedcss=read('css/features/feed-classinfo-weekly.css'),html=read('index.html'),sw=read('sw.js'),app=read('js/app.js');
 ok(rt.includes('function startMemberRoomIndexSubscription()')&&rt.includes('attachMemberSummary'),'persistent member-room summary subscription missing');
-ok(rt.includes('ref.on("value",onValue')&&(rt.includes('memberSummaryUnsubs.set(roomId')||rt.includes('memberSummaryUnsubs.set(id')),'member room summaries are not subscribed independently of group directory');
-ok(rt.includes('orderByChild("lastMessageAt").startAt(1)')&&rt.includes('if(roomListRequested&&groupRoomUnsubs.length)return'),'group directory should stay lightweight and reuse its listener after first open');
+ok(rt.includes('ref.on("value",onValue')&&rt.includes('memberSummaryUnsubs.set(roomId'),'member room summaries are not subscribed outside group tab');
+ok(rt.includes('orderByChild("lastMessageAt").startAt(1)')&&rt.includes('clearGroupRoomSubscription()'),'group tab should load lightweight summaries only while open');
 ok(unread.includes('const messageTime=room=>Number(room?.lastMessageAt'),'unread tracking is not based on last-message time');
 ok(feed.includes('pendingLocalHeartEffects')&&feed.includes('playHeartFeedback(button,nextCount>prevCount,false)'),'remote feed-heart visual effect missing');
 ok(feed.includes('playHeaderHeartFeedback')&&feed.includes('patchHeaderHeart(animate,on)'),'header received-heart effect missing');
@@ -12,6 +12,6 @@ ok(shell.includes('function beginLoading()')&&shell.includes('setTimeout(()=>{lo
 ok(router.includes('MiniTalk.UI.Shell.beginLoading?.()')&&auth.includes('MiniTalk.UI.Shell.beginLoading?.()'),'route/auth loading indicator is not wired');
 ok(appcss.includes('.moaru-loading-host{')&&appcss.includes('@keyframes moaru-loading-pulse'),'loading overlay CSS missing');
 ok(feedcss.includes('.header-heart-inline.heart-pop'),'header heart animation CSS missing');
-ok(html.includes('css/app.css?v=64.5.22')&&html.includes('feed-classinfo-weekly.css?v=65.0.31')&&html.includes('js/core/router.js')&&html.includes('realtime.js?v=64.5.46')&&html.includes('js/chat/unread.js')&&html.includes('features/feed.js?v=65.0.21')&&html.includes('app.js?v=64.5.46'),'v5.23 cache versions stale');
+ok(html.includes('css/app.css?v=64.5.23')&&html.includes('feed-classinfo-weekly.css?v=65.0.31')&&html.includes('js/core/router.js')&&html.includes('realtime.js?v=64.5.45')&&html.includes('js/chat/unread.js')&&html.includes('features/feed.js?v=65.0.21')&&html.includes('app.js?v=64.5.46'),'v5.23 cache versions stale');
 ok(sw.includes('moaru-moa-dialogue-fusion-final')&&app.includes('sw.js?v=64.5.60'),'v5.23 service worker version stale');
 console.log('ROOM_LIVE_HEART_LOADING_OK');

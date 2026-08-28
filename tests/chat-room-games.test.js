@@ -9,16 +9,16 @@ assert(source.includes('kind:"ladder"'),'ladder payload missing');
 assert(source.includes('typeof crypto.randomUUID==="function"')&&source.includes('crypto.getRandomValues(new Uint32Array(2))'),'randomUUID compatibility fallback missing');
 assert(source.includes('kind:"mafia-lobby"'),'mafia lobby missing');
 assert(source.includes('crypto.subtle.generateKey({name:"RSA-OAEP"'),'mafia role encryption missing');
-assert(source.includes('participants:chosen'),'selected participants are not persisted');
+assert(source.includes('kind:"game-invite"')&&source.includes('invited,maxPlayers,minPlayers'),'game invitation payload missing');
 for(const role of ['mafia','citizen','police','doctor'])assert(source.includes(`assets/chat-games/role-${role}.png`),`role asset missing for ${role}`);
 assert(source.includes('mafia-doctor-action')&&source.includes('mafia-police-action')&&source.includes('mafia-police-result'),'doctor/police flow missing');
-assert(source.includes('memberPicker("마피아 게임",members,{min:4,max:12'),'mafia max participants must be 12');
+assert(source.includes('memberPicker("마피아 게임 초대",invitees,{min:3,max:999'),'mafia invitation picker must allow over-inviting while keeping host auto-participation');
 assert(source.includes('역할 뽑기')&&source.includes('mafia-role-draw'),'role draw UI missing');
 assert(css.includes('@keyframes mafia-card-shuffle-left')&&css.includes('@keyframes mafia-card-deck-flip')&&css.includes('@keyframes mafia-role-reveal'),'role draw animation CSS missing');
 assert(realtime.includes('game:payload.game&&typeof payload.game==="object"?payload.game:null'),'realtime adapter drops game metadata');
 assert(chats.includes('addAction("♟","게임"'),'composer game action missing');
 assert(chats.includes('MiniTalk.Chat.RoomGames?.renderMessage?.(message,message.roomId)'),'game renderer missing');
-assert(index.includes('js/chat/room-games.js?v=10'),'room-games script not loaded');
+assert(index.includes('js/chat/room-games.js?v=12'),'room-games script not loaded');
 
 assert(source.includes('svg.setAttribute("preserveAspectRatio","none")'),'ladder SVG fill mode missing');
 assert(source.includes('"data-phase-gate":"night"'),'host night control gate missing');
@@ -43,6 +43,14 @@ assert(source.includes('마피아끼리 선택한 대상이 달라요'),'split m
 assert(source.includes('roleReveal:15000')&&source.includes('night:30000')&&source.includes('discussion:45000')&&source.includes('vote:30000'),'mafia timing policy missing');
 assert(source.includes('kind:"mafia-leave"')&&source.includes('kind:"mafia-player-left"'),'mafia leave flow missing');
 assert(source.includes('personal-win')&&source.includes('personal-lose'),'personal win/loss rendering missing');
+
+assert(source.includes('kind:"game-invite-accept"')&&source.includes('kind:"game-invite-decline"')&&source.includes('kind:"game-invite-slot"'),'game invite accept/decline/slot protocol missing');
+assert(source.includes('status=final||participants.length>=max?"full":"accepted"'),'first-accept capacity guard missing');
+assert(source.includes('capacityReached=people.length>=max')&&source.includes('allResponded'),'automatic invite finalization missing');
+assert(source.includes('maybeAutoStartMafia'),'mafia automatic start after accepted participants prepare keys is missing');
+assert(source.includes('if(desktopGameMode()){const room=MiniTalk.Store.get("rooms")?.[roomId]'),'accepted desktop invite must open popup from user gesture');
+assert(source.includes('인원 초과로 참가할 수 없어요.'),'late acceptance full-capacity feedback missing');
+assert(css.includes('.room-game-invite-actions')&&css.includes('.room-game-invite-person'),'game invite UI CSS missing');
 assert(source.includes('scheduleHostPhaseResolution'),'background phase timeout scheduler missing');
 assert(source.includes('allowTimeout:true'),'timeout fallback resolution missing');
 assert(css.includes('.mafia-timer')&&css.includes('.mafia-leave-button'),'timer/leave CSS missing');

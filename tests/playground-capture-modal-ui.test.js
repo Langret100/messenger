@@ -16,10 +16,10 @@ ok(profile.includes('hostClass: "profile-modal-host"')&&chats.includes('hostClas
 ok(css.includes('.modal-host{align-items:center;padding:14px}')&&css.includes('.header-create-button{font-size:23px!important')&&css.includes('.header-search-button::before{content:"⌕"')&&css.includes('transform:translate(-50%,-68%)'),'mobile modal centering or header icon sizing is missing');
 ok(chats.includes('text:"⌕","aria-label":"검색"')&&chats.includes('class:"search-glyph",text:"⌕"'),'original search glyph was not preserved');
 ok(css.includes('.room-lock-badge{right:-5px;bottom:-4px;min-width:0;width:auto;height:auto;border:0;border-radius:0;background:transparent;box-shadow:none'),'room lock badge still has a circular overlay');
-ok(html.includes('js/features/chats.js?v=64.5.25'), 'stale cache version for js/features/chats.js');
+ok(html.includes('js/features/chats.js?v=64.5.23'), 'stale cache version for js/features/chats.js');
 ok(html.includes('js/features/auth.js?v=64.5.35'),'stale cache version for js/features/auth.js');
 ok(html.includes('js/app.js?v=64.5.46'),'stale cache version for js/app.js');
-ok(html.includes('css/app.css?v=64.5.22'),'stale cache version for css/app.css');
+ok(html.includes('css/app.css?v=64.5.23'),'stale cache version for css/app.css');
 ok(html.includes('js/ui/shell.js?v=64.5.34'),'stale cache version for js/ui/shell.js');
 ok(html.includes('js/tools/profile-editor.js?v=64.4.2'),'stale cache version for js/tools/profile-editor.js');
 ok(html.includes('js/features/tools.js?v=64.5.15'),'stale cache version for js/features/tools.js');

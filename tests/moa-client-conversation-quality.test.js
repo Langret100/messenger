@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const engine=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('js/ai/moa-communication-engine.js?v=49'),'MOA engine cache bust v14 missing');
+ok(html.includes('js/ai/moa-communication-engine.js?v=50'),'MOA engine cache bust v14 missing');
 ok(engine.includes('function conversationalPenalty(frame,c)'),'conversation penalty missing');
 ok(engine.includes('function qualityGate(answer,frame,source,strategy)'),'final quality gate missing');
 ok(engine.includes('function recentQuestionStreak()'),'question streak guard missing');

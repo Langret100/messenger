@@ -14,7 +14,7 @@
    ============================================================ */
 MiniTalk.AI = MiniTalk.AI || {};
 MiniTalk.AI.MoaCommunicationEngine = (() => {
-  const VERSION = 94;
+  const VERSION = 95;
   const MAX_CONTEXT = 28;
   const MAX_EPISODES = 36;
   const MAX_TIMELINE = 24;
@@ -410,7 +410,12 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/(싫어|힘들|피곤|실패|속상|짜증|화나|어려|망했|졌어|틀렸|별로|아쉬워|아쉽|싸웠|무시|맛없|기분안좋|큰일|걱정|불안|서운)/.test(c))affect="negative";
     const reaction=detectReaction(text);
     let act=reaction?"social":searchCue?"search":referenceCue?"followup":explicitQuestion?"question":"statement";
-    const event=/(했어|갔어|먹었어|봤어|끝냈어|이겼어|졌어|틀렸어|넣었어|역전했어|놀랐어|만들었어|그렸어|놀았어|샀어|왔어|다녀왔어|됐어|받았어|혼났어|어려웠어|쉬웠어|아쉬워했어|맞았어|싸웠어|넘어졌어|무시했어|사줬어|괜찮대|다쳤어)/.test(c)||/(었어|았어|였어)$/.test(c)||/(?:함|했음|갔음|왔음|먹음|봄|끝남|이김|짐|틀림|끊김|꺼짐|찾음|풀림|남음|나감|도착함|막힘|숨음|재밌음|괜찮았음|별로였음|힘들었음)$/.test(c);
+    // Desire and unfinished/blocked actions are not past events.  Korean chat often
+    // compresses these heavily ("먹고프다", "먹고 프다", "아직 못먹음").  Keep
+    // them explicit so everyday routing does not hallucinate that the action happened.
+    const desire=!explicitQuestion&&/(?:고싶|고프|땡겨|땡긴|당겨|당긴|하고파|가고파|보고파|먹고파|사고파|자고파|쉬고파)/.test(c);
+    const unfulfilled=!explicitQuestion&&(/(?:아직|여태|계속).*(?:못|안).*(?:했|해|먹었|먹|갔|가|봤|보|샀|사|받았|받|만났|만나|끝냈|끝내|됐|되|잤|자|쉬었|쉬)/.test(c)||/(?:못|안)(?:먹었|먹|갔|가|봤|보|샀|사|받았|받|만났|만나|끝냈|끝내|했|해|됐|되|잤|자|쉬었|쉬)(?:음|어|어씀|었음|았음)?$/.test(c));
+    const event=!desire&&!unfulfilled&&(/(했어|갔어|먹었어|봤어|끝냈어|이겼어|졌어|틀렸어|넣었어|역전했어|놀랐어|만들었어|그렸어|놀았어|샀어|왔어|다녀왔어|됐어|받았어|혼났어|어려웠어|쉬웠어|아쉬워했어|맞았어|싸웠어|넘어졌어|무시했어|사줬어|괜찮대|다쳤어)/.test(c)||/(었어|았어|였어)$/.test(c)||/(?:함|했음|갔음|왔음|먹음|봄|끝남|이김|짐|틀림|끊김|꺼짐|찾음|풀림|남음|나감|도착함|막힘|숨음|재밌음|괜찮았음|별로였음|힘들었음)$/.test(c));
     const futureCue=/(내일|모레|주말|다음주|\d{1,2}월\d{1,2}일)/.test(c);
     const scheduledCue=!explicitQuestion&&futureCue&&/(시험|약속|경기|발표|여행|면접|대회)/.test(c);
     const plan=/(할거야|하려고|하기로했어|할예정|갈거야|먹을거야|볼거야|해볼래|하기로|가기로)/.test(c)||(!explicitQuestion&&futureCue&&/(할거|갈거|볼거|먹을거|만날거|시작할|끝낼)/.test(c));
@@ -419,9 +424,9 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const opinionQuestion=explicitQuestion&&/(어때|어떻게생각|생각은|괜찮아|좋아보여)/.test(c);
     const factQuestion=explicitQuestion&&!reasonQuestion&&!opinionQuestion&&/(누구|뭐야|뭔지|뭐인지|무엇|무엇인지|어디|언제|몇|얼마|뜻|알려줘|설명|정의|유래|역사|차이)/.test(c);
     const knowledgeCue=searchCue||factQuestion||reasonQuestion||/(무슨뜻|뜻이뭐|어떤사람|어떤곳|어떤거|차이가뭐|장단점|원리|유래|역사|왜그런|어떻게작동|추천해줘|비교해줘|정리해줘)/.test(c);
-    const speechAct=reaction?`social:${reaction}`:plan?"inform:plan":preference?"inform:preference":event?"inform:event":reasonQuestion?"ask:reason":opinionQuestion?"ask:opinion":factQuestion?"ask:fact":act==="followup"?"followup":act==="question"?"ask:question":"inform:statement";
+    const speechAct=reaction?`social:${reaction}`:desire?"inform:desire":unfulfilled?"inform:unfulfilled":plan?"inform:plan":preference?"inform:preference":event?"inform:event":reasonQuestion?"ask:reason":opinionQuestion?"ask:opinion":factQuestion?"ask:fact":act==="followup"?"followup":act==="question"?"ask:question":"inform:statement";
     const punctuation=punctuationOnly(text),profanity=PROFANITY.test(text),directedAbuse=DIRECTED_ABUSE.test(text);
-    return {text,c,concepts:cs,topic:topicFrom(text,cs),affect,act,speechAct,reaction,event,plan,scheduledCue,preference,question:explicitQuestion||act==="followup",searchCue,knowledgeCue,referenceCue,decisionCue,repairCue,punctuation,profanity,directedAbuse};
+    return {text,c,concepts:cs,topic:topicFrom(text,cs),affect,act,speechAct,reaction,event,desire,unfulfilled,plan,scheduledCue,preference,question:explicitQuestion||act==="followup",searchCue,knowledgeCue,referenceCue,decisionCue,repairCue,punctuation,profanity,directedAbuse};
   }
 
   function resolveReference(frame){
@@ -814,6 +819,34 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       ];
     const domainOf=x=>{for(const [rx,name] of domains){if(rx.test(x))return name;}return "";};
     const priorDomain=domainOf(joined),currentDomain=domainOf(c),sameDomainCue=!!priorDomain&&priorDomain===currentDomain;
+    const activeDomain=currentDomain||priorDomain;
+    if(frame.desire&&activeDomain){
+      const rows={
+        food:["오, 지금 먹고 싶은 게 확실히 있구나 ㅋㅋ 아직 먹은 건 아니고 땡기는 쪽이네.","아 먹고 싶은 상태구나 ㅋㅋ 생각나면 더 땡기지.","오 지금은 그 메뉴가 당기는 거네 ㅋㅋ"],
+        game:["오 지금 그거 하고 싶은 거구나 ㅋㅋ","아 게임 쪽이 땡기는 상태네 ㅋㅋ","오, 지금은 한 판 하고 싶은 쪽이구나."],
+        media:["오 지금 그거 보고 싶은 거구나.","아 아직 본 건 아니고 보고 싶은 상태네 ㅋㅋ","오, 지금은 그 작품이 당기는구나."],
+        outing:["오 지금 거기 가고 싶은 거구나.","아 아직 간 건 아니고 가보고 싶은 쪽이네.","오, 지금은 밖에 나가고 싶은 마음이 있구나."],
+        hobby:["오 지금 그거 해보고 싶은 거구나.","아 아직 한 건 아니고 해보고 싶은 상태네.","오, 지금은 그 취미 쪽이 당기네 ㅋㅋ"],
+        sleep:["아 지금 자고 싶은 거구나 ㅋㅋ 꽤 졸린가 보네.","오 지금은 잠이 제일 땡기는 상태네.","아 아직 자는 건 아니고 좀 쉬고 싶은 거구나."],
+        shopping:["오 지금 그거 사고 싶은 거구나.","아 아직 산 건 아니고 갖고 싶은 상태네.","오, 지금은 그 물건이 좀 끌리는구나."],
+        exercise:["오 지금 운동하고 싶은 쪽이구나.","아 아직 한 건 아니고 몸 좀 움직이고 싶은 거네.","오, 지금은 운동 생각이 나는구나."]
+      };
+      return chooseFreshReply(`continuity.desire.${activeDomain}`,rows[activeDomain]||["오, 지금 그걸 하고 싶은 거구나.","아 아직 한 건 아니고 하고 싶은 상태네.","오, 지금은 그쪽이 좀 끌리는구나."]);
+    }
+    if(frame.unfulfilled&&activeDomain){
+      const rows={
+        food:["아 아직 못 먹은 거구나 ㅋㅋ 그러면 계속 생각나겠다.","오 아직 먹기 전이네. 먹고 싶은 마음은 그대로고 ㅋㅋ","아, 아직 못 먹었구나. 그럼 더 땡길 만하지."],
+        game:["아 아직 못 한 거구나. 그럼 계속 생각나겠네 ㅋㅋ","오 아직 시작도 못 했네.","아, 하고 싶었는데 아직 못 한 상태구나."],
+        media:["아 아직 못 본 거구나. 그래서 더 궁금하겠네.","오 아직 보기 전이네 ㅋㅋ","아, 보고 싶었는데 아직 못 본 상태구나."],
+        outing:["아 아직 못 간 거구나. 계획만 남아 있는 상태네.","오 아직 가기 전이네.","아, 가고 싶었는데 아직 못 갔구나."],
+        shopping:["아 아직 못 산 거구나. 계속 눈에 밟히겠네 ㅋㅋ","오 아직 구매한 건 아니네.","아, 사고 싶었는데 아직 못 산 상태구나."],
+        study:["아 아직 못 끝낸 거구나. 남아 있으니 계속 신경 쓰이겠다.","오 아직 마무리 전이네.","아, 하려고 했는데 아직 못 한 상태구나."],
+        school:["아 아직 못 한 거구나. 학교 일이라 더 계속 걸리겠다.","오 아직 끝난 건 아니네.","아, 하려고 했는데 아직 못 한 상태구나."],
+        hobby:["아 아직 못 해본 거구나. 하고 싶은 마음은 남아 있네.","오 아직 시작 전이네.","아, 해보고 싶었는데 아직 못 했구나."],
+        exercise:["아 아직 운동 못 한 거구나. 하려던 마음은 있었네.","오 아직 시작 전이네.","아, 하려고 했는데 아직 못 한 상태구나."]
+      };
+      return chooseFreshReply(`continuity.unfulfilled.${activeDomain}`,rows[activeDomain]||["아 아직 못 한 거구나.","오 아직 끝난 건 아니네.","아, 하려고 했는데 아직 못 한 상태구나."]);
+    }
     const resolvedCue=/(?:다시|이제|결국|방금|지금(?:은)?).*(?:됐|됨|돼|된다|정상|괜찮아졌|괜찮|풀렸|해결)/.test(c);
     const burstCue=/^(?:막판|마지막|아직|아직도|오늘은|오늘도|오늘드디어|어제보다|지난번보다|전보다|결국|갑자기|생각보다|하나(?:는)?|자리|사람|길|바람|비|눈|배터리|앱|집에서|밤에|디저트|반찬|걔가|아빠는|엄마는|필요한건|타고싶던건|결말|방은)/.test(c);
     const rhetoricalBridgeQuestion=/(?:왜이렇게|왜이리|왜이래).*(?:많|힘들|힘드|피곤|졸리|늦|귀찮|짜증|별로|답답)/.test(c);
@@ -1046,6 +1079,15 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       ["schedule",/(약속|일정|내일|주말|모레|다음주|예약|시간표|계획)/]
     ];
     let topic="";for(const [name,rx] of topicDefs){if(rx.test(c)){topic=name;break;}}
+    if(!topic&&(frame.desire||frame.unfulfilled)){
+      if(/(?:먹|마시)/.test(c))topic="food";
+      else if(/(?:가고|못가|안가)/.test(c))topic="outing";
+      else if(/(?:보고|못보|안보)/.test(c))topic="media";
+      else if(/(?:사고|못사|안사)/.test(c))topic="shopping";
+      else if(/(?:자고|못자|안자|쉬고|못쉬)/.test(c))topic="sleep";
+      else if(/(?:운동|뛰|달리)/.test(c))topic="exercise";
+      else topic="general";
+    }
     if(!topic)return "";
     const stateDefs=[
       ["relieved",/(다행|드디어|겨우|해결|풀렸|찾았|도착했|무사히|괜찮아졌|살았다|끝나서좋)/],
@@ -1066,8 +1108,34 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       ["new",/(샀어|받았어|생겼어|왔어|도착했어|선물받|새로)/],
       ["plain",/(했어|갔어|왔어|봤어|먹었어|놀았어|다녀왔어|있었어|였어|함$|봄$|감$|옴$)/]
     ];
-    let stateName="";for(const [name,rx] of stateDefs){if(rx.test(c)){stateName=name;break;}}
+    let stateName=frame.unfulfilled?"unfulfilled":frame.desire?"want":"";for(const [name,rx] of stateDefs){if(!stateName&&rx.test(c)){stateName=name;break;}}
     if(!stateName)return "";
+    if(stateName==="want"){
+      const rows={
+        food:["오 지금 먹고 싶은 게 있구나 ㅋㅋ 아직 먹은 건 아니고 딱 땡기는 상태네.","아 먹고 싶은 게 생겼네 ㅋㅋ 생각나면 계속 당기지.","오, 지금은 먹는 쪽으로 마음이 확 갔네."],
+        game:["오 지금 게임하고 싶은 거구나 ㅋㅋ","아 한 판 땡기는 상태네 ㅋㅋ","오, 지금은 게임 쪽으로 마음이 가네."],
+        media:["오 지금 그거 보고 싶은 거구나.","아 아직 본 건 아니고 보고 싶은 상태네 ㅋㅋ","오, 지금은 볼 게 하나 떠오른 거네."],
+        outing:["오 지금 어디 좀 가고 싶은 거구나.","아 아직 간 건 아니고 나가고 싶은 마음이 있네.","오, 지금은 밖에 좀 나가고 싶은 쪽이구나."],
+        sleep:["아 지금 자고 싶은 거구나 ㅋㅋ 피곤한가 보네.","오 지금은 잠이나 휴식이 제일 땡기는 상태네.","아, 좀 쉬고 싶은 마음이 확 드는구나."],
+        shopping:["오 지금 사고 싶은 게 있구나.","아 아직 산 건 아니고 갖고 싶은 상태네.","오, 지금은 그 물건이 좀 끌리는구나."],
+        hobby:["오 지금 그거 해보고 싶은 거구나.","아 아직 한 건 아니고 해보고 싶은 상태네.","오, 지금은 취미 쪽으로 마음이 가네."],
+        exercise:["오 지금 운동하고 싶은 쪽이구나.","아 아직 한 건 아니고 몸 좀 움직이고 싶은 거네.","오, 지금은 운동 생각이 나는구나."]
+      };
+      return chooseFreshReply(`everyday.want.${topic}`,rows[topic]||["오, 지금 그걸 하고 싶은 거구나.","아 아직 한 건 아니고 하고 싶은 상태네.","오, 지금은 그쪽이 좀 끌리는구나."]);
+    }
+    if(stateName==="unfulfilled"){
+      const rows={
+        food:["아 아직 못 먹은 거구나 ㅋㅋ 그러면 더 생각나겠다.","오 아직 먹기 전이네. 먹고 싶은 마음은 그대로고 ㅋㅋ","아, 아직 못 먹었구나. 그럼 더 땡길 만하지."],
+        game:["아 아직 못 한 거구나. 하고 싶었는데 타이밍이 안 났네.","오 아직 시작 전이네.","아, 하려고 했는데 아직 못 한 상태구나."],
+        media:["아 아직 못 본 거구나. 그래서 더 궁금하겠네.","오 아직 보기 전이네 ㅋㅋ","아, 보고 싶었는데 아직 못 본 상태구나."],
+        outing:["아 아직 못 간 거구나. 가고 싶은 마음은 남아 있네.","오 아직 가기 전이네.","아, 가고 싶었는데 아직 못 갔구나."],
+        shopping:["아 아직 못 산 거구나. 계속 눈에 밟히겠네 ㅋㅋ","오 아직 구매한 건 아니네.","아, 사고 싶었는데 아직 못 산 상태구나."],
+        study:["아 아직 못 끝낸 거구나. 남아 있으니 계속 신경 쓰이겠다.","오 아직 마무리 전이네.","아, 하려고 했는데 아직 못 한 상태구나."],
+        hobby:["아 아직 못 해본 거구나. 하고 싶은 마음은 남아 있네.","오 아직 시작 전이네.","아, 해보고 싶었는데 아직 못 했구나."],
+        exercise:["아 아직 운동 못 한 거구나. 하려던 마음은 있었네.","오 아직 시작 전이네.","아, 하려고 했는데 아직 못 한 상태구나."]
+      };
+      return chooseFreshReply(`everyday.unfulfilled.${topic}`,rows[topic]||["아 아직 못 한 거구나.","오 아직 끝난 건 아니네.","아, 하려고 했는데 아직 못 한 상태구나."]);
+    }
     const base={
       relieved:["아 다행이다. 그거 해결되니까 마음 좀 놓였겠다.","오 다행이네 ㅋㅋ 계속 걸리던 게 풀리면 갑자기 편해지지.","드디어 됐네. 그동안 신경 쓰인 만큼 더 시원하겠다.","오, 결국 잘 넘어갔네. 이제 그건 좀 내려놔도 되겠다."],
       finished:["오 끝냈네 ㅋㅋ 시작하기 전보다 지금이 훨씬 편하겠다.","좋네. 할 일 하나 제대로 치웠다.","오 수고했네. 끝내고 나면 괜히 숨통 트이지.","드디어 마무리했구나. 이제 좀 다른 거 해도 마음 편하겠다."],
@@ -1165,7 +1233,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   // candidates still arbitrate after this local answer, so broad defaults never
   // replace learned conversation data.
   function diversifyEverydayAnswer(answer,frame,source){
-    if(!answer||source!=="local-everyday"||!frame||frame.question||frame.searchCue||frame.knowledgeCue||frame.decisionCue)return answer;
+    if(!answer||source!=="local-everyday"||!frame||frame.question||frame.searchCue||frame.knowledgeCue||frame.decisionCue||frame.desire||frame.unfulfilled)return answer;
     const c=frame.c||"";if(!c)return answer;
     const topicDefs=[
       ["school",/(학교|학원|수업|교실|쌤|선생님|급식|쉬는시간|등교|하교|반친구|체육시간)/],
@@ -1699,6 +1767,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(strategy==="ack"){
       if(frame.event&&frame.affect==="positive")add("ack.event.pos",["오, 잘됐네 ㅋㅋ","그건 좀 뿌듯했겠다.","오 좋았겠다 ㅋㅋ"]);
       else if(frame.event&&frame.affect==="negative")add("ack.event.neg",["아 그건 좀 힘들었겠다.","아이고, 생각대로 안 됐구나.","그건 기분 좀 상했겠다."]);
+      else if(frame.desire)add("ack.desire",["오, 지금 그걸 하고 싶은 거구나.","아 아직 한 건 아니고 하고 싶은 상태네.","오, 지금은 그쪽이 좀 끌리는구나."]);
+      else if(frame.unfulfilled)add("ack.unfulfilled",["아 아직 못 한 거구나.","오 아직 끝난 건 아니네.","아, 하려고 했는데 아직 못 한 상태구나."]);
       else if(frame.plan)add("ack.plan",["오, 그렇게 하기로 했구나.","좋네 ㅋㅋ 다음 계획까지 잡았네.","오케이. 다음엔 그걸 해보는 거구나."]);
       else if(frame.preference)add("ack.pref",frame.affect==="negative"?["아, 그건 취향에 안 맞는구나.","오, 넌 그쪽은 별로구나."]:["오 그거 좋아하는구나 ㅋㅋ","그쪽 취향이구나.","오, 그건 기억해둘 만하네."]);
       else if(frame.topic&&frame.text.length>8)add("ack.topic",[`아, ${frame.topic} 얘기구나.`,`응, ${frame.topic} 얘기였구나.`]);
@@ -1722,6 +1792,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       }
       else if(frame.act==="question"&&!frame.knowledgeCue)add("direct.question",s.lastStatement?["지금까지 나온 얘기 기준으로는 일단 그렇게 봐도 돼. 더 필요한 게 생기면 그때 같이 보면 되고.","앞에서 말한 흐름만 보면 그쪽으로 생각해도 괜찮아."]:["지금 질문만으로는 대상을 딱 잡기 어렵네. 누구나 무엇 얘기인지 붙여주면 바로 답할게.","어떤 대상 얘기인지 한 단어만 붙여주면 바로 답할 수 있어."]);
       else if(frame.event&&frame.topic)add("direct.event",frame.affect==="positive"?[`${frame.topic} 쪽은 결과가 괜찮았던 거네 ㅋㅋ`,`오, ${frame.topic} 얘기는 잘 풀렸구나.`]:frame.affect==="negative"?[`${frame.topic} 때문에 꽤 신경 쓰였겠네.`,`아, ${frame.topic} 쪽에서 일이 꼬였구나.`]:[`${frame.topic}에서 그런 일이 있었구나.`,`아, ${frame.topic} 얘기였구나.`]);
+      else if(frame.desire)add("direct.desire",["오, 아직 한 건 아니고 지금 하고 싶은 상태네.","아 지금 그쪽이 좀 끌리는 거구나."]);
+      else if(frame.unfulfilled)add("direct.unfulfilled",["아 아직 못 한 거구나.","오 아직 끝난 건 아니네."]);
       else if(frame.plan&&frame.topic)add("direct.plan",[`그럼 다음엔 ${frame.topic} 쪽으로 해보려는 거네.`,`오케이, ${frame.topic} 계획까지 잡아둔 거구나.`]);
       else if(frame.preference&&frame.topic)add("direct.preference",frame.affect==="negative"?[`${frame.topic} 쪽은 취향이 아닌 거네.`]:[`${frame.topic} 쪽을 좋아하는구나. 그건 기억해둘게.`]);
       else if(frame.topic&&frame.text.length>8&&frame.text.length<=24)add("direct.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 그 뒤엔 좀 괜찮았어?","오, 그러고 있었구나 ㅋㅋ"]);
@@ -1895,7 +1967,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
   function conversationalPenalty(frame,c){
     let penalty=0;const text=String(c.text||""),shape=normalizedReplyShape(text),recent=recentAssistantTurns(5),q=questionPressure(),qStreak=recentQuestionStreak();
-    const shortPlain=!frame.question&&!frame.event&&!frame.plan&&!frame.preference&&frame.affect==="neutral"&&frame.text.length<=12;
+    const shortPlain=!frame.question&&!frame.event&&!frame.desire&&!frame.unfulfilled&&!frame.plan&&!frame.preference&&frame.affect==="neutral"&&frame.text.length<=12;
     if(recent.some(v=>normalizedReplyShape(v.text||"")===shape))penalty+=70;
     if(recent.some(v=>{const a=normalizedReplyShape(v.text||""),b=shape;return a&&b&&a.length>10&&b.length>10&&(a.includes(b)||b.includes(a));}))penalty+=24;
     if(c.question&&qStreak>=1&&!frame.question)penalty+=18*qStreak;
@@ -1947,7 +2019,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(!(gateSource.startsWith("local")||gateSource==="learned-human")||source==="local-utility"||source==="local-style")return out;
     const recent=recentAssistantTurns(5),shape=normalizedReplyShape(out),qStreak=recentQuestionStreak();
     const repeated=recent.some(v=>normalizedReplyShape(v.text||"")===shape);
-    const neutralShort=!frame.question&&!frame.event&&!frame.plan&&!frame.preference&&frame.affect==="neutral"&&frame.text.length<=12;
+    const neutralShort=!frame.question&&!frame.event&&!frame.desire&&!frame.unfulfilled&&!frame.plan&&!frame.preference&&frame.affect==="neutral"&&frame.text.length<=12;
     const intrusive=/어떤 느낌|어떻게 느꼈|기분이 어땠|왜 그렇게 생각했|제일 힘들었/.test(out);
     if(!frame.question&&/[?？]$/.test(out)&&(neutralShort||qStreak>=2||intrusive)){
       const pool=frame.reaction?[]:frame.event?["오, 그런 일이 있었구나.","아, 그랬구나.","오 그렇구나 ㅋㅋ"]:frame.plan?["오, 그렇게 해보려는 거구나.","좋네. 계획은 잡혀 있네."]:frame.preference?["오, 그쪽 취향이구나.","아, 그건 취향이 확실하네."]:["응, 알겠어.","오 그렇구나.","응응, 무슨 말인지는 알겠어."];
@@ -2389,8 +2461,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
     const manner=mannerQuestion(text)?mannerAdviceText():null;
     const memQEarly=memoryQuestion(text),memAnswerEarly=memQEarly?memoryAnswer(memQEarly):"";
-    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=compositionalEverydayReply(frame),broadEveryday=broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
+    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
 

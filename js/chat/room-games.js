@@ -27,7 +27,7 @@ MiniTalk.Chat.RoomGames=(()=>{
     doctor:"밤마다 한 명을 치료해 탈락을 막을 수 있어요."
   };
   const phaseText=phase=>phase==="night"?"밤":phase==="day"?"낮 · 토론/투표":"게임 종료";
-  const MAFIA_TIMING={roleReveal:15000,night:30000,discussion:45000,vote:30000};
+  const MAFIA_TIMING={roleReveal:3000,night:15000,discussion:20000,vote:15000};
   const INVITE_HOST_ALONE_TIMEOUT=10*60*1000;
   function phaseTiming(phase,{initial=false,now=Date.now()}={}){
     if(phase==="night"){
@@ -437,37 +437,19 @@ MiniTalk.Chat.RoomGames=(()=>{
   }
   async function requestInviteDecline(roomId,message){const invite=message.game,me=String(currentUser().user_id||"");if(inviteFinalMessage(invite.id))return;const saved=await sendGame(roomId,{text:"[게임 초대 거절]",game:{kind:"game-invite-decline",id:invite.id,userId:me,declinedAt:Date.now()}});playGameSfx("vote")}
   function inviteCard(roomId,message){
-    const U=D(),g=message.game,me=String(currentUser().user_id||""),isHost=me===String(g.hostId),isInvited=(g.invited||[]).some(p=>String(p.user_id)===me),canOpenJoin=!isHost&&g.openJoin!==false,declined=inviteDeclinedIds(g.id),slot=inviteSlotFor(g.id,me),people=inviteParticipants(g),final=inviteFinalMessage(g.id),gameLabel=g.gameType==="ladder"?"사다리타기":g.gameType==="chess"?"체스":"마피아 게임",icon=g.gameType==="ladder"?"🪜":g.gameType==="chess"?"♟️":"🕵️",card=U.el("section",{class:`room-game-card room-game-invite-card room-game-invite-compact ${g.gameType}`});
-    const main=U.el("div",{class:"room-game-invite-compact-main"},[
-      U.el("span",{class:"room-game-invite-compact-icon","aria-hidden":"true",text:icon}),
-      U.el("div",{class:"room-game-invite-compact-copy"},[
-        U.el("strong",{text:gameLabel}),
-        U.el("small",{text:`${people.length}/${Number(g.maxPlayers)||12}명`})
-      ])
-    ]);
-    card.append(main);
-    if(final)return card;
+    const U=D(),g=message.game,me=String(currentUser().user_id||""),isHost=me===String(g.hostId),isInvited=(g.invited||[]).some(p=>String(p.user_id)===me),canOpenJoin=!isHost&&g.openJoin!==false,slots=inviteAcceptedSlots(g.id),acceptedIds=new Set(slots.map(m=>String(m.game.userId))),declined=inviteDeclinedIds(g.id),slot=inviteSlotFor(g.id,me),people=inviteParticipants(g),final=inviteFinalMessage(g.id),gameLabel=g.gameType==="ladder"?"사다리타기":g.gameType==="chess"?"체스":"마피아 게임",card=U.el("section",{class:`room-game-card room-game-invite-card ${g.gameType}`});
+    card.append(U.el("div",{class:"room-game-head"},[U.el("div",{class:"room-game-head-copy"},[U.el("strong",{text:`${g.gameType==="ladder"?"🪜":g.gameType==="chess"?"♟️":"🕵️"} ${gameLabel} 초대`}),U.el("small",{text:`${g.host?.nickname||g.hostNickname||"방장"} 님이 게임에 초대했어요.`})]),U.el("span",{class:"room-game-badge",text:"INVITE"})]));
+    card.append(U.el("div",{class:"room-game-pills"},[U.el("span",{class:"room-game-pill",text:`참가 ${people.length}/${g.maxPlayers||12}`}),U.el("span",{class:"room-game-pill",text:`초대 ${(g.invited||[]).length}명`}),U.el("span",{class:"room-game-pill",text:"수락 순서 우선"})]));
+    const names=U.el("div",{class:"room-game-invite-people"});people.forEach((p,i)=>names.append(U.el("span",{class:"room-game-invite-person"},[U.el("b",{text:p.nickname}),U.el("small",{text:i===0?"방장":"참가 확정"})])));card.append(names);
+    if(final){const included=final.game?.participants?.some?.(p=>String(p.user_id)===me),cancelled=final.game?.kind==="game-invite-cancelled",text=cancelled?"참가 인원이 부족해 초대가 종료됐어요.":included?"참가가 확정되어 게임이 시작됐어요.":isInvited?"게임이 시작되어 더 이상 참가할 수 없어요.":"게임이 이미 시작됐어요.";card.append(U.el("p",{class:`mafia-event-text ${included?"":"invite-full"}`,text}));return card}
     const pendingAccept=(isInvited||canOpenJoin)&&!slot&&!declined.has(me)&&Boolean(latest(g.id,"game-invite-accept",m=>String(m.game.userId)===me));
-    if((isInvited||canOpenJoin)&&!slot&&!declined.has(me)&&!pendingAccept){
-      const accept=U.el("button",{class:"button primary compact-button room-game-invite-compact-action",type:"button",text:"참가"});
-      accept.onclick=async()=>{accept.disabled=true;try{await requestInviteAccept(roomId,message)}catch(e){MiniTalk.UI.Shell.toast(e.message||"참가 요청에 실패했어요.");accept.disabled=false}};
-      card.append(accept)
-    }else if(pendingAccept){
-      card.append(U.el("button",{class:"button secondary compact-button room-game-invite-compact-action",type:"button",text:"확인 중",disabled:true}))
-    }else if(slot?.game?.status==="accepted"){
-      const leave=U.el("button",{class:"button secondary compact-button room-game-invite-compact-action",type:"button",text:"참가 취소"});
-      leave.onclick=async()=>{leave.disabled=true;try{await sendGame(roomId,{text:"[게임 참가 취소]",game:{kind:"game-invite-leave",id:g.id,userId:me,leftAt:Date.now()}});playGameSfx("vote")}catch(e){MiniTalk.UI.Shell.toast(e.message||"참가 취소에 실패했어요.");leave.disabled=false}};
-      card.append(leave)
-    }else if(slot?.game?.status==="full"){
-      card.append(U.el("button",{class:"button secondary compact-button room-game-invite-compact-action",type:"button",text:"마감",disabled:true}))
-    }else if(declined.has(me)){
-      card.append(U.el("button",{class:"button secondary compact-button room-game-invite-compact-action",type:"button",text:"거절됨",disabled:true}))
-    }else if(isHost){
-      const min=Number(g.minPlayers)||2,start=U.el("button",{class:"button primary compact-button room-game-invite-compact-action",type:"button",text:"시작"});
-      start.disabled=people.length<min;start.title=people.length<min?`최소 ${min}명 필요`:"현재 인원으로 시작";
-      start.onclick=async()=>{start.disabled=true;try{await maybeFinalizeInviteAsHost(roomId,g.id,{force:true})}catch(e){MiniTalk.UI.Shell.toast(e.message||"게임을 시작하지 못했어요.");start.disabled=people.length<min}};
-      card.append(start)
-    }
+    if((isInvited||canOpenJoin)&&!slot&&!declined.has(me)&&!pendingAccept){const actions=U.el("div",{class:"room-game-invite-actions"}),accept=U.el("button",{class:"button primary compact-button",type:"button",text:"참가"}),decline=isInvited?U.el("button",{class:"button secondary compact-button",type:"button",text:"거절"}):null;accept.onclick=async()=>{accept.disabled=true;if(decline)decline.disabled=true;try{await requestInviteAccept(roomId,message)}catch(e){MiniTalk.UI.Shell.toast(e.message||"참가 요청에 실패했어요.");accept.disabled=false;if(decline)decline.disabled=false}};if(decline)decline.onclick=async()=>{accept.disabled=true;decline.disabled=true;try{await requestInviteDecline(roomId,message)}catch(e){MiniTalk.UI.Shell.toast(e.message||"거절 처리에 실패했어요.");accept.disabled=false;decline.disabled=false}};actions.append(accept);if(decline)actions.append(decline);card.append(U.el("p",{class:"mafia-event-text",text:isInvited?"참가를 누르면 정원 안에서 수락된 순서대로 참가가 확정돼요.":"게임 시작 전까지 자유롭게 참가할 수 있어요."}),actions)}
+    else if(pendingAccept)card.append(U.el("p",{class:"mafia-event-text",text:"참가 요청 확인 중… 방장이 수락 순서대로 자리를 확정하고 있어요."}));
+    else if(slot?.game?.status==="accepted"){const leave=U.el("button",{class:"button secondary compact-button",type:"button",text:"참가 취소"});leave.onclick=async()=>{leave.disabled=true;await sendGame(roomId,{text:"[게임 참가 취소]",game:{kind:"game-invite-leave",id:g.id,userId:me,leftAt:Date.now()}});playGameSfx("vote")};card.append(U.el("p",{class:"mafia-event-text",text:"참가 확정 · 방장이 시작하면 바로 진행돼요."}),leave)}
+    else if(slot?.game?.status==="full")card.append(U.el("p",{class:"mafia-event-text invite-full",text:"인원 초과로 참가할 수 없어요."}));
+    else if(declined.has(me))card.append(U.el("p",{class:"mafia-event-text",text:"초대를 거절했어요."}));
+    else if(isHost){const min=Number(g.minPlayers)||2,start=U.el("button",{class:"button primary compact-button",type:"button",text:people.length>=min?`현재 ${people.length}명으로 시작`:`최소 ${min}명 필요`});start.disabled=people.length<min;start.onclick=async()=>{start.disabled=true;try{await maybeFinalizeInviteAsHost(roomId,g.id,{force:true})}catch(e){MiniTalk.UI.Shell.toast(e.message||"게임을 시작하지 못했어요.");start.disabled=people.length<min}};card.append(U.el("p",{class:"mafia-event-text",text:`초대한 사람이 모두 들어오지 않아도 최소 인원이 모이면 바로 시작할 수 있어요.`}),U.el("div",{class:"room-game-invite-actions"},[start]))}
+    else card.append(U.el("p",{class:"mafia-event-text",text:"게임 시작 전까지 대화방 멤버는 누구나 참가할 수 있어요."}));
     return card
   }
 
@@ -725,6 +707,7 @@ MiniTalk.Chat.RoomGames=(()=>{
       label.textContent=windowName==="role"?`역할 확인 ${formatRemain(remain)}`:windowName==="night"?`밤 행동 ${formatRemain(remain)}`:windowName==="discussion"?`토론 ${formatRemain(remain)}`:windowName==="vote"?`투표 ${formatRemain(remain)}`:"종료";
       fill.style.width=`${Math.max(0,Math.min(100,total?remain/total*100:0))}%`;
       card.querySelectorAll('[data-phase-gate="night"]').forEach(node=>node.disabled=windowName!=="night");
+      card.querySelectorAll('[data-mafia-night-action="1"]').forEach(node=>node.disabled=!(windowName==="night"||state.revealedRoles.has(rolePanel?.dataset?.mafiaRolePanel||"")));
       card.querySelectorAll('[data-phase-gate="vote"]').forEach(node=>node.disabled=windowName!=="vote");
       if(windowName!=="role"&&rolePanel&&roleValue&&!state.revealedRoles.has(rolePanel.dataset.mafiaRolePanel)){state.revealedRoles.add(rolePanel.dataset.mafiaRolePanel);mountRolePanel(rolePanel,roleValue);playGameSfx("reveal");try{rolePanel.__mafiaOnReveal?.()}catch{}}
       if(remain<=0&&g.phase!=="ended"&&lobby.hostId===me&&!state.autoResolved.has(key)){
@@ -756,17 +739,17 @@ MiniTalk.Chat.RoomGames=(()=>{
     if(phase==="night"&&living.includes(me)&&roleRevealed){
       if(roleValue==="mafia"&&!latest(gameId,"mafia-night-action",m=>m.user_id===me&&m.game.round===phaseMsg.game.round)){
         const targets=lobby.game.participants.filter(p=>living.includes(p.user_id)&&p.user_id!==me),sel=U.el("select",{class:"room-game-select"});targets.forEach(p=>sel.append(U.el("option",{value:p.user_id,text:p.nickname})));
-        const kill=U.el("button",{class:"button danger compact-button",type:"button",text:"밤의 대상 선택","data-phase-gate":"night"});kill.disabled=phaseWindow(phaseMsg.game)!=="night";kill.onclick=async()=>{kill.disabled=true;try{const cipher=await encryptFor(lobby.game.hostPublic,{target:sel.value,round:phaseMsg.game.round});await sendGame(roomId,{text:"[밤 행동 완료]",game:{kind:"mafia-night-action",id:gameId,round:phaseMsg.game.round,cipher}});playGameSfx("action")}catch(e){MiniTalk.UI.Shell.toast(e.message);kill.disabled=false}};
+        const kill=U.el("button",{class:"button danger compact-button",type:"button",text:"밤의 대상 선택","data-mafia-night-action":"1"});kill.disabled=false;kill.onclick=async()=>{kill.disabled=true;try{const cipher=await encryptFor(lobby.game.hostPublic,{target:sel.value,round:phaseMsg.game.round});await sendGame(roomId,{text:"[밤 행동 완료]",game:{kind:"mafia-night-action",id:gameId,round:phaseMsg.game.round,cipher}});playGameSfx("action")}catch(e){MiniTalk.UI.Shell.toast(e.message);kill.disabled=false}};
         card.append(U.el("div",{class:"mafia-action-panel"},[U.el("small",{text:"마피아만 보이는 비밀 행동"}),sel,kill]))
       }
       if(roleValue==="doctor"&&!latest(gameId,"mafia-doctor-action",m=>m.user_id===me&&m.game.round===phaseMsg.game.round)){
         const targets=lobby.game.participants.filter(p=>living.includes(p.user_id)),sel=U.el("select",{class:"room-game-select"});targets.forEach(p=>sel.append(U.el("option",{value:p.user_id,text:p.nickname})));
-        const save=U.el("button",{class:"button primary compact-button",type:"button",text:"치료 대상 선택","data-phase-gate":"night"});save.disabled=phaseWindow(phaseMsg.game)!=="night";save.onclick=async()=>{save.disabled=true;try{const cipher=await encryptFor(lobby.game.hostPublic,{target:sel.value,round:phaseMsg.game.round});await sendGame(roomId,{text:"[의사 행동 완료]",game:{kind:"mafia-doctor-action",id:gameId,round:phaseMsg.game.round,cipher}});playGameSfx("action")}catch(e){MiniTalk.UI.Shell.toast(e.message);save.disabled=false}};
+        const save=U.el("button",{class:"button primary compact-button",type:"button",text:"치료 대상 선택","data-mafia-night-action":"1"});save.disabled=false;save.onclick=async()=>{save.disabled=true;try{const cipher=await encryptFor(lobby.game.hostPublic,{target:sel.value,round:phaseMsg.game.round});await sendGame(roomId,{text:"[의사 행동 완료]",game:{kind:"mafia-doctor-action",id:gameId,round:phaseMsg.game.round,cipher}});playGameSfx("action")}catch(e){MiniTalk.UI.Shell.toast(e.message);save.disabled=false}};
         card.append(U.el("div",{class:"mafia-action-panel"},[U.el("small",{text:"의사는 한 명을 살릴 수 있어요. 자신도 가능해요."}),sel,save]))
       }
       if(roleValue==="police"&&!latest(gameId,"mafia-police-action",m=>m.user_id===me&&m.game.round===phaseMsg.game.round)){
         const targets=lobby.game.participants.filter(p=>living.includes(p.user_id)&&p.user_id!==me),sel=U.el("select",{class:"room-game-select"});targets.forEach(p=>sel.append(U.el("option",{value:p.user_id,text:p.nickname})));
-        const inspect=U.el("button",{class:"button secondary compact-button",type:"button",text:"조사 대상 선택","data-phase-gate":"night"});inspect.disabled=phaseWindow(phaseMsg.game)!=="night";inspect.onclick=async()=>{inspect.disabled=true;try{const cipher=await encryptFor(lobby.game.hostPublic,{target:sel.value,round:phaseMsg.game.round});await sendGame(roomId,{text:"[경찰 행동 완료]",game:{kind:"mafia-police-action",id:gameId,round:phaseMsg.game.round,cipher}});playGameSfx("action")}catch(e){MiniTalk.UI.Shell.toast(e.message);inspect.disabled=false}};
+        const inspect=U.el("button",{class:"button secondary compact-button",type:"button",text:"조사 대상 선택","data-mafia-night-action":"1"});inspect.disabled=false;inspect.onclick=async()=>{inspect.disabled=true;try{const cipher=await encryptFor(lobby.game.hostPublic,{target:sel.value,round:phaseMsg.game.round});await sendGame(roomId,{text:"[경찰 행동 완료]",game:{kind:"mafia-police-action",id:gameId,round:phaseMsg.game.round,cipher}});playGameSfx("action")}catch(e){MiniTalk.UI.Shell.toast(e.message);inspect.disabled=false}};
         card.append(U.el("div",{class:"mafia-action-panel"},[U.el("small",{text:"경찰은 한 명을 조사해 마피아 여부를 확인해요."}),sel,inspect]))
       }
     }

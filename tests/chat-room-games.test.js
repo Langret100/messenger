@@ -20,7 +20,7 @@ assert(css.includes('@keyframes mafia-card-shuffle-left')&&css.includes('@keyfra
 assert(realtime.includes('game:payload.game&&typeof payload.game==="object"?payload.game:null'),'realtime adapter drops game metadata');
 assert(chats.includes('addAction("♟","게임"'),'composer game action missing');
 assert(chats.includes('MiniTalk.Chat.RoomGames?.renderMessage?.(message,message.roomId)'),'game renderer missing');
-assert(index.includes('js/chat/room-games.js?v=26'),'room-games script not loaded');
+assert(index.includes('js/chat/room-games.js?v=27'),'room-games script not loaded');
 
 assert(source.includes('svg.setAttribute("preserveAspectRatio","xMidYMid meet")'),'ladder must preserve its vertical geometry');
 assert(source.includes('"data-phase-gate":"night"'),'host night control gate missing');
@@ -42,7 +42,7 @@ assert(source.includes('uniqueActors(mafiaVotes)<mafiaIds.length'),'night resolu
 assert(source.includes('uniqueActors(doctorActions)<doctorIds.length'),'night resolution does not wait for doctor action');
 assert(source.includes('uniqueActors(policeActions)<policeIds.length'),'night resolution does not wait for police action');
 assert(source.includes('마피아끼리 선택한 대상이 달라요'),'split mafia target guard missing');
-assert(source.includes('roleReveal:15000')&&source.includes('night:30000')&&source.includes('discussion:45000')&&source.includes('vote:30000'),'mafia timing policy missing');
+assert(source.includes('roleReveal:3000')&&source.includes('night:15000')&&source.includes('discussion:20000')&&source.includes('vote:15000'),'mafia timing policy missing');
 assert(source.includes('kind:"mafia-leave"')&&source.includes('kind:"mafia-player-left"'),'mafia leave flow missing');
 assert(source.includes('personal-win')&&source.includes('personal-lose'),'personal win/loss rendering missing');
 
@@ -96,9 +96,9 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(roleCounts(8))),{mafia:2,police
 assert.deepStrictEqual(JSON.parse(JSON.stringify(roleCounts(11))),{mafia:2,police:1,doctor:0,citizen:8},'11-player roles incorrect');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(roleCounts(12))),{mafia:2,police:1,doctor:1,citizen:8},'12-player roles incorrect');
 const t0=100000;
-assert.deepStrictEqual(JSON.parse(JSON.stringify(phaseTiming("night",{initial:true,now:t0}))),{startedAt:t0,actionStartsAt:t0+15000,deadline:t0+45000},'initial night timing incorrect');
-assert.deepStrictEqual(JSON.parse(JSON.stringify(phaseTiming("night",{now:t0}))),{startedAt:t0,actionStartsAt:t0,deadline:t0+30000},'night timing incorrect');
-assert.deepStrictEqual(JSON.parse(JSON.stringify(phaseTiming("day",{now:t0}))),{startedAt:t0,discussionEndsAt:t0+45000,deadline:t0+75000},'day timing incorrect');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(phaseTiming("night",{initial:true,now:t0}))),{startedAt:t0,actionStartsAt:t0+3000,deadline:t0+18000},'initial night timing incorrect');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(phaseTiming("night",{now:t0}))),{startedAt:t0,actionStartsAt:t0,deadline:t0+15000},'night timing incorrect');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(phaseTiming("day",{now:t0}))),{startedAt:t0,discussionEndsAt:t0+20000,deadline:t0+35000},'day timing incorrect');
 assert.strictEqual(winnerFor({roles:{m:'mafia',c:'citizen'},living:['c']}),'citizen','last mafia leave must produce citizen win');
 assert.strictEqual(winnerFor({roles:{m:'mafia',c:'citizen'},living:['m']}),'mafia','citizen-side leave causing parity must produce mafia win');
 assert.strictEqual(winnerFor({roles:{m:'mafia',c1:'citizen',c2:'citizen'},living:['m','c1','c2']}),null,'game should continue when no victory condition is met');
@@ -113,3 +113,5 @@ for(const n of [4,8,12]){
   assert(signatures.size>1,`${n}-player roles are not randomized across participants`);
 }
 console.log('CHAT_ROOM_GAMES_OK');
+
+assert(source.includes('data-mafia-night-action=\"1\"') && source.includes('kill.disabled=false') && source.includes('save.disabled=false') && source.includes('inspect.disabled=false'), 'revealed night roles must be actionable immediately');

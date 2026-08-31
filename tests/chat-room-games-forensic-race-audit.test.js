@@ -9,5 +9,5 @@ assert(src.includes('"host-left-before-start"')&&src.includes('"not-enough-befor
 assert(src.includes("function chessTerminal(gameId){const ends=allOf(gameId,'chess-end')"),'deterministic chess terminal selection missing');
 assert(src.includes("sort((a,b)=>String(a.id||'').localeCompare(String(b.id||'')))[0]"),'chess terminal selection still depends on receive order');
 assert(src.includes('if(!desktopGameMode()&&g.kind==="ladder")return ladderCard(g)'),'mobile ladder result must remain playable instead of collapsing immediately to terminal card');
-assert(index.includes('js/chat/room-games.js?v=26'),'room-games cache version stale');
+assert(index.includes('js/chat/room-games.js?v=27'),'room-games cache version stale');
 console.log('CHAT_ROOM_GAMES_FORENSIC_RACE_AUDIT_OK');

@@ -73,3 +73,13 @@
 .message-list .game-bubble .room-game-invite-card .room-game-invite-people{gap:4px}
 .message-list .game-bubble .room-game-invite-card .room-game-invite-person{padding:5px 7px}
 .message-list .game-bubble .room-game-invite-card .room-game-invite-actions .button,.message-list .game-bubble .room-game-invite-card>.button{min-height:30px;padding:5px 10px;font-size:9px}
+
+/* Ultra-compact invitation row: prevents chat horizontal overflow. */
+.message-list .game-bubble .room-game-invite-compact{box-sizing:border-box;width:min(244px,100%);max-width:100%;min-width:0;min-height:0;padding:7px 8px;display:flex;align-items:center;gap:7px;border-radius:12px;overflow:hidden}
+.message-list .game-bubble .room-game-invite-compact-main{display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 auto;overflow:hidden}
+.message-list .game-bubble .room-game-invite-compact-icon{display:grid;place-items:center;width:25px;height:25px;flex:0 0 25px;border-radius:8px;background:rgba(99,102,241,.09);font-size:13px}
+.message-list .game-bubble .room-game-invite-compact-copy{display:grid;gap:0;min-width:0;overflow:hidden}
+.message-list .game-bubble .room-game-invite-compact-copy strong{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:1.2}
+.message-list .game-bubble .room-game-invite-compact-copy small{font-size:8px;line-height:1.2;color:var(--muted);white-space:nowrap}
+.message-list .game-bubble .room-game-invite-compact-action{box-sizing:border-box;width:auto;max-width:76px;min-width:46px;min-height:27px;height:27px;margin:0;padding:0 9px;flex:0 0 auto;border-radius:9px;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.message-list .game-bubble{max-width:100%;min-width:0}

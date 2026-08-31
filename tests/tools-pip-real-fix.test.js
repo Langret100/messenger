@@ -1,0 +1,14 @@
+const fs=require('fs');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const drag=fs.readFileSync('js/ui/drag-scroll.js','utf8');
+const tools=fs.readFileSync('js/features/tools.js','utf8');
+const wm=fs.readFileSync('js/adapters/window-mode.js','utf8');
+const html=fs.readFileSync('index.html','utf8');
+ok(tools.includes('allowInteractive:".profile-summary,.modern-tool,.shortcut-row"'),'tools interactive drag allowance missing');
+ok(!tools.includes('documentMouseDrag:true'),'tools must use the same default pointer drag path as tasks');
+ok(drag.includes('doc.addEventListener("mousemove",move,{passive:false})'),'document mousemove drag path missing');
+ok(wm.includes('preferInitialWindowPlacement:true'),'PiP must prefer requested initial placement/size');
+ok(!wm.includes('pipWindow.resizeTo?.(')&&!wm.includes('resizeTo(PIP_BOUNDS.width'),'PiP must not resize after requestWindow');
+ok(wm.includes('body{visibility:hidden!important}')&&wm.includes('await copyStyles(doc)')&&wm.includes('boot.remove()'),'PiP single-paint boot guard missing');
+ok(html.includes('drag-scroll.js?v=11')&&html.includes('tools.js?v=64.5.15')&&html.includes('window-mode.js?v=64.5.40'),'v101 cache refs stale');
+console.log('V101_TOOLS_PIP_REAL_FIX_OK');

@@ -1,0 +1,13 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const tools=read('js/features/tools.js'),config=read('js/config.js'),links=read('js/features/links.js'),html=read('index.html');
+ok(tools.includes('{ id: "playground", icon: "↗", title: "온라인 놀이터", description: "친구와 온라인으로 놀기" }'),'main tools playground card mismatch');
+ok(tools.includes('playground: () => openOnlinePlayground()'),'main tools playground must use positioned popup action');
+ok(!tools.includes('{ id: "face-toy", icon:'),'face change card must not remain in main tools');
+ok(config.includes('{name:"페이스 체인지",tool:"face-toy"}'),'face change must be in related links');
+ok(!config.includes('{name:"온라인 놀이터",url:"https://langret100.github.io/multiroom-playground/"}'),'playground must not remain in related links');
+ok(tools.includes('openTool: open'),'tools feature must expose safe internal opener for related links');
+ok(links.includes('if(s.tool)')&&links.includes('MiniTalk.Features.Tools?.openTool?.(s.tool)'),'related links must open internal face-change tool through existing tool action');
+for(const ref of ['js/config.js?v=64.5.5','js/features/tools.js?v=64.5.17','js/features/links.js?v=4'])ok(html.includes(ref),`cache ref missing ${ref}`);
+console.log('TOOLS_PLAYGROUND_FACE_LINK_SWAP_OK');

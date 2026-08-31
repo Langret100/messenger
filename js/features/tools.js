@@ -9,7 +9,7 @@ MiniTalk.Features.Tools = (() => {
     { id: "tarot", icon: "✧", title: "오늘의 타로", description: "카드를 뽑아 보는 운세" },
     { id: "alarm", icon: "◉", title: "알람", description: "원하는 시간에 알림" },
     { id: "lookalike", icon: "?", title: "닮은 생물 찾기", description: "3·2·1 찍고 닮은 동식물 보기" },
-    { id: "face-toy", icon: "☺", title: "페이스 체인지", description: "찍고 바꾸고 크게 놀기" },
+    { id: "playground", icon: "↗", title: "온라인 놀이터", description: "친구와 온라인으로 놀기" },
     { id: "timetable", icon: "▦", title: "오늘의 시간표", description: "이미지로 함께 갱신" },
     { id: "lunch", icon: "☰", title: "오늘의 급식표", description: "TXT에서 오늘 급식 보기" }
   ];
@@ -22,6 +22,7 @@ MiniTalk.Features.Tools = (() => {
     timetable: () => MiniTalk.Tools.ClassInfo.openTimetable(),
     lunch: () => MiniTalk.Tools.ClassInfo.openLunch(),
     "face-toy": () => openCameraTool(MiniTalk.Tools.FaceToy, "페이스 체인지"),
+    playground: () => openOnlinePlayground(),
     lookalike: () => openCameraTool(MiniTalk.Tools.LookalikePlay, "닮은 생물 찾기")
   };
 
@@ -119,6 +120,54 @@ MiniTalk.Features.Tools = (() => {
     enforceCameraPopupBounds(popup, bounds);
     try { popup.focus(); } catch {}
   }
+
+  function externalGamePopupBounds(sourceView) {
+    const scr = sourceView.screen || {}, availLeft = Number(scr.availLeft) || 0, availTop = Number(scr.availTop) || 0;
+    const availWidth = Math.max(640, Number(scr.availWidth) || 1280), availHeight = Math.max(520, Number(scr.availHeight) || 800), gap = 42;
+    const messengerLeft = Number(sourceView.screenX ?? sourceView.screenLeft) || availLeft, messengerTop = Number(sourceView.screenY ?? sourceView.screenTop) || availTop;
+    const messengerW = Math.max(320, Number(sourceView.outerWidth) || Math.min(520, availWidth * .42)), messengerH = Math.max(420, Number(sourceView.outerHeight) || availHeight * .8);
+    const rightStart = Math.min(availLeft + availWidth, messengerLeft + messengerW + gap), rightSpace = Math.max(0, availLeft + availWidth - rightStart), leftSpace = Math.max(0, messengerLeft - gap - availLeft);
+    const bottomStart = Math.min(availTop + availHeight, messengerTop + messengerH + gap), bottomSpace = Math.max(0, availTop + availHeight - bottomStart), topSpace = Math.max(0, messengerTop - gap - availTop);
+    const desiredWidth = Math.min(1280, Math.max(760, Math.round(availWidth * .7))), desiredHeight = Math.min(900, Math.max(620, Math.round(availHeight * .88))), minSideWidth = Math.min(640, Math.max(500, Math.round(availWidth * .34)));
+    let width, height, left, top;
+    if (Math.max(rightSpace, leftSpace) >= minSideWidth) {
+      const useRight = rightSpace >= leftSpace, space = useRight ? rightSpace : leftSpace;
+      width = Math.min(desiredWidth, space); height = Math.min(desiredHeight, availHeight - 24); left = useRight ? rightStart : messengerLeft - gap - width;
+      top = Math.max(availTop + 8, Math.min(messengerTop, availTop + availHeight - height - 8));
+    } else if (Math.max(bottomSpace, topSpace) >= 440) {
+      const useBottom = bottomSpace >= topSpace; width = Math.min(desiredWidth, availWidth - 24); height = Math.min(desiredHeight, useBottom ? bottomSpace : topSpace);
+      left = Math.max(availLeft + 8, Math.min(messengerLeft, availLeft + availWidth - width - 8)); top = useBottom ? bottomStart : messengerTop - gap - height;
+    } else {
+      width = Math.min(Math.max(640, Math.round(availWidth * .60)), availWidth - 24); height = Math.min(desiredHeight, availHeight - 24);
+      left = (messengerLeft + messengerW / 2) <= (availLeft + availWidth / 2) ? availLeft + availWidth - width - 8 : availLeft + 8;
+      top = Math.max(availTop + 8, Math.min(messengerTop, availTop + availHeight - height - 8));
+    }
+    return { width: Math.round(Math.max(500, width)), height: Math.round(Math.max(540, height)), left: Math.round(left), top: Math.round(top) };
+  }
+
+  function openOnlinePlayground() {
+    const url = "https://langret100.github.io/multiroom-playground/";
+    if (mobileCameraTool()) {
+      try { window.open(url, "_blank", "noopener,noreferrer"); } catch {}
+      return;
+    }
+    const sourceView = MiniTalk.UI.Dom.doc()?.defaultView || window;
+    const bounds = externalGamePopupBounds(sourceView);
+    const features = `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=yes,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`;
+    let popup = null;
+    try { popup = window.open("", "MoaruOnlinePlayground", features); } catch {}
+    if (!popup) {
+      try { window.open(url, "_blank", "noopener,noreferrer"); } catch {}
+      return;
+    }
+    const apply = () => { try { popup.resizeTo(bounds.width, bounds.height); popup.moveTo(bounds.left, bounds.top); } catch {} };
+    apply();
+    try { popup.opener = null; } catch {}
+    try { popup.location.replace(url); } catch { try { popup.location.href = url; } catch {} }
+    setTimeout(apply, 80); setTimeout(apply, 260);
+    try { popup.focus(); } catch {}
+  }
+
 
   function render(host) {
     if(activeDragList){MiniTalk.UI.DragScroll?.unbind?.(activeDragList);activeDragList=null}
@@ -228,7 +277,8 @@ MiniTalk.Features.Tools = (() => {
     openTarot: MiniTalk.Tools.TarotView.open,
     notifyIncoming: MiniTalk.Tools.Notifications.notifyIncoming,
     notifyRoomInvite: MiniTalk.Tools.Notifications.notifyRoomInvite,
-    notificationMode: MiniTalk.Tools.Notifications.mode
+    notificationMode: MiniTalk.Tools.Notifications.mode,
+    openTool: open
   };
 })();
 

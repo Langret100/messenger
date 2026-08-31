@@ -12,7 +12,7 @@ if(!realtime.includes('startProfileCollection(legacyProfilesRef,"legacy"')||!rea
 if(feed.includes('cloudSubscribe(STATE_PATH'))throw new Error('feed still subscribes to the entire feedState');
 for(const required of ['cloudSubscribeDelta(POSTS_PATH','TOTALS_PATH','VIDEO_LIMIT=700*1024','feed-fab','video-gated','leave:stopSub'])if(!feed.includes(required))throw new Error(`feed optimization missing: ${required}`);
 for(const removed of ['id: "notifications"','id: "timer"','id: "layout"'])if(tools.includes(removed))throw new Error(`removed tool still visible: ${removed}`);
-for(const required of ['오늘의 타로','알람','닮은 생물 찾기','페이스 체인지','오늘의 시간표','오늘의 급식표'])if(!tools.includes(required))throw new Error(`expected tool missing: ${required}`);
+for(const required of ['오늘의 타로','알람','닮은 생물 찾기','온라인 놀이터','오늘의 시간표','오늘의 급식표'])if(!tools.includes(required))throw new Error(`expected tool missing: ${required}`);
 if(friday.includes('평소에는 잠겨 있어요')||friday.includes('text:info.open?"시작":"잠김"'))throw new Error('old Friday mission lock copy/button remains');
 for(const required of ['friday-lock-overlay','주간 미션','80점 이상'])if(!friday.includes(required))throw new Error(`Friday mission polish missing: ${required}`);
 for(const required of ['.feed-fab','.feed-heart-total','.friday-lock-overlay','.video-gated'])if(!css.includes(required))throw new Error(`new UI style missing: ${required}`);

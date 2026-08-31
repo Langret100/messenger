@@ -20,14 +20,25 @@ MiniTalk.Features.Links=(()=>{
     const view=D.el("section",{class:"view utility-view view-enter links-view"});
     const list=D.el("div",{class:"card-list links-screen"});
     const grid=D.el("div",{class:"site-grid links-grid"});
-    MiniTalkConfig.sites.forEach(s=>grid.append(D.el("a",{
-      class:"site-link",
-      href:s.url,
-      target:"_blank",
-      rel:"noopener noreferrer",
-      text:s.name,
-      onclick:event=>openExternal(event,s.url)
-    })));
+    MiniTalkConfig.sites.forEach(s=>{
+      if(s.tool){
+        grid.append(D.el("button",{
+          class:"site-link",
+          type:"button",
+          text:s.name,
+          onclick:()=>MiniTalk.Features.Tools?.openTool?.(s.tool)
+        }));
+        return;
+      }
+      grid.append(D.el("a",{
+        class:"site-link",
+        href:s.url,
+        target:"_blank",
+        rel:"noopener noreferrer",
+        text:s.name,
+        onclick:event=>openExternal(event,s.url)
+      }));
+    });
     list.append(grid);
     view.append(list);
     host.replaceChildren(view);

@@ -25,7 +25,7 @@ ok(face.includes('velocity *= .91')&&face.includes('raf(step)'),'face JS should 
 ok(faceCss.includes('.face-toy-effects.dragging')&&faceCss.includes('scroll-snap-type:none'),'dragging should temporarily disable snap for smooth inertia');
 ok(face.includes('isSeparate: () => separateWindow')&&look.includes('isSeparate:()=>separateWindow'),'camera tools must expose separate-window state');
 ok(gameCss.includes('.game-library{overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:none')&&gameCss.includes('.game-library::-webkit-scrollbar'),'mini-game chooser scrollbar must be hidden while scrolling remains');
-ok(html.includes('face-toy.js?v=7')&&html.includes('lookalike-play.js?v=5')&&html.includes('tools.js?v=64.5.15'),'camera cache refs stale');
+ok(html.includes('face-toy.js?v=7')&&html.includes('lookalike-play.js?v=5')&&html.includes('tools.js?v=64.5.17'),'camera cache refs stale');
 
 // 관성 드래그 런타임: 손을 뗀 뒤에도 짧게 이동하고 매 프레임 감속해야 한다.
 const sandbox={console,Date,window:{},navigator:{},Image:function(){},FileReader:function(){},URL:{},crypto:{},MiniTalk:{Tools:{},UI:{Dom:{}},Store:{get:()=>({})},Realtime:{}}};

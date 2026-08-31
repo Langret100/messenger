@@ -230,3 +230,11 @@
   }
   .delivery-order-dust { animation: none !important; opacity: 0 !important; }
 }
+
+/* 선택 재고/품절 */
+.shop-product-card { position: relative; }
+.shop-product-card.is-sold-out { opacity: .62; cursor: not-allowed; filter: grayscale(.18); transform: none !important; }
+.shop-product-card.is-sold-out::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, transparent 42%, rgba(120,128,145,.08) 42%, rgba(120,128,145,.08) 58%, transparent 58%); pointer-events: none; }
+.shop-stock-label { color: var(--accent); font-weight: 800 !important; -webkit-line-clamp: 1 !important; }
+.shop-stock-label.sold-out { color: #c14f58; }
+.shop-sold-out-badge { align-self: end; justify-self: start; padding: 4px 8px; border-radius: 999px; background: rgba(193,79,88,.12); color: #b23f49; font-size: 11px; font-weight: 900; }

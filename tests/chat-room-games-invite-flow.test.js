@@ -34,6 +34,16 @@ async function makePub(){const kp=await webcrypto.subtle.generateKey({name:'RSA-
   await accept(inv2.id,'u2');assert(!latest('ladder',inv2.id),'must wait while another invited player has not responded');
   await accept(inv2.id,'u3');assert(latest('ladder',inv2.id),'must auto-start when all invited players accept');
 
+  // Host can start before every invitee responds once the game's valid minimum is present.
+  const manual={kind:'game-invite',id:'manualLadder',gameType:'ladder',hostId:'u1',host:{...users.u1},invited:[users.u2,users.u3,users.u4],minPlayers:2,maxPlayers:12,resultLabels:['당첨','꽝'],openJoin:true};emitAs('u1',{game:manual});
+  await accept(manual.id,'u2');assert(!latest('ladder',manual.id),'manual ladder must stay pending while unresponded invitees remain');
+  current=users.u1;await Q.maybeFinalizeInviteAsHost('r1',manual.id,{force:true});const manualStarted=latest('ladder',manual.id);assert(manualStarted&&manualStarted.game.participants.length===2,'host manual start must use current accepted participants only');
+
+  // A room member who was not invited can join before start.
+  const open={kind:'game-invite',id:'openJoin',gameType:'ladder',hostId:'u1',host:{...users.u1},invited:[users.u2,users.u3],minPlayers:2,maxPlayers:12,resultLabels:[],openJoin:true};emitAs('u1',{game:open});
+  await accept(open.id,'u5');const openSlot=Q.inviteSlotFor(open.id,'u5');assert(openSlot&&openSlot.game.status==='accepted','non-invited room member must be accepted while open join is active');
+  assert(Q.inviteParticipants(open).some(p=>p.user_id==='u5'),'open join participant must be included in current roster');
+
   // Mafia invitation -> all accepted -> lobby finalized -> all crypto keys ready -> phase auto-start.
   const minv={kind:'game-invite',id:'mafiaInvite',gameType:'mafia',hostId:'u1',host:{...users.u1},invited:[users.u2,users.u3,users.u4],minPlayers:4,maxPlayers:12,resultLabels:[]};emitAs('u1',{game:minv});
   await accept(minv.id,'u2');await accept(minv.id,'u3');await accept(minv.id,'u4');

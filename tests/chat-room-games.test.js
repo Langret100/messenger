@@ -4,7 +4,7 @@ const source=fs.readFileSync(root+'/js/chat/room-games.js','utf8');
 const realtime=fs.readFileSync(root+'/js/adapters/realtime.js','utf8');
 const chats=fs.readFileSync(root+'/js/features/chats.js','utf8');
 const index=fs.readFileSync(root+'/index.html','utf8');
-const css=fs.readFileSync(root+'/css/app.css','utf8');
+const css=fs.readFileSync(root+'/css/app.css','utf8')+fs.readFileSync(root+'/css/features/room-games-plus.css','utf8');
 assert(source.includes('kind:"ladder"'),'ladder payload missing');
 assert(source.includes('typeof crypto.randomUUID==="function"')&&source.includes('crypto.getRandomValues(new Uint32Array(2))'),'randomUUID compatibility fallback missing');
 assert(source.includes('kind:"mafia-lobby"'),'mafia lobby missing');
@@ -20,13 +20,13 @@ assert(css.includes('@keyframes mafia-card-shuffle-left')&&css.includes('@keyfra
 assert(realtime.includes('game:payload.game&&typeof payload.game==="object"?payload.game:null'),'realtime adapter drops game metadata');
 assert(chats.includes('addAction("♟","게임"'),'composer game action missing');
 assert(chats.includes('MiniTalk.Chat.RoomGames?.renderMessage?.(message,message.roomId)'),'game renderer missing');
-assert(index.includes('js/chat/room-games.js?v=14'),'room-games script not loaded');
+assert(index.includes('js/chat/room-games.js?v=15'),'room-games script not loaded');
 
-assert(source.includes('svg.setAttribute("preserveAspectRatio","none")'),'ladder SVG fill mode missing');
+assert(source.includes('svg.setAttribute("preserveAspectRatio","xMidYMid meet")'),'ladder must preserve its vertical geometry');
 assert(source.includes('"data-phase-gate":"night"'),'host night control gate missing');
 assert(source.includes('"data-phase-gate":"vote"'),'host vote control gate missing');
 
-assert(source.includes('Math.min(26,n*2+4)'),'ladder line-density guard missing');
+assert(source.includes('Math.max(12,Math.min(34,n*3+8))')&&source.includes('Math.max(5,n+3)'),'ladder rung-density guard missing');
 assert(css.includes('.chat-room-game-window .room-game-member-list{display:grid;grid-template-columns:repeat(2'),'desktop member picker is not two-column');
 for(const role of ['mafia','citizen','police','doctor'])assert(fs.existsSync(root+`/assets/chat-games/role-${role}.png`),`${role} role image file missing`);
 // Mobile role art budget: actual cards render far below source size, so keep assets lean.

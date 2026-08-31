@@ -73,7 +73,7 @@ MiniTalk.Features.Shopping = (() => {
     const D = MiniTalk.UI.Dom, screen = host.querySelector(".shopping-screen"), view = host.querySelector(".shopping-view");
     if (!screen || !view) return render(host, { animate: false, preserveScroll: true, refreshCatalog: false });
     const user = MiniTalk.Store.get("user") || {}, products = Service.products(), owned = user.isGuest ? [] : Service.inventory(), scrollTop = screen.scrollTop;
-    screen.querySelector(".shop-market-hero")?.replaceWith(shopHero(products.length, user.isGuest));
+    screen.querySelector(".shop-market-hero")?.replaceWith(shopHero(products.filter(product=>!Service.isSoldOut(product)).length, user.isGuest));
     const catalog = screen.querySelector(".shop-product-grid");
     if (catalog) {
       catalog.classList.toggle("is-empty", !products.length);
@@ -98,7 +98,7 @@ MiniTalk.Features.Shopping = (() => {
     const view = D.el("section", { class: `view utility-view shopping-view${options.animate === false ? "" : " view-enter"}` });
     const wrap = D.el("div", { class: "card-list shopping-screen" });
     const products = Service.products();
-    wrap.append(shopHero(products.length, user.isGuest));
+    wrap.append(shopHero(products.filter(product=>!Service.isSoldOut(product)).length, user.isGuest));
     const catalog = D.el("div", { class: `shop-product-grid${products.length ? "" : " is-empty"}` });
     if (!products.length) catalog.append(marketEmpty());
     products.forEach(product => catalog.append(productCard(product, user.isGuest)));
@@ -190,7 +190,7 @@ MiniTalk.Features.Shopping = (() => {
   }
 
   async function openRandomPurchase() {
-    const D=MiniTalk.UI.Dom, doc=D.doc(), products=Service.products();
+    const D=MiniTalk.UI.Dom, doc=D.doc(), products=Service.products().filter(product=>!Service.isSoldOut(product));
     if(!products.length){ MiniTalk.UI.Shell.toast("추첨할 상품이 아직 없어요."); return; }
 
     closeRandomOverlay(); randomAudio();
@@ -311,11 +311,11 @@ MiniTalk.Features.Shopping = (() => {
   }
 
   function productCard(product, guest) {
-    const D = MiniTalk.UI.Dom;
-    return D.el("button", { class: "shop-product-card", type: "button", onclick: () => guest ? MiniTalk.UI.Shell.toast("로그인 후 구매할 수 있어요.") : openPurchase(product) }, [
+    const D = MiniTalk.UI.Dom, soldOut = Service.isSoldOut(product);
+    return D.el("button", { class: `shop-product-card${soldOut ? " is-sold-out" : ""}`, type: "button", disabled: soldOut, "aria-disabled": String(soldOut), onclick: () => soldOut ? MiniTalk.UI.Shell.toast("품절된 상품이에요.") : guest ? MiniTalk.UI.Shell.toast("로그인 후 구매할 수 있어요.") : openPurchase(product) }, [
       product.imageUrl ? D.el("img", { class: "shop-product-image", src: product.imageUrl, alt: "", loading: "lazy" }) : D.el("span", { class: "shop-product-icon", text: "▤" }),
-      D.el("span", { class: "shop-product-copy" }, [D.el("strong", { text: product.name }), D.el("small", { class: "muted", text: product.description || "설명 없음" })]),
-      coinAmount(product.price, "shop-price coin-amount")
+      D.el("span", { class: "shop-product-copy" }, [D.el("strong", { text: product.name }), D.el("small", { class: "muted", text: product.description || "설명 없음" }), product.quantity !== null ? D.el("small", { class: `shop-stock-label${soldOut ? " sold-out" : ""}`, text: soldOut ? "품절" : `남은 수량 ${product.quantity}개` }) : null].filter(Boolean)),
+      soldOut ? D.el("span", { class: "shop-sold-out-badge", text: "품절" }) : coinAmount(product.price, "shop-price coin-amount")
     ]);
   }
 
@@ -496,13 +496,13 @@ MiniTalk.Features.Shopping = (() => {
     const D = context.Dom || MiniTalk.UI.Dom, Shell = context.Shell || MiniTalk.UI.Shell, panel = D.el("section", { class: "tool-card admin-shop-panel" });
     if (!Service.products().length) Service.refreshCatalog().then(rows => { if (rows.length) onChanged?.(); }).catch(error => console.warn("상품 목록을 불러오지 못했습니다.", error));
     const add = D.el("button", { class: "button primary compact-button", type: "button", text: "상품 추가", onclick: () => openProductEditor(null, onChanged, { D, Shell }) });
-    panel.append(D.el("div", { class: "admin-shop-head" }, [D.el("div", {}, [D.el("strong", { text: "쇼핑 상품 관리" }), D.el("small", { class: "muted", text: "상품 이름·가격·설명을 설정합니다." })]), add]));
+    panel.append(D.el("div", { class: "admin-shop-head" }, [D.el("div", {}, [D.el("strong", { text: "쇼핑 상품 관리" }), D.el("small", { class: "muted", text: "상품 이름·가격·설명과 선택 재고 수량을 설정합니다." })]), add]));
     const list = D.el("div", { class: "admin-product-list" });
     const products = Service.products();
     if (!products.length) list.append(empty("등록된 상품이 없어요", "상품 추가 버튼으로 첫 상품을 등록하세요."));
     products.forEach(product => list.append(D.el("article", { class: "admin-product-row" }, [
       product.imageUrl ? D.el("img", { class: "admin-product-image", src: product.imageUrl, alt: "", loading: "lazy" }) : D.el("span", { class: "admin-product-image placeholder", text: "▤" }),
-      D.el("div", {}, [D.el("strong", { text: product.name }), D.el("small", { class: "muted admin-product-meta" }, [coinAmount(product.price, "coin-amount inline-coin"), D.el("span", { text: ` · ${product.description || "설명 없음"}` })])]),
+      D.el("div", {}, [D.el("strong", { text: product.name }), D.el("small", { class: "muted admin-product-meta" }, [coinAmount(product.price, "coin-amount inline-coin"), D.el("span", { text: ` · ${product.quantity === null ? "재고 무제한" : product.quantity <= 0 ? "품절" : `재고 ${product.quantity}개`} · ${product.description || "설명 없음"}` })])]),
       D.el("div", { class: "button-row compact-row" }, [D.el("button", { class: "button secondary compact-button", type: "button", text: "수정", onclick: () => openProductEditor(product, onChanged, { D, Shell }) }), D.el("button", { class: "button secondary compact-button", type: "button", text: "삭제", onclick: () => deleteProduct(product, onChanged, { D, Shell }) })])
     ])));
     panel.append(list);return panel;
@@ -510,7 +510,7 @@ MiniTalk.Features.Shopping = (() => {
 
   function openProductEditor(product, onChanged, context = {}) {
     const D = context.D || MiniTalk.UI.Dom, Shell = context.Shell || MiniTalk.UI.Shell, body = D.el("div", { class: "modal-stack" });
-    body.innerHTML = `<button id="productImagePicker" class="product-image-picker" type="button" aria-label="상품 이미지 촬영 또는 선택"><span>▤</span><strong>상품 이미지</strong><small>눌러서 촬영하거나 선택하세요</small></button><div id="productImageActions" class="product-image-actions hidden"><button id="productCamera" class="button secondary compact-button" type="button">카메라로 촬영</button><button id="productGallery" class="button secondary compact-button" type="button">이미지 선택</button><button id="productImageRemove" class="button text compact-button" type="button">이미지 제거</button></div><input id="productCameraInput" class="hidden" type="file" accept="image/*" capture="environment"><input id="productGalleryInput" class="hidden" type="file" accept="image/png,image/jpeg,image/webp"><p class="muted modal-note">사진은 실제 표시 크기에 맞는 160×120 이미지로 자동 압축됩니다.</p><label class="field">상품 이름<input id="productName" maxlength="60"></label><label class="field">가격<input id="productPrice" type="number" min="1" step="1"></label><label class="field">설명<textarea id="productDescription" maxlength="160"></textarea></label><button id="productSave" class="button primary" type="button">저장</button>`;
+    body.innerHTML = `<button id="productImagePicker" class="product-image-picker" type="button" aria-label="상품 이미지 촬영 또는 선택"><span>▤</span><strong>상품 이미지</strong><small>눌러서 촬영하거나 선택하세요</small></button><div id="productImageActions" class="product-image-actions hidden"><button id="productCamera" class="button secondary compact-button" type="button">카메라로 촬영</button><button id="productGallery" class="button secondary compact-button" type="button">이미지 선택</button><button id="productImageRemove" class="button text compact-button" type="button">이미지 제거</button></div><input id="productCameraInput" class="hidden" type="file" accept="image/*" capture="environment"><input id="productGalleryInput" class="hidden" type="file" accept="image/png,image/jpeg,image/webp"><p class="muted modal-note">사진은 실제 표시 크기에 맞는 160×120 이미지로 자동 압축됩니다.</p><label class="field">상품 이름<input id="productName" maxlength="60"></label><label class="field">가격<input id="productPrice" type="number" min="1" step="1"></label><label class="field">재고 수량 <small class="muted">(선택 · 비워두면 무제한)</small><input id="productQuantity" type="number" min="0" step="1" inputmode="numeric" placeholder="무제한"></label><label class="field">설명<textarea id="productDescription" maxlength="160"></textarea></label><button id="productSave" class="button primary" type="button">저장</button>`;
     const picker = body.querySelector("#productImagePicker"), actions = body.querySelector("#productImageActions"), cameraInput = body.querySelector("#productCameraInput"), galleryInput = body.querySelector("#productGalleryInput");
     let imageUrl = product?.imageUrl || "", pendingImage = "";
     const updatePreview = value => { picker.style.backgroundImage = value ? `url("${value}")` : "";picker.classList.toggle("has-image", Boolean(value));picker.querySelector("span").textContent = value ? "" : "▤";picker.querySelector("strong").textContent = value ? "이미지 변경" : "상품 이미지"; };
@@ -521,8 +521,8 @@ MiniTalk.Features.Shopping = (() => {
     body.querySelector("#productImageRemove").onclick = () => { imageUrl = "";pendingImage = "";updatePreview("");actions.classList.add("hidden"); };
     const chooseImage = async input => { const file = input.files?.[0];if (!file) return;actions.classList.add("hidden");picker.disabled = true;try { pendingImage = await compressProductImage(file);updatePreview(pendingImage); } catch (error) { Shell.toast(error.message); } finally { picker.disabled = false;input.value = ""; } };
     cameraInput.onchange = () => chooseImage(cameraInput);galleryInput.onchange = () => chooseImage(galleryInput);
-    body.querySelector("#productName").value = product?.name || "";body.querySelector("#productPrice").value = product?.price || "";body.querySelector("#productDescription").value = product?.description || "";
-    body.querySelector("#productSave").onclick = async event => { const button = event.currentTarget,name = body.querySelector("#productName").value.trim(),price = body.querySelector("#productPrice").value,description = body.querySelector("#productDescription").value;button.disabled = true;try { if (pendingImage) imageUrl = pendingImage;await Service.saveProduct({ id: product?.id, name, price, description, imageUrl });Shell.closeModal();Shell.toast("상품을 저장했습니다.");onChanged?.(); } catch (error) { Shell.toast(error.message);button.disabled = false; } };
+    body.querySelector("#productName").value = product?.name || "";body.querySelector("#productPrice").value = product?.price || "";body.querySelector("#productQuantity").value = product?.quantity === null || product?.quantity === undefined ? "" : String(product.quantity);body.querySelector("#productDescription").value = product?.description || "";
+    body.querySelector("#productSave").onclick = async event => { const button = event.currentTarget,name = body.querySelector("#productName").value.trim(),price = body.querySelector("#productPrice").value,quantityText = body.querySelector("#productQuantity").value.trim(),quantity = quantityText === "" ? null : Math.max(0,Math.floor(Number(quantityText)||0)),description = body.querySelector("#productDescription").value;button.disabled = true;try { if (pendingImage) imageUrl = pendingImage;await Service.saveProduct({ id: product?.id, name, price, quantity, description, imageUrl });Shell.closeModal();Shell.toast("상품을 저장했습니다.");onChanged?.(); } catch (error) { Shell.toast(error.message);button.disabled = false; } };
     Shell.modal(product ? "상품 수정" : "상품 추가", body);
   }
 

@@ -87,7 +87,7 @@ MiniTalk.Chat.RoomGames=(()=>{
       const data=await decryptOwn(game.cipher);return{kind:"police-result",value:data}
     });
     if(game.kind==="game-invite-accept")setTimeout(()=>handleInviteAcceptAsHost(message).catch(()=>{}),0);
-    if(game.kind==="game-invite-decline")setTimeout(()=>maybeFinalizeInviteAsHost(message.roomId,game.id).catch(()=>{}),0);
+    if(game.kind==="game-invite-decline"||game.kind==="game-invite-leave")setTimeout(()=>maybeFinalizeInviteAsHost(message.roomId,game.id).catch(()=>{}),0);
     if(game.kind==="game-invite-slot"&&game.status==="accepted")setTimeout(()=>maybeFinalizeInviteAsHost(message.roomId,game.id).catch(()=>{}),0);
     if(game.kind==="mafia-lobby"&&game.participants?.some(p=>p.user_id===currentUser().user_id))setTimeout(()=>announceMafiaKey(message.roomId,game).catch(()=>{}),0);
     if(game.kind==="mafia-key")setTimeout(()=>maybeAutoStartMafia(message.roomId,game.id).catch(()=>{}),0);
@@ -137,22 +137,28 @@ MiniTalk.Chat.RoomGames=(()=>{
 
   function rng(seed){let x=(Number(seed)||1)>>>0;return()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return(x>>>0)/4294967296}}
   function ladderData(game){
-    const people=game.participants||[],n=people.length,rows=Math.max(8,Math.min(26,n*2+4)),random=rng(game.seed),rungs=[];
+    const people=game.participants||[],n=Math.max(2,people.length),rows=Math.max(12,Math.min(34,n*3+8)),random=rng(game.seed),rungs=[];
+    let prev=-2;
     for(let r=0;r<rows;r++){
+      const candidates=[];for(let c=0;c<n-1;c++)candidates.push(c);
+      for(let i=candidates.length-1;i>0;i--){const j=Math.floor(random()*(i+1)),t=candidates[i];candidates[i]=candidates[j];candidates[j]=t}
       const used=new Set();
-      for(let c=0;c<n-1;c++){
-        if(used.has(c)||used.has(c+1)||random()>.31)continue;
-        rungs.push([r,c]);used.add(c);used.add(c+1)
-      }
+      for(const c of candidates){if(used.has(c)||used.has(c+1))continue;const chance=n===2?.58:.42;if(random()>chance)continue;if(n===2&&prev===r-1&&random()<.48)continue;rungs.push([r,c]);used.add(c);used.add(c+1);prev=r}
+    }
+    const minimum=Math.min(rows,Math.max(5,n+3));
+    if(rungs.length<minimum){
+      const occupied=new Set(rungs.map(([r,c])=>`${r}:${c}`));
+      for(let r=1;r<rows-1&&rungs.length<minimum;r+=2){const c=Math.floor(random()*Math.max(1,n-1));if(occupied.has(`${r}:${c}`))continue;if(rungs.some(([rr,cc])=>rr===r&&Math.abs(cc-c)<=1))continue;rungs.push([r,c]);occupied.add(`${r}:${c}`)}
+      rungs.sort((a,b)=>a[0]-b[0]||a[1]-b[1])
     }
     const pos=[...Array(n).keys()];
     for(const [,c] of rungs){const t=pos[c];pos[c]=pos[c+1];pos[c+1]=t}
     const mapping=Array(n);pos.forEach((start,end)=>mapping[start]=end);return{rows,rungs,mapping}
   }
   function ladderLayout(game){
-    const n=Math.max(2,(game.participants||[]).length),data=ladderData(game),width=Math.max(240,n*62),height=214,padX=26,padTop=18,padBottom=24;
+    const n=Math.max(2,(game.participants||[]).length),data=ladderData(game),width=Math.max(240,n*86),height=Math.max(390,data.rows*25+70),padX=Math.max(34,Math.min(58,width*.08)),padTop=28,padBottom=34;
     const x=index=>padX+index*(width-padX*2)/Math.max(1,n-1);
-    const y=index=>padTop+index*(height-padTop-padBottom)/Math.max(1,data.rows);
+    const y=index=>padTop+(index+.5)*(height-padTop-padBottom)/Math.max(1,data.rows);
     return{...data,width,height,padX,padTop,padBottom,x,y}
   }
   function ladderTrace(game,start){
@@ -167,49 +173,51 @@ MiniTalk.Chat.RoomGames=(()=>{
     return{layout,points,endIndex:layout.mapping[start]}
   }
   function tracePath(points){return points.map((point,index)=>`${index?"L":"M"}${point[0].toFixed(2)},${point[1].toFixed(2)}`).join(" ")}
-  function animateSvgPath(path){try{const length=path.getTotalLength();path.style.strokeDasharray=String(length);path.style.strokeDashoffset=String(length);requestAnimationFrame(()=>{path.style.strokeDashoffset="0"})}catch{}}
+  function animateLadderPath(path,marker,duration=1100){
+    return new Promise(resolve=>{let length=0;try{length=path.getTotalLength()}catch{}if(!length){resolve();return}path.style.strokeDasharray=String(length);path.style.strokeDashoffset=String(length);const started=(typeof performance!=="undefined"&&typeof performance.now==="function"?performance.now():Date.now());const frame=now=>{const t=Math.max(0,Math.min(1,((now||Date.now())-started)/duration)),ease=1-Math.pow(1-t,2.4),at=length*ease;path.style.strokeDashoffset=String(length-at);try{const point=path.getPointAtLength(at);marker.setAttribute("cx",point.x);marker.setAttribute("cy",point.y)}catch{}if(t<1)requestAnimationFrame(frame);else{path.style.strokeDashoffset="0";resolve()}};requestAnimationFrame(frame)})
+  }
   function playerChip(U,person,index,onClick){const chip=U.el("button",{class:"ladder-player-chip",type:"button","data-player-index":String(index)}),avatar=U.el("span",{class:"ladder-player-dot",text:(person.nickname||person.user_id||"?").slice(0,1)}),name=U.el("span",{text:person.nickname});chip.append(avatar,name);chip.onclick=onClick;return chip}
   function ladderCard(game){
     const U=D(),layout=ladderLayout(game),card=U.el("section",{class:"room-game-card ladder-game-card"});
     card.append(U.el("div",{class:"room-game-head"},[
-      U.el("div",{class:"room-game-head-copy"},[U.el("strong",{text:"🪜 사다리타기"}),U.el("small",{text:"모바일 카드형 디자인 · 선택한 멤버 경로 추적"})]),
+      U.el("div",{class:"room-game-head-copy"},[U.el("strong",{text:"🪜 사다리타기"}),U.el("small",{text:"이름을 누르면 실제 경로를 따라 내려가요."})]),
       U.el("span",{class:"room-game-badge",text:"RANDOM"})
     ]));
-    card.append(U.el("div",{class:"room-game-pills"},[
-      U.el("span",{class:"room-game-pill",text:`참가 ${game.participants.length}명`}),
-      U.el("span",{class:"room-game-pill",text:"매번 새 무작위 생성"})
-    ]));
+    card.append(U.el("div",{class:"room-game-pills"},[U.el("span",{class:"room-game-pill",text:`참가 ${game.participants.length}명`}),U.el("span",{class:"room-game-pill",text:`연결 ${layout.rungs.length}개`})]));
     const top=U.el("div",{class:"ladder-top-row"});
-    game.participants.forEach((person,index)=>top.append(playerChip(U,person,index,()=>selectTrace(index))));
-    card.append(top);
-    const stage=U.el("div",{class:"ladder-stage"});
-    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
-    svg.setAttribute("viewBox",`0 0 ${layout.width} ${layout.height}`);svg.setAttribute("preserveAspectRatio","none");svg.classList.add("ladder-svg");
+    game.participants.forEach((person,index)=>top.append(playerChip(U,person,index,()=>selectTrace(index))));card.append(top);
+    const stage=U.el("div",{class:"ladder-stage"}),scroll=U.el("div",{class:"ladder-scroll"});
+    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox",`0 0 ${layout.width} ${layout.height}`);svg.setAttribute("preserveAspectRatio","xMidYMid meet");svg.classList.add("ladder-svg");
     const bg=document.createElementNS(svg.namespaceURI,"rect");bg.setAttribute("x","8");bg.setAttribute("y","8");bg.setAttribute("width",String(layout.width-16));bg.setAttribute("height",String(layout.height-16));bg.setAttribute("rx","18");bg.classList.add("ladder-panel-bg");svg.append(bg);
     for(let i=0;i<game.participants.length;i++){const line=document.createElementNS(svg.namespaceURI,"line");line.setAttribute("x1",layout.x(i));line.setAttribute("x2",layout.x(i));line.setAttribute("y1",layout.padTop);line.setAttribute("y2",layout.height-layout.padBottom);line.classList.add("ladder-rail");svg.append(line)}
     layout.rungs.forEach(([r,c])=>{const line=document.createElementNS(svg.namespaceURI,"line"),y=layout.y(r);line.setAttribute("x1",layout.x(c));line.setAttribute("x2",layout.x(c+1));line.setAttribute("y1",y);line.setAttribute("y2",y);line.classList.add("ladder-rung");svg.append(line)});
-    const traceLayer=document.createElementNS(svg.namespaceURI,"g");traceLayer.classList.add("ladder-traces");svg.append(traceLayer);stage.append(svg);card.append(stage);
-    const bottom=U.el("div",{class:"ladder-result-slots"});
-    (game.results||[]).forEach((value,index)=>bottom.append(U.el("div",{class:"ladder-result-slot","data-result-index":String(index)},[U.el("small",{text:`결과 ${index+1}`}),U.el("strong",{text:value||`${index+1}번`})])));
-    card.append(bottom);
-    const focus=U.el("div",{class:"ladder-focus-box hidden"}),focusLine=U.el("div",{class:"ladder-focus-copy"},[U.el("small",{text:"선택 결과"}),U.el("strong",{text:"위에서 이름을 누르면 경로가 그려져요."})]);
-    focus.append(focusLine);card.append(focus);
-    const revealAll=U.el("button",{class:"button secondary compact-button",type:"button",text:"전체 결과 보기"}),resultList=U.el("div",{class:"ladder-results hidden"});
-    layout.mapping.forEach((end,start)=>resultList.append(U.el("div",{class:"ladder-result-row"},[U.el("b",{text:game.participants[start].nickname}),U.el("span",{text:"→"}),U.el("strong",{text:(game.results||[])[end]||`${end+1}번`})])));
-    revealAll.onclick=()=>{resultList.classList.toggle("hidden");revealAll.textContent=resultList.classList.contains("hidden")?"전체 결과 보기":"전체 결과 숨기기"};
+    const traceLayer=document.createElementNS(svg.namespaceURI,"g");traceLayer.classList.add("ladder-traces");svg.append(traceLayer);scroll.append(svg);stage.append(scroll);card.append(stage);
+    const bottom=U.el("div",{class:"ladder-result-slots"});(game.results||[]).forEach((value,index)=>bottom.append(U.el("div",{class:"ladder-result-slot","data-result-index":String(index)},[U.el("small",{text:`결과 ${index+1}`}),U.el("strong",{text:value||`${index+1}번`})])));card.append(bottom);
+    const focus=U.el("div",{class:"ladder-focus-box hidden"}),focusLine=U.el("div",{class:"ladder-focus-copy"},[U.el("small",{text:"선택 결과"}),U.el("strong",{text:"위에서 이름을 눌러 시작하세요."})]);focus.append(focusLine);card.append(focus);
+    const revealAll=U.el("button",{class:"button secondary compact-button",type:"button",text:"전체 경로 순서대로 보기"}),resultList=U.el("div",{class:"ladder-results hidden"});layout.mapping.forEach((end,start)=>resultList.append(U.el("div",{class:"ladder-result-row"},[U.el("b",{text:game.participants[start].nickname}),U.el("span",{text:"→"}),U.el("strong",{text:(game.results||[])[end]||`${end+1}번`})])));
+    let runToken=0;
+    revealAll.onclick=async()=>{const token=++runToken;revealAll.disabled=true;resultList.classList.add("hidden");for(let i=0;i<game.participants.length&&token===runToken;i++)await selectTrace(i,{duration:Math.max(520,920-game.participants.length*22)});if(token===runToken){resultList.classList.remove("hidden");revealAll.textContent="전체 결과 다시 보기";revealAll.disabled=false}};
     card.append(U.el("div",{class:"room-game-actions"},[revealAll]),resultList);
-    function selectTrace(index){
-      const picked=game.participants[index],trace=ladderTrace(game,index),color=ladderPalette[index%ladderPalette.length];playGameSfx("trace");
-      top.querySelectorAll(".ladder-player-chip").forEach((node,i)=>node.classList.toggle("active",i===index));
-      bottom.querySelectorAll(".ladder-result-slot").forEach((node,i)=>node.classList.toggle("active",i===trace.endIndex));
-      traceLayer.replaceChildren();
+    async function selectTrace(index,{duration=1100}={}){
+      const picked=game.participants[index],trace=ladderTrace(game,index),color=ladderPalette[index%ladderPalette.length];playGameSfx("trace");top.querySelectorAll(".ladder-player-chip").forEach((node,i)=>node.classList.toggle("active",i===index));bottom.querySelectorAll(".ladder-result-slot").forEach(node=>node.classList.remove("active"));traceLayer.replaceChildren();
       const path=document.createElementNS(svg.namespaceURI,"path");path.setAttribute("d",tracePath(trace.points));path.classList.add("ladder-trace-path");path.style.setProperty("--trace-color",color);traceLayer.append(path);
-      const endPoint=trace.points[trace.points.length-1],marker=document.createElementNS(svg.namespaceURI,"circle");marker.setAttribute("cx",endPoint[0]);marker.setAttribute("cy",endPoint[1]);marker.setAttribute("r","6.5");marker.classList.add("ladder-trace-marker");marker.style.setProperty("--trace-color",color);traceLayer.append(marker);
-      animateSvgPath(path);focus.classList.remove("hidden");focusLine.replaceChildren(U.el("small",{text:"선택 결과"}),U.el("strong",{text:`${picked.nickname} → ${(game.results||[])[trace.endIndex]||`${trace.endIndex+1}번`}`}))
+      const marker=document.createElementNS(svg.namespaceURI,"circle");marker.setAttribute("cx",trace.points[0][0]);marker.setAttribute("cy",trace.points[0][1]);marker.setAttribute("r","8");marker.classList.add("ladder-runner");marker.style.setProperty("--trace-color",color);traceLayer.append(marker);
+      focus.classList.remove("hidden");focusLine.replaceChildren(U.el("small",{text:"경로 추적 중"}),U.el("strong",{text:`${picked.nickname} 내려가는 중…`}));await animateLadderPath(path,marker,duration);
+      marker.classList.add("arrived");bottom.querySelector(`[data-result-index="${trace.endIndex}"]`)?.classList.add("active");focusLine.replaceChildren(U.el("small",{text:"도착!"}),U.el("strong",{text:`${picked.nickname} → ${(game.results||[])[trace.endIndex]||`${trace.endIndex+1}번`}`}));playGameSfx("result");return trace.endIndex
     }
     return card
   }
-  const CHESS_PIECES={w:{k:"♔",q:"♕",r:"♖",b:"♗",n:"♘",p:"♙"},b:{k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"}};
+  function chessPieceSvg(piece){
+    if(!piece)return null;const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","0 0 64 64");svg.setAttribute("aria-hidden","true");svg.classList.add("chess-piece-svg",piece.c==='w'?"white":"black");const ns=svg.namespaceURI,add=(tag,attrs)=>{const n=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,String(v)));svg.append(n);return n};
+    const base=()=>{add("path",{d:"M15 53 Q32 47 49 53 L52 59 H12 Z",class:"piece-base"});add("path",{d:"M19 47 H45 L49 53 H15 Z",class:"piece-body"})};
+    if(piece.t==='p'){add("circle",{cx:32,cy:18,r:9});add("path",{d:"M24 28 Q32 24 40 28 L43 46 H21 Z"});base()}
+    else if(piece.t==='r'){add("path",{d:"M18 12 H24 V18 H29 V12 H35 V18 H40 V12 H46 V26 H18 Z"});add("path",{d:"M22 27 H42 L45 47 H19 Z"});base()}
+    else if(piece.t==='n'){add("path",{d:"M20 46 Q18 35 26 29 L22 22 L31 10 Q43 15 47 28 L40 31 L43 47 Z"});add("circle",{cx:36,cy:20,r:2.3,class:"piece-eye"});base()}
+    else if(piece.t==='b'){add("path",{d:"M32 9 C22 18 21 27 29 34 L23 46 H41 L35 34 C43 27 42 18 32 9 Z"});add("path",{d:"M36 15 L27 29",class:"piece-cut"});base()}
+    else if(piece.t==='q'){for(const [cx,cy] of [[18,16],[32,10],[46,16]])add("circle",{cx,cy,r:4});add("path",{d:"M16 20 L24 31 L32 18 L40 31 L48 20 L43 46 H21 Z"});base()}
+    else {add("path",{d:"M29 8 H35 V14 H41 V20 H35 V27 H29 V20 H23 V14 H29 Z"});add("path",{d:"M24 29 Q32 24 40 29 L43 46 H21 Z"});base()}
+    return svg
+  }
   const chessOther=c=>c==="w"?"b":"w";
   const chessColorLabel=c=>c==="w"?"백":"흑";
   const chessSquare=(r,c)=>`${String.fromCharCode(97+c)}${8-r}`;
@@ -279,9 +287,10 @@ MiniTalk.Chat.RoomGames=(()=>{
   async function submitChessMove(roomId,gameId,from,to,promotion='q'){
     const snap=chessState(gameId),me=String(currentUser().user_id||'');if(!snap||chessTerminal(gameId))return;const mine=chessPlayer(snap.start,me);if(!mine||mine.color!==snap.state.turn)throw new Error('지금은 내 차례가 아니에요.');const lock=`${gameId}:${snap.moves.length+1}`;if(state.chessSending.has(lock))return;const mv=chessLegalMove(snap.state,from,to,promotion);if(!mv)throw new Error('그 말은 그렇게 움직일 수 없어요.');const projected=chessApply(snap.state,mv),fx=chessMoveFx(mv,projected);state.chessSending.add(lock);try{await sendGame(roomId,{text:'[체스 수]',game:{kind:'chess-move',id:gameId,moveNo:snap.moves.length+1,by:me,from,to,promotion:mv.promotion||null,fx,movedAt:Date.now()}});const after=chessState(gameId);if(after?.status?.ended)await sendChessEnd(roomId,gameId,{reason:after.status.reason,winner:after.status.winner})}finally{state.chessSending.delete(lock)}}
   async function resignChess(roomId,gameId){const snap=chessState(gameId),me=String(currentUser().user_id||'');if(!snap||chessTerminal(gameId))return;const mine=chessPlayer(snap.start,me);if(!mine)return;if(typeof window!=='undefined'&&window.confirm&&!window.confirm('체스 게임에서 기권할까요?'))return;await sendChessEnd(roomId,gameId,{reason:'resign',winner:chessOther(mine.color),by:me})}
+  async function leaveChess(roomId,gameId){const snap=chessState(gameId),me=String(currentUser().user_id||'');if(!snap||chessTerminal(gameId))return;const mine=chessPlayer(snap.start,me);if(!mine)return;if(typeof window!=='undefined'&&window.confirm&&!window.confirm('체스 게임에서 나갈까요? 게임이 종료됩니다.'))return;await sendChessEnd(roomId,gameId,{reason:'leave',winner:chessOther(mine.color),by:me})}
   async function offerChessDraw(roomId,gameId){const snap=chessState(gameId),me=String(currentUser().user_id||'');if(!snap||chessTerminal(gameId)||!chessPlayer(snap.start,me))return;const existing=latest(gameId,'chess-draw-offer',m=>String(m.game.by)!==me&&!latest(gameId,'chess-draw-reject',r=>String(r.game.offerId)===String(m.id)));if(existing){await sendChessEnd(roomId,gameId,{reason:'draw-agreement',winner:null,by:me});return}await sendGame(roomId,{text:'[체스 무승부 제안]',game:{kind:'chess-draw-offer',id:gameId,by:me,offeredAt:Date.now()}});playGameSfx('vote')}
   async function rejectChessDraw(roomId,gameId,offer){if(!offer)return;await sendGame(roomId,{text:'[체스 무승부 거절]',game:{kind:'chess-draw-reject',id:gameId,by:String(currentUser().user_id||''),offerId:offer.id,rejectedAt:Date.now()}})}
-  function chessEndText(end,start){if(!end)return'';const g=end.game;if(g.reason==='stalemate'||g.reason==='fifty-move'||g.reason==='draw-agreement')return'무승부로 게임이 끝났어요.';const winner=start.players?.find(p=>p.color===g.winner);return g.reason==='resign'?`${winner?.nickname||chessColorLabel(g.winner)} 승리 · 상대가 기권했어요.`:`체크메이트 · ${winner?.nickname||chessColorLabel(g.winner)} 승리!`}
+  function chessEndText(end,start){if(!end)return'';const g=end.game;if(g.reason==='stalemate'||g.reason==='fifty-move'||g.reason==='draw-agreement')return'무승부로 게임이 끝났어요.';const winner=start.players?.find(p=>p.color===g.winner);return g.reason==='resign'?`${winner?.nickname||chessColorLabel(g.winner)} 승리 · 상대가 기권했어요.`:g.reason==='leave'?`${winner?.nickname||chessColorLabel(g.winner)} 승리 · 상대가 게임에서 나갔어요.`:`체크메이트 · ${winner?.nickname||chessColorLabel(g.winner)} 승리!`}
   function chessCard(roomId,message){
     const gameId=message.game.id,snap=chessState(gameId),U=D();if(!snap)return null;const {start,state:pos,moves,status}=snap,me=String(currentUser().user_id||''),mine=chessPlayer(start,me),end=chessTerminal(gameId),view=mine?.color==='b'?'b':'w',lastMoveMsg=latest(gameId,'chess-move'),lastFx=lastMoveMsg?.game?.fx||{},card=U.el('section',{class:`room-game-card chess-game-card ${status.check&&!end?'is-check':''} ${end?'is-ended':''} ${end?.game?.reason==='checkmate'?'is-checkmate':''}`}),white=start.players.find(p=>p.color==='w'),black=start.players.find(p=>p.color==='b');
     card.append(U.el('div',{class:'room-game-head'},[U.el('div',{class:'room-game-head-copy'},[U.el('strong',{text:'♟️ 체스'}),U.el('small',{text:`${white?.nickname||'백'} vs ${black?.nickname||'흑'} · 정식 이동 규칙`})]),U.el('span',{class:'room-game-badge chess',text:end?'END':pos.turn==='w'?'WHITE':'BLACK'})]));
@@ -290,8 +299,8 @@ MiniTalk.Chat.RoomGames=(()=>{
     const board=U.el('div',{class:`chess-board view-${view} ${status.check&&!end?'board-check':''} ${end?.game?.reason==='checkmate'?'board-mate':''}`,'aria-label':'체스판'}),selected={sq:null};
     const order=view==='w'?[0,1,2,3,4,5,6,7]:[7,6,5,4,3,2,1,0];
     const refreshSelection=()=>{board.querySelectorAll('.chess-square').forEach(n=>{n.classList.toggle('selected',n.dataset.square===selected.sq);n.classList.remove('legal')});if(!selected.sq)return;for(const mv of chessLegalMoves(pos,pos.turn).filter(m=>m.from===selected.sq)){board.querySelector(`[data-square="${mv.to}"]`)?.classList.add('legal')}};
-    for(const r of order)for(const c of order){const sq=chessSquare(r,c),piece=pos.board[r][c],btn=U.el('button',{class:`chess-square ${(r+c)%2?'dark':'light'} ${pos.last?.from===sq?'last last-from':''} ${pos.last?.to===sq?'last last-to moved':''} ${pos.last?.to===sq&&lastFx.capture?'capture-hit':''} ${pos.last?.to===sq&&lastFx.promotion?'promoted':''}`,type:'button','data-square':sq,'aria-label':sq,text:piece?CHESS_PIECES[piece.c][piece.t]:''});btn.onclick=async()=>{if(end||!mine||mine.color!==pos.turn)return;const here=pos.board[r][c];if(!selected.sq){if(here?.c===mine.color){selected.sq=sq;refreshSelection()}return}if(here?.c===mine.color){selected.sq=sq;refreshSelection();return}const from=selected.sq;selected.sq=null;refreshSelection();let promotion='q';const mv=chessLegalMove(pos,from,sq,'q');if(mv?.piece.t==='p'&&mv.promotion){const raw=typeof window!=='undefined'&&window.prompt?window.prompt('프로모션: 퀸(q), 룩(r), 비숍(b), 나이트(n)','q'):'q';promotion=['q','r','b','n'].includes(String(raw||'q').toLowerCase())?String(raw).toLowerCase():'q'}try{await submitChessMove(roomId,gameId,from,sq,promotion)}catch(e){MiniTalk.UI.Shell.toast(e.message||'수를 둘 수 없어요.')}};board.append(btn)}if(status.check&&!end)board.append(U.el('div',{class:'chess-board-fx check-flash','aria-hidden':'true',text:'CHECK'}));if(end?.game?.reason==='checkmate')board.append(U.el('div',{class:'chess-board-fx mate-burst','aria-hidden':'true'},[U.el('strong',{text:'CHECKMATE'}),U.el('span',{text:'♛'})]));card.append(board);
-    if(!end&&mine){const actions=U.el('div',{class:'chess-actions'}),draw=U.el('button',{class:'button secondary compact-button',type:'button',text:'무승부 제안'}),resign=U.el('button',{class:'button danger compact-button',type:'button',text:'기권'});const offer=latest(gameId,'chess-draw-offer',m=>String(m.game.by)!==me&&!latest(gameId,'chess-draw-reject',r=>String(r.game.offerId)===String(m.id)));if(offer){draw.textContent='무승부 수락';const reject=U.el('button',{class:'button secondary compact-button',type:'button',text:'거절'});reject.onclick=()=>rejectChessDraw(roomId,gameId,offer);actions.append(draw,reject,resign)}else actions.append(draw,resign);draw.onclick=()=>offerChessDraw(roomId,gameId);resign.onclick=()=>resignChess(roomId,gameId);card.append(actions)}
+    for(const r of order)for(const c of order){const sq=chessSquare(r,c),piece=pos.board[r][c],btn=U.el('button',{class:`chess-square ${(r+c)%2?'dark':'light'} ${pos.last?.from===sq?'last last-from':''} ${pos.last?.to===sq?'last last-to moved':''} ${pos.last?.to===sq&&lastFx.capture?'capture-hit':''} ${pos.last?.to===sq&&lastFx.promotion?'promoted':''}`,type:'button','data-square':sq,'aria-label':sq});if(piece){const art=chessPieceSvg(piece);if(art)btn.append(art)};btn.onclick=async()=>{if(end||!mine||mine.color!==pos.turn)return;const here=pos.board[r][c];if(!selected.sq){if(here?.c===mine.color){selected.sq=sq;refreshSelection()}return}if(here?.c===mine.color){selected.sq=sq;refreshSelection();return}const from=selected.sq;selected.sq=null;refreshSelection();let promotion='q';const mv=chessLegalMove(pos,from,sq,'q');if(mv?.piece.t==='p'&&mv.promotion){const raw=typeof window!=='undefined'&&window.prompt?window.prompt('프로모션: 퀸(q), 룩(r), 비숍(b), 나이트(n)','q'):'q';promotion=['q','r','b','n'].includes(String(raw||'q').toLowerCase())?String(raw).toLowerCase():'q'}try{await submitChessMove(roomId,gameId,from,sq,promotion)}catch(e){MiniTalk.UI.Shell.toast(e.message||'수를 둘 수 없어요.')}};board.append(btn)}if(status.check&&!end)board.append(U.el('div',{class:'chess-board-fx check-flash','aria-hidden':'true',text:'CHECK'}));if(end?.game?.reason==='checkmate')board.append(U.el('div',{class:'chess-board-fx mate-burst','aria-hidden':'true'},[U.el('strong',{text:'CHECKMATE'}),U.el('span',{text:'♛'})]));card.append(board);
+    if(!end&&mine){const actions=U.el('div',{class:'chess-actions'}),draw=U.el('button',{class:'button secondary compact-button',type:'button',text:'무승부 제안'}),resign=U.el('button',{class:'button danger compact-button',type:'button',text:'기권'}),leave=U.el('button',{class:'button secondary compact-button',type:'button',text:'나가기'});const offer=latest(gameId,'chess-draw-offer',m=>String(m.game.by)!==me&&!latest(gameId,'chess-draw-reject',r=>String(r.game.offerId)===String(m.id)));if(offer){draw.textContent='무승부 수락';const reject=U.el('button',{class:'button secondary compact-button',type:'button',text:'거절'});reject.onclick=()=>rejectChessDraw(roomId,gameId,offer);actions.append(draw,reject,resign,leave)}else actions.append(draw,resign,leave);draw.onclick=()=>offerChessDraw(roomId,gameId);resign.onclick=()=>resignChess(roomId,gameId);leave.onclick=()=>leaveChess(roomId,gameId);card.append(actions)}
     if(moves.length){const history=U.el('div',{class:'chess-history'});moves.slice(-10).forEach(m=>history.append(U.el('span',{text:`${m.moveNo}. ${m.from}→${m.to}${m.promotion?`=${m.promotion.toUpperCase()}`:''}`})));card.append(history)}return card
   }
 
@@ -303,14 +312,15 @@ MiniTalk.Chat.RoomGames=(()=>{
     allOf(gameId,"game-invite-slot").forEach(m=>{const g=m.game||{};if(g.status!=="accepted"||!g.userId||seen.has(g.userId))return;seen.add(g.userId);out.push(m)});return out
   }
   function inviteDeclinedIds(gameId){return new Set(allOf(gameId,"game-invite-decline").map(m=>m.game?.userId).filter(Boolean))}
+  function inviteLeftIds(gameId){return new Set(allOf(gameId,"game-invite-leave").map(m=>m.game?.userId).filter(Boolean))}
   function inviteSlotFor(gameId,userId){return latest(gameId,"game-invite-slot",m=>m.game.userId===userId)}
   function inviteParticipants(invite){
-    const host=invite.host||{user_id:invite.hostId,nickname:invite.hostNickname||invite.hostId},byId=new Map((invite.invited||[]).map(p=>[String(p.user_id),p])),people=[{user_id:String(host.user_id),nickname:String(host.nickname||host.user_id)}];
-    inviteAcceptedSlots(invite.id).forEach(m=>{const p=byId.get(String(m.game.userId));if(p&&!people.some(x=>x.user_id===String(p.user_id)))people.push({user_id:String(p.user_id),nickname:String(p.nickname||p.user_id)})});return people.slice(0,Number(invite.maxPlayers)||12)
+    const host=invite.host||{user_id:invite.hostId,nickname:invite.hostNickname||invite.hostId},byId=new Map((invite.invited||[]).map(p=>[String(p.user_id),p])),left=inviteLeftIds(invite.id),people=[{user_id:String(host.user_id),nickname:String(host.nickname||host.user_id)}];
+    inviteAcceptedSlots(invite.id).forEach(m=>{const id=String(m.game.userId);if(left.has(id))return;const p=byId.get(id)||{user_id:id,nickname:m.game.nickname||id};if(p&&!people.some(x=>x.user_id===id))people.push({user_id:id,nickname:String(p.nickname||id)})});return people.slice(0,Number(invite.maxPlayers)||12)
   }
   function normalizedLadderResults(labels,count){const out=(labels||[]).map(v=>String(v||"").trim()).filter(Boolean).slice(0,count);while(out.length<count)out.push(`${out.length+1}번`);return out}
   async function sendInvite(roomId,{gameType,invited,minPlayers,maxPlayers,resultLabels=[]}){
-    const host=inviteHostPerson(),id=nowId(`invite-${gameType}`),game={kind:"game-invite",id,gameType,hostId:host.user_id,host,invited,maxPlayers,minPlayers,resultLabels,createdAt:Date.now()};
+    const host=inviteHostPerson(),id=nowId(`invite-${gameType}`),game={kind:"game-invite",id,gameType,hostId:host.user_id,host,invited,maxPlayers,minPlayers,resultLabels,openJoin:true,createdAt:Date.now()};
     const message={roomId,user_id:host.user_id,nickname:host.nickname,type:"game",text:gameType==="ladder"?"[사다리타기 초대]":gameType==="chess"?"[체스 초대]":"[마피아 게임 초대]",game};
     const saved=await sendGame(roomId,{text:message.text,game});return saved||message
   }
@@ -341,19 +351,20 @@ MiniTalk.Chat.RoomGames=(()=>{
     const previous=state.inviteQueues.get(gameId)||Promise.resolve();
     const task=previous.catch(()=>{}).then(async()=>{
       const marker=`${gameId}:user:${userId}`;if(state.inviteHandled.has(marker)||inviteSlotFor(gameId,userId)||inviteDeclinedIds(gameId).has(userId))return;
-      if(!(invite.invited||[]).some(p=>String(p.user_id)===userId))return;state.inviteHandled.add(marker);
+      const invitedPerson=(invite.invited||[]).find(p=>String(p.user_id)===userId);if(!invitedPerson&&!invite.openJoin)return;state.inviteHandled.add(marker);
       try{
-        const final=inviteFinalMessage(gameId),participants=inviteParticipants(invite),max=Number(invite.maxPlayers)||12,status=final||participants.length>=max?"full":"accepted";
-        const saved=await sendGame(roomId,{text:status==="accepted"?"[게임 참가 확정]":"[게임 정원 마감]",game:{kind:"game-invite-slot",id:gameId,userId,status,acceptedAt:Date.now()}});
+        const final=inviteFinalMessage(gameId),participants=inviteParticipants(invite),max=Number(invite.maxPlayers)||12,status=final||participants.length>=max?"full":"accepted",nickname=String(g.nickname||invitedPerson?.nickname||userId);
+        const saved=await sendGame(roomId,{text:status==="accepted"?"[게임 참가 확정]":"[게임 정원 마감]",game:{kind:"game-invite-slot",id:gameId,userId,nickname,status,acceptedAt:Date.now()}});
         if(status==="accepted")await maybeFinalizeInviteAsHost(roomId,gameId)
       }catch(error){state.inviteHandled.delete(marker);throw error}
     });
     state.inviteQueues.set(gameId,task);try{return await task}finally{if(state.inviteQueues.get(gameId)===task)state.inviteQueues.delete(gameId)}
   }
-  async function maybeFinalizeInviteAsHost(roomId,gameId){
+  async function maybeFinalizeInviteAsHost(roomId,gameId,{force=false}={}){
     const inviteMsg=latest(gameId,"game-invite"),invite=inviteMsg?.game;if(!invite||invite.hostId!==String(currentUser().user_id||"")||inviteFinalMessage(gameId)||state.inviteStarting.has(gameId))return false;
     const people=inviteParticipants(invite),max=Number(invite.maxPlayers)||12,min=Number(invite.minPlayers)||2,accepted=new Set(inviteAcceptedSlots(gameId).map(m=>String(m.game.userId))),declined=inviteDeclinedIds(gameId),invitedIds=(invite.invited||[]).map(p=>String(p.user_id)),allResponded=invitedIds.every(id=>accepted.has(id)||declined.has(id)||inviteSlotFor(gameId,id)?.game?.status==="full"),capacityReached=people.length>=max;
-    if(!capacityReached&&!allResponded)return false;
+    if(force&&people.length<min)throw new Error(`최소 ${min}명이 참가해야 시작할 수 있어요.`);
+    if(!force&&!capacityReached&&!allResponded)return false;
     state.inviteStarting.add(gameId);
     try{
       if(people.length<min){await sendGame(roomId,{text:"[게임 초대 종료]",game:{kind:"game-invite-cancelled",id:gameId,reason:"not-enough",participants:people}});scheduleGameCleanup(roomId,gameId);return false}
@@ -368,23 +379,23 @@ MiniTalk.Chat.RoomGames=(()=>{
     if(slot?.game?.status==="accepted")return;
     if(final){MiniTalk.UI.Shell.toast(final.game?.participants?.some?.(p=>String(p.user_id)===me)?"이미 참가가 확정됐어요.":"인원 초과로 참가할 수 없어요.");return}
     if(desktopGameMode()){const room=MiniTalk.Store.get("rooms")?.[roomId]||{id:roomId,title:"대화방",members:{}};if(ensureDesktopPopup(roomId,room))showDesktopMessage(message)}
-    const saved=await sendGame(roomId,{text:"[게임 참가 요청]",game:{kind:"game-invite-accept",id:invite.id,userId:me,requestedAt:Date.now()}});playGameSfx("action")
+    const saved=await sendGame(roomId,{text:"[게임 참가 요청]",game:{kind:"game-invite-accept",id:invite.id,userId:me,nickname:String(currentUser().nickname||me),requestedAt:Date.now()}});playGameSfx("action")
   }
   async function requestInviteDecline(roomId,message){const invite=message.game,me=String(currentUser().user_id||"");if(inviteFinalMessage(invite.id))return;const saved=await sendGame(roomId,{text:"[게임 초대 거절]",game:{kind:"game-invite-decline",id:invite.id,userId:me,declinedAt:Date.now()}});playGameSfx("vote")}
   function inviteCard(roomId,message){
-    const U=D(),g=message.game,me=String(currentUser().user_id||""),isHost=me===String(g.hostId),isInvited=(g.invited||[]).some(p=>String(p.user_id)===me),slots=inviteAcceptedSlots(g.id),acceptedIds=new Set(slots.map(m=>String(m.game.userId))),declined=inviteDeclinedIds(g.id),slot=inviteSlotFor(g.id,me),people=inviteParticipants(g),final=inviteFinalMessage(g.id),gameLabel=g.gameType==="ladder"?"사다리타기":g.gameType==="chess"?"체스":"마피아 게임",card=U.el("section",{class:`room-game-card room-game-invite-card ${g.gameType}`});
+    const U=D(),g=message.game,me=String(currentUser().user_id||""),isHost=me===String(g.hostId),isInvited=(g.invited||[]).some(p=>String(p.user_id)===me),canOpenJoin=!isHost&&g.openJoin!==false,slots=inviteAcceptedSlots(g.id),acceptedIds=new Set(slots.map(m=>String(m.game.userId))),declined=inviteDeclinedIds(g.id),slot=inviteSlotFor(g.id,me),people=inviteParticipants(g),final=inviteFinalMessage(g.id),gameLabel=g.gameType==="ladder"?"사다리타기":g.gameType==="chess"?"체스":"마피아 게임",card=U.el("section",{class:`room-game-card room-game-invite-card ${g.gameType}`});
     card.append(U.el("div",{class:"room-game-head"},[U.el("div",{class:"room-game-head-copy"},[U.el("strong",{text:`${g.gameType==="ladder"?"🪜":g.gameType==="chess"?"♟️":"🕵️"} ${gameLabel} 초대`}),U.el("small",{text:`${g.host?.nickname||g.hostNickname||"방장"} 님이 게임에 초대했어요.`})]),U.el("span",{class:"room-game-badge",text:"INVITE"})]));
     card.append(U.el("div",{class:"room-game-pills"},[U.el("span",{class:"room-game-pill",text:`참가 ${people.length}/${g.maxPlayers||12}`}),U.el("span",{class:"room-game-pill",text:`초대 ${(g.invited||[]).length}명`}),U.el("span",{class:"room-game-pill",text:"수락 순서 우선"})]));
     const names=U.el("div",{class:"room-game-invite-people"});people.forEach((p,i)=>names.append(U.el("span",{class:"room-game-invite-person"},[U.el("b",{text:p.nickname}),U.el("small",{text:i===0?"방장":"참가 확정"})])));card.append(names);
     if(final){const included=final.game?.participants?.some?.(p=>String(p.user_id)===me);card.append(U.el("p",{class:`mafia-event-text ${included?"":"invite-full"}`,text:final.game?.kind==="game-invite-cancelled"?"참가 인원이 부족해 초대가 종료됐어요.":included?"참가가 확정되어 게임이 시작됐어요.":isInvited?"정원이 마감되어 참가할 수 없어요.":"게임 참가가 확정됐어요."}));return card}
-    const pendingAccept=isInvited&&!slot&&!declined.has(me)&&Boolean(latest(g.id,"game-invite-accept",m=>String(m.game.userId)===me));
-    if(isInvited&&!slot&&!declined.has(me)&&!pendingAccept){const actions=U.el("div",{class:"room-game-invite-actions"}),accept=U.el("button",{class:"button primary compact-button",type:"button",text:"참가"}),decline=U.el("button",{class:"button secondary compact-button",type:"button",text:"거절"});accept.onclick=async()=>{accept.disabled=true;decline.disabled=true;try{await requestInviteAccept(roomId,message)}catch(e){MiniTalk.UI.Shell.toast(e.message||"참가 요청에 실패했어요.");accept.disabled=false;decline.disabled=false}};decline.onclick=async()=>{accept.disabled=true;decline.disabled=true;try{await requestInviteDecline(roomId,message)}catch(e){MiniTalk.UI.Shell.toast(e.message||"거절 처리에 실패했어요.");accept.disabled=false;decline.disabled=false}};actions.append(accept,decline);card.append(U.el("p",{class:"mafia-event-text",text:"참가를 누르면 정원 안에서 수락된 순서대로 참가가 확정돼요."}),actions)}
+    const pendingAccept=(isInvited||canOpenJoin)&&!slot&&!declined.has(me)&&Boolean(latest(g.id,"game-invite-accept",m=>String(m.game.userId)===me));
+    if((isInvited||canOpenJoin)&&!slot&&!declined.has(me)&&!pendingAccept){const actions=U.el("div",{class:"room-game-invite-actions"}),accept=U.el("button",{class:"button primary compact-button",type:"button",text:"참가"}),decline=U.el("button",{class:"button secondary compact-button",type:"button",text:"거절"});accept.onclick=async()=>{accept.disabled=true;decline.disabled=true;try{await requestInviteAccept(roomId,message)}catch(e){MiniTalk.UI.Shell.toast(e.message||"참가 요청에 실패했어요.");accept.disabled=false;decline.disabled=false}};decline.onclick=async()=>{accept.disabled=true;decline.disabled=true;try{await requestInviteDecline(roomId,message)}catch(e){MiniTalk.UI.Shell.toast(e.message||"거절 처리에 실패했어요.");accept.disabled=false;decline.disabled=false}};actions.append(accept,decline);card.append(U.el("p",{class:"mafia-event-text",text:"참가를 누르면 정원 안에서 수락된 순서대로 참가가 확정돼요."}),actions)}
     else if(pendingAccept)card.append(U.el("p",{class:"mafia-event-text",text:"참가 요청 확인 중… 방장이 수락 순서대로 자리를 확정하고 있어요."}));
-    else if(slot?.game?.status==="accepted")card.append(U.el("p",{class:"mafia-event-text",text:"참가 확정 · 다른 참가자의 응답을 기다리고 있어요."}));
+    else if(slot?.game?.status==="accepted"){const leave=U.el("button",{class:"button secondary compact-button",type:"button",text:"참가 취소"});leave.onclick=async()=>{leave.disabled=true;await sendGame(roomId,{text:"[게임 참가 취소]",game:{kind:"game-invite-leave",id:g.id,userId:me,leftAt:Date.now()}});playGameSfx("vote")};card.append(U.el("p",{class:"mafia-event-text",text:"참가 확정 · 방장이 시작하면 바로 진행돼요."}),leave)}
     else if(slot?.game?.status==="full")card.append(U.el("p",{class:"mafia-event-text invite-full",text:"인원 초과로 참가할 수 없어요."}));
     else if(declined.has(me))card.append(U.el("p",{class:"mafia-event-text",text:"초대를 거절했어요."}));
-    else if(isHost)card.append(U.el("p",{class:"mafia-event-text",text:"참가 응답을 기다리는 중이에요. 정원이 차거나 모두 응답하면 자동으로 시작해요."}));
-    else card.append(U.el("p",{class:"mafia-event-text",text:"초대받은 참가자들의 응답을 기다리는 중이에요."}));
+    else if(isHost){const min=Number(g.minPlayers)||2,start=U.el("button",{class:"button primary compact-button",type:"button",text:people.length>=min?`현재 ${people.length}명으로 시작`:`최소 ${min}명 필요`});start.disabled=people.length<min;start.onclick=async()=>{start.disabled=true;try{await maybeFinalizeInviteAsHost(roomId,g.id,{force:true})}catch(e){MiniTalk.UI.Shell.toast(e.message||"게임을 시작하지 못했어요.");start.disabled=people.length<min}};card.append(U.el("p",{class:"mafia-event-text",text:`초대한 사람이 모두 들어오지 않아도 최소 인원이 모이면 바로 시작할 수 있어요.`}),U.el("div",{class:"room-game-invite-actions"},[start]))}
+    else card.append(U.el("p",{class:"mafia-event-text",text:"게임 시작 전까지 대화방 멤버는 누구나 참가할 수 있어요."}));
     return card
   }
 
@@ -435,7 +446,7 @@ MiniTalk.Chat.RoomGames=(()=>{
       if(ids.length&&MiniTalk.Realtime.removeGameMessages)await MiniTalk.Realtime.removeGameMessages(roomId,ids);
       try{localStorage.removeItem(mafiaHostKey(gameId))}catch{}
     }catch(error){console.warn("대화방 게임 기록 정리 실패",error);setTimeout(()=>{state.cleanupRunning.delete(gameId);scheduleGameCleanup(roomId,gameId,15000)},1000);return}
-    state.cleanupRunning.delete(gameId)
+    state.cleanupRunning.delete(gameId);state.messages.delete(gameId);if(state.desktop.activeGameId===gameId&&state.desktop.win&&!state.desktop.win.closed){state.desktop.activeGameId=null;const U=D(),ended=U.el("section",{class:"room-game-card room-game-ended-card"},[U.el("strong",{text:"게임이 종료됐어요."}),U.el("small",{text:"서버의 임시 게임 기록도 정리했습니다."})]);desktopMount("게임 종료",ended)}
   }
   function scheduleHostPhaseResolution(message){
     const g=message?.game,roomId=message?.roomId;if(!g?.id||!g.deadline||!roomId)return;
@@ -466,7 +477,12 @@ MiniTalk.Chat.RoomGames=(()=>{
     const marker=`${gameId}:${userId}`;if(state.leaveHandled.has(marker))return;state.leaveHandled.add(marker);
     const host=await hostPrivate(gameId),person=lobby.game.participants.find(p=>p.user_id===userId);
     if(!host?.roles){
-      await sendGame(roomId,{text:"[게임 나가기]",game:{kind:"mafia-player-left",id:gameId,userId,nickname:person?.nickname||userId,round:0}});return
+      await sendGame(roomId,{text:"[게임 나가기]",game:{kind:"mafia-player-left",id:gameId,userId,nickname:person?.nickname||userId,round:0}});
+      if(userId===lobby.game.hostId){
+        await sendGame(roomId,{text:"[마피아 게임 종료]",game:{kind:"mafia-phase",id:gameId,phase:"ended",round:0,living:activeParticipants(lobby.game).map(p=>p.user_id).filter(id=>id!==userId),winner:"none",reason:"host-left-before-start",leftUserId:userId,startedAt:Date.now(),deadline:Date.now()}});
+        scheduleGameCleanup(roomId,gameId)
+      }
+      return
     }
     if(!host.living.includes(userId)){return}
     const role=host.roles[userId]||"citizen";host.living=host.living.filter(id=>id!==userId);localStorage.setItem(mafiaHostKey(gameId),JSON.stringify(host));
@@ -697,7 +713,7 @@ MiniTalk.Chat.RoomGames=(()=>{
   }
   async function advanceOrEnd(roomId,lobby,host,nextPhase,round){const winner=winnerFor(host);if(winner){await sendGame(roomId,{text:"[마피아 게임 종료]",game:{kind:"mafia-phase",id:lobby.id,phase:"ended",round,living:[...host.living],winner,reason:"rule",startedAt:Date.now(),deadline:Date.now()}});scheduleGameCleanup(roomId,lobby.id);return}await sendGame(roomId,{text:"[마피아 진행]",game:phasePayload(lobby.id,nextPhase,round,host.living)})}
   function mafiaHostControls(roomId,lobby,phaseMsg){const U=D(),wrap=U.el("div",{class:"mafia-host-controls"});if(phaseMsg.game.phase==="night"){const b=U.el("button",{class:"button primary compact-button",type:"button",text:"밤 결과 처리","data-phase-gate":"night"});b.disabled=phaseWindow(phaseMsg.game)!=="night";b.onclick=async()=>{b.disabled=true;try{await resolveNight(roomId,lobby,phaseMsg);playGameSfx("result")}catch(e){MiniTalk.UI.Shell.toast(e.message);b.disabled=phaseWindow(phaseMsg.game)!=="night"}};wrap.append(U.el("small",{class:"muted",text:"역할 확인이 끝난 뒤, 마피아/경찰/의사의 밤 행동 완료 후 처리할 수 있어요."}),b)}else if(phaseMsg.game.phase==="day"){const b=U.el("button",{class:"button primary compact-button",type:"button",text:"투표 집계","data-phase-gate":"vote"});b.disabled=phaseWindow(phaseMsg.game)!=="vote";b.onclick=async()=>{b.disabled=true;try{await resolveVote(roomId,lobby,phaseMsg);playGameSfx("result")}catch(e){MiniTalk.UI.Shell.toast(e.message);b.disabled=phaseWindow(phaseMsg.game)!=="vote"}};wrap.append(U.el("small",{class:"muted",text:"토론 시간이 끝난 뒤 생존자 투표를 집계할 수 있어요."}),b)}return wrap.childNodes.length?wrap:null}
-  function isInternal(message){return ["game-invite-accept","game-invite-decline","game-invite-slot","mafia-key","mafia-role","mafia-night-action","mafia-doctor-action","mafia-police-action","mafia-police-result","mafia-vote","mafia-death","mafia-eliminate","mafia-tie","mafia-leave","mafia-player-left","chess-move","chess-draw-offer","chess-draw-reject"].includes(message?.game?.kind)}
+  function isInternal(message){return ["game-invite-accept","game-invite-decline","game-invite-slot","game-invite-leave","mafia-key","mafia-role","mafia-night-action","mafia-doctor-action","mafia-police-action","mafia-police-result","mafia-vote","mafia-death","mafia-eliminate","mafia-tie","mafia-leave","mafia-player-left","chess-move","chess-draw-offer","chess-draw-reject"].includes(message?.game?.kind)}
   function renderFullMessage(message,roomId){const g=message?.game;if(!g)return null;if(g.kind==="game-invite")return inviteCard(roomId,message);if(g.kind==="game-invite-cancelled")return inviteCard(roomId,latest(g.id,"game-invite")||message);if(g.kind==="ladder")return ladderCard(g);if(g.kind==="chess-start"||g.kind==="chess-move"||g.kind==="chess-end"||g.kind==="chess-draw-offer"||g.kind==="chess-draw-reject")return chessCard(roomId,message);if(g.kind==="mafia-lobby")return mafiaLobbyCard(roomId,g);if(g.kind==="mafia-phase")return mafiaPhaseCard(roomId,message);return null}
   function desktopGameMode(){if(MiniTalk.MobileImmersive?.isMobile?.())return false;const ua=navigator.userAgent||"";if(/CrOS|Whale/i.test(ua))return true;return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua)}
   function desktopPopupBounds(){
@@ -722,18 +738,18 @@ MiniTalk.Chat.RoomGames=(()=>{
     const U=D(),body=U.el("div",{class:"room-game-desktop-menu"});body.append(U.el("div",{class:"room-game-desktop-hero"},[U.el("strong",{text:"대화방 미니게임"}),U.el("p",{text:"현재 대화방 멤버를 골라 게임을 시작하세요. PC·웨일북에서는 넓은 별도 창으로 진행합니다."})]));
     const choices=U.el("div",{class:"room-game-desktop-choices"}),ladder=U.el("button",{class:"room-game-desktop-choice ladder",type:"button"},[U.el("span",{class:"choice-icon choice-ladder","aria-hidden":"true"},[U.el("i"),U.el("i"),U.el("i")]),U.el("strong",{text:"사다리타기"}),U.el("small",{text:"2~12명 · 랜덤 경로 추적"})]),mafia=U.el("button",{class:"room-game-desktop-choice mafia",type:"button"},[U.el("img",{class:"choice-role-art",src:roleAsset("mafia"),alt:"",loading:"eager"}),U.el("strong",{text:"마피아 게임"}),U.el("small",{text:"4~12명 · 역할/타이머/투표"})]),chess=U.el("button",{class:"room-game-desktop-choice chess",type:"button"},[U.el("span",{class:"choice-chess","aria-hidden":"true",text:"♞"}),U.el("strong",{text:"체스"}),U.el("small",{text:"2명 · 체크/캐슬링/프로모션"})]);
     ladder.onclick=()=>createLadder(roomId,room,desktopMount);mafia.onclick=()=>createMafia(roomId,room,desktopMount);chess.onclick=()=>createChess(roomId,room,desktopMount);choices.append(ladder,mafia,chess);body.append(choices);
-    const recent=roomDisplayGames(roomId);if(recent.length){const section=U.el("section",{class:"room-game-desktop-recent"},[U.el("strong",{text:"진행 중 / 최근 게임"})]);recent.forEach(msg=>{const label=msg.game.kind==="game-invite"?`${msg.game.gameType==="ladder"?"사다리타기":msg.game.gameType==="chess"?"체스":"마피아 게임"} · 초대`:msg.game.kind==="ladder"?"사다리타기":String(msg.game.kind||'').startsWith('chess-')?`체스${msg.game.kind==='chess-end'?' · 종료':''}`:msg.game.kind==="mafia-phase"&&msg.game.phase==="ended"?"마피아 게임 · 종료":"마피아 게임";const b=U.el("button",{class:"room-game-recent-button",type:"button",text:label});b.onclick=()=>showDesktopMessage(msg);section.append(b)});body.append(section)}
+    const recent=roomDisplayGames(roomId);if(recent.length){const section=U.el("section",{class:"room-game-desktop-recent"},[U.el("strong",{text:"진행 중 / 최근 게임"})]);recent.forEach(msg=>{const label=msg.game.kind==="game-invite"?`${msg.game.gameType==="ladder"?"사다리타기":msg.game.gameType==="chess"?"체스":"마피아 게임"} · 초대`:msg.game.kind==="ladder"?"사다리타기 · 종료":String(msg.game.kind||'').startsWith('chess-')?`체스${msg.game.kind==='chess-end'?' · 종료':''}`:msg.game.kind==="mafia-phase"&&msg.game.phase==="ended"?"마피아 게임 · 종료":"마피아 게임";const b=U.el("button",{class:"room-game-recent-button",type:"button",text:label});b.onclick=()=>showDesktopMessage(msg);section.append(b)});body.append(section)}
     const d=state.desktop;d.title.textContent="대화방 게임";d.back.classList.add("hidden");d.activeGameId=null;d.root.replaceChildren(d.win.document.adoptNode(body))
   }
   function ensureDesktopPopup(roomId,room){
     const d=state.desktop;try{if(d.win&&!d.win.closed){d.roomId=roomId;d.win.focus();renderDesktopMenu(roomId,room);return true}}catch{}
     let win=null;try{win=window.open("",`MoaruChatRoomGame_${String(roomId).replace(/[^a-zA-Z0-9_-]/g,"_")}`,desktopPopupFeatures())}catch{}if(!win)return false;
-    const base=String(document.baseURI||location.href).replace(/"/g,"%22"),doc=win.document;doc.open();doc.write(`<!doctype html><html lang="ko" data-theme="${document.documentElement?.dataset?.theme||"light"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>대화방 게임</title><link rel="stylesheet" href="css/tokens.css?v=7"><link rel="stylesheet" href="css/app.css?v=64.5.23"><link rel="stylesheet" href="css/features/room-chess.css?v=2"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}.chat-room-game-window{background:#eef2f8}.chat-room-game-shell{height:100%;display:grid;grid-template-rows:54px minmax(0,1fr)}.chat-room-game-bar{display:flex;align-items:center;gap:10px;padding:0 14px;background:#fff;border-bottom:1px solid #dfe5ee;box-shadow:0 2px 10px rgba(22,33,50,.06)}.chat-room-game-back,.chat-room-game-close{width:36px;height:36px;border:1px solid #dfe5ee;border-radius:11px;background:#f6f8fb;color:#253246;font-size:18px;cursor:pointer}.chat-room-game-title{flex:1;font-size:15px}.chat-room-game-root{min-height:0;overflow:auto;padding:22px}</style></head><body class="chat-room-game-window"><main class="chat-room-game-shell"><header class="chat-room-game-bar"><button id="roomGameBack" class="chat-room-game-back hidden" type="button" aria-label="게임 메뉴로">‹</button><strong id="roomGameTitle" class="chat-room-game-title">대화방 게임</strong><button id="roomGameClose" class="chat-room-game-close" type="button" aria-label="닫기">×</button></header><section id="roomGameRoot" class="chat-room-game-root"></section></main></body></html>`);doc.close();enforceDesktopPopupBounds(win);
+    const base=String(document.baseURI||location.href).replace(/"/g,"%22"),doc=win.document;doc.open();doc.write(`<!doctype html><html lang="ko" data-theme="${document.documentElement?.dataset?.theme||"light"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><title>대화방 게임</title><link rel="stylesheet" href="css/tokens.css?v=7"><link rel="stylesheet" href="css/app.css?v=64.5.23"><link rel="stylesheet" href="css/features/room-chess.css?v=2"><link rel="stylesheet" href="css/features/room-games-plus.css?v=1"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}.chat-room-game-window{background:#eef2f8}.chat-room-game-shell{height:100%;display:grid;grid-template-rows:54px minmax(0,1fr)}.chat-room-game-bar{display:flex;align-items:center;gap:10px;padding:0 14px;background:#fff;border-bottom:1px solid #dfe5ee;box-shadow:0 2px 10px rgba(22,33,50,.06)}.chat-room-game-back,.chat-room-game-close{width:36px;height:36px;border:1px solid #dfe5ee;border-radius:11px;background:#f6f8fb;color:#253246;font-size:18px;cursor:pointer}.chat-room-game-title{flex:1;font-size:15px}.chat-room-game-root{min-height:0;overflow:auto;padding:22px}</style></head><body class="chat-room-game-window"><main class="chat-room-game-shell"><header class="chat-room-game-bar"><button id="roomGameBack" class="chat-room-game-back hidden" type="button" aria-label="게임 메뉴로">‹</button><strong id="roomGameTitle" class="chat-room-game-title">대화방 게임</strong><button id="roomGameClose" class="chat-room-game-close" type="button" aria-label="닫기">×</button></header><section id="roomGameRoot" class="chat-room-game-root"></section></main></body></html>`);doc.close();enforceDesktopPopupBounds(win);
     d.win=win;d.roomId=roomId;d.root=doc.getElementById("roomGameRoot");d.title=doc.getElementById("roomGameTitle");d.back=doc.getElementById("roomGameBack");d.activeGameId=null;
     d.back.onclick=()=>renderDesktopMenu(d.roomId,room);doc.getElementById("roomGameClose").onclick=()=>win.close();win.addEventListener("pagehide",()=>{if(d.win===win){clearTimeout(d.refreshTimer);d.win=null;d.root=null;d.title=null;d.back=null;d.activeGameId=null}},{once:true});renderDesktopMenu(roomId,room);try{win.focus()}catch{}return true
   }
   function desktopLaunchCard(message,roomId){const U=D(),g=message.game,card=U.el("section",{class:"room-game-card room-game-launch-card"});card.append(U.el("div",{class:"room-game-head"},[U.el("div",{class:"room-game-head-copy"},[U.el("strong",{text:(g.kind==="ladder"||g.gameType==="ladder")?"🪜 사다리타기":(String(g.kind||"").startsWith("chess-")||g.gameType==="chess")?"♟️ 체스":"🕵️ 마피아 게임"}),U.el("small",{text:"PC·웨일북에서는 넓은 별도 창에서 진행합니다."})]),U.el("span",{class:"room-game-badge",text:"POPUP"})]));const b=U.el("button",{class:"button primary",type:"button",text:"큰 창에서 열기"});b.onclick=async()=>{const room=await MiniTalk.Realtime.getRoom(roomId);if(!ensureDesktopPopup(roomId,room))return showDesktopMessage(message);showDesktopMessage(message)};card.append(b);return card}
   function renderMessage(message,roomId){const g=message?.game;if(!g)return null;ingest(message);if(g.kind==="game-invite")return inviteCard(roomId,message);if(desktopGameMode())return desktopLaunchCard(message,roomId);return renderFullMessage(message,roomId)}
-  async function open(roomId){const room=await MiniTalk.Realtime.getRoom(roomId);if(!room)throw new Error("대화방 정보를 불러오지 못했습니다.");if(desktopGameMode()&&ensureDesktopPopup(roomId,room))return;const U=D(),body=U.el("div",{class:"modal-stack room-game-menu"}),ladder=U.el("button",{class:"button secondary room-game-menu-button",type:"button",text:"🪜 사다리타기"}),mafia=U.el("button",{class:"button secondary room-game-menu-button",type:"button",text:"🕵️ 마피아 게임"}),chess=U.el("button",{class:"button secondary room-game-menu-button",type:"button",text:"♟️ 체스"});ladder.onclick=()=>createLadder(roomId,room);mafia.onclick=()=>createMafia(roomId,room);chess.onclick=()=>createChess(roomId,room);body.append(U.el("p",{class:"muted modal-note",text:"초대할 멤버를 고르면 상대가 참가 여부를 선택합니다. 정원이 차거나 모두 응답하면 자동 시작합니다."}),ladder,mafia,chess);MiniTalk.UI.Shell.modal("대화방 게임",body)}
+  async function open(roomId){const room=await MiniTalk.Realtime.getRoom(roomId);if(!room)throw new Error("대화방 정보를 불러오지 못했습니다.");if(desktopGameMode()&&ensureDesktopPopup(roomId,room))return;const U=D(),body=U.el("div",{class:"modal-stack room-game-menu"}),ladder=U.el("button",{class:"button secondary room-game-menu-button",type:"button",text:"🪜 사다리타기"}),mafia=U.el("button",{class:"button secondary room-game-menu-button",type:"button",text:"🕵️ 마피아 게임"}),chess=U.el("button",{class:"button secondary room-game-menu-button",type:"button",text:"♟️ 체스"});ladder.onclick=()=>createLadder(roomId,room);mafia.onclick=()=>createMafia(roomId,room);chess.onclick=()=>createChess(roomId,room);body.append(U.el("p",{class:"muted modal-note",text:"초대 후 최소 인원이 모이면 방장이 바로 시작할 수 있고, 시작 전에는 다른 대화방 멤버도 참가할 수 있어요."}),ladder,mafia,chess);MiniTalk.UI.Shell.modal("대화방 게임",body)}
   return{open,ingest,renderMessage,isInternal,ladderData,ladderTrace,roleCounts,buildRolesForParticipants,playGameSfx,phaseTiming,winnerFor,desktopGameMode,desktopPopupBounds,normalizedLadderResults,chessInitial,chessLegalMove,chessLegalMoves,chessApply,chessStatus,chessMoveFx,chessSfxName,chessState};
 })();

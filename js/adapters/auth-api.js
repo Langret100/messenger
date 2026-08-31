@@ -11,10 +11,12 @@ MiniTalk.AuthApi = (() => {
     PRICE_CHANGED: "상품 가격이 변경되었습니다. 쇼핑 화면을 다시 열어주세요.",
     PRODUCT_CHANGED: "상품 정보가 변경되었습니다. 최신 상품을 확인해주세요.",
     PRODUCT_NOT_AVAILABLE: "현재 구매할 수 없는 상품입니다.",
+    PRODUCT_SOLD_OUT: "품절된 상품입니다.",
     ITEM_NOT_AVAILABLE: "이 상품의 서버 보관함 정보를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.",
     GIFT_ITEM_NOT_AVAILABLE: "이 상품은 현재 선물할 수 없습니다. 보관함을 다시 확인해주세요.",
     GIFT_REQUEST_CONFLICT: "이전 선물 요청 정보와 현재 대상이 다릅니다. 보관함을 다시 열어주세요.",
     SHOP_BUSY: "구매 요청이 많습니다. 잠시 후 다시 시도해주세요.",
+    SHOP_STOCK_UPDATE_FAILED: "재고를 확인하지 못했습니다. 다시 시도해주세요.",
     INVALID_PRODUCT_IMAGE: "상품 이미지 형식이 올바르지 않습니다.",
     PRODUCT_IMAGE_TOO_LARGE: "압축된 상품 이미지가 너무 큽니다.",
     PRODUCT_IMAGE_UPLOAD_FAILED: "상품 이미지를 서버에 저장하지 못했습니다.",
@@ -106,6 +108,7 @@ MiniTalk.AuthApi = (() => {
         name: product.name,
         price: product.price,
         description: product.description || "",
+        quantity: product.quantity === null || product.quantity === undefined ? "" : product.quantity,
         image_data: product.imageUrl || ""
       });
     },

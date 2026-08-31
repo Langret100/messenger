@@ -13,5 +13,6 @@ assert(games.includes('gameMessages(gameId).filter(m=>m?.id&&m.roomId===roomId).
 assert(games.includes('MiniTalk.Realtime.removeGameMessages(roomId,ids)'),'room-games does not call server cleanup');
 assert(games.includes('if(invite.gameType==="ladder")')&&games.includes('scheduleGameCleanup(roomId,gameId);return true'),'ladder completion must schedule cleanup');
 assert((games.match(/scheduleGameCleanup\(roomId,lobby\.id\)/g)||[]).length>=2,'mafia terminal paths must schedule cleanup');
+assert(games.includes('reason:"host-left-before-start"')&&games.includes('scheduleGameCleanup(roomId,gameId)'), 'pre-start mafia host leave must terminate and schedule cleanup');
 assert(!backup.includes('type === "game"'),'server-backup module should remain generic; realtime is responsible for excluding game traffic');
 console.log('CHAT_ROOM_GAME_SERVER_CLEANUP_OK');

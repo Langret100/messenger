@@ -14,6 +14,6 @@ const remove=rt.slice(rt.indexOf('async function removeShopInventory('),rt.index
 ok(remove.includes('if(explicitOwner){const stored=localGet(`shop.inventory.${expectedOwner}`,{})'), 'explicit-owner legacy cleanup must read raw mirror only');
 const explicit=remove.slice(remove.indexOf('if(explicitOwner)'),remove.indexOf('const inventory=localShopInventory'));
 ok(!explicit.includes('emit("shop-inventory"'), 'explicit-owner cleanup must not re-emit stale mirror');
-ok(html.includes('js/shopping/store-service.js?v=64.5.24'), 'store-service cache version stale');
+ok(html.includes('js/shopping/store-service.js?v=64.5.25'), 'store-service cache version stale');
 ok(html.includes('js/adapters/realtime.js?v=64.5.45'), 'realtime cache version stale');
 console.log('SHOPPING_LOCAL_MIRROR_RESURRECTION_OK');

@@ -12,7 +12,9 @@ MiniTalk.Shopping.StoreService = (() => {
 
   function user() { return MiniTalk.Store.get("user") || {}; }
   function requireLogin() { const current=user();if(!current.user_id||current.isGuest)throw new Error("로그인 후 이용할 수 있어요.");return current; }
-  function normalizeProduct(product={}) { return { id:String(product.id||""),name:String(product.name||"").trim().slice(0,60),description:String(product.description||"").trim().slice(0,160),imageUrl:String(product.imageUrl||product.image_url||"").trim().slice(0,7200),price:Math.max(1,Math.floor(Number(product.price)||0)),updatedAt:Number(product.updatedAt)||0 }; }
+  function normalizeProduct(product={}) { const rawQuantity=product.quantity??product.stock??null,hasQuantity=rawQuantity!==null&&rawQuantity!==undefined&&String(rawQuantity).trim()!=="",quantity=hasQuantity?Math.max(0,Math.floor(Number(rawQuantity)||0)):null;return { id:String(product.id||""),name:String(product.name||"").trim().slice(0,60),description:String(product.description||"").trim().slice(0,160),imageUrl:String(product.imageUrl||product.image_url||"").trim().slice(0,7200),price:Math.max(1,Math.floor(Number(product.price)||0)),quantity,updatedAt:Number(product.updatedAt)||0 }; }
+  function isSoldOut(product){return product?.quantity!==null&&product?.quantity!==undefined&&Number(product.quantity)<=0}
+  function patchProductQuantity(productId,quantity){if(quantity===undefined)return;const catalog={...objectValue(MiniTalk.Store.get("shopCatalog"))},current=catalog[productId];if(!current)return;catalog[productId]=normalizeProduct({...current,quantity});writeCatalog(catalog);catalogLoadedAt=Date.now()}
   function normalizeInventory(item={}) { const product=objectValue(MiniTalk.Store.get("shopCatalog"))[item.productId]||{};const status=String(item.deliveryStatus||item.delivery_status||"").trim().toLowerCase();return{...item,id:String(item.id||""),productId:String(item.productId||""),name:item.name||product.name||"상품",description:item.description||product.description||"",imageUrl:item.imageUrl||product.imageUrl||"",price:Number(item.price||product.price)||0,deliveryStatus:["owned","requested","shipping","completed","cancelled"].includes(status)?status:(item.usedAt?"completed":"owned"),deliveryRequestedAt:Number(item.deliveryRequestedAt||item.delivery_requested_at)||0,deliveryCompletedAt:Number(item.deliveryCompletedAt||item.delivery_completed_at)||0,deliveryCancelledAt:Number(item.deliveryCancelledAt||item.delivery_cancelled_at)||0,deliveryHandledBy:String(item.deliveryHandledBy||item.delivery_handled_by||"")}; }
 
   function writeCatalog(catalog) { const current=objectValue(MiniTalk.Store.get("shopCatalog"));if(sameValue(current,catalog))return false;MiniTalk.Store.set("shopCatalog",catalog);MiniTalk.Persistence.set(CATALOG_CACHE_KEY,catalog);return true; }
@@ -94,8 +96,9 @@ MiniTalk.Shopping.StoreService = (() => {
     try {
       // 별도 사전 조회 없이 기존 구매 요청에 화면의 상품 개정 정보를 함께 보냅니다.
       result=await MiniTalk.AuthApi.shopPurchase({userId:current.user_id,product:item,purchaseKey});
+      patchProductQuantity(item.id,result.remaining_quantity);
     } catch(error) {
-      if(["PRODUCT_CHANGED","PRICE_CHANGED","PRODUCT_NOT_AVAILABLE"].includes(error?.code)) {
+      if(["PRODUCT_CHANGED","PRICE_CHANGED","PRODUCT_NOT_AVAILABLE","PRODUCT_SOLD_OUT"].includes(error?.code)) {
         await refreshCatalog(true).catch(()=>{});
         pendingPurchaseKeys.delete(pendingKey);
         error.productChanged=true;
@@ -122,13 +125,14 @@ MiniTalk.Shopping.StoreService = (() => {
   }
   async function randomPurchase() {
     const current=requireLogin();
-    const available=products();
+    const available=products().filter(product=>!isSoldOut(product));
     if(!available.length)throw new Error("추첨할 상품이 아직 없습니다.");
     const pendingKey=`${current.user_id}:random`,purchaseKey=pendingPurchaseKeys.get(pendingKey)||`${pendingKey}:${crypto.randomUUID()}`;
     pendingPurchaseKeys.set(pendingKey,purchaseKey);
     let result;
     try {
       result=await MiniTalk.AuthApi.shopPurchase({userId:current.user_id,product:null,purchaseKey,randomPurchase:true,price:3});
+      if(result.product_id)patchProductQuantity(result.product_id,result.remaining_quantity);
     } catch(error) {
       if(["PRODUCT_NOT_AVAILABLE","NO_RANDOM_PRODUCTS"].includes(error?.code))await refreshCatalog(true).catch(()=>{});
       if(error?.code!=="REQUEST_TIMEOUT")pendingPurchaseKeys.delete(pendingKey);
@@ -202,5 +206,5 @@ MiniTalk.Shopping.StoreService = (() => {
     return{targetId:target.user_id,targetNickname:target.nickname};
   }
 
-  return{products,refreshCatalog,refreshInventory,start,enter,leave,saveProduct,deleteProduct,inventory,recipients,purchase,randomPurchase,use,requestDelivery,gift,normalizeProduct,normalizeInventory,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
+  return{products,refreshCatalog,refreshInventory,start,enter,leave,saveProduct,deleteProduct,inventory,recipients,purchase,randomPurchase,use,requestDelivery,gift,normalizeProduct,normalizeInventory,isSoldOut,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
 })();

@@ -10,7 +10,7 @@ for(const token of ['MOA_LANGUAGE_SHEET','모아_언어패턴','moaAdminLearnCha
 for(const token of ['moa_admin_learning_status','moa_admin_learn_chats'])ok(code.includes(token),'missing Code route '+token);
 for(const token of ['adminMoaLearningStatus','adminMoaLearnChats','cleanup'])ok(auth.includes(token),'missing AuthApi admin learning '+token);
 for(const token of ['모아 대화 학습','새 대화 학습','전체 재학습','중복 정리','cleanup:first'])ok(admin.includes(token),'missing admin learning UI '+token);
-ok(html.includes('moa-communication-engine.js?v=50')&&html.includes('auth-api.js?v=64.5.39')&&html.includes('admin.js?v=64.5.38'),'cache versions not bumped');
+ok(html.includes('moa-communication-engine.js?v=50')&&html.includes('auth-api.js?v=64.5.40')&&html.includes('admin.js?v=64.5.38'),'cache versions not bumped');
 
 // Execute pure Apps Script language/privacy helpers with a small mock.
 const gsCtx={console,Utilities:{DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(_,x)=>Array.from(crypto.createHash('sha256').update(String(x)).digest()),base64EncodeWebSafe:b=>Buffer.from(b).toString('base64url')}};

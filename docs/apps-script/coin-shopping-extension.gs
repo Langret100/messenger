@@ -133,10 +133,14 @@ function writeShopProduct_(product) {
 function normalizeShopProduct_(value) {
   const product = value || {};
   const price = Math.floor(Number(product.price) || 0);
+  const rawQuantity = product.quantity;
+  const hasQuantity = rawQuantity !== null && rawQuantity !== undefined && String(rawQuantity).trim() !== "";
+  const quantity = hasQuantity ? Math.max(0, Math.floor(Number(rawQuantity) || 0)) : null;
   return {
     id: String(product.id || "").trim().slice(0, 80),
     name: String(product.name || "").trim().slice(0, 60),
     price: price,
+    quantity: quantity,
     description: String(product.description || "").trim().slice(0, 160),
     imageUrl: String(product.imageUrl || product.imageData || "").trim().slice(0, SHOP_IMAGE_MAX_CHARS),
     active: product.active !== false,
@@ -302,6 +306,7 @@ function handleShopProductSave(e) {
     id: p.product_id,
     name: p.name,
     price: p.price,
+    quantity: p.quantity,
     description: p.description,
     imageUrl: imageData,
     active: true,
@@ -1313,7 +1318,7 @@ function pickWeightedShopProductFromGroup_(rows) {
 }
 
 function pickWeightedShopProduct_(products) {
-  const rows = (products || []).filter(function (product) { return product && product.id && product.active && Number(product.price) > 0; });
+  const rows = (products || []).filter(function (product) { return product && product.id && product.active && Number(product.price) > 0 && (product.quantity === null || product.quantity === undefined || Number(product.quantity) > 0); });
   if (!rows.length) return null;
   const low = rows.filter(function (product) { const price = Number(product.price) || 0;return price >= 1 && price <= 3; });
   const high = rows.filter(function (product) { return Number(product.price) >= 4; });
@@ -1321,6 +1326,24 @@ function pickWeightedShopProduct_(products) {
   if (!high.length) return pickWeightedShopProductFromGroup_(low);
   // 가격군 확률을 상품 개수와 무관하게 먼저 70% / 30%로 고정합니다.
   return Math.random() < 0.70 ? pickWeightedShopProductFromGroup_(low) : pickWeightedShopProductFromGroup_(high);
+}
+
+function shopProductHasStock_(product) {
+  return !!product && (product.quantity === null || product.quantity === undefined || Number(product.quantity) > 0);
+}
+function decrementShopProductStock_(product) {
+  const current = normalizeShopProduct_(product);
+  if (current.quantity === null || current.quantity === undefined) return { product: current, changed: false, remaining: null };
+  if (current.quantity <= 0) return { product: current, changed: false, soldOut: true, remaining: 0 };
+  const updated = normalizeShopProduct_(Object.assign({}, current, { quantity: current.quantity - 1 }));
+  writeShopProduct_(updated);
+  CacheService.getScriptCache().remove("moaru-shop-catalog-v2");
+  return { product: updated, changed: true, remaining: updated.quantity };
+}
+function restoreShopProductStock_(beforeProduct) {
+  if (!beforeProduct || beforeProduct.quantity === null || beforeProduct.quantity === undefined) return;
+  writeShopProduct_(normalizeShopProduct_(beforeProduct));
+  CacheService.getScriptCache().remove("moaru-shop-catalog-v2");
 }
 
 function findRewardUserForShop_(userId) {
@@ -1372,7 +1395,7 @@ function handleShopPurchase(e) {
       const duplicateProduct = normalizeShopProduct_(Object.assign({}, currentProduct, { id: duplicate.productId, name: duplicate.productName || currentProduct.name || "상품", price: duplicate.price || currentProduct.price || 1 }));
       const duplicateItem = createPurchasedInventory_(userId, duplicateProduct, purchaseKey);
       clearPendingShopPurchase_(purchaseKey);
-      return shopJson_({ ok: true, applied: false, reason: "ALREADY_PURCHASED", newCoin: duplicate.newCoin, product_id: duplicateProduct.id, product_name: duplicateProduct.name, product_description: duplicateProduct.description || "", product_image_url: duplicateProduct.imageUrl || "", original_price: Number(currentProduct.price) || Number(duplicateProduct.price) || 0, item: duplicateItem });
+      return shopJson_({ ok: true, applied: false, reason: "ALREADY_PURCHASED", newCoin: duplicate.newCoin, remaining_quantity: duplicateProduct.quantity, product_id: duplicateProduct.id, product_name: duplicateProduct.name, product_description: duplicateProduct.description || "", product_image_url: duplicateProduct.imageUrl || "", original_price: Number(currentProduct.price) || Number(duplicateProduct.price) || 0, item: duplicateItem });
     }
 
     const catalog = readShopCatalog_();
@@ -1385,6 +1408,7 @@ function handleShopPurchase(e) {
     } else {
       product = normalizeShopProduct_(catalog[productId]);
       if (!product.id || !product.active || product.price <= 0) return shopJson_({ ok: false, error: "PRODUCT_NOT_AVAILABLE" });
+      if (!shopProductHasStock_(product)) return shopJson_({ ok: false, error: "PRODUCT_SOLD_OUT", message: "품절된 상품입니다." });
       if (clientPrice !== product.price || expectedName !== product.name || expectedDescription !== product.description || expectedUpdatedAt !== product.updatedAt) return shopJson_({ ok: false, error: "PRODUCT_CHANGED", currentPrice: product.price, currentUpdatedAt: product.updatedAt, message: "상품 정보가 변경되었습니다. 최신 상품을 확인해주세요." });
       originalPrice = Number(product.price) || 0;
       chargePrice = product.price;
@@ -1396,9 +1420,23 @@ function handleShopPurchase(e) {
     const beforeCoin = reward.coin;
     if (beforeCoin < chargePrice) return shopJson_({ ok: false, error: "INSUFFICIENT_COIN", coin: beforeCoin });
     const result = setRewardCoinForShopGuarded_(reward, beforeCoin - chargePrice);
+    const stockBefore = normalizeShopProduct_(product);
+    let stockResult = null;
+    try {
+      stockResult = decrementShopProductStock_(stockBefore);
+      if (stockResult.soldOut) {
+        try { setRewardCoinForShopGuarded_(reward, beforeCoin); } catch (rollbackError) { console.error("SHOP_ROLLBACK_FAILED", rollbackError); }
+        return shopJson_({ ok: false, error: "PRODUCT_SOLD_OUT", message: "품절된 상품입니다." });
+      }
+      product = stockResult.product;
+    } catch (stockError) {
+      try { setRewardCoinForShopGuarded_(reward, beforeCoin); } catch (rollbackError) { console.error("SHOP_ROLLBACK_FAILED", rollbackError); }
+      return shopJson_({ ok: false, error: "SHOP_STOCK_UPDATE_FAILED", message: "재고를 확인하지 못했습니다. 다시 시도해주세요." });
+    }
 
     try { logSheet.appendRow([purchaseKey, userId, product.id, product.name, chargePrice, beforeCoin, result.newCoin, new Date()]); }
     catch (logError) {
+      try { if (stockResult && stockResult.changed) restoreShopProductStock_(stockBefore); } catch (stockRollbackError) { console.error("SHOP_STOCK_ROLLBACK_FAILED", stockRollbackError); }
       try { setRewardCoinForShopGuarded_(reward, beforeCoin); } catch (rollbackError) { console.error("SHOP_ROLLBACK_FAILED", rollbackError); }
       return shopJson_({ ok: false, error: "PURCHASE_LOG_FAILED" });
     }
@@ -1411,7 +1449,7 @@ function handleShopPurchase(e) {
       try { rememberPendingShopPurchase_(userId, inventoryProduct, purchaseKey); } catch (pendingError) { console.error("SHOP_PENDING_PURCHASE_SAVE_FAILED", pendingError); }
       console.error("SHOP_INVENTORY_WRITE_DEFERRED", purchaseKey, inventoryError);
     }
-    return shopJson_({ ok: true, applied: true, random_purchase: randomMode, product_id: product.id, product_name: product.name, product_description: product.description || "", product_image_url: product.imageUrl || "", product_updated_at: Number(product.updatedAt) || 0, original_price: originalPrice, price: chargePrice, newCoin: result.newCoin, item: inventoryItem, inventory_pending: inventoryPending });
+    return shopJson_({ ok: true, applied: true, random_purchase: randomMode, remaining_quantity: product.quantity, product_id: product.id, product_name: product.name, product_description: product.description || "", product_image_url: product.imageUrl || "", product_updated_at: Number(product.updatedAt) || 0, original_price: originalPrice, price: chargePrice, newCoin: result.newCoin, item: inventoryItem, inventory_pending: inventoryPending });
   } catch (error) {
     const message = String(error && error.message ? error.message : error);
     return shopJson_({ ok: false, error: message === "COIN_SHEET_TEMPORARY_ERROR" ? message : "SHOP_PURCHASE_FAILED", message: message === "COIN_SHEET_TEMPORARY_ERROR" ? "코인 정보를 확인하지 못했습니다. 잠시 후 다시 시도해주세요." : "구매 처리 중 오류가 발생했습니다." });

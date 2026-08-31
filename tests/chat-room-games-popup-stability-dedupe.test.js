@@ -1,8 +1,5 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 let source=fs.readFileSync(__dirname+'/../js/chat/room-games.js','utf8');
-const original='return{open,ingest,renderMessage,isInternal,ladderData,ladderTrace,roleCounts,buildRolesForParticipants,playGameSfx,phaseTiming,winnerFor,desktopGameMode,desktopPopupBounds,normalizedLadderResults,chessInitial,chessLegalMove,chessLegalMoves,chessApply,chessStatus,chessMoveFx,chessSfxName,chessState};';
-assert(source.includes(original),'room-games export anchor changed');
-source=source.replace(original,'return{open,ingest,renderMessage,isInternal,ladderData,ladderTrace,roleCounts,buildRolesForParticipants,playGameSfx,phaseTiming,winnerFor,desktopGameMode,desktopPopupBounds,normalizedLadderResults,chessInitial,chessLegalMove,chessLegalMoves,chessApply,chessStatus,chessMoveFx,chessSfxName,chessState,_qa:{membersFor,desktopRefreshKind}};');
 const sandbox={
   MiniTalk:{Chat:{},Store:{get:k=>k==='user'?{user_id:'me'}:k==='presence'?{}:k==='profiles'?{}:{}},UI:{Dom:{doc:()=>({defaultView:{}})},Shell:{toast:()=>{}}},Realtime:{},MobileImmersive:{isMobile:()=>false}},
   TextEncoder,TextDecoder,crypto:require('crypto').webcrypto,localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}},document:{querySelectorAll:()=>[]},navigator:{userAgent:'Node'},CSS:{escape:s=>s},window:{AudioContext:null},btoa:s=>Buffer.from(s,'binary').toString('base64'),atob:s=>Buffer.from(s,'base64').toString('binary'),setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,clearInterval:()=>{},requestAnimationFrame:fn=>fn(),console

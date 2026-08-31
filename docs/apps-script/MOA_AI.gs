@@ -747,11 +747,20 @@ function moaPairSourceHash_(sheetId,room,a,b){
   var left=moaAnonActorHash_(String((a&&a.user)||(a&&a.nick)||"anon-a")),right=moaAnonActorHash_(String((b&&b.user)||(b&&b.nick)||"anon-b"));
   return moaDigestShort_([sheetId,room,semantic,left,right].join("|"),16);
 }
+function moaLearningTextEligible_(value){
+  var t=String(value||"").trim();if(!t)return false;
+  // Attachments are transport/UI events, not human conversational language.
+  if(/^\[\[(?:IMG|FILE)\]\]/i.test(t)||/^\[(?:사진|파일)\](?:\s|$)/.test(t))return false;
+  // Current game packets are excluded from Sheet backup on the client, but older
+  // backups may still contain their display labels. Keep those out of relearning too.
+  if(/^\[(?:사다리타기(?:\s+초대)?|체스(?:\s+게임)?(?:\s+(?:초대|시작|종료))?|마피아(?:\s+게임)?(?:\s+(?:초대|시작|종료|인원\s+변경))?|게임\s+(?:초대(?:\s+종료)?|참가(?:\s+(?:확정|취소))?|정원(?:\s+마감)?|나가기(?:\s+요청)?|종료)|밤\s+결과|투표(?:\s+무효)?|마피아\s+준비)\](?:\s|$)/.test(t))return false;
+  return true;
+}
 function moaReadGlobalLearnBatch_(sh,start,limit,names){
   var last=sh.getLastRow(),out={messages:[],next:start,done:true,privateSkipped:0,scanned:0};if(last<2)return out;start=Math.max(2,Number(start||2));if(start>last){out.next=last+1;return out;}
   var begin=Math.max(2,start-1),count=Math.min(last-begin+1,Number(limit||260)+1),vals=sh.getRange(begin,1,count,4).getValues(),baseNames=Array.isArray(names)?names:[],baseSet=moaNicknameMeta_(baseNames).set,extraNames=[],extraSeen={};
   vals.forEach(function(r){var n=String(r[1]||"").trim();if(n.length>=2&&!baseSet[n]&&!extraSeen[n]){extraSeen[n]=1;extraNames.push(n);}});var localNames=extraNames.length?baseNames.concat(extraNames):baseNames;out.scanned=count;
-  vals.forEach(function(r,idx){var row=begin+idx,clean=moaAnonymizeChatText_(r[3],localNames);if(!clean){if(String(r[3]||"").trim())out.privateSkipped++;return;}out.messages.push({row:row,user:String(r[0]||""),nick:String(r[1]||""),text:clean,ts:r[2] instanceof Date?r[2].getTime():Number(r[2]||0)});});
+  vals.forEach(function(r,idx){var row=begin+idx,rawText=String(r[3]||"");if(!moaLearningTextEligible_(rawText))return;var clean=moaAnonymizeChatText_(rawText,localNames);if(!clean){if(rawText.trim())out.privateSkipped++;return;}out.messages.push({row:row,user:String(r[0]||""),nick:String(r[1]||""),text:clean,ts:r[2] instanceof Date?r[2].getTime():Number(r[2]||0)});});
   out.next=Math.min(last+1,begin+count);out.done=out.next>last;return out;
 }
 function moaRoomLastRow_(sh,col){
@@ -766,7 +775,7 @@ function moaReadRoomLearnBatch_(sh,col,start,limit,names,lastRow){
   var last=Math.max(6,Number(lastRow||moaRoomLastRow_(sh,col))),out={messages:[],next:start,done:true,privateSkipped:0,scanned:0};start=Math.max(7,Number(start||7));if(start>last){out.next=last+1;return out;}
   var begin=Math.max(7,start-1),count=Math.min(last-begin+1,Number(limit||260)+1),vals=sh.getRange(begin,col,count,1).getValues(),parsed=[],baseNames=Array.isArray(names)?names:[],baseSet=moaNicknameMeta_(baseNames).set,extraNames=[],extraSeen={};out.scanned=count;
   vals.forEach(function(r,idx){var raw=String(r[0]||"").trim();if(!raw){parsed.push(null);return;}try{var o=JSON.parse(raw),n=String(o.nickname||"").trim();if(n.length>=2&&!baseSet[n]&&!extraSeen[n]){extraSeen[n]=1;extraNames.push(n);}parsed.push({row:begin+idx,o:o});}catch(e){parsed.push(null);}});var localNames=extraNames.length?baseNames.concat(extraNames):baseNames;
-  parsed.forEach(function(item){if(!item)return;var o=item.o,clean=moaAnonymizeChatText_(o.text||o.message,localNames);if(!clean){out.privateSkipped++;return;}out.messages.push({row:item.row,user:String(o.user_id||""),nick:String(o.nickname||""),text:clean,ts:Number(o.ts||0)});});
+  parsed.forEach(function(item){if(!item)return;var o=item.o,rawText=String(o.text||o.message||"");if(!moaLearningTextEligible_(rawText))return;var clean=moaAnonymizeChatText_(rawText,localNames);if(!clean){out.privateSkipped++;return;}out.messages.push({row:item.row,user:String(o.user_id||""),nick:String(o.nickname||""),text:clean,ts:Number(o.ts||0)});});
   out.next=Math.min(last+1,begin+count);out.done=out.next>last;return out;
 }
 function moaSameChatSpeaker_(a,b){if(a.user&&b.user)return a.user===b.user;if(a.nick&&b.nick)return a.nick===b.nick;return false;}

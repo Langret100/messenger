@@ -103,6 +103,8 @@ MiniTalk.DataCache=(()=>{
     if(rows.length>CHAT_MAX){rows.sort((a,b)=>(Number(a.sortAt)||0)-(Number(b.sortAt)||0));await Promise.all(rows.slice(0,rows.length-CHAT_MAX).map(row=>remove("chat-message",row.key)))}
   }
 
+  async function removeMessage(roomId,messageId){const room=String(roomId),mid=String(messageId||"");if(!mid)return false;await remove("chat-message",`${room}|${mid}`);return true}
+
   async function removeMessageRoom(roomId){const rows=await list("chat-message",{prefix:`${String(roomId)}|`,touchRecords:false});await Promise.all(rows.map(row=>remove("chat-message",row.key)))}
 
   async function cleanup({force=false}={}){
@@ -118,5 +120,5 @@ MiniTalk.DataCache=(()=>{
 
   function start(){cleanup().catch(error=>console.warn("기기 캐시 정리 실패",error))}
 
-  return{get,put,remove,list,touch,getMeta,setMeta,getMessages,getMessagesBefore,putMessage,removeMessageRoom,cleanup,start,MAX_AGE,CHAT_MAX};
+  return{get,put,remove,list,touch,getMeta,setMeta,getMessages,getMessagesBefore,putMessage,removeMessage,removeMessageRoom,cleanup,start,MAX_AGE,CHAT_MAX};
 })();

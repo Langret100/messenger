@@ -5,7 +5,8 @@ const games=fs.readFileSync(root+'/js/chat/room-games.js','utf8');
 const backup=fs.readFileSync(root+'/js/chat/server-backup.js','utf8');
 assert(realtime.includes('async function removeGameMessages(roomId,messageIds=[])'),'game-message cleanup API missing');
 assert(realtime.includes('if(saved.type!=="game")MiniTalk.Chat.ServerBackup?.message(saved)'),'game messages must not be copied to Apps Script/Sheet backup');
-assert(realtime.includes('limitToLast(1).once("value")'),'cleanup must restore room preview with only the latest remaining message');
+assert(realtime.includes('limitToLast(50).once("value")'),'cleanup must inspect a small recent tail when restoring the visible room preview');
+assert(realtime.includes('message?.type!=="game"||message?.game?.kind==="game-invite"'),'cleanup preview must skip hidden internal game packets');
 assert(realtime.includes('[`${messagesPath(roomId)}/${id}`]=null'),'cleanup must delete only known game message ids');
 assert(games.includes('function scheduleGameCleanup(roomId,gameId,delay=10000)'),'automatic game cleanup scheduler missing');
 assert(games.includes('gameHostId(gameId)!==String(currentUser().user_id||"")'),'only host should perform server cleanup');
@@ -13,6 +14,6 @@ assert(games.includes('gameMessages(gameId).filter(m=>m?.id&&m.roomId===roomId).
 assert(games.includes('MiniTalk.Realtime.removeGameMessages(roomId,ids)'),'room-games does not call server cleanup');
 assert(games.includes('if(invite.gameType==="ladder")')&&games.includes('scheduleGameCleanup(roomId,gameId);return true'),'ladder completion must schedule cleanup');
 assert((games.match(/scheduleGameCleanup\(roomId,lobby\.id\)/g)||[]).length>=2,'mafia terminal paths must schedule cleanup');
-assert(games.includes('reason:"host-left-before-start"')&&games.includes('scheduleGameCleanup(roomId,gameId)'), 'pre-start mafia host leave must terminate and schedule cleanup');
+assert(games.includes('"host-left-before-start"')&&games.includes('"not-enough-before-start"')&&games.includes('"left-during-role-setup"')&&games.includes('scheduleGameCleanup(roomId,gameId)'), 'pre-start/role-setup mafia leave below minimum must terminate and schedule cleanup');
 assert(!backup.includes('type === "game"'),'server-backup module should remain generic; realtime is responsible for excluding game traffic');
 console.log('CHAT_ROOM_GAME_SERVER_CLEANUP_OK');

@@ -19,7 +19,8 @@ MiniTalk.Features.Chats=(()=>{
     MiniTalk.Events.on("rt:profiles",profiles=>{MiniTalk.Store.set("profiles",profiles||{});if(!isRenderedChatRoute())return;const active=MiniTalk.Store.get("activeRoom");if(active){applyChatHeader(MiniTalk.Store.get("rooms")?.[active]?.title||"대화",roomHeaderActions(active),{back:()=>backToList()});scheduleMessageRender(active)}else{applyChatHeader(homeTitle(),headerListActions());refreshRoomList()}});
     MiniTalk.Events.on("rt:presence",presence=>MiniTalk.Store.set("presence",presence||{}));
     MiniTalk.Events.on("rt:message-reset",roomId=>{messagesByRoom[roomId]=[];renderedMessageIds[roomId]=new Set();olderStateByRoom[roomId]={loading:false,hasMore:true}});
-    MiniTalk.Events.on("rt:message",message=>{MiniTalk.Chat.RoomGames?.ingest?.(message);const roomId=message.roomId;if(!roomId)return;const list=messagesByRoom[roomId]||(messagesByRoom[roomId]=[]),isNew=!list.some(item=>item.id===message.id);if(isNew)list.push(message);const active=isRenderedChatRoute()&&MiniTalk.Store.get("activeRoom")===roomId,room=MiniTalk.Store.get("rooms")?.[roomId],stillMember=Boolean(room&&MiniTalk.Realtime.isRoomMember(room));if(active)scheduleMessageRender(roomId);if(isNew&&!active&&stillMember&&(message.ts||0)>Date.now()-7000)MiniTalk.Features.Tools?.notifyIncoming?.(message)});
+    MiniTalk.Events.on("rt:message",message=>{MiniTalk.Chat.RoomGames?.ingest?.(message);const roomId=message.roomId;if(!roomId)return;const list=messagesByRoom[roomId]||(messagesByRoom[roomId]=[]),isNew=!list.some(item=>item.id===message.id);if(isNew)list.push(message);const active=isRenderedChatRoute()&&MiniTalk.Store.get("activeRoom")===roomId,room=MiniTalk.Store.get("rooms")?.[roomId],stillMember=Boolean(room&&MiniTalk.Realtime.isRoomMember(room)),notifyable=message.type!=="game"||message.game?.kind==="game-invite";if(active)scheduleMessageRender(roomId);if(isNew&&!active&&stillMember&&notifyable&&(message.ts||0)>Date.now()-7000)MiniTalk.Features.Tools?.notifyIncoming?.(message)});
+    MiniTalk.Events.on("rt:message-removed",info=>{const roomId=String(info?.roomId||""),id=String(info?.id||"");if(!roomId||!id)return;const list=messagesByRoom[roomId]||(messagesByRoom[roomId]=[]),next=list.filter(message=>String(message.id||"")!==id);if(next.length===list.length)return;messagesByRoom[roomId]=next;renderedMessageIds[roomId]?.delete(id);MiniTalk.Chat.RoomGames?.removeMessage?.(id);if(isRenderedChatRoute()&&MiniTalk.Store.get("activeRoom")===roomId)scheduleMessageRender(roomId)});
     MiniTalk.Events.on("chat:unread",()=>{if(isRenderedChatRoute()&&!MiniTalk.Store.get("activeRoom"))refreshRoomList()});
   }
   function scheduleMessageRender(roomId){if(renderFrame)cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(()=>{renderFrame=0;if(MiniTalk.Store.get("activeRoom")===roomId)renderMessages(roomId)})}
@@ -180,6 +181,10 @@ MiniTalk.Features.Chats=(()=>{
   }
   function fillMessageList(roomId,list,initial){
     const sorted=[...(messagesByRoom[roomId]||[])].sort((a,b)=>(Number(a.ts)||Number(a.clientTs)||0)-(Number(b.ts)||Number(b.clientTs)||0)||String(a.id||"").localeCompare(String(b.id||""))),seen=renderedMessageIds[roomId]||(renderedMessageIds[roomId]=new Set());
+    // Prime the complete game timeline before deciding which historical game rows are visible.
+    // Without this first pass, a fresh chat render can briefly show invite/start/terminal cards together
+    // because earlier rows do not yet know that a later message already ended the same game.
+    sorted.forEach(message=>{if(message?.type==="game")MiniTalk.Chat.RoomGames?.ingest?.(message)});
     const nodes=sorted.map((message,i)=>{const n=messageNode(message),key=String(message.id||`${message.user_id||""}:${message.ts||0}:${i}`),fresh=!seen.has(key);if(fresh&&(initial?i>=Math.max(0,sorted.length-4):true))n.classList.add("message-enter");seen.add(key);return n});
     list.replaceChildren(...nodes)
   }

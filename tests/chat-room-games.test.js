@@ -20,7 +20,7 @@ assert(css.includes('@keyframes mafia-card-shuffle-left')&&css.includes('@keyfra
 assert(realtime.includes('game:payload.game&&typeof payload.game==="object"?payload.game:null'),'realtime adapter drops game metadata');
 assert(chats.includes('addAction("♟","게임"'),'composer game action missing');
 assert(chats.includes('MiniTalk.Chat.RoomGames?.renderMessage?.(message,message.roomId)'),'game renderer missing');
-assert(index.includes('js/chat/room-games.js?v=19'),'room-games script not loaded');
+assert(index.includes('js/chat/room-games.js?v=24'),'room-games script not loaded');
 
 assert(source.includes('svg.setAttribute("preserveAspectRatio","xMidYMid meet")'),'ladder must preserve its vertical geometry');
 assert(source.includes('"data-phase-gate":"night"'),'host night control gate missing');
@@ -47,7 +47,7 @@ assert(source.includes('kind:"mafia-leave"')&&source.includes('kind:"mafia-playe
 assert(source.includes('personal-win')&&source.includes('personal-lose'),'personal win/loss rendering missing');
 
 assert(source.includes('kind:"game-invite-accept"')&&source.includes('kind:"game-invite-decline"')&&source.includes('kind:"game-invite-slot"'),'game invite accept/decline/slot protocol missing');
-assert(source.includes('status=final||participants.length>=max?"full":"accepted"'),'first-accept capacity guard missing');
+assert(source.includes('status=participants.length>=max?"full":"accepted"'),'first-accept capacity guard missing');
 assert(source.includes('capacityReached=people.length>=max')&&source.includes('allResponded'),'automatic invite finalization missing');
 assert(source.includes('maybeAutoStartMafia'),'mafia automatic start after accepted participants prepare keys is missing');
 assert(source.includes('if(desktopGameMode()){const room=MiniTalk.Store.get("rooms")?.[roomId]'),'accepted desktop invite must open popup from user gesture');
@@ -59,7 +59,7 @@ assert(css.includes('.mafia-timer')&&css.includes('.mafia-leave-button'),'timer/
 assert(source.includes('function desktopGameMode()')&&source.includes('/CrOS|Whale/i'),'PC/WhaleBook desktop detection missing');
 assert(source.includes('window.open("",`MoaruChatRoomGame_'),'desktop chat-game popup open missing');
 assert(source.includes('width=${b.width},height=${b.height}')&&source.includes('enforceDesktopPopupBounds'),'desktop popup sizing enforcement missing');
-assert(source.includes('PC·웨일북에서는 넓은 별도 창에서 진행합니다.'),'desktop popup user guidance missing');
+assert(source.includes('room-game-open-button')&&source.includes('text:"열기"'),'compact desktop popup launch control missing');
 assert(css.includes('.chat-room-game-window .room-game-card')&&css.includes('width:min(780px,calc(100vw - 48px))'),'large-window game card layout missing');
 assert(css.includes('.chat-room-game-window .mafia-role-preview')&&css.includes('repeat(4,minmax(0,1fr))'),'desktop role grid missing');
 

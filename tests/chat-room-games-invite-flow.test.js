@@ -1,7 +1,5 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert'),webcrypto=require('crypto').webcrypto;
 let source=fs.readFileSync(__dirname+'/../js/chat/room-games.js','utf8');
-source=source.replace(/return\{open,ingest,renderMessage,isInternal,ladderData,ladderTrace,roleCounts,buildRolesForParticipants,playGameSfx,phaseTiming,winnerFor,desktopGameMode,desktopPopupBounds,normalizedLadderResults,chessInitial,chessLegalMove,chessLegalMoves,chessApply,chessStatus,chessMoveFx,chessSfxName,chessState\};/,
-  'return{open,ingest,renderMessage,isInternal,ladderData,ladderTrace,roleCounts,buildRolesForParticipants,playGameSfx,phaseTiming,winnerFor,desktopGameMode,desktopPopupBounds,normalizedLadderResults,chessInitial,chessLegalMove,chessLegalMoves,chessApply,chessStatus,chessMoveFx,chessSfxName,chessState,_qa:{handleInviteAcceptAsHost,maybeFinalizeInviteAsHost,maybeAutoStartMafia,inviteParticipants,inviteSlotFor,inviteFinalMessage}};');
 const users={};for(let i=1;i<=14;i++)users['u'+i]={user_id:'u'+i,nickname:'참가자'+i};
 let current=users.u1,seq=0;const messages=[],storage=new Map();
 const localStorage={getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)};
@@ -26,7 +24,8 @@ async function makePub(){const kp=await webcrypto.subtle.generateKey({name:'RSA-
   assert.deepStrictEqual(JSON.parse(JSON.stringify(ladder.game.participants.map(p=>p.user_id))),Array.from({length:12},(_,i)=>'u'+(i+1)),'capacity must preserve first acceptance order and host');
   assert.strictEqual(ladder.game.results.length,12,'ladder result count must match accepted players');
   assert.deepStrictEqual(JSON.parse(JSON.stringify(ladder.game.results.slice(0,3))),['A','B','3번'],'ladder result labels must be normalized to final accepted count');
-  await accept(inv.id,'u13');const late=Q.inviteSlotFor(inv.id,'u13');assert(late&&late.game.status==='full','late accept after capacity must be rejected as full');
+  const beforeLate=messages.length;await accept(inv.id,'u13');const late=Q.inviteSlotFor(inv.id,'u13');assert.strictEqual(late,null,'late accept after game finalization must not create a new slot');
+  assert.strictEqual(messages.length,beforeLate+1,'late accept after finalization must not create a host response packet');
   assert(!ladder.game.participants.some(p=>p.user_id==='u13'),'late player must not enter full ladder');
 
   // All invitees respond below cap -> automatic start without a host start button.
@@ -54,6 +53,12 @@ async function makePub(){const kp=await webcrypto.subtle.generateKey({name:'RSA-
   const minv={kind:'game-invite',id:'mafiaInvite',gameType:'mafia',hostId:'u1',host:{...users.u1},invited:[users.u2,users.u3,users.u4],minPlayers:4,maxPlayers:12,resultLabels:[]};emitAs('u1',{game:minv});
   await accept(minv.id,'u2');await accept(minv.id,'u3');await accept(minv.id,'u4');
   const lobby=latest('mafia-lobby',minv.id);assert(lobby,'mafia lobby must be created automatically after invite acceptance');assert.strictEqual(lobby.game.participants.length,4);
+  // If someone leaves before role assignment and active players fall below four, the lobby must terminate instead of hanging forever.
+  const preLeave={kind:'game-invite',id:'mafiaPreLeave',gameType:'mafia',hostId:'u1',host:{...users.u1},invited:[users.u2,users.u3,users.u4],minPlayers:4,maxPlayers:12,resultLabels:[]};emitAs('u1',{game:preLeave});
+  await accept(preLeave.id,'u2');await accept(preLeave.id,'u3');await accept(preLeave.id,'u4');
+  const preLobby=latest('mafia-lobby',preLeave.id);assert(preLobby,'pre-leave mafia lobby missing');
+  const leaveMsg=emitAs('u4',{game:{kind:'mafia-leave',id:preLeave.id,userId:'u4'}});current=users.u1;await Q.maybeHandleLeaveAsHost(leaveMsg);
+  const preEnd=latest('mafia-phase',preLeave.id);assert(preEnd&&preEnd.game.phase==='ended'&&preEnd.game.reason==='not-enough-before-start','pre-role mafia leave below four must terminate the game');
   for(const uid of ['u1','u2','u3','u4'])emitAs(uid,{game:{kind:'mafia-key',id:minv.id,userId:uid,publicKey:await makePub()}});
   current=users.u1;const started=await Q.maybeAutoStartMafia('r1',minv.id);assert.strictEqual(started,true,'mafia must auto-start after every accepted player crypto key is ready');
   const phase=latest('mafia-phase',minv.id);assert(phase&&phase.game.phase==='night','automatic mafia start must enter initial night phase');

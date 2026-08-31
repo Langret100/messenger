@@ -396,7 +396,8 @@ MiniTalk.Realtime=(()=>{
   function unsubscribeMessages(){requestedMessageRoom=null;messageUnsub?.();messageUnsub=null}
   async function subscribeMessages(roomId){
     unsubscribeMessages();requestedMessageRoom=String(roomId);emit("message-reset",roomId);
-    const cacheRoom=`${user.user_id}|${roomId}`,cached=await MiniTalk.DataCache?.getMessages?.(cacheRoom,CHAT_PAGE_SIZE)||[];
+    const cacheRoom=`${user.user_id}|${roomId}`,cachedRaw=await MiniTalk.DataCache?.getMessages?.(cacheRoom,CHAT_PAGE_SIZE)||[],cached=[];
+    for(const message of cachedRaw){if(message?.type==="game"){MiniTalk.DataCache?.removeMessage?.(cacheRoom,message.id).catch(()=>{});continue}cached.push(message)}
     if(requestedMessageRoom!==String(roomId))return;
     cached.forEach(message=>emit("message",message));
     const lastTs=cached.reduce((max,message)=>Math.max(max,Number(message?.ts)||Number(message?.clientTs)||0),0);
@@ -404,9 +405,10 @@ MiniTalk.Realtime=(()=>{
     if(requestedMessageRoom!==String(roomId))return;
     if(mode==="firebase"&&db){
       const base=db.ref(messagesPath(roomId)).orderByChild("ts"),ref=cached.length&&lastTs>0?base.startAt(lastTs):base.limitToLast(CHAT_PAGE_SIZE);
-      const fn=s=>{const value=s.val()||{},message={...value,id:s.key,roomId:value.roomId||roomId};MiniTalk.DataCache?.putMessage?.(cacheRoom,message).catch(()=>{});emit("message",message)};
+      const fn=s=>{const value=s.val()||{},message={...value,id:s.key,roomId:value.roomId||roomId};if(message.type!=="game")MiniTalk.DataCache?.putMessage?.(cacheRoom,message).catch(()=>{});emit("message",message)};
       const fail=error=>{console.error("대화내역 구독 실패",error);emit("error",{message:"대화내역을 읽을 권한이 없습니다.",code:String(error?.code||"")})};
-      ref.on("child_added",fn,fail);messageUnsub=()=>ref.off("child_added",fn);
+      const removeRef=db.ref(messagesPath(roomId)),drop=s=>{MiniTalk.DataCache?.removeMessage?.(cacheRoom,s.key).catch(()=>{});emit("message-removed",{roomId,id:s.key})};
+      ref.on("child_added",fn,fail);removeRef.on("child_removed",drop,fail);messageUnsub=()=>{ref.off("child_added",fn);removeRef.off("child_removed",drop)};
     }else localGet(`messages.${roomId}`,[]).slice(-CHAT_PAGE_SIZE).forEach(message=>emit("message",message));
   }
   async function loadOlderMessages(roomId,beforeTs,beforeId=""){
@@ -467,14 +469,15 @@ MiniTalk.Realtime=(()=>{
     if(mode==="firebase"){
       const updates={};ids.forEach(id=>updates[`${messagesPath(roomId)}/${id}`]=null);
       await db.ref().update(updates);
-      const snap=await db.ref(messagesPath(roomId)).orderByChild("ts").limitToLast(1).once("value");let latest=null;
-      snap.forEach(child=>{latest={id:child.key,...(child.val()||{})}});
+      const snap=await db.ref(messagesPath(roomId)).orderByChild("ts").limitToLast(50).once("value"),tail=[];
+      snap.forEach(child=>tail.push({id:child.key,...(child.val()||{})}));
+      const latest=[...tail].reverse().find(message=>message?.type!=="game"||message?.game?.kind==="game-invite")||null;
       const meta=latest?{lastMessage:roomMessagePreview(latest),lastMessageEmoticon:latest.emoticon||null,lastMessageAt:Number(latest.ts)||Number(latest.clientTs)||0,lastMessageUserId:latest.user_id||"",lastMessageNickname:latest.nickname||""}:{lastMessage:"",lastMessageEmoticon:null,lastMessageAt:0,lastMessageUserId:"",lastMessageNickname:""};
       await db.ref().update({[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessage`]:meta.lastMessage,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageEmoticon`]:meta.lastMessageEmoticon,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageAt`]:meta.lastMessageAt,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageUserId`]:meta.lastMessageUserId,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageNickname`]:meta.lastMessageNickname,[`${roomSummariesPath()}/${roomId}/lastMessage`]:meta.lastMessage,[`${roomSummariesPath()}/${roomId}/lastMessageEmoticon`]:meta.lastMessageEmoticon,[`${roomSummariesPath()}/${roomId}/lastMessageAt`]:meta.lastMessageAt,[`${roomSummariesPath()}/${roomId}/lastMessageUserId`]:meta.lastMessageUserId,[`${roomSummariesPath()}/${roomId}/lastMessageNickname`]:meta.lastMessageNickname});
       return{removed:ids.length,lastMessage:latest};
     }
     const key=`messages.${roomId}`,before=localGet(key,[]),removeSet=new Set(ids),after=before.filter(message=>!removeSet.has(String(message?.id||"")));localSet(key,after);
-    const latest=after[after.length-1]||null,rooms=localGet("rooms",{});if(rooms[roomId]){rooms[roomId]={...rooms[roomId],lastMessage:latest?roomMessagePreview(latest):"",lastMessageEmoticon:latest?.emoticon||null,lastMessageAt:latest?(Number(latest.ts)||Number(latest.clientTs)||0):0,lastMessageUserId:latest?.user_id||"",lastMessageNickname:latest?.nickname||""};localSet("rooms",rooms);broadcast("rooms",rooms)}
+    const latest=[...after].reverse().find(message=>message?.type!=="game"||message?.game?.kind==="game-invite")||null,rooms=localGet("rooms",{});if(rooms[roomId]){rooms[roomId]={...rooms[roomId],lastMessage:latest?roomMessagePreview(latest):"",lastMessageEmoticon:latest?.emoticon||null,lastMessageAt:latest?(Number(latest.ts)||Number(latest.clientTs)||0):0,lastMessageUserId:latest?.user_id||"",lastMessageNickname:latest?.nickname||""};localSet("rooms",rooms);broadcast("rooms",rooms)}
     return{removed:before.length-after.length,lastMessage:latest};
   }
 
@@ -491,13 +494,14 @@ MiniTalk.Realtime=(()=>{
     };
     const preview=roomMessagePreview(message);
     if(mode==="firebase"){
-      const ref=db.ref(messagesPath(roomId)).push(),serverMessage={...message,ts:firebase.database.ServerValue.TIMESTAMP},roomMeta={lastMessage:preview,lastMessageEmoticon:message.emoticon||null,lastMessageAt:firebase.database.ServerValue.TIMESTAMP,lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:firebase.database.ServerValue.TIMESTAMP};
-      await db.ref().update({[`${messagesPath(roomId)}/${ref.key}`]:serverMessage,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessage`]:roomMeta.lastMessage,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageEmoticon`]:roomMeta.lastMessageEmoticon,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageAt`]:roomMeta.lastMessageAt,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageUserId`]:roomMeta.lastMessageUserId,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageNickname`]:roomMeta.lastMessageNickname,[`${MiniTalkConfig.paths.rooms}/${roomId}/updatedAt`]:roomMeta.updatedAt,[`${roomSummariesPath()}/${roomId}/lastMessage`]:roomMeta.lastMessage,[`${roomSummariesPath()}/${roomId}/lastMessageEmoticon`]:roomMeta.lastMessageEmoticon,[`${roomSummariesPath()}/${roomId}/lastMessageAt`]:roomMeta.lastMessageAt,[`${roomSummariesPath()}/${roomId}/lastMessageUserId`]:roomMeta.lastMessageUserId,[`${roomSummariesPath()}/${roomId}/lastMessageNickname`]:roomMeta.lastMessageNickname,[`${roomSummariesPath()}/${roomId}/updatedAt`]:roomMeta.updatedAt});
+      const ref=db.ref(messagesPath(roomId)).push(),serverMessage={...message,ts:firebase.database.ServerValue.TIMESTAMP},roomMeta={lastMessage:preview,lastMessageEmoticon:message.emoticon||null,lastMessageAt:firebase.database.ServerValue.TIMESTAMP,lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:firebase.database.ServerValue.TIMESTAMP},updates={[`${messagesPath(roomId)}/${ref.key}`]:serverMessage},gamePreview=message.type!=="game"||message.game?.kind==="game-invite";
+      if(gamePreview)Object.assign(updates,{[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessage`]:roomMeta.lastMessage,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageEmoticon`]:roomMeta.lastMessageEmoticon,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageAt`]:roomMeta.lastMessageAt,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageUserId`]:roomMeta.lastMessageUserId,[`${MiniTalkConfig.paths.rooms}/${roomId}/lastMessageNickname`]:roomMeta.lastMessageNickname,[`${MiniTalkConfig.paths.rooms}/${roomId}/updatedAt`]:roomMeta.updatedAt,[`${roomSummariesPath()}/${roomId}/lastMessage`]:roomMeta.lastMessage,[`${roomSummariesPath()}/${roomId}/lastMessageEmoticon`]:roomMeta.lastMessageEmoticon,[`${roomSummariesPath()}/${roomId}/lastMessageAt`]:roomMeta.lastMessageAt,[`${roomSummariesPath()}/${roomId}/lastMessageUserId`]:roomMeta.lastMessageUserId,[`${roomSummariesPath()}/${roomId}/lastMessageNickname`]:roomMeta.lastMessageNickname,[`${roomSummariesPath()}/${roomId}/updatedAt`]:roomMeta.updatedAt});
+      await db.ref().update(updates);
       /* 방금 쓴 메시지를 Firebase에서 다시 읽지 않습니다. 목록 사용자는 roomSummaries의 작은 변경만 받습니다. */
       const saved={id:ref.key,...message};if(saved.type!=="game")MiniTalk.Chat.ServerBackup?.message(saved);pruneRoomMessages(roomId).catch(()=>{});return saved;
     }
     const value={id:crypto.randomUUID(),...message},list=localGet(`messages.${roomId}`,[]);list.push(value);localSet(`messages.${roomId}`,list.slice(-200));
-    const rooms=localGet("rooms",{});rooms[roomId]={...(rooms[roomId]||{id:roomId,title:roomId}),lastMessage:preview,lastMessageEmoticon:message.emoticon||null,lastMessageAt:Date.now(),lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:Date.now()};localSet("rooms",rooms);broadcast("message",value);broadcast("rooms",rooms);return value;
+    const rooms=localGet("rooms",{}),gamePreview=message.type!=="game"||message.game?.kind==="game-invite";if(gamePreview){rooms[roomId]={...(rooms[roomId]||{id:roomId,title:roomId}),lastMessage:preview,lastMessageEmoticon:message.emoticon||null,lastMessageAt:Date.now(),lastMessageUserId:user.user_id,lastMessageNickname:user.nickname,updatedAt:Date.now()};localSet("rooms",rooms)}broadcast("message",value);if(gamePreview)broadcast("rooms",rooms);return value;
   }
   async function getRoom(roomId){
     await awaitTransport();

@@ -2,7 +2,7 @@
 MiniTalk.Chat.RoomGames=(()=>{
   const D=()=>MiniTalk.UI.Dom;
   const enc=new TextEncoder(),dec=new TextDecoder();
-  const state={messages:new Map(),privateBoxes:new Map(),decrypting:new Set(),keyAnnouncements:new Set(),revealedRoles:new Set(),autoResolved:new Set(),leaveHandled:new Set(),inviteHandled:new Set(),inviteStarting:new Set(),inviteQueues:new Map(),phaseTimers:new Map(),phaseResolving:new Set(),cleanupTimers:new Map(),localCleanupTimers:new Map(),cleanupRunning:new Set(),retiredGames:new Map(),chessSending:new Set(),chessFxSeen:new Set(),desktop:{win:null,roomId:null,root:null,title:null,back:null,activeGameId:null,sessionGames:new Map(),refreshTimer:0,closeWatchTimer:0,closeToken:0}};
+  const state={messages:new Map(),privateBoxes:new Map(),decrypting:new Set(),keyAnnouncements:new Set(),revealedRoles:new Set(),autoResolved:new Set(),leaveHandled:new Set(),inviteHandled:new Set(),inviteStarting:new Set(),inviteQueues:new Map(),phaseTimers:new Map(),phaseResolving:new Set(),cleanupTimers:new Map(),localCleanupTimers:new Map(),cleanupRunning:new Set(),retiredGames:new Map(),inviteExpiryTimers:new Map(),chessSending:new Set(),chessFxSeen:new Set(),desktop:{win:null,roomId:null,root:null,title:null,back:null,activeGameId:null,sessionGames:new Map(),refreshTimer:0,closeWatchTimer:0,closeToken:0}};
   const currentUser=()=>MiniTalk.Store.get("user")||{};
   function gameWindow(){try{const w=state.desktop.win;if(w&&!w.closed)return w}catch{}return window}
   function gameConfirm(message){const w=gameWindow();return typeof w?.confirm==="function"?w.confirm(message):true}
@@ -28,6 +28,7 @@ MiniTalk.Chat.RoomGames=(()=>{
   };
   const phaseText=phase=>phase==="night"?"밤":phase==="day"?"낮 · 토론/투표":"게임 종료";
   const MAFIA_TIMING={roleReveal:15000,night:30000,discussion:45000,vote:30000};
+  const INVITE_HOST_ALONE_TIMEOUT=10*60*1000;
   function phaseTiming(phase,{initial=false,now=Date.now()}={}){
     if(phase==="night"){
       const actionStartsAt=initial?now+MAFIA_TIMING.roleReveal:now;
@@ -95,7 +96,9 @@ MiniTalk.Chat.RoomGames=(()=>{
     if(game.kind==="mafia-police-result"&&game.target===currentUser().user_id)primeOwnBox(`police:${game.id}:${game.target}:${game.round||0}`,message,async()=>{
       const data=await decryptOwn(game.cipher);return{kind:"police-result",value:data}
     });
+    if(game.kind==="game-invite")scheduleHostAloneInviteExpiry(message);
     if(game.kind==="game-invite-accept")setTimeout(()=>handleInviteAcceptAsHost(message).catch(()=>{}),0);
+    if(game.kind==="game-invite-slot"&&game.status==="accepted")clearInviteExpiry(game.id);
     if(game.kind==="game-invite-leave"&&game.userId)state.inviteHandled.delete(`${game.id}:user:${String(game.userId)}`);
     if(game.kind==="game-invite-decline"||game.kind==="game-invite-leave")setTimeout(()=>maybeFinalizeInviteAsHost(message.roomId,game.id).catch(()=>{}),0);
     if(game.kind==="game-invite-slot"&&game.status==="accepted")setTimeout(()=>maybeFinalizeInviteAsHost(message.roomId,game.id).catch(()=>{}),0);
@@ -103,7 +106,7 @@ MiniTalk.Chat.RoomGames=(()=>{
     if(game.kind==="mafia-key")setTimeout(()=>maybeAutoStartMafia(message.roomId,game.id).catch(()=>{}),0);
     if(game.kind==="mafia-leave")setTimeout(()=>maybeHandleLeaveAsHost(message).catch(()=>{}),0);
     if(game.kind==="mafia-phase"&&game.phase!=="ended")scheduleHostPhaseResolution(message);
-    if(gameIsTerminal(game.id)){rememberRetiredGame(game.id,message.roomId,gameHostId(game.id));scheduleLocalGameCleanup(game.id);scheduleGameCleanup(message.roomId,game.id)};
+    if(gameIsTerminal(game.id)){clearInviteExpiry(game.id);rememberRetiredGame(game.id,message.roomId,gameHostId(game.id));scheduleLocalGameCleanup(game.id);scheduleGameCleanup(message.roomId,game.id)};
     if(game.kind==='chess-move'||game.kind==='chess-end')setTimeout(()=>playChessMessageFx(message),0);
     if(state.desktop.activeGameId===game.id&&desktopRefreshKind(game.kind))queueDesktopRefresh(game.id);
     return true;
@@ -348,6 +351,26 @@ MiniTalk.Chat.RoomGames=(()=>{
     const host=invite.host||{user_id:invite.hostId,nickname:invite.hostNickname||invite.hostId},byId=new Map((invite.invited||[]).map(p=>[String(p.user_id),p])),left=inviteLeftIds(invite.id),people=[{user_id:String(host.user_id),nickname:String(host.nickname||host.user_id)}];
     inviteAcceptedSlots(invite.id).forEach(m=>{const id=String(m.game.userId);if(left.has(id))return;const p=byId.get(id)||{user_id:id,nickname:m.game.nickname||id};if(p&&!people.some(x=>x.user_id===id))people.push({user_id:id,nickname:String(p.nickname||id)})});return people.slice(0,Number(invite.maxPlayers)||12)
   }
+  function inviteEverAccepted(gameId){return allOf(gameId,"game-invite-slot").some(m=>m.game?.status==="accepted")}
+  function clearInviteExpiry(gameId){const timer=state.inviteExpiryTimers.get(String(gameId||""));if(timer!=null)clearTimeout(timer);state.inviteExpiryTimers.delete(String(gameId||""))}
+  function inviteCreatedAt(inviteMsg){return Number(inviteMsg?.game?.createdAt||inviteMsg?.clientTs||inviteMsg?.ts||0)}
+  async function expireHostAloneInviteAsHost(roomId,gameId,{now=Date.now()}={}){
+    const inviteMsg=latest(gameId,"game-invite"),invite=inviteMsg?.game;if(!invite||String(invite.hostId)!==String(currentUser().user_id||"")||inviteFinalMessage(gameId)){clearInviteExpiry(gameId);return false}
+    const createdAt=inviteCreatedAt(inviteMsg),deadline=createdAt+INVITE_HOST_ALONE_TIMEOUT;if(!createdAt||Number(now)<deadline)return false;
+    if(inviteEverAccepted(gameId)){clearInviteExpiry(gameId);return false}
+    const people=inviteParticipants(invite);if(people.length!==1){clearInviteExpiry(gameId);return false}
+    if(state.inviteStarting.has(gameId))return false;state.inviteStarting.add(gameId);
+    try{
+      if(inviteFinalMessage(gameId)||inviteEverAccepted(gameId)||inviteParticipants(invite).length!==1)return false;
+      await sendGame(roomId,{text:"[게임 초대 종료]",game:{kind:"game-invite-cancelled",id:gameId,reason:"host-alone-timeout",participants:people,expiredAt:Number(now)}});scheduleGameCleanup(roomId,gameId);clearInviteExpiry(gameId);return true
+    }finally{state.inviteStarting.delete(gameId)}
+  }
+  function scheduleHostAloneInviteExpiry(message){
+    const invite=message?.game,gameId=String(invite?.id||""),roomId=message?.roomId;if(invite?.kind!=="game-invite"||!gameId||!roomId||String(invite.hostId)!==String(currentUser().user_id||""))return false;
+    if(inviteFinalMessage(gameId)||inviteEverAccepted(gameId)){clearInviteExpiry(gameId);return false}
+    const createdAt=inviteCreatedAt(message);if(!createdAt)return false;clearInviteExpiry(gameId);
+    const delay=Math.max(0,createdAt+INVITE_HOST_ALONE_TIMEOUT-Date.now()+120),timer=setTimeout(()=>{state.inviteExpiryTimers.delete(gameId);expireHostAloneInviteAsHost(roomId,gameId).catch(()=>{})},delay);state.inviteExpiryTimers.set(gameId,timer);return true
+  }
   function normalizedLadderResults(labels,count){const out=(labels||[]).map(v=>String(v||"").trim()).filter(Boolean).slice(0,count);while(out.length<count)out.push(`${out.length+1}번`);return out}
   async function sendInvite(roomId,{gameType,invited,minPlayers,maxPlayers,resultLabels=[]}){
     const host=inviteHostPerson(),id=nowId(`invite-${gameType}`),game={kind:"game-invite",id,gameType,hostId:host.user_id,host,invited,maxPlayers,minPlayers,resultLabels,openJoin:true,createdAt:Date.now()};
@@ -465,7 +488,7 @@ MiniTalk.Chat.RoomGames=(()=>{
   }
   function gameHostId(gameId){return String(latest(gameId,"game-invite")?.game?.hostId||latest(gameId,"mafia-lobby")?.game?.hostId||latest(gameId,"chess-start")?.game?.hostId||"")}
   function gameIsTerminal(gameId){const ladder=latest(gameId,"ladder"),cancelled=latest(gameId,"game-invite-cancelled"),phase=latestPhase(gameId),chessEnd=latest(gameId,"chess-end");return Boolean(ladder||cancelled||chessEnd||(phase?.game?.phase==="ended"))}
-  function clearGameVolatileState(gameId){const prefix=`${gameId}:`;for(const [key,timer] of [...state.phaseTimers])if(String(key).startsWith(prefix)){clearTimeout(timer);state.phaseTimers.delete(key)}for(const key of [...state.privateBoxes.keys()])if(String(key).includes(`:${gameId}:`)||String(key).startsWith(`role:${gameId}:`)||String(key).startsWith(`police:${gameId}:`))state.privateBoxes.delete(key);for(const set of [state.keyAnnouncements,state.revealedRoles,state.autoResolved,state.phaseResolving,state.leaveHandled,state.inviteHandled,state.chessSending])for(const key of [...set])if(String(key).includes(gameId))set.delete(key);for(const key of [...state.chessFxSeen]){const messages=gameMessages(gameId);if(messages.some(m=>String(m.id||"")===String(key)))state.chessFxSeen.delete(key)}state.inviteQueues.delete(gameId);state.inviteStarting.delete(gameId);state.inviteStarting.delete(`mafia:${gameId}`)}
+  function clearGameVolatileState(gameId){clearInviteExpiry(gameId);const prefix=`${gameId}:`;for(const [key,timer] of [...state.phaseTimers])if(String(key).startsWith(prefix)){clearTimeout(timer);state.phaseTimers.delete(key)}for(const key of [...state.privateBoxes.keys()])if(String(key).includes(`:${gameId}:`)||String(key).startsWith(`role:${gameId}:`)||String(key).startsWith(`police:${gameId}:`))state.privateBoxes.delete(key);for(const set of [state.keyAnnouncements,state.revealedRoles,state.autoResolved,state.phaseResolving,state.leaveHandled,state.inviteHandled,state.chessSending])for(const key of [...set])if(String(key).includes(gameId))set.delete(key);for(const key of [...state.chessFxSeen]){const messages=gameMessages(gameId);if(messages.some(m=>String(m.id||"")===String(key)))state.chessFxSeen.delete(key)}state.inviteQueues.delete(gameId);state.inviteStarting.delete(gameId);state.inviteStarting.delete(`mafia:${gameId}`)}
   function rememberRetiredGame(gameId,roomId,hostId){
     const id=String(gameId||"");if(!id)return;const record={roomId:String(roomId||""),hostId:String(hostId||""),expiresAt:Date.now()+5*60*1000};state.retiredGames.set(id,record);setTimeout(()=>{const current=state.retiredGames.get(id);if(current&&current.expiresAt<=Date.now())state.retiredGames.delete(id)},5*60*1000+1000)
   }
@@ -848,5 +871,5 @@ MiniTalk.Chat.RoomGames=(()=>{
   }
   function renderMessage(message,roomId){const g=message?.game;if(!g)return null;ingest(message);if(!desktopGameMode()&&g.kind==="ladder")return ladderCard(g);if(gameIsTerminal(g.id))return endedChatCard(message);if(g.kind==="game-invite")return inviteCard(roomId,message);if(desktopGameMode())return desktopLaunchCard(message,roomId);return renderFullMessage(message,roomId)}
   async function open(roomId){const room=await MiniTalk.Realtime.getRoom(roomId);if(!room)throw new Error("대화방 정보를 불러오지 못했습니다.");if(desktopGameMode()&&ensureDesktopPopup(roomId,room))return;const U=D(),body=U.el("div",{class:"modal-stack room-game-menu"}),ladder=U.el("button",{class:"button secondary room-game-menu-button",type:"button",text:"🪜 사다리타기"}),mafia=U.el("button",{class:"button secondary room-game-menu-button",type:"button",text:"🕵️ 마피아 게임"}),chess=U.el("button",{class:"button secondary room-game-menu-button",type:"button",text:"♟️ 체스"});ladder.onclick=()=>createLadder(roomId,room);mafia.onclick=()=>createMafia(roomId,room);chess.onclick=()=>createChess(roomId,room);body.append(U.el("p",{class:"muted modal-note",text:"초대 후 최소 인원이 모이면 방장이 바로 시작할 수 있고, 시작 전에는 다른 대화방 멤버도 참가할 수 있어요."}),ladder,mafia,chess);MiniTalk.UI.Shell.modal("대화방 게임",body)}
-  return{open,ingest,renderMessage,isInternal,ladderData,ladderTrace,roleCounts,buildRolesForParticipants,playGameSfx,phaseTiming,winnerFor,desktopGameMode,desktopPopupBounds,normalizedLadderResults,chessInitial,chessLegalMove,chessLegalMoves,chessApply,chessStatus,chessMoveFx,chessSfxName,chessState,removeMessage:removeIngestedMessage,_qa:{assignRoles,resolveNight,resolveVote,maybeHandleLeaveAsHost,hostPrivate,handleInviteAcceptAsHost,maybeFinalizeInviteAsHost,maybeAutoStartMafia,inviteParticipants,inviteSlotFor,inviteFinalMessage,membersFor,desktopRefreshKind,leaveActiveDesktopGame}};
+  return{open,ingest,renderMessage,isInternal,ladderData,ladderTrace,roleCounts,buildRolesForParticipants,playGameSfx,phaseTiming,winnerFor,desktopGameMode,desktopPopupBounds,normalizedLadderResults,chessInitial,chessLegalMove,chessLegalMoves,chessApply,chessStatus,chessMoveFx,chessSfxName,chessState,removeMessage:removeIngestedMessage,_qa:{assignRoles,resolveNight,resolveVote,maybeHandleLeaveAsHost,hostPrivate,handleInviteAcceptAsHost,maybeFinalizeInviteAsHost,maybeAutoStartMafia,inviteParticipants,inviteSlotFor,inviteFinalMessage,membersFor,desktopRefreshKind,leaveActiveDesktopGame,expireHostAloneInviteAsHost,scheduleHostAloneInviteExpiry,inviteEverAccepted,INVITE_HOST_ALONE_TIMEOUT}};
 })();

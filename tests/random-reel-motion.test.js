@@ -1,0 +1,11 @@
+const fs=require('fs');const ok=(v,m)=>{if(!v)throw new Error(m)};
+const ui=fs.readFileSync('js/features/shopping.js','utf8'),css=fs.readFileSync('css/features/shopping-store.css','utf8');
+ok(ui.includes('Array.from({length:90},randomProduct)'),'full rolling strip missing');
+ok(ui.includes('strip.animate([{transform:"translateY(0px)"},{transform:`translateY(${-distance}px)`}]'),'continuous reel animation missing');
+ok(!ui.includes('setInterval(()=>{\n        const p=products'),'old single-cell fake spinner returned');
+ok(ui.includes('wait=Math.max(0,2680-elapsed)')&&ui.includes('duration=fast?420:820'),'normal ~3.5s / fast-stop timing missing');
+ok(ui.includes('state.fastRequested=true')&&ui.includes('state.rollAnimation.playbackRate=3.2'),'second tap fast-forward missing');
+ok(css.includes('top:33.333%')&&css.includes('top:66.666%'),'three-cell reel guides missing');
+ok(css.includes('grid-template-columns:104px minmax(0,1fr)')&&css.includes('width:104px;height:104px'),'large product reel cells missing');
+ok(css.includes('.shop-random-status')&&css.includes('.shop-random-status strong'),'winner status must use its own non-overlapping row');
+console.log('RANDOM_REEL_MOTION_OK');

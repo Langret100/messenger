@@ -1,0 +1,22 @@
+const fs=require('fs');
+const weekly=fs.readFileSync('js/tasks/friday-grade6-mission.js','utf8');
+const css=fs.readFileSync('css/features/feed-classinfo-weekly.css','utf8');
+const game=fs.readFileSync('js/game-bridge/game-host.js','utf8');
+const html=fs.readFileSync('index.html','utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(weekly.includes('<html lang="ko" data-theme="light">')&&weekly.includes('color-scheme')===false,'weekly popup must explicitly request light theme');
+ok(css.includes('.weekly-exam-popup{margin:0;background:#f6f8fc')&&css.includes('color-scheme:light'),'weekly worksheet light surface missing');
+ok(css.includes('.weekly-exam-submit{width:auto!important')&&weekly.includes('weekly-exam-footer-copy'),'weekly footer submit/copy layout fix missing');
+ok(css.includes('width:min(1180px')&&weekly.includes('desiredW=Math.min(1180')&&weekly.includes('minSideW'),'weekly worksheet width expansion missing');
+ok(weekly.includes('rightSpace')&&weekly.includes('leftSpace')&&weekly.includes('messengerW'),'weekly popup avoidance placement missing');
+ok(game.includes('rightSpace')&&game.includes('leftSpace')&&game.includes('messengerW'),'game popup avoidance placement missing');
+ok(game.includes('<html lang="ko" data-theme="light">')&&game.includes('background:#fff;color:#18212f'),'game popup chrome light theme missing');
+ok(weekly.includes('주간 미션 완료 도장')&&weekly.includes('20문항 제출이 완료되어 도장을 받았어요.'),'weekly completion stamp missing');
+ok(css.includes('.friday-mission-card.open:not(.quest-compact)')&&css.includes('.friday-mission-card.quest-compact{display:block')&&css.includes('min-height:38px'),'weekly open-card polish/compact preservation missing');
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.31')&&html.includes('js/game-bridge/game-host.js?v=24')&&html.includes('js/tasks/friday-grade6-mission.js?v=65.0.19')&&html.includes('js/tasks/task-window.js?v=64.5.10')&&html.includes('js/features/admin.js?v=64.5.38'),'new UI cache versions missing');
+console.log('WEEKLY_POPUP_UI_POLISH_OK');
+
+ok(css.includes('@media(max-width:760px){.weekly-exam-popup{min-width:0')&&css.includes('max-height:calc(100dvh - 92px)')&&css.includes('.weekly-exam-choices{grid-template-columns:1fr'), 'weekly worksheet mobile layout missing');
+ok(weekly.includes('enforcePopupBounds(win)')&&weekly.includes('win.moveTo')&&game.includes('enforcePopupBounds(popup)')&&game.includes('win.moveTo'), 'weekly/game popup force placement missing');
+const task=fs.readFileSync('js/tasks/task-window.js','utf8'),admin=fs.readFileSync('js/features/admin.js','utf8');
+ok(task.includes('enforcePopupBounds(popup,bounds)')&&task.includes('win.moveTo')&&admin.includes('enforceAdminPopupBounds(popup,bounds)')&&admin.includes('win.moveTo'),'task/admin popup avoidance missing');

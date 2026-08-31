@@ -1,0 +1,13 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const extension=fs.readFileSync(path.join(root,'docs/apps-script/coin-shopping-extension.gs'),'utf8');
+const code=fs.readFileSync(path.join(root,'docs/apps-script/Code.gs'),'utf8');
+const rules=JSON.parse(fs.readFileSync(path.join(root,'database.rules.json'),'utf8'));
+if(!extension.includes('PropertiesService.getDocumentProperties()')||!extension.includes('MOARU_TASK_PROPERTY_PREFIX'))throw new Error('task source must be server-only document properties');
+if(!extension.includes('MOARU_TASK_BACKUP_SHEET = "모아루_과제백업"')||!extension.includes('getOrCreateMoaruTaskBackupSheet_().appendRow'))throw new Error('append-only task sheet backup is missing');
+if(/const MOARU_TASK_SHEET\s*=/.test(extension))throw new Error('task sheet must not be the live source');
+if(/mini_talk_(?:room|message)_backup/.test(extension+code)||/getOrCreateMiniTalkBackupSheet_/.test(extension))throw new Error('duplicate chat backup sheets/routes must not be recreated');
+if(!code.includes('ensureMoaruCoinAccount_')||!code.includes('deleteRow(insertedLoginRow)'))throw new Error('signup must atomically initialize the coin account and roll back on failure');
+const v3=rules.rules.moaru.v3;
+for(const name of ['commands','tasks','shop'])if(v3[name]['.read']!==false||v3[name]['.write']!==false)throw new Error(`${name} must reject direct client access`);
+console.log('SERVER_SOURCE_POLICY_OK');

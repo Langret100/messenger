@@ -1,0 +1,23 @@
+const fs=require('fs'),vm=require('vm');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const engine=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
+const html=fs.readFileSync('index.html','utf8');
+ok(html.includes('js/ai/moa-communication-engine.js?v=50'),'MOA engine cache bust v14 missing');
+ok(engine.includes('function socialReactionReply(frame)'),'social reaction fast path missing');
+ok(engine.includes('function conversationalPenalty(frame,c)')&&engine.includes('function qualityGate(answer,frame,source,strategy)'),'candidate/final quality gate missing');
+const store={};const fakeMath=Object.create(Math);fakeMath.random=()=>0.01;
+const sandbox={console,Date,Math:fakeMath,setTimeout:()=>1,clearTimeout:()=>{},MiniTalk:{AI:{},Store:{get:()=>({user_id:'u1',isGuest:false})},Persistence:{get:(k,d)=>k in store?store[k]:d,set:(k,v)=>store[k]=v,remove:k=>delete store[k]},AuthApi:{moaSync:async()=>({ok:true}),moaSearch:async()=>({}),moaCommit:async()=>({ok:true})}}};
+vm.createContext(sandbox);vm.runInContext(engine,sandbox);
+(async()=>{
+ const e=sandbox.MiniTalk.AI.MoaCommunicationEngine;
+ let r=await e.reply('넌 멍청해');
+ ok(r.source==='local'&&r.strategy==='social','bare insult should use social fast path: '+JSON.stringify(r));
+ ok(!/질문을 다시|맥락을 못 따라갔|어떤 느낌|조금 더 말해/.test(r.reply),'bare insult got robotic repair/fallback: '+r.reply);
+ await e.reply('안녕');
+ r=await e.reply('넌 멍청해');
+ ok(r.source==='local'&&r.strategy==='social','contextual insult should stay social: '+JSON.stringify(r));
+ ok(/ㅋㅋ|방금|다시|답/.test(r.reply)&&!/질문을 다시 한 번만/.test(r.reply),'contextual complaint is unnatural: '+r.reply);
+ r=await e.reply('오늘 별일 없었어');
+ ok(!/어떤 느낌|어떻게 느꼈|기분이 어땠/.test(r.reply),'neutral short statement got therapy-style question: '+r.reply);
+ console.log('MOA_CLIENT_NATURAL_RESPONSE_V105_OK');
+})().catch(e=>{console.error(e);process.exit(1)});

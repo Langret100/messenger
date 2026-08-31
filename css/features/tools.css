@@ -1,0 +1,97 @@
+/* 도구 공통 모달: 타이머·알람·화면 꾸미기가 같은 규격을 공유합니다. */
+.modal header strong {
+  font-size: 14px;
+  letter-spacing: -.025em;
+}
+
+.modal header .icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  font-size: 18px;
+}
+
+.tool-modal-body {
+  gap: 12px;
+}
+
+.tool-modal-body .modal-note {
+  padding: 10px 11px;
+  border-radius: 13px;
+  background: var(--surface-3);
+}
+
+.tool-modal-body .inline-fields {
+  margin: 1px 0;
+}
+
+.tool-modal-state {
+  min-height: 36px;
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.tool-modal-body .button-row {
+  margin-top: 1px;
+}
+
+
+/* 도구탭: 다른 탭처럼 하나의 정상적인 세로 스크롤 흐름을 사용합니다.
+ * card-list의 grid 행 계산에 기대지 않고 모든 섹션을 flex column의 실제 콘텐츠 높이로 쌓습니다.
+ */
+.tools-screen {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior-y: contain;
+  padding-bottom: max(34px, calc(env(safe-area-inset-bottom, 0px) + 24px));
+}
+
+/* 각 섹션은 화면 높이에 맞춰 축소되지 않고 자기 실제 높이를 유지합니다. */
+.tools-screen > * {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.tools-screen .modern-tool-grid {
+  flex: 0 0 auto;
+}
+.tools-screen .tool-shortcuts {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.tools-screen .shortcut-row {
+  min-height: 60px;
+}
+
+.tools-screen::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 작은 PiP: 제목은 '시간/표'처럼 음절 단위로 부서지지 않게 유지합니다. */
+.tools-screen .tool-label strong,.tools-screen .tool-label small,.tools-screen .shortcut-copy strong,.tools-screen .shortcut-copy small{word-break:keep-all;overflow-wrap:normal}
+@media(max-width:340px){
+  .tools-screen .modern-tool-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .tools-screen .modern-tool{grid-column:auto;min-width:0;padding:10px 9px;min-height:88px}
+  .tools-screen .tool-label strong{font-size:10px;line-height:1.28}
+  .tools-screen .tool-label small{font-size:7.5px;line-height:1.3}
+}

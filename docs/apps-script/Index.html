@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    *{box-sizing:border-box}body{margin:0;padding:20px;background:#f4f4f9;color:#263238;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .container{width:min(100%,420px);margin:auto;padding:24px;background:#fff;border-radius:18px;box-shadow:0 8px 28px rgba(0,0,0,.1);text-align:center}
+    .identity{color:#78909c;font-size:13px}.coin-box{margin:20px 0;padding:20px;border:2px solid #fdd835;border-radius:14px;background:#fffde7}
+    .coin-display{margin-top:4px;color:#f9a825;font-size:56px;font-weight:800}.coin-label{font-size:14px;font-weight:700}
+    .field{display:block;margin:12px 0;text-align:left;font-size:13px;font-weight:700}.field input{width:100%;margin-top:7px;padding:14px;border:2px solid #cfd8dc;border-radius:10px;font-size:18px}
+    .field input:focus{outline:none;border-color:#4caf50}.btn-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+    button{min-height:46px;border:0;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}.calc{background:#eceff1;color:#37474f}
+    .actions{display:flex;gap:10px}.action{flex:1;color:#fff;font-size:17px}.add{background:#43a047}.remove{background:#ef5350}
+    button:disabled{opacity:.5;cursor:wait}#status{min-height:24px;margin-top:14px;font-size:14px;font-weight:700}
+    .hint{display:block;margin-top:10px;color:#90a4ae;font-size:12px;line-height:1.5}
+    @media(max-width:480px){body{padding:10px}.container{padding:18px}.coin-display{font-size:48px}}
+  </style>
+</head>
+<body>
+  <main class="container">
+    <div class="identity">사용자: <strong><?= username ?></strong><br>ID: <?= userId ?></div>
+    <section class="coin-box"><div class="coin-label">현재 보유 코인</div><div class="coin-display" id="currentCoin"><?= coin ?></div></section>
+    <label class="field">관리자 코드<input id="adminCode" type="password" autocomplete="current-password" placeholder="스크립트 속성의 관리자 코드"></label>
+    <label class="field">변경 수량<input id="amount" type="number" value="1" min="1" max="100000" inputmode="numeric"></label>
+    <div class="btn-grid">
+      <button class="calc" onclick="setVal(1)">1</button><button class="calc" onclick="setVal(5)">5</button>
+      <button class="calc" onclick="setVal(10)">10</button><button class="calc" onclick="setVal(50)">50</button>
+      <button class="calc" onclick="addVal(10)">+10</button><button class="calc" onclick="addVal(50)">+50</button>
+      <button class="calc" onclick="addVal(100)">+100</button><button class="calc" onclick="setVal(1)">초기화</button>
+    </div>
+    <div class="actions">
+      <button class="action add" id="btnAdd" onclick="changeCoin('add')">＋ 지급</button>
+      <button class="action remove" id="btnSub" onclick="changeCoin('remove')">－ 차감</button>
+    </div>
+    <div id="status" role="status" aria-live="polite"></div>
+    <small class="hint">관리자 코드는 브라우저에 저장되지 않으며 서버에서 매번 검증됩니다.</small>
+  </main>
+  <script>
+    const userId=<?= JSON.stringify(userId) ?>;
+    const amount=document.getElementById("amount"),code=document.getElementById("adminCode"),status=document.getElementById("status"),coin=document.getElementById("currentCoin");
+    function setVal(value){amount.value=value}function addVal(value){amount.value=Math.min(100000,(parseInt(amount.value,10)||0)+value)}
+    function busy(value){document.getElementById("btnAdd").disabled=value;document.getElementById("btnSub").disabled=value}
+    function changeCoin(action){
+      const value=parseInt(amount.value,10),adminCode=code.value;
+      if(!adminCode){status.style.color="#c62828";status.textContent="관리자 코드를 입력해주세요.";return}
+      if(!Number.isInteger(value)||value<1||value>100000){status.style.color="#c62828";status.textContent="1~100000 사이 수량을 입력해주세요.";return}
+      busy(true);status.style.color="#607d8b";status.textContent="처리 중…";
+      google.script.run.withSuccessHandler(result=>{coin.textContent=result.newCoin;status.style.color=action==="add"?"#2e7d32":"#c62828";status.textContent=action==="add"?`코인 +${value}`:`코인 -${value}`;busy(false)})
+        .withFailureHandler(error=>{status.style.color="#c62828";status.textContent=error?.message||"처리하지 못했습니다.";busy(false)})
+        .processCoinChangeAuthorized(userId,action,value,adminCode);
+    }
+  </script>
+</body>
+</html>

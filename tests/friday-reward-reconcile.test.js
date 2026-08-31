@@ -1,0 +1,10 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const friday=read('js/tasks/friday-grade6-mission.js'),html=read('index.html');
+ok(friday.includes('record?.reward?.acknowledged===true')&&friday.includes('CoinWallet?.refresh?.(true)'),'acknowledged weekly reward does not reconcile coin balance');
+ok(friday.includes('application/x-www-form-urlencoded;charset=UTF-8'),'weekly reward content type missing');
+ok(friday.includes('error?.code==="COIN_BUSY"')&&friday.includes('COIN_SHEET_TEMPORARY_ERROR'),'weekly reward transient retry guard missing');
+ok(friday.includes('scorePercent(record)>=80'),'weekly threshold regressed');
+ok(html.includes('js/tasks/friday-grade6-mission.js?v=65.0.19'),'weekly reward cache version missing');
+console.log('FRIDAY_REWARD_RECONCILE_OK');

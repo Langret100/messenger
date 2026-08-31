@@ -1,0 +1,15 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+const auth=read('js/features/auth.js'),shell=read('js/ui/shell.js'),html=read('index.html'),app=read('js/app.js'),sw=read('sw.js');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const authStart=auth.indexOf('const authReady=');
+const windowStart=auth.indexOf('const windowReady=prepareWindow()');
+ok(authStart>=0&&windowStart>authStart,'login network request must start before window/PiP preparation');
+const enter=shell.slice(shell.indexOf('async function enterWorkspace(user){'),shell.indexOf('function resetWorkspaceSession'));
+ok(enter.indexOf('await MiniTalk.Router.go("chats")')>=0,'chat first render missing');
+ok(enter.indexOf('await MiniTalk.Router.go("chats")')<enter.indexOf('MiniTalk.Realtime.init(user)'),'first chat DOM must be built before realtime bootstrap');
+ok(enter.includes('requestAnimationFrame(()=>setTimeout(()=>startWorkspaceBackground(user),0))'),'noncritical workspace services must start after first paint');
+ok(!enter.includes('await MiniTalk.Economy.CoinWallet')&&!enter.includes('await MiniTalk.UserDirectory'),'noncritical server reads must not gate first workspace paint');
+ok(html.includes('js/features/auth.js?v=64.5.35')&&html.includes('js/ui/shell.js?v=64.5.34')&&html.includes('js/app.js?v=64.5.46'),'login first-paint asset versions stale');
+ok(app.includes('sw.js?v=64.5.60')&&sw.includes('moaru-moa-dialogue-fusion-final'),'login first-paint service worker version stale');
+console.log('LOGIN_FIRST_PAINT_OK');

@@ -43,6 +43,12 @@ async function makePub(){const kp=await webcrypto.subtle.generateKey({name:'RSA-
   const open={kind:'game-invite',id:'openJoin',gameType:'ladder',hostId:'u1',host:{...users.u1},invited:[users.u2,users.u3],minPlayers:2,maxPlayers:12,resultLabels:[],openJoin:true};emitAs('u1',{game:open});
   await accept(open.id,'u5');const openSlot=Q.inviteSlotFor(open.id,'u5');assert(openSlot&&openSlot.game.status==='accepted','non-invited room member must be accepted while open join is active');
   assert(Q.inviteParticipants(open).some(p=>p.user_id==='u5'),'open join participant must be included in current roster');
+  // A confirmed participant can cancel and then join again before the host starts.
+  emitAs('u5',{game:{kind:'game-invite-leave',id:open.id,userId:'u5',leftAt:Date.now()}});
+  assert(!Q.inviteParticipants(open).some(p=>p.user_id==='u5'),'cancelled participant must leave the current roster');
+  assert.strictEqual(Q.inviteSlotFor(open.id,'u5'),null,'cancelled participant must not remain stuck in an accepted slot');
+  await accept(open.id,'u5');
+  assert(Q.inviteParticipants(open).some(p=>p.user_id==='u5'),'cancelled participant must be able to join again before start');
 
   // Mafia invitation -> all accepted -> lobby finalized -> all crypto keys ready -> phase auto-start.
   const minv={kind:'game-invite',id:'mafiaInvite',gameType:'mafia',hostId:'u1',host:{...users.u1},invited:[users.u2,users.u3,users.u4],minPlayers:4,maxPlayers:12,resultLabels:[]};emitAs('u1',{game:minv});

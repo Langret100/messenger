@@ -20,7 +20,7 @@ assert(css.includes('@keyframes mafia-card-shuffle-left')&&css.includes('@keyfra
 assert(realtime.includes('game:payload.game&&typeof payload.game==="object"?payload.game:null'),'realtime adapter drops game metadata');
 assert(chats.includes('addAction("♟","게임"'),'composer game action missing');
 assert(chats.includes('MiniTalk.Chat.RoomGames?.renderMessage?.(message,message.roomId)'),'game renderer missing');
-assert(index.includes('js/chat/room-games.js?v=15'),'room-games script not loaded');
+assert(index.includes('js/chat/room-games.js?v=19'),'room-games script not loaded');
 
 assert(source.includes('svg.setAttribute("preserveAspectRatio","xMidYMid meet")'),'ladder must preserve its vertical geometry');
 assert(source.includes('"data-phase-gate":"night"'),'host night control gate missing');

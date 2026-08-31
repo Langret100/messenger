@@ -30,3 +30,22 @@
 @keyframes chess-vector-land{0%{transform:translateY(-16%) scale(1.12)}60%{transform:translateY(3%) scale(.97)}100%{transform:none}}
 @media(max-width:420px){.ladder-svg{min-height:360px!important;max-height:470px}.ladder-top-row,.ladder-result-slots{grid-template-columns:repeat(auto-fit,minmax(58px,1fr))}.chess-piece-svg{width:86%;height:86%}}
 @media(prefers-reduced-motion:reduce){.ladder-runner.arrived,.chess-square.moved .chess-piece-svg{animation:none!important}}
+
+
+/* Popup stability/full-window pass: game content uses the available popup instead of a narrow chat card. */
+.chat-room-game-window .chat-room-game-desktop-stage{width:100%;min-width:0;min-height:100%;display:block}
+.chat-room-game-window .chat-room-game-desktop-stage>.room-game-card{width:100%;max-width:none;min-height:calc(100dvh - 90px);margin:0;padding:clamp(16px,2.2vw,28px);border-radius:24px}
+.chat-room-game-window .chat-room-game-desktop-stage>.mafia-game-card{align-content:start}
+.chat-room-game-window .chat-room-game-desktop-stage>.mafia-game-card .mafia-role-draw{min-height:min(44vh,360px);align-content:center}
+.chat-room-game-window .chat-room-game-desktop-stage>.mafia-game-card .mafia-card-deck{width:clamp(96px,12vw,138px);height:clamp(126px,16vw,182px)}
+.chat-room-game-window .chat-room-game-desktop-stage>.mafia-game-card .mafia-role-draw-button{width:min(420px,70%);max-width:none;min-height:52px;font-size:14px}
+.chat-room-game-window .chat-room-game-desktop-stage>.mafia-game-card .mafia-event-text{font-size:11px}
+@media(max-width:760px){.chat-room-game-window .chat-room-game-desktop-stage>.room-game-card{width:100%;min-height:calc(100dvh - 82px);border-radius:18px}.chat-room-game-window .chat-room-game-desktop-stage>.mafia-game-card .mafia-role-draw-button{width:100%}}
+
+/* Popup board sizing audit: make ladder/chess use the available game window, while preserving their geometry. */
+.chat-room-game-window .chat-room-game-desktop-stage>.ladder-game-card .ladder-stage{min-height:calc(100dvh - 250px);display:flex;align-items:stretch}
+.chat-room-game-window .chat-room-game-desktop-stage>.ladder-game-card .ladder-scroll{display:flex;align-items:stretch;min-height:0}
+.chat-room-game-window .chat-room-game-desktop-stage>.ladder-game-card .ladder-svg{width:100%;height:calc(100dvh - 270px);min-height:470px;max-height:none}
+.chat-room-game-window .chat-room-game-desktop-stage>.chess-game-card{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto;align-content:start}
+.chat-room-game-window .chat-room-game-desktop-stage>.chess-game-card .chess-board{width:min(100%,calc(100dvh - 255px));max-width:none;align-self:center;justify-self:center}
+@media(max-height:700px){.chat-room-game-window .chat-room-game-desktop-stage>.ladder-game-card .ladder-stage{min-height:0}.chat-room-game-window .chat-room-game-desktop-stage>.ladder-game-card .ladder-svg{height:auto;min-height:360px}.chat-room-game-window .chat-room-game-desktop-stage>.chess-game-card .chess-board{width:min(100%,max(280px,calc(100dvh - 300px)))}}

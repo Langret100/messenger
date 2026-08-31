@@ -1,9 +1,0 @@
-const fs=require('fs'),vm=require('vm');const ok=(v,m)=>{if(!v)throw new Error(m)};
-const src=fs.readFileSync('js/ai/moa-communication-engine.js','utf8'),data={},user={user_id:'clarify-loop',isGuest:false};let seed=7;const fakeMath=Object.create(Math);fakeMath.random=()=>((seed=seed*1103515245+12345>>>0)/4294967296);
-const ctx={console,Date,Math:fakeMath,setTimeout:(fn)=>{fn();return 1},clearTimeout:()=>{},globalThis:null,MiniTalk:{AI:{},Store:{get:k=>k==='user'?user:undefined},Persistence:{get:(k,d)=>k in data?data[k]:d,set:(k,v)=>{data[k]=JSON.parse(JSON.stringify(v));return v},remove:k=>delete data[k]},DataCache:{get:async()=>null,put:async()=>true,remove:async()=>true},AuthApi:{moaSync:async()=>({ok:true,version:1,patterns:[],policy:{},expressionWeights:{}}),moaCommit:async()=>({ok:true}),moaSearch:async()=>({})}}};ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(src,ctx);const E=ctx.MiniTalk.AI.MoaCommunicationEngine;
-(async()=>{
- E.clearContext();await E.reply('오늘 그거 했어');const q=await E.reply('그건?');ok(q.strategy==='clarify'||/누구|대상|어느/.test(q.reply),'setup did not reach clarification: '+q.reply);
- const answer=await E.reply('친구 얘기');ok(answer.strategy!=='clarify','clarification repeated after user supplied detail: '+answer.reply);ok(!/한마디만|조금만 더|어느 부분|알려줘/.test(answer.reply),'asked for detail again after detail supplied: '+answer.reply);
- E.clearContext();await E.reply('배고파');const ramen=await E.reply('라면?');const what=await E.reply('뭐');ok(!/애매하게|다시 정확|설명이 이상|헷갈/.test(what.reply),'short what fell into canned apology: '+what.reply);ok(/라면/.test(what.reply),'short what failed to preserve actual topic: '+what.reply);
- console.log('MOA_CLARIFICATION_LOOP_BREAK_OK',JSON.stringify({q:q.reply,answer:answer.reply,ramen:ramen.reply,what:what.reply}));
-})().catch(e=>{console.error(e);process.exit(1)});

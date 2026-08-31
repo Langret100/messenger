@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <script>
+    /* CSS가 그려지기 전에 현재 모아루 표시 설정을 복제해 다크 플래시/테마 불일치를 막는다. */
+    (() => {
+      const allowedThemes = new Set(["light", "dark", "forest"]);
+      const allowedMotions = new Set(["full", "reduced"]);
+      const root = document.documentElement;
+      let source = null;
+      try {
+        const owner = window.opener;
+        if (owner && !owner.closed && owner.location.origin === location.origin) source = owner.document.documentElement;
+      } catch {}
+      const theme = allowedThemes.has(source?.dataset?.theme) ? source.dataset.theme : "light";
+      root.dataset.theme = theme;
+      if (allowedMotions.has(source?.dataset?.motion)) root.dataset.motion = source.dataset.motion;
+      const fontSize = source?.style?.getPropertyValue?.("--font-size")?.trim();
+      if (/^\d+(?:\.\d+)?px$/.test(fontSize || "")) root.style.setProperty("--font-size", fontSize);
+      const colors = { light: "#f6f8fb", dark: "#0c121b", forest: "#0a1713" };
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = colors[theme];
+    })();
+  </script>
+  <title>카메라 놀이</title>
+  <link rel="stylesheet" href="css/tokens.css?v=7">
+  <link rel="stylesheet" href="css/app.css?v=64.5.13">
+  <link rel="stylesheet" href="css/features/face-toy.css?v=6">
+  <link rel="stylesheet" href="css/features/lookalike-play.css?v=5">
+  <link rel="stylesheet" href="css/features/camera-tool-window.css?v=1">
+</head>
+<body class="camera-tool-window-body">
+  <main id="cameraToolRoot" class="camera-tool-root">
+    <div class="camera-tool-loading">카메라 화면을 준비하고 있어요…</div>
+  </main>
+  <div id="toastHost" class="toast-host" aria-live="polite"></div>
+  <div id="modalHost" class="modal-host hidden"></div>
+  <script src="js/tools/camera-tool.js?v=2"></script>
+</body>
+</html>

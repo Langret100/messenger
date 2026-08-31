@@ -1,0 +1,265 @@
+/* ============================================================
+   WINDOW MODE ADAPTER
+   ------------------------------------------------------------
+   목적
+   1) 기본: 일반 브라우저의 "minimal popup" 요청으로 독립 소형 창 실행
+   2) 선택: Document Picture-in-Picture 로 항상 위 창 실행
+   3) 선택: 설치된 PWA 독립 창
+   4) 폴백: 현재 페이지
+
+   중요한 제한
+   - window.open()의 popup/toolbar/location 옵션은 "요청"입니다.
+     실제 주소/출처 UI를 얼마나 남길지는 브라우저가 결정합니다.
+   - Document PiP는 항상 위지만 브라우저 보안용 상단 UI가 남습니다.
+   - 일반 웹 코드만으로 완전한 프레임리스 + 항상 위 창은 만들 수 없습니다.
+   ============================================================ */
+MiniTalk.WindowMode=(()=>{
+  const POPUP_NAME="MiniTalkCornerWindow";
+  // 버전을 올려 이전 460px대 저장 폭을 폐기하고, PC/웨일북 기본 폭을 더 좁게 적용합니다.
+  const BOUNDS_VERSION=4;
+  const DEFAULT_BOUNDS={width:360,height:760};
+  const STANDALONE_BOUNDS={width:400,height:740};
+  const PIP_BOUNDS={width:290,height:560};
+  const POPUP_PARAM="window";
+  let installEvent=null,pipWindow=null,movedNodes=[],popupHandle=null,popupWatchTimer=0,boundsTimer=0;
+
+  addEventListener("beforeinstallprompt",event=>{
+    event.preventDefault();
+    installEvent=event;
+    MiniTalk.Events.emit("install:available",true);
+  });
+  addEventListener("appinstalled",()=>{
+    installEvent=null;
+    MiniTalk.Events.emit("install:available",false);
+  });
+
+  const params=()=>new URLSearchParams(location.search);
+  const isPopup=()=>params().get(POPUP_PARAM)==="popup";
+  const standalone=()=>matchMedia("(display-mode: standalone)").matches||matchMedia("(display-mode: window-controls-overlay)").matches||navigator.standalone===true;
+  const mobileWindow=()=>Boolean(MiniTalk.MobileImmersive?.isMobile?.())||/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||"");
+  const canInstall=()=>Boolean(installEvent);
+
+  function fitStandaloneWindow(){
+    /* v98: 설치형/PWA 메신저 본체의 크기는 사용 중 강제로 바꾸지 않습니다.
+       일부 Chromium 계열에서 지연 resizeTo()가 늦게 적용되어 작업 중 갑자기 폭이
+       줄어드는 현상이 있었으므로, standalone은 브라우저/사용자가 정한 현재 크기를 존중합니다. */
+    return;
+  }
+
+  function clampNumber(value,min,max,fallback){
+    const n=Number(value);
+    return Number.isFinite(n)?Math.min(max,Math.max(min,n)):fallback;
+  }
+  function readPopupBounds(){
+    const saved=MiniTalk.Persistence?.get?.("window.popupBounds",null)||{};
+    const availW=Math.max(320,screen.availWidth||DEFAULT_BOUNDS.width);
+    const availH=Math.max(420,screen.availHeight||DEFAULT_BOUNDS.height);
+    const originX=Number(screen.availLeft)||0,originY=Number(screen.availTop)||0;
+    const useSaved=saved.version===BOUNDS_VERSION;
+    const width=Math.round(clampNumber(useSaved?saved.width:undefined,330,Math.min(760,availW),Math.min(DEFAULT_BOUNDS.width,availW)));
+    const height=Math.round(clampNumber(useSaved?saved.height:undefined,520,Math.min(1000,availH),Math.min(DEFAULT_BOUNDS.height,availH)));
+    const centeredLeft=originX+Math.max(0,Math.round((availW-width)/2));
+    const centeredTop=originY+Math.max(0,Math.round((availH-height)/2));
+    return{
+      width,height,
+      left:Math.round(clampNumber(useSaved?saved.left:undefined,originX,originX+Math.max(0,availW-width),centeredLeft)),
+      top:Math.round(clampNumber(useSaved?saved.top:undefined,originY,originY+Math.max(0,availH-height),centeredTop))
+    };
+  }
+  function savePopupBounds(){
+    if(!isPopup())return;
+    const width=Math.max(320,Math.round(window.innerWidth||DEFAULT_BOUNDS.width));
+    const height=Math.max(420,Math.round(window.innerHeight||DEFAULT_BOUNDS.height));
+    const left=Math.round(Number.isFinite(window.screenX)?window.screenX:DEFAULT_BOUNDS.left);
+    const top=Math.round(Number.isFinite(window.screenY)?window.screenY:DEFAULT_BOUNDS.top);
+    try{MiniTalk.Persistence.set("window.popupBounds",{version:BOUNDS_VERSION,width,height,left,top})}catch(error){console.warn("팝업 위치 저장 실패",error)}
+  }
+  function startPopupBoundsTracking(){
+    if(!isPopup()||boundsTimer)return;
+    let last="";
+    const snapshot=()=>`${window.screenX}|${window.screenY}|${window.innerWidth}|${window.innerHeight}`;
+    boundsTimer=setInterval(()=>{
+      const now=snapshot();
+      if(now!==last){last=now;savePopupBounds()}
+    },1200);
+    addEventListener("resize",savePopupBounds,{passive:true});
+    addEventListener("pagehide",()=>{savePopupBounds();clearInterval(boundsTimer);boundsTimer=0},{once:true});
+  }
+  function popupUrl(){
+    const url=new URL(location.href);
+    url.searchParams.set(POPUP_PARAM,"popup");
+    url.searchParams.delete("source");
+    return url.href;
+  }
+  function popupFeatures(bounds){
+    /* legacy UI flags도 함께 넣지만 최신 브라우저에서는 주로 popup 요청 신호로만 취급됩니다. */
+    return[
+      "popup=yes","toolbar=no","location=no","menubar=no","status=no","directories=no","personalbar=no",
+      "scrollbars=yes","resizable=yes",
+      `width=${bounds.width}`,`height=${bounds.height}`,`left=${bounds.left}`,`top=${bounds.top}`
+    ].join(",");
+  }
+  function setLaunchMessage(text){
+    const node=document.getElementById("launchMessage");
+    if(node)node.textContent=text||"";
+  }
+  function updatePopupControls(open){
+    document.getElementById("popupControls")?.classList.toggle("hidden",!open);
+  }
+  function setTransferredState(active){
+    document.getElementById("launchDefault")?.classList.toggle("hidden",active);
+    document.getElementById("launchTransferred")?.classList.toggle("hidden",!active);
+    if(active)document.getElementById("launchView")?.classList.remove("hidden");
+  }
+  function watchPopup(){
+    clearInterval(popupWatchTimer);
+    popupWatchTimer=0;
+    if(!popupHandle)return;
+    updatePopupControls(true);
+    popupWatchTimer=setInterval(()=>{
+      let closed=true;
+      try{closed=popupHandle.closed}catch{}
+      if(closed){
+        clearInterval(popupWatchTimer);popupWatchTimer=0;popupHandle=null;
+        updatePopupControls(false);setTransferredState(false);setLaunchMessage("모아루 창이 닫혔습니다.");
+      }
+    },900);
+  }
+  async function openPopup(){
+    if(isPopup()||standalone()){
+      await MiniTalk.UI.Shell.showApp();
+      return true;
+    }
+    try{
+      if(popupHandle&&!popupHandle.closed){popupHandle.focus();setLaunchMessage("열려 있는 모아루 창을 앞으로 가져왔습니다.");return true}
+    }catch{popupHandle=null}
+    const bounds=readPopupBounds();
+    const handle=window.open(popupUrl(),POPUP_NAME,popupFeatures(bounds));
+    if(!handle){
+      setLaunchMessage("팝업이 차단되었습니다. 항상 위 모드나 현재 창을 사용할 수 있습니다.");
+      return false;
+    }
+    popupHandle=handle;
+    // v98: 메신저 본체는 window.open 시 지정한 초기 크기 이후 런타임 resizeTo를 하지 않습니다.
+    try{popupHandle.focus()}catch{}
+    setTransferredState(true);setLaunchMessage("필요할 때 ‘창 앞으로’를 누르면 메신저를 다시 찾을 수 있어요.");
+    watchPopup();
+    return true;
+  }
+  function focusPopup(){
+    try{if(popupHandle&&!popupHandle.closed){popupHandle.focus();return true}}catch{}
+    setLaunchMessage("열려 있는 구석창을 찾지 못했습니다.");
+    updatePopupControls(false);
+    return false;
+  }
+  function closePopup(){
+    try{if(popupHandle&&!popupHandle.closed)popupHandle.close()}catch{}
+    popupHandle=null;updatePopupControls(false);setTransferredState(false);setLaunchMessage("모아루 창을 닫았습니다.");
+  }
+
+  async function copyStyles(doc){
+    const css=[],wait=[];
+    for(const sheet of document.styleSheets){
+      try{
+        const rules=[...sheet.cssRules].map(rule=>rule.cssText).join("\n");
+        if(rules)css.push(rules);
+      }catch(error){
+        if(sheet.href){
+          const link=doc.createElement("link");link.rel="stylesheet";link.href=sheet.href;
+          wait.push(new Promise(resolve=>{link.onload=resolve;link.onerror=resolve}));doc.head.append(link);
+        }else console.warn("PiP 스타일 복사 실패",error);
+      }
+    }
+    if(css.length){const style=doc.createElement("style");style.dataset.pipSnapshot="1";style.textContent=css.join("\n");doc.head.append(style)}
+    if(wait.length)await Promise.all(wait);
+  }
+  function restoreNodes(){
+    if(!movedNodes.length)return;
+    /* 게임/잠금처럼 body에 동적으로 붙는 레이어는 appShell과 별개이므로 문서 이동 전에 정리합니다. */
+    try{MiniTalk.GameHost?.close?.()}catch(error){console.warn("PiP 게임 정리 실패",error)}
+    try{pipWindow?.document?.getElementById("hardLock")?.remove()}catch{}
+    for(const node of movedNodes)document.body.append(node);
+    movedNodes=[];
+    setTransferredState(false);
+    MiniTalk.Store.set("rootDocument",document);
+    /* PiP 닫기는 명시적 로그아웃이 아닙니다.
+       저장 로그인 세션은 유지하고 원본 탭만 로그인 대기 화면으로 되돌립니다. */
+    MiniTalk.UI.Shell?.resetWorkspaceSession?.();
+    setTimeout(()=>MiniTalk.Features.Auth?.returnToLogin?.(),0);
+  }
+  /* Document PiP 크기는 requestWindow()에서 딱 한 번 요청합니다.
+     열린 뒤에는 resizeTo()를 전혀 호출하지 않고, 스타일과 앱 DOM을 숨긴 상태에서
+     준비한 다음 한 프레임에 공개해 초기 재배치가 눈에 보이지 않게 합니다. */
+  async function openPiP(){
+    if(!window.documentPictureInPicture)return false;
+    if(pipWindow&&!pipWindow.closed){pipWindow.focus();return true}
+    pipWindow=await documentPictureInPicture.requestWindow({...PIP_BOUNDS,preferInitialWindowPlacement:true,disallowReturnToOpener:true});
+    const doc=pipWindow.document,meta=doc.createElement("meta"),base=doc.createElement("base"),boot=doc.createElement("style");
+    meta.name="viewport";meta.content="width=device-width,initial-scale=1,viewport-fit=cover";base.href=document.baseURI;
+    boot.dataset.pipBoot="1";boot.textContent="html,body{margin:0;background:#fff}body{visibility:hidden!important}";
+    doc.head.append(meta,base,boot);doc.title=MiniTalkConfig.appName;
+    await copyStyles(doc);
+    movedNodes=["appShell","toastHost","notificationHost","overlayHost","modalHost"].map(id=>document.getElementById(id)).filter(Boolean);
+    document.getElementById("hardLock")?.remove();
+    for(const node of movedNodes)doc.body.append(node);
+    MiniTalk.Store.set("rootDocument",doc);MiniTalk.Features.Layout?.apply?.();MiniTalk.Features.Admin?.applyStoredLock?.();
+    pipWindow.addEventListener("pagehide",()=>{restoreNodes();pipWindow=null},{once:true});
+    await MiniTalk.UI.Shell.showApp();
+    await new Promise(resolve=>pipWindow.requestAnimationFrame(()=>resolve()));
+    boot.remove();
+    setTransferredState(true);updatePopupControls(false);setLaunchMessage("메신저는 항상 위 창에서 계속 실행됩니다.");
+    return true;
+  }
+  async function openPiPWithFallback(){
+    if(standalone()||isPopup()){await MiniTalk.UI.Shell.showApp();return true}
+    try{if(await openPiP())return true}catch(error){MiniTalk.UI.Shell.toast(`항상 위 창 실패: ${error.message}`)}
+    return false;
+  }
+  async function openForLogin(){
+    if(MiniTalk.MobileImmersive?.isMobile?.()||standalone()||isPopup())return false;
+    if(!window.documentPictureInPicture)return false;
+    return openPiP();
+  }
+  async function openBest(){
+    /* 모바일은 별도 팝업보다 현재 탭 + immersive 처리가 안정적입니다. */
+    if(MiniTalk.MobileImmersive?.isMobile?.()){
+      await openHere({immersive:true});
+      return "mobile-here";
+    }
+    /* 데스크톱 기본은 독립성이 높은 일반 popup. 차단될 때만 PiP, 마지막으로 현재 창. */
+    if(await openPopup())return "popup";
+    if(await openPiPWithFallback())return "pip";
+    await MiniTalk.UI.Shell.showApp();
+    return "here";
+  }
+  async function openHere(options={}){
+    if(options.immersive===true)await MiniTalk.MobileImmersive?.enterFromGesture?.();
+    await MiniTalk.UI.Shell.showApp();
+    MiniTalk.MobileImmersive?.afterAppShown?.();
+    return true;
+  }
+  async function install(){
+    if(!installEvent)throw new Error("현재 설치 요청을 사용할 수 없습니다.");
+    await installEvent.prompt();
+    const result=await installEvent.userChoice;
+    installEvent=null;MiniTalk.Events.emit("install:available",false);
+    return result.outcome;
+  }
+  function initWindowInstance(){
+    if(isPopup()){
+      document.documentElement.dataset.windowMode="popup";
+      document.body.classList.add("popup-window");
+      startPopupBoundsTracking();
+    }else if(standalone()){
+      document.documentElement.dataset.windowMode="standalone";
+      fitStandaloneWindow();
+    }else{
+      document.documentElement.dataset.windowMode="browser";
+    }
+  }
+  initWindowInstance();
+  return{
+    openBest,openPopup,openPiP:openPiPWithFallback,openForLogin,openHere,
+    focusPopup,closePopup,install,standalone,canInstall,isPopup,initWindowInstance
+  };
+})();

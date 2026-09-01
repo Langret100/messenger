@@ -279,6 +279,9 @@
         let timerInterval;
         let questionTimeout;
         let activeBalls = []; // 현재 화면에 떠 있는 공들을 관리하는 배열
+        let correctSlotBag = [];
+        let correctSlotCount = 0;
+        let lastCorrectSlot = -1;
 
         const gameContainer = document.getElementById('game-container');
         const questionElement = document.getElementById('question');
@@ -310,6 +313,24 @@
                 '#8bc34a', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'
             ];
             return colors[getRandomInt(0, colors.length - 1)];
+        }
+
+        function nextCorrectSlot(count) {
+            if (count <= 1) {
+                lastCorrectSlot = 0;
+                return 0;
+            }
+            if (correctSlotCount !== count || correctSlotBag.length === 0) {
+                correctSlotCount = count;
+                correctSlotBag = shuffleArray(Array.from({ length: count }, (_, index) => index));
+                if (correctSlotBag[0] === lastCorrectSlot) {
+                    const swapIndex = correctSlotBag.findIndex(slot => slot !== lastCorrectSlot);
+                    if (swapIndex > 0) [correctSlotBag[0], correctSlotBag[swapIndex]] = [correctSlotBag[swapIndex], correctSlotBag[0]];
+                }
+            }
+            const slot = correctSlotBag.shift();
+            lastCorrectSlot = slot;
+            return slot;
         }
 
         // --- 게임 핵심 로직 ---
@@ -376,7 +397,16 @@
             const actualBallSize = Math.max(36, Math.min(cssBallSize, maxFittingSize));
             const usableGap = answers.length > 1 ? Math.max(2, (containerWidth - sidePadding * 2 - actualBallSize * answers.length) / (answers.length - 1)) : 0;
             const positions = Array.from({ length: answers.length }, (_, index) => sidePadding + index * (actualBallSize + usableGap));
-            shuffleArray(positions);
+            const correctAnswerIndex = answers.findIndex(answer => Number(answer) === Number(correctAnswer));
+            const correctSlot = nextCorrectSlot(answers.length);
+            const remainingSlots = shuffleArray(Array.from({ length: answers.length }, (_, index) => index).filter(index => index !== correctSlot));
+            const answerSlots = new Array(answers.length);
+            if (correctAnswerIndex >= 0) answerSlots[correctAnswerIndex] = correctSlot;
+            let remainingIndex = 0;
+            for (let index = 0; index < answers.length; index++) {
+                if (index === correctAnswerIndex) continue;
+                answerSlots[index] = remainingSlots[remainingIndex++];
+            }
             const speedRanks = shuffleArray(Array.from({ length: answers.length }, (_, index) => index));
             const baseDuration = getRandomInt(4800, 5600);
             const maxRiseHeight = containerHeight - BALL_START_BOTTOM + actualBallSize;
@@ -392,7 +422,7 @@
                 if (actualBallSize < 68) ball.style.fontSize = `${Math.max(1.25, actualBallSize / 38)}em`;
 
                 // 화면 폭에 맞춘 고정 슬롯을 섞어 사용하므로 시작부터 서로 완전히 겹칠 수 없습니다.
-                ball.style.left = `${positions[index]}px`;
+                ball.style.left = `${positions[answerSlots[index]]}px`;
                 ball.style.bottom = `${BALL_START_BOTTOM}px`; 
 
                 ball.addEventListener('click', handleAnswerClick);

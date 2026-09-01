@@ -1,6 +1,7 @@
 const fs=require('fs'),assert=require('assert');
 for(const file of ['js/tasks/daily-math-quest.js','js/tasks/daily-korean-quest.js']){
  const s=fs.readFileSync(file,'utf8');
+ assert(!/\battempts\b/.test(s),`${file}: legacy attempts field must not be stored or cloud-synced`);
  const open=s.slice(s.indexOf('function openMission'));
  assert(/wrongCount\s*=\s*0/.test(open),`${file}: wrong count must be per-open memory`);
  assert(!/progress\.attempts\[missionId\]\s*=/.test(open),`${file}: wrong answers must not be persisted as attempts`);

@@ -1,0 +1,11 @@
+const fs=require('fs'),path=require('path'),vm=require('vm');
+const root=path.resolve(__dirname,'..'),ui=fs.readFileSync(path.join(root,'js/features/shopping.js'),'utf8'),html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const match=ui.match(/function activeInventoryCount\(items=\[\]\) \{([\s\S]*?)\n  \}/);ok(match,'activeInventoryCount helper missing');
+const ctx={};vm.createContext(ctx);vm.runInContext(`function activeInventoryCount(items=[]){${match[1]}};this.fn=activeInventoryCount`,ctx);
+const items=[{id:'a',deliveryStatus:'owned'},{id:'b',deliveryStatus:'requested'},{id:'c',deliveryStatus:'shipping'},{id:'d',deliveryStatus:'completed'},{id:'e',usedAt:123,deliveryStatus:'owned'},{id:'f',deliveryStatus:'cancelled'}];
+ok(ctx.fn(items)===4,'used/completed items are still counted as held inventory');
+ok((ui.match(/activeCount ?\? D\.el\("b", \{ text: String\(activeCount\) \}\) : null/g)||[]).length===2,'both outside inventory badge render paths must use active count');
+ok(ui.includes('owned.forEach(item => inventory.append(inventoryCard(item)))'),'used items should remain visible as gray history inside inventory');
+ok(html.includes('js/features/shopping.js?v=64.5.43'),'shopping cache version stale');
+console.log('SHOPPING_INVENTORY_ACTIVE_COUNT_OK');

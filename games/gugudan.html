@@ -367,11 +367,19 @@
             stopAllBalls(); // 기존 공 모두 중지 및 제거
             activeBalls = [];
             
-            const containerWidth = gameContainer.clientWidth;
-            const positions = []; // 이미 배치된 공들의 x 위치 저장
+            const containerWidth = Math.max(200, gameContainer.clientWidth);
             const containerHeight = gameContainer.clientHeight;
-            // BALL_START_BOTTOM은 GROUND_HEIGHT와 BALL_SIZE에 따라 계산됨
-            const maxRiseHeight = containerHeight - BALL_START_BOTTOM + BALL_SIZE; // 공이 화면 밖으로 완전히 나갈 높이
+            const sidePadding = 6;
+            const preferredGap = 10;
+            const cssBallSize = window.matchMedia && window.matchMedia('(max-width: 600px)').matches ? 72 : BALL_SIZE;
+            const maxFittingSize = Math.floor((containerWidth - sidePadding * 2 - preferredGap * (answers.length - 1)) / answers.length);
+            const actualBallSize = Math.max(36, Math.min(cssBallSize, maxFittingSize));
+            const usableGap = answers.length > 1 ? Math.max(2, (containerWidth - sidePadding * 2 - actualBallSize * answers.length) / (answers.length - 1)) : 0;
+            const positions = Array.from({ length: answers.length }, (_, index) => sidePadding + index * (actualBallSize + usableGap));
+            shuffleArray(positions);
+            const speedRanks = shuffleArray(Array.from({ length: answers.length }, (_, index) => index));
+            const baseDuration = getRandomInt(4800, 5600);
+            const maxRiseHeight = containerHeight - BALL_START_BOTTOM + actualBallSize;
 
             answers.forEach((ans, index) => {
                 const ball = document.createElement('div');
@@ -379,36 +387,19 @@
                 ball.textContent = ans;
                 ball.dataset.value = ans;
                 ball.style.backgroundColor = getRandomColor();
-                
-                // 겹치지 않게 공 위치 찾기
-                let randomX;
-                let isOverlapping;
-                let attempts = 0;
-                const minDistance = BALL_SIZE + 10; // 공 간의 최소 거리
-                
-                do {
-                    isOverlapping = false;
-                    randomX = getRandomInt(0, containerWidth - BALL_SIZE);
+                ball.style.width = `${actualBallSize}px`;
+                ball.style.height = `${actualBallSize}px`;
+                if (actualBallSize < 68) ball.style.fontSize = `${Math.max(1.25, actualBallSize / 38)}em`;
 
-                    for (const pos of positions) {
-                        if (Math.abs(randomX - pos) < minDistance) {
-                            isOverlapping = true;
-                            break;
-                        }
-                    }
-                    attempts++;
-                } while (isOverlapping && attempts < 100); // 100번 시도 후에도 겹치면 그냥 배치
-
-                ball.style.left = `${randomX}px`;
-                // 시작 위치: 바닥 바로 위
+                // 화면 폭에 맞춘 고정 슬롯을 섞어 사용하므로 시작부터 서로 완전히 겹칠 수 없습니다.
+                ball.style.left = `${positions[index]}px`;
                 ball.style.bottom = `${BALL_START_BOTTOM}px`; 
-                positions.push(randomX); // 배치된 위치 기록
 
                 ball.addEventListener('click', handleAnswerClick);
                 gameContainer.appendChild(ball);
                 activeBalls.push(ball);
 
-                const duration = getRandomInt(4000, 7000); // 공이 위로 올라가는 총 시간
+                const duration = baseDuration + speedRanks[index] * 180; // 공마다 서로 다른 상승 시간
                 
                 // requestAnimationFrame을 이용한 부상 애니메이션
                 let animationFrameId;

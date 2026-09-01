@@ -1,0 +1,15 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+const admin=read('js/features/admin.js'),wallet=read('js/economy/coin-wallet.js'),notifications=read('js/tools/notifications.js'),realtime=read('js/adapters/realtime.js'),coin=read('docs/apps-script/coin.gs'),shopServer=read('docs/apps-script/coin-shopping-extension.gs'),html=read('index.html');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(admin.includes('const BALANCE_REFRESH_MS=15000'),'admin coin refresh interval must be 15 seconds');
+ok(admin.includes('Date.now()-balanceLoadedAt<BALANCE_REFRESH_MS'),'admin balance cache has no TTL');
+ok(admin.includes('setTimeout(async()=>')&&admin.includes('loadBalances(true);applyBalances()'),'admin coin list is not automatically revalidated');
+ok(admin.includes('text:"코인 새로고침"')&&admin.includes('coinRefresh.onclick'),'manual admin coin refresh is missing');
+ok(admin.includes('balanceLoadedAt=Date.now();MiniTalk.Realtime.notifyCommandTargets?.(targets)'),'admin mutation does not refresh its local balance timestamp');
+ok(realtime.includes('setInterval(pollServerCommands,10000)'),'user command fallback polling changed or is missing');
+ok(notifications.includes('CoinWallet?.setLocal?.(Number(newCoin)'),'admin coin command does not apply authoritative newCoin to user wallet');
+ok(wallet.includes('coinStatus(user.user_id)'),'user wallet is not backed by coin_status');
+ok(coin.includes('const userData = getRewardUserData_(userId)')&&shopServer.includes('coins = moaruRewardCoinMap_()'),'admin/user balance endpoints no longer share the reward coin source');
+ok(html.includes('js/features/admin.js?v=64.5.40'),'admin cache version stale');
+console.log('ADMIN_COIN_CONSISTENCY_REFRESH_OK');

@@ -34,6 +34,10 @@ for(const mission of missions){
   const second=quest.generate(mission.id);
   if(first.length!==5)throw new Error(`${mission.id} must have five questions`);
   if(JSON.stringify(first)!==JSON.stringify(second))throw new Error(`${mission.id} questions must stay stable during the day`);
+  if(new Set(first.map(item=>`${item.question}|${item.answer}`)).size!==5)throw new Error(`${mission.id} repeated a question inside one mission`);
+  const answerPositions=first.map((item,index)=>quest.choices(item,mission.id,index).indexOf(item.answer));
+  if(new Set(answerPositions.slice(0,4)).size!==4)throw new Error(`${mission.id} first four correct-answer positions must cover all four slots`);
+  if(answerPositions.some((position,index)=>index>0&&position===answerPositions[index-1]))throw new Error(`${mission.id} repeated the correct-answer position consecutively`);
   for(const [index,item] of first.entries()){
     if(!item.question||!item.answer)throw new Error(`${mission.id} produced an incomplete question`);
     const choices=quest.choices(item,mission.id,index);
@@ -47,7 +51,41 @@ for(const mission of missions){
       const m=item.question.match(/(\d+) × (\d+)/);if(!m||Number(m[1])*Number(m[2])!==Number(item.answer))throw new Error('bad multiplication');
     }else if(mission.id==='division'){
       const m=item.question.match(/(\d+) ÷ (\d+)/);if(!m||Number(m[1])/Number(m[2])!==Number(item.answer))throw new Error('bad division');
-    }else if(!/^\d+\/\d+$/.test(item.answer))throw new Error('bad fraction');
+    }else {
+      if(!/^\d+\/\d+$/.test(item.answer))throw new Error('bad fraction');
+      if(!item.question.includes('기약분수'))throw new Error('fraction mission did not increase beyond direct fraction reading');
+      const [n,d]=item.answer.split('/').map(Number);let a=n,b=d;while(b)[a,b]=[b,a%b];if(a!==1)throw new Error('fraction answer must be reduced');
+    }
+  }
+}
+
+const signatures=new Set();
+for(let userIndex=0;userIndex<80;userIndex+=1){
+  ctx.MiniTalk.Store.set('user',{user_id:`math-random-${userIndex}`,nickname:'테스트'});
+  for(const mission of missions){
+    const items=quest.generate(mission.id);
+    if(new Set(items.map(item=>`${item.question}|${item.answer}`)).size!==5)throw new Error(`${mission.id} duplicate question under stress`);
+    const positions=items.map((item,index)=>quest.choices(item,mission.id,index).indexOf(item.answer));
+    if(new Set(positions.slice(0,4)).size!==4||positions.some((value,index)=>index&&value===positions[index-1]))throw new Error(`${mission.id} answer-position stress failure`);
+  }
+  signatures.add(JSON.stringify(quest.generate('fraction')));
+}
+if(signatures.size<60)throw new Error(`fraction random variety too low: ${signatures.size}/80`);
+ctx.MiniTalk.Store.set('user',{user_id:'math-test',nickname:'테스트'});
+
+// 오답으로 새 문제를 만들 때는 문제 내용과 정답 위치가 모두 바뀌는 variant가 존재해야 합니다.
+for(const mission of missions){
+  const base=quest.generate(mission.id,0);
+  for(let index=0;index<5;index+=1){
+    const baseKey=`${base[index].question}|${base[index].answer}`;
+    const basePos=quest.choices(base[index],mission.id,index,0).indexOf(base[index].answer);
+    let found=false;
+    for(let variant=1;variant<65;variant+=1){
+      const items=quest.generate(mission.id,variant),item=items[index];
+      const pos=quest.choices(item,mission.id,index,variant).indexOf(item.answer);
+      if(`${item.question}|${item.answer}`!==baseKey&&pos!==basePos){found=true;break;}
+    }
+    if(!found)throw new Error(`${mission.id} cannot replace a wrong answer with a new problem and new answer position`);
   }
 }
 

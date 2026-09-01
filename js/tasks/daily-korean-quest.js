@@ -74,11 +74,13 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
   const userId = () => MiniTalk.Store.get("user")?.user_id || "guest";
   function hash(text) { let value = 2166136261; for (const char of text) { value ^= char.charCodeAt(0); value = Math.imul(value, 16777619); } return value >>> 0; }
   function random(seed) { let state = seed >>> 0; return () => { state += 0x6D2B79F5; let value = state; value = Math.imul(value ^ value >>> 15, value | 1); value ^= value + Math.imul(value ^ value >>> 7, value | 61); return ((value ^ value >>> 14) >>> 0) / 4294967296; }; }
+  function correctPosition(missionId, questionIndex = 0, variant = 0) { const rng=random(hash(`${dateKey()}|${userId()}|${missionId}|${variant}|answer-positions`)),positions=[];while(positions.length<=questionIndex){const cycle=[0,1,2,3];for(let i=cycle.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[cycle[i],cycle[j]]=[cycle[j],cycle[i]]}if(positions.length&&cycle[0]===positions[positions.length-1])[cycle[0],cycle[1]]=[cycle[1],cycle[0]];positions.push(...cycle)}return positions[questionIndex]}
+  function positionChoices(item,missionId,questionIndex,variant=0){const rng=random(hash(`${dateKey()}|${userId()}|${missionId}|${questionIndex}|${variant}|korean-choices`)),wrong=item.choices.filter(value=>value!==item.answer);for(let i=wrong.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[wrong[i],wrong[j]]=[wrong[j],wrong[i]]}const choices=wrong.slice(0,3);choices.splice(correctPosition(missionId,questionIndex,variant),0,item.answer);return {...item,choices}}
   function emptyProgress() { return { date: dateKey(), userId: userId(), correct: Object.fromEntries(MISSIONS.map(item => [item.id, 0])), completed: {}, attempts: Object.fromEntries(MISSIONS.map(item => [item.id, 0])), updatedAt: 0 }; }
   function loadProgress() { const saved = MiniTalk.Persistence.get(STORAGE_KEY, null), progress = emptyProgress(); if (!saved || saved.date !== progress.date || saved.userId !== progress.userId) return progress; MISSIONS.forEach(item => { progress.correct[item.id] = Math.min(5, Math.max(0, Math.floor(Number(saved.correct?.[item.id]) || 0))); progress.completed[item.id] = saved.completed?.[item.id] === true; progress.attempts[item.id]=Math.max(0,Math.floor(Number(saved.attempts?.[item.id])||0)); }); progress.updatedAt=Number(saved.updatedAt)||0;return progress; }
   function cloudPath(progress=loadProgress()){const key=String(progress.userId||userId()).replace(/[.#$\[\]\/]/g,"_");return `moaru/v3/questProgress/${key}/korean/${progress.date}`}
   function mergeProgress(base,incoming){const next={...base,date:base.date,userId:base.userId,correct:{...(base.correct||{})},completed:{...(base.completed||{})},attempts:{...(base.attempts||{})}};MISSIONS.forEach(m=>{next.correct[m.id]=Math.min(QUESTIONS_PER_MISSION,Math.max(Number(base.correct?.[m.id])||0,Number(incoming?.correct?.[m.id])||0));next.completed[m.id]=base.completed?.[m.id]===true||incoming?.completed?.[m.id]===true;next.attempts[m.id]=Math.max(Number(base.attempts?.[m.id])||0,Number(incoming?.attempts?.[m.id])||0)});next.updatedAt=Math.max(Number(base.updatedAt)||0,Number(incoming?.updatedAt)||0);return next}
-  function saveProgress(progress) { progress.updatedAt=Date.now();MiniTalk.Persistence.set(STORAGE_KEY, progress); MiniTalk.Store.set("dailyKoreanQuest", progress);if(progress.userId!=="guest")MiniTalk.Realtime?.cloudTransaction?.(cloudPath(progress),remote=>{if(!remote||remote.date!==progress.date||remote.userId!==progress.userId)return progress;return mergeProgress(progress,remote)}).catch(error=>console.warn("국어 퀘스트 서버 동기화 실패",error)); }
+  function saveProgress(progress,options={}) { progress.updatedAt=Date.now();MiniTalk.Persistence.set(STORAGE_KEY, progress); MiniTalk.Store.set("dailyKoreanQuest", progress);if(progress.userId!=="guest")MiniTalk.Realtime?.cloudTransaction?.(cloudPath(progress),remote=>{if(options.replaceCloud===true)return progress;if(!remote||remote.date!==progress.date||remote.userId!==progress.userId)return progress;return mergeProgress(progress,remote)}).catch(error=>console.warn("국어 퀘스트 서버 동기화 실패",error)); }
   let lastSyncKey="",lastSyncAt=0;async function syncProgress(onProgress){const local=loadProgress(),key=cloudPath(local);if(local.userId==="guest"||key===lastSyncKey&&Date.now()-lastSyncAt<30000)return;lastSyncKey=key;lastSyncAt=Date.now();try{const remote=await MiniTalk.Realtime?.cloudGet?.(key,null);if(!remote||remote.date!==local.date||remote.userId!==local.userId)return;const merged=mergeProgress(local,remote),changed=JSON.stringify({correct:merged.correct,completed:merged.completed,attempts:merged.attempts})!==JSON.stringify({correct:local.correct,completed:local.completed,attempts:local.attempts});if(changed){MiniTalk.Persistence.set(STORAGE_KEY,merged);MiniTalk.Store.set("dailyKoreanQuest",merged);onProgress?.()}}catch(error){console.warn("국어 퀘스트 진행 불러오기 실패",error)}}
   function formatQuestion(raw) {
     const separator = raw.indexOf("? ");
@@ -91,7 +93,10 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
     }
     return { instruction: "문제를 읽고 가장 알맞은 답을 고르세요.", question: raw };
   }
-  function generate(missionId, variant = 0) { const items = (BANK[missionId] || []).map(([raw, answer, choices]) => ({ ...formatQuestion(raw), answer, choices: choices.slice() })); const rng = random(hash(`${dateKey()}|${userId()}|${missionId}|korean|${variant}`)); for (let i = items.length - 1; i > 0; i -= 1) { const j = Math.floor(rng() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; } return items.slice(0, QUESTIONS_PER_MISSION); }
+  function generate(missionId, variant = 0) { const items = (BANK[missionId] || []).map(([raw, answer, choices]) => ({ ...formatQuestion(raw), answer, choices: choices.slice() })); const rng = random(hash(`${dateKey()}|${userId()}|${missionId}|korean|${variant}`)); for (let i = items.length - 1; i > 0; i -= 1) { const j = Math.floor(rng() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; } return items.slice(0, QUESTIONS_PER_MISSION).map((item,index)=>positionChoices(item,missionId,index,variant)); }
+
+  function problemKey(item){return `${item?.instruction||""}|${item?.question||""}|${item?.answer||""}`}
+  function nextVariant(missionId,questionIndex,currentItem,currentVariant){const currentPosition=correctPosition(missionId,questionIndex,currentVariant);let candidate=Math.max(0,Number(currentVariant)||0)+1;for(let guard=0;guard<64;guard+=1,candidate+=1){const items=generate(missionId,candidate),nextItem=items[questionIndex];if(nextItem&&problemKey(nextItem)!==problemKey(currentItem)&&correctPosition(missionId,questionIndex,candidate)!==currentPosition)return candidate}return candidate}
 
   function render(onProgress) {
     const D = MiniTalk.UI.Dom, guest = Boolean(MiniTalk.Store.get("user")?.isGuest), progress = loadProgress(), grid = D.el("div", { class: "daily-quest-grid" });syncProgress(onProgress);
@@ -112,29 +117,30 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
   function openMission(missionId, onProgress) {
     if (MiniTalk.Store.get("user")?.isGuest) { MiniTalk.UI.Shell.toast("게스트는 과제를 볼 수만 있어요.");return; }
     const mission = MISSIONS.find(item => item.id === missionId); if (!mission) return;
-    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), progress = loadProgress();let questions = generate(missionId,progress.attempts?.[missionId]||0);
+    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), progress = loadProgress();
+    let variant=Math.max(0,Number(progress.attempts?.[missionId])||0),questions=generate(missionId,variant),wrongCount=0;
     function renderQuestion() {
       const index = progress.correct[missionId] || 0; body.replaceChildren();
       if (index >= 5 || progress.completed[missionId]) return renderComplete();
-      const current = questions[index], feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" }), choices = D.el("div", { class: "quest-choice-grid korean-choice-grid", role: "group", "aria-label": "정답 보기" });
-      current.choices.forEach(answer => { const button = D.el("button", { class: "quest-choice korean-choice", type: "button", text: answer }); button.onclick = () => submit(answer, button); choices.append(button); });
+      const current = questions[index], feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" }), choiceGrid = D.el("div", { class: "quest-choice-grid korean-choice-grid", role: "group", "aria-label": "정답 보기" });
+      let answerLocked=false;
+      current.choices.forEach(answer => { const button = D.el("button", { class: "quest-choice korean-choice", type: "button", text: answer }); button.onclick = () => submit(answer, button); choiceGrid.append(button); });
       function submit(answer, selected) {
-        if (answer !== current.answer) { D.all(".quest-choice",choices).forEach(button=>{button.disabled=true});selected.classList.add("wrong");feedback.textContent="아쉬워요. 새 문제로 바꿀게요.";feedback.className="quest-feedback wrong";progress.attempts[missionId]=(Number(progress.attempts?.[missionId])||0)+1;saveProgress(progress);setTimeout(()=>{questions=generate(missionId,progress.attempts[missionId]);renderQuestion()},420);return; }
-        D.all(".quest-choice", choices).forEach(button => { button.disabled = true; }); selected.classList.add("correct"); progress.correct[missionId] = index + 1;
-        if (progress.correct[missionId] >= 5) progress.completed[missionId] = true;
-        saveProgress(progress); if (progress.completed[missionId] === true) onProgress?.(); if (MISSIONS.every(item => progress.completed[item.id])) MiniTalk.Events.emit("quest:subject-complete", { subject: "korean", date: progress.date, userId: progress.userId });
-        const missionFinished = progress.completed[missionId] === true;
-        MiniTalk.Tasks.QuestAccordion.celebrate(body, () => {
-          if (!missionFinished) return renderQuestion();
-          MiniTalk.UI.Shell.closeModal();
-          MiniTalk.UI.Shell.toast("도장을 받았어요!");
-        });
+        if(answerLocked)return;answerLocked=true;D.all(".quest-choice",choiceGrid).forEach(button=>{button.disabled=true});
+        if (answer !== current.answer) {
+          selected.classList.add("wrong");wrongCount+=1;progress.attempts[missionId]=(Number(progress.attempts?.[missionId])||0)+1;
+          if(wrongCount>=2){progress.correct[missionId]=0;progress.completed[missionId]=false;saveProgress(progress,{replaceCloud:true});feedback.textContent="오답이 2개가 되어 이 미션을 0/5부터 다시 시작해요.";feedback.className="quest-feedback wrong";setTimeout(()=>{MiniTalk.UI.Shell.closeModal();onProgress?.();MiniTalk.UI.Shell.toast(`${mission.title} 미션을 다시 시작해요.`)},520);return;}
+          feedback.textContent="아쉬워요. 새 문제로 바꿀게요. 한 번 더 틀리면 이 미션은 다시 시작해요.";feedback.className="quest-feedback wrong";variant=nextVariant(missionId,index,current,variant);questions=generate(missionId,variant);saveProgress(progress);setTimeout(renderQuestion,520);return;
+        }
+        selected.classList.add("correct");progress.correct[missionId]=index+1;if(progress.correct[missionId]>=5)progress.completed[missionId]=true;
+        saveProgress(progress); if (progress.completed[missionId] === true) onProgress?.(); if(MISSIONS.every(item=>progress.completed[item.id]))MiniTalk.Events.emit("quest:subject-complete",{subject:"korean",date:progress.date,userId:progress.userId});
+        const missionFinished=progress.completed[missionId]===true;MiniTalk.Tasks.QuestAccordion.celebrate(body,()=>{if(!missionFinished)return renderQuestion();MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("도장을 받았어요!")});
       }
-      body.append(D.el("div", { class: "quest-solver-progress" }, [D.el("span", { text: `국어 · ${mission.title}` }), D.el("strong", { text: `${index + 1} / 5` })]), D.el("small", { class: "quest-instruction", text: current.instruction }), D.el("div", { class: "quest-question korean-question", text: current.question }), choices, feedback);
-      setTimeout(() => choices.querySelector(".quest-choice")?.focus(), 30);
+      body.append(D.el("div",{class:"quest-solver-progress"},[D.el("span",{text:`국어 · ${mission.title}`}),D.el("strong",{text:`${index+1} / 5`})]),D.el("small",{class:"quest-instruction",text:current.instruction}),D.el("div",{class:"quest-question korean-question",text:current.question}),D.el("small",{class:"muted",text:`오답 ${wrongCount}/2 · 두 번째 오답이면 이 미션을 다시 시작해요.`}),choiceGrid,feedback);
+      setTimeout(()=>choiceGrid.querySelector(".quest-choice")?.focus(),30);
     }
-    function renderComplete() { body.append(D.el("img", { class: "quest-complete-stamp", src: "assets/ui/quest-stamp.png", alt: "퀘스트 완료 도장" }), D.el("h3", { text: `${mission.title} 미션 완료!` }), D.el("p", { class: "muted", text: "문제 5개를 모두 맞혀 오늘의 도장을 받았습니다." }), D.el("button", { class: "button primary", type: "button", text: "확인", onclick: () => MiniTalk.UI.Shell.closeModal() })); }
-    MiniTalk.UI.Shell.modal(`${mission.title} 미션`, body); renderQuestion();
+    function renderComplete(){body.append(D.el("img",{class:"quest-complete-stamp",src:"assets/ui/quest-stamp.png",alt:"퀘스트 완료 도장"}),D.el("h3",{text:`${mission.title} 미션 완료!`}),D.el("p",{class:"muted",text:"문제 5개를 모두 맞혀 오늘의 도장을 받았습니다."}),D.el("button",{class:"button primary",type:"button",text:"확인",onclick:()=>MiniTalk.UI.Shell.closeModal()}));}
+    MiniTalk.UI.Shell.modal(`${mission.title} 미션`,body);renderQuestion();
   }
 
   function resetForTests() { MiniTalk.Persistence.remove(STORAGE_KEY); }

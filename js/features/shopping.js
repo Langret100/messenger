@@ -69,6 +69,10 @@ MiniTalk.Features.Shopping = (() => {
     }, 140);
   }
 
+  function activeInventoryCount(items=[]) {
+    return (items||[]).reduce((count,item)=>count+((item?.usedAt||String(item?.deliveryStatus||"").toLowerCase()==="completed")?0:1),0);
+  }
+
   function patchVisible(host) {
     const D = MiniTalk.UI.Dom, screen = host.querySelector(".shopping-screen"), view = host.querySelector(".shopping-view");
     if (!screen || !view) return render(host, { animate: false, preserveScroll: true, refreshCatalog: false });
@@ -84,7 +88,8 @@ MiniTalk.Features.Shopping = (() => {
       const panel = inventoryPanel(user, owned, () => { inventoryOpen = false;render(host); });
       oldPanel ? oldPanel.replaceWith(panel) : view.insertBefore(panel, view.querySelector(".shop-inventory-fab"));
     } else oldPanel?.remove();
-    const button = D.el("button", { class: `shop-inventory-fab${inventoryOpen ? " active" : ""}`, type: "button", "aria-expanded": String(inventoryOpen), "aria-label": inventoryOpen ? "보관함 닫기" : "보관함 열기", onclick: () => { inventoryOpen = !inventoryOpen;render(host); } }, [D.el("small", { text: "보관함" }), owned.length ? D.el("b", { text: String(owned.length) }) : null].filter(Boolean));
+    const activeCount=activeInventoryCount(owned);
+    const button = D.el("button", { class: `shop-inventory-fab${inventoryOpen ? " active" : ""}`, type: "button", "aria-expanded": String(inventoryOpen), "aria-label": inventoryOpen ? "보관함 닫기" : "보관함 열기", onclick: () => { inventoryOpen = !inventoryOpen;render(host); } }, [D.el("small", { text: "보관함" }), activeCount ? D.el("b", { text: String(activeCount) }) : null].filter(Boolean));
     const oldButton = view.querySelector(".shop-inventory-fab");oldButton ? oldButton.replaceWith(button) : view.append(button);
     screen.scrollTop = scrollTop;
   }
@@ -105,13 +110,14 @@ MiniTalk.Features.Shopping = (() => {
     wrap.append(catalog);
 
     const owned = user.isGuest ? [] : Service.inventory();
+    const activeCount = activeInventoryCount(owned);
     const inventoryButton = D.el("button", {
       class: `shop-inventory-fab${inventoryOpen ? " active" : ""}`,
       type: "button",
       "aria-expanded": String(inventoryOpen),
       "aria-label": inventoryOpen ? "보관함 닫기" : "보관함 열기",
       onclick: () => { inventoryOpen = !inventoryOpen; render(host); }
-    }, [D.el("small", { text: "보관함" }), owned.length ? D.el("b", { text: String(owned.length) }) : null].filter(Boolean));
+    }, [D.el("small", { text: "보관함" }), activeCount ? D.el("b", { text: String(activeCount) }) : null].filter(Boolean));
 
     view.append(wrap);
     if (inventoryOpen) view.append(inventoryPanel(user, owned, () => { inventoryOpen = false; render(host); }));

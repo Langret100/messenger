@@ -108,10 +108,16 @@ MiniTalk.Economy.CoinWallet = (() => {
       title: loginRequired ? "로그인 후 코인을 확인할 수 있어요" : "코인 잔액 새로고침",
       "aria-label": loginRequired ? "로그인이 필요해요" : `보유 코인 ${value()}개. 새로고침`,
       onclick: async () => {
-        button.disabled = true;
-        const amount = await refresh(true);
-        update(button, count, amount);
-        button.disabled = false;
+        if (button.dataset.refreshing === "1") return;
+        button.dataset.refreshing = "1";
+        button.setAttribute("aria-busy", "true");
+        try {
+          const amount = await refresh(true);
+          update(button, count, amount);
+        } finally {
+          delete button.dataset.refreshing;
+          button.removeAttribute("aria-busy");
+        }
       }
     }, [
       D.el("img", { src: "assets/ui/notebook-coin.svg", alt: "" }),

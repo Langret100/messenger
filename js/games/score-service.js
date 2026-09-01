@@ -53,25 +53,38 @@ MiniTalk.Games.ScoreService = (() => {
       return true;
     }
 
-    try {
-      const body = new URLSearchParams({
-        mode: "game_update_score",
-        game_name: String(gameName),
-        user_id: String(user.user_id),
-        username: String(user.nickname || user.username || user.user_id),
-        score: String(normalized)
-      });
-      const response = await fetch(MiniTalkConfig.sheetUrl, { method: "POST", body });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      await response.json().catch(() => ({}));
-      // 주간 TOP3 코인은 게임 요청 시 즉시 지급하지 않고 월요일 오전 9시 서버 트리거에서만 지급합니다.
-      MiniTalk.UI.Shell.toast(`${gameName} ${normalized}점 기록`);
-      return true;
-    } catch (error) {
-      console.warn("게임 점수 온라인 전송 실패", error);
-      MiniTalk.UI.Shell.toast(`${gameName} ${normalized}점 · 로컬 기록 보관`);
-      return false;
+    const payload = () => new URLSearchParams({
+      mode: "game_update_score",
+      game_name: String(gameName),
+      user_id: String(user.user_id),
+      username: String(user.nickname || user.username || user.user_id),
+      score: String(normalized)
+    });
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetch(MiniTalkConfig.sheetUrl, { method: "POST", body: payload() });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json().catch(() => ({}));
+        if (json && json.ok === false) {
+          const code = String(json.error || "GAME_SCORE_REJECTED");
+          const error = new Error(code);
+          error.retryable = code === "GAME_SCORE_BUSY";
+          throw error;
+        }
+        // Apps Script의 GAME_SCORE_BUSY 또는 일시적인 네트워크 실패는 같은 최고점 요청으로 안전하게 재시도합니다.
+        MiniTalk.UI.Shell.toast(`${gameName} ${normalized}점 기록`);
+        return true;
+      } catch (error) {
+        lastError = error;
+        const networkOrServer = !error?.retryable && (/^HTTP 5/.test(String(error?.message || "")) || error instanceof TypeError);
+        if (attempt >= 2 || (!error?.retryable && !networkOrServer)) break;
+        await new Promise(resolve => setTimeout(resolve, 250 + attempt * 350));
+      }
     }
+    console.warn("게임 점수 온라인 전송 실패", lastError);
+    MiniTalk.UI.Shell.toast(`${gameName} ${normalized}점 · 로컬 기록 보관`);
+    return false;
   }
 
   function normalizeRemote(item) {

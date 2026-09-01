@@ -11,6 +11,6 @@ ok(rt.includes('base.limitToLast(CHAT_PAGE_SIZE)')&&rt.includes('base.startAt(la
 ok(chats.includes('"data-has-message":roomHasVisibleActivity(room)?"1":"0"')&&chats.includes('mode==="group"&&item.dataset.roomType==="group"&&hasMessage'),"empty room UI fallback filter missing");
 ok(chats.includes('class:"room-summary-icon profile-image"')&&chats.includes('class:"room-member-avatar profile-image"'),"room information profile images missing");
 ok(appcss.includes('.room-summary-icon{')&&appcss.includes('object-fit:cover'),"room profile image crop style missing");
-ok(html.includes('feed-classinfo-weekly.css?v=65.0.31')&&html.includes('realtime.js?v=64.5.47')&&html.includes('features/chats.js?v=64.5.25')&&html.includes('features/feed.js?v=65.0.21')&&html.includes('app.js?v=64.5.46'),"delta patch cache versions stale");
+ok(html.includes('feed-classinfo-weekly.css?v=65.0.31')&&html.includes('realtime.js?v=64.5.49')&&html.includes('features/chats.js?v=64.5.27')&&html.includes('features/feed.js?v=65.0.21')&&html.includes('app.js?v=64.5.46'),"delta patch cache versions stale");
 ok(sw.includes('moaru-moa-dialogue-fusion-final')&&app.includes('sw.js?v=64.5.60'),"service worker cache bump missing");
 console.log("FEED_ROOM_DELTA_OK");

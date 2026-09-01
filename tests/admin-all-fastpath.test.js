@@ -24,6 +24,6 @@ for(const fn of ['handleUserTaskList','handleUserTaskSubmit']){
 ok(tasks.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'),'task fallback polling was not reduced');
 ok(admin.includes('},30000);load();return section'),'admin task review fallback polling was not reduced');
 // 변경 에셋 캐시 버전 동기화
-for(const ref of ['js/adapters/realtime.js?v=64.5.47','js/shopping/store-service.js?v=64.5.25','js/tasks/task-service.js?v=64.5.26','js/features/admin.js?v=64.5.41'])ok(index.includes(ref),'cache ref missing '+ref);
+for(const ref of ['js/adapters/realtime.js?v=64.5.49','js/shopping/store-service.js?v=64.5.25','js/tasks/task-service.js?v=64.5.26','js/features/admin.js?v=64.5.41'])ok(index.includes(ref),'cache ref missing '+ref);
 ok(sw.includes('moaru-moa-dialogue-fusion-final'),'v104 service worker cache missing');
 console.log('V104_ADMIN_ALL_FASTPATH_OK');

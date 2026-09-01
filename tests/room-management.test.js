@@ -28,6 +28,7 @@ function makeCtx(){
   const invited=await A.MiniTalk.Realtime.inviteRoomMembers(room.id,[{user_id:"c",nickname:"C"}]);
   updated=await A.MiniTalk.Realtime.getRoom(room.id);
   if(invited!==1||!updated.members?.c)throw new Error("room invitation was not stored");
+  if(!updated.hasPassword||!updated.passwordHash||!updated.passwordSalt)throw new Error("room invitation unexpectedly cleared password protection");
   await C.MiniTalk.Realtime.init({user_id:"c",nickname:"C"});
   const invitedEntry=await C.MiniTalk.Realtime.joinRoom(room.id,"");
   if(!invitedEntry.members?.c)throw new Error("invited member was asked for the password");
@@ -44,7 +45,10 @@ function makeCtx(){
   const transfer=await A.MiniTalk.Realtime.leaveRoom(room.id);
   updated=await B.MiniTalk.Realtime.getRoom(room.id);
   if(transfer.deleted||transfer.newCreator!=="b"||updated.creator!=="b"||updated.members.b.role!=="owner")throw new Error("owner transfer failed");
-  await B.MiniTalk.Realtime.updateRoomPassword(room.id,"");
+  let accidentalClearRejected=false;try{await B.MiniTalk.Realtime.updateRoomPassword(room.id,"")}catch(error){accidentalClearRejected=/입력하세요/.test(error.message)}
+  if(!accidentalClearRejected)throw new Error("blank password update silently cleared a protected room");
+  updated=await B.MiniTalk.Realtime.getRoom(room.id);if(!updated.hasPassword||!updated.passwordHash||!updated.passwordSalt)throw new Error("rejected blank update changed password protection");
+  await B.MiniTalk.Realtime.clearRoomPassword(room.id);
   updated=await B.MiniTalk.Realtime.getRoom(room.id);
   if(updated.hasPassword||updated.passwordHash||updated.passwordSalt)throw new Error("password removal failed");
   const removed=await B.MiniTalk.Realtime.leaveRoom(room.id);

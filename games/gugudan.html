@@ -394,13 +394,53 @@
             
             const containerWidth = Math.max(200, gameContainer.clientWidth);
             const containerHeight = gameContainer.clientHeight;
-            const sidePadding = 6;
-            const preferredGap = 10;
-            const cssBallSize = window.matchMedia && window.matchMedia('(max-width: 600px)').matches ? 72 : BALL_SIZE;
+            const isMobile = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+            const isTallPortrait = containerHeight > containerWidth * 1.2;
+            const sidePadding = isMobile ? 4 : 6;
+            const preferredGap = isTallPortrait ? 3 : 5;
+            const cssBallSize = isMobile ? (containerWidth <= 360 ? 66 : 70) : BALL_SIZE;
             const maxFittingSize = Math.floor((containerWidth - sidePadding * 2 - preferredGap * (answers.length - 1)) / answers.length);
-            const actualBallSize = Math.max(36, Math.min(cssBallSize, maxFittingSize));
-            const usableGap = answers.length > 1 ? Math.max(2, (containerWidth - sidePadding * 2 - actualBallSize * answers.length) / (answers.length - 1)) : 0;
-            const positions = Array.from({ length: answers.length }, (_, index) => sidePadding + index * (actualBallSize + usableGap));
+            const actualBallSize = Math.max(isMobile ? 34 : 36, Math.min(cssBallSize, maxFittingSize));
+            const availableGap = answers.length > 1
+                ? (containerWidth - sidePadding * 2 - actualBallSize * answers.length) / (answers.length - 1)
+                : 0;
+            const minGap = answers.length > 1
+                ? Math.max(0, Math.min(preferredGap, availableGap))
+                : 0;
+
+            // 등간격 슬롯 대신, 공이 겹치지만 않도록만 하고 남는 가로 여백을 매 문제 불규칙하게 나눕니다.
+            // 정답 위치의 좌/중/우 균등성은 slot 번호로 유지하고, 실제 보이는 좌표는 문제마다 자연스럽게 달라집니다.
+            function buildNaturalPositions(count) {
+                if (count <= 1) return [Math.max(sidePadding, (containerWidth - actualBallSize) / 2)];
+                const baseUsed = sidePadding * 2 + actualBallSize * count + minGap * (count - 1);
+                const extra = Math.max(0, containerWidth - baseUsed);
+                const segmentCount = count + 1; // 좌측 가장자리 + 공 사이 + 우측 가장자리
+                let weights = [];
+                for (let attempt = 0; attempt < 20; attempt++) {
+                    weights = Array.from({ length: segmentCount }, (_, index) => {
+                        const isEdge = index === 0 || index === segmentCount - 1;
+                        let weight = isEdge
+                            ? (isTallPortrait ? 0.08 + Math.random() * 0.50 : 0.05 + Math.random() * 0.45)
+                            : (isTallPortrait ? 0.10 + Math.random() * 1.55 : 0.10 + Math.random() * 2.10);
+                        if (!isEdge && Math.random() < 0.45) weight *= 0.10 + Math.random() * 0.40; // 붙어 보이는 쌍 허용
+                        if (!isEdge && Math.random() < 0.25) weight *= 1.60 + Math.random() * 1.80; // 크게 벌어진 간격도 가끔 생성
+                        if (isEdge && Math.random() < 0.45) weight *= 0.25 + Math.random() * 0.55;
+                        return weight;
+                    });
+                    const interior = weights.slice(1, -1);
+                    if (interior.length <= 1) break;
+                    const spread = Math.max(...interior) - Math.min(...interior);
+                    if (spread >= 0.55) break;
+                }
+                const weightSum = weights.reduce((a, b) => a + b, 0) || 1;
+                const distributed = weights.map(weight => (extra * weight) / weightSum);
+                const out = [sidePadding + distributed[0]];
+                for (let index = 1; index < count; index++) {
+                    out[index] = out[index - 1] + actualBallSize + minGap + distributed[index];
+                }
+                return out;
+            }
+            const positions = buildNaturalPositions(answers.length);
             const correctAnswerIndex = answers.findIndex(answer => Number(answer) === Number(correctAnswer));
             const correctSlot = nextCorrectSlot(answers.length);
             const remainingSlots = shuffleArray(Array.from({ length: answers.length }, (_, index) => index).filter(index => index !== correctSlot));
@@ -413,19 +453,18 @@
             }
             const baseDuration = getRandomInt(4800, 5600);
 
-            // 규칙적인 횡대/등간격 출발을 피하기 위한 자연스러운 분산값.
-            // 정답 슬롯의 공정성은 유지하되, 화면상 위치·높이·출발 위상·속도는 서로 독립적으로 흔듭니다.
-            const xJitterLimit = Math.max(0, Math.min(14, usableGap * 0.32));
-            const bottomRange = Math.max(28, Math.min(82, Math.floor(containerHeight * 0.12)));
+            // 규칙적인 횡대 출발을 피하기 위한 자연스러운 분산값.
+            // 가로 위치는 위에서 이미 불규칙 간격으로 정했고, 높이·출발 위상·속도도 서로 독립적으로 흔듭니다.
+            const bottomRange = Math.max(isTallPortrait ? 42 : 28, Math.min(isTallPortrait ? 150 : 92, Math.floor(containerHeight * (isTallPortrait ? 0.18 : 0.13))));
             const rawBottomOffsets = answers.map(() => Math.random() * bottomRange);
             // 우연히 전부 비슷한 높이에 몰린 경우에만 한 공을 더 아래/위로 보내 '한 줄 출발'만 방지합니다.
             const bottomSpread = Math.max(...rawBottomOffsets) - Math.min(...rawBottomOffsets);
-            if (bottomSpread < Math.min(24, bottomRange * 0.45) && rawBottomOffsets.length > 1) {
+            if (bottomSpread < Math.min(26, bottomRange * 0.40) && rawBottomOffsets.length > 1) {
                 rawBottomOffsets[getRandomInt(0, rawBottomOffsets.length - 1)] = 0;
                 rawBottomOffsets[getRandomInt(0, rawBottomOffsets.length - 1)] = bottomRange;
             }
-            const phaseOffsets = answers.map(() => Math.random() * 190);
-            const speedOffsets = answers.map(() => Math.random() * 620);
+            const phaseOffsets = answers.map(() => Math.random() * (isTallPortrait ? 240 : 190));
+            const speedOffsets = answers.map(() => Math.random() * (isTallPortrait ? 760 : 620));
             // 속도가 우연히 거의 같아 장시간 포개지는 상황만 피하고, 일정한 계단식 속도차는 만들지 않습니다.
             for (let i = 1; i < speedOffsets.length; i++) {
                 let guard = 0;
@@ -444,13 +483,10 @@
                 ball.style.height = `${actualBallSize}px`;
                 if (actualBallSize < 68) ball.style.fontSize = `${Math.max(1.25, actualBallSize / 38)}em`;
 
-                // 슬롯 중심은 유지하되, 슬롯 안에서 좌우를 조금 흔들어 기계적인 등간격을 없앱니다.
+                // 정답/오답은 공정한 slot 번호를 쓰되, slot 자체의 실제 X 좌표는 매 문제 불규칙하게 생성됩니다.
                 const slot = answerSlots[index];
-                const leftBound = slot === 0 ? 0 : -xJitterLimit;
-                const rightBound = slot === answers.length - 1 ? 0 : xJitterLimit;
-                const xJitter = leftBound === rightBound ? leftBound : (leftBound + Math.random() * (rightBound - leftBound));
                 const startBottom = BALL_START_BOTTOM + rawBottomOffsets[index];
-                ball.style.left = `${positions[slot] + xJitter}px`;
+                ball.style.left = `${positions[slot]}px`;
                 ball.style.bottom = `${startBottom}px`;
 
                 ball.addEventListener('click', handleAnswerClick);

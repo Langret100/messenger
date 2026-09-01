@@ -10,5 +10,5 @@ assert(games.includes('sessions.forEach(([gameId,roomId])=>{if(roomId)leaveActiv
 assert(games.includes('disabled:ended,"aria-disabled":String(ended)'), 'terminal recent games must not be reopenable');
 assert(games.includes('if(!ended)b.onclick=()=>showDesktopMessage(msg)'), 'ended recent game still has open handler');
 assert(index.includes('js/chat/room-games.js?v=27'), 'room-games cache version stale');
-assert(index.includes('js/features/chats.js?v=64.5.25'), 'chats cache version stale');
+assert(index.includes('js/features/chats.js?v=64.5.27'), 'chats cache version stale');
 console.log('CHAT_ROOM_GAMES_FRESH_RENDER_POPUP_SESSION_AUDIT_OK');

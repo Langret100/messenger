@@ -8,7 +8,7 @@ ok(html.includes('.filter(index => index !== lastCorrectSlot)'),'selector must e
 ok(html.includes('const minUsage = Math.min'),'selector must prefer least-used slots');
 ok(html.includes('const correctSlot = nextCorrectSlot(answers.length);'),'correct answer must use balanced slot');
 ok(html.includes('const slot = answerSlots[index];'),'ball placement must start from assigned answer slot');
-ok(html.includes('positions[slot] + xJitter'),'visual jitter must stay anchored to assigned slot');
+ok(html.includes('ball.style.left = `${positions[slot]}px`'),'visual position must stay anchored to assigned balanced slot');
 
 function makePicker(r=Math.random){const usageMap=new Map();let last=-1;return function next(n){if(n<=1){last=0;return 0}let usage=usageMap.get(n);if(!usage||usage.length!==n){usage=Array(n).fill(0);usageMap.set(n,usage)}const candidates=Array.from({length:n},(_,i)=>i).filter(i=>i!==last);const min=Math.min(...candidates.map(i=>usage[i]));const least=candidates.filter(i=>usage[i]===min);const slot=least[Math.floor(r()*least.length)];usage[slot]++;last=slot;return slot}}
 

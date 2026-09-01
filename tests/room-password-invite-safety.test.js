@@ -1,0 +1,18 @@
+const fs=require("fs"),path=require("path");
+const root=path.resolve(__dirname,"..");
+const chats=fs.readFileSync(path.join(root,"js/features/chats.js"),"utf8");
+const realtime=fs.readFileSync(path.join(root,"js/adapters/realtime.js"),"utf8");
+const html=fs.readFileSync(path.join(root,"index.html"),"utf8");
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(chats.includes('text:"비밀번호 해제"')&&chats.includes('confirmClearRoomPassword(room)'),"password clear must be a separate confirmed action");
+ok(chats.includes('clearRoomPassword(room.id)'),"password clear must use the dedicated clearRoomPassword API");
+ok(!chats.includes('allowClear'),"password UI must not rely on an allowClear escape flag");
+ok(chats.includes("if(!secret){MiniTalk.UI.Shell.toast(room.hasPassword?"),"blank password change must not silently clear the room password");
+ok(!chats.includes('빈칸으로 저장하면 비밀번호가 해제됩니다.'),"dangerous blank-to-clear instruction must be removed");
+ok(realtime.includes('if(!secret)throw new Error("비밀번호를 입력하세요.")'),"password update API must reject blank passwords");
+ok(realtime.includes('async function clearRoomPassword(roomId)'),"password clear must be a dedicated realtime API");
+ok(!realtime.includes('allowClear'),"realtime password API must not expose an allowClear escape flag");
+ok(chats.includes('(MiniTalk.UserDirectory?.all?.()||[]).forEach(value=>'),"invite list must come from the canonical user directory");
+ok(!chats.includes('Object.values(MiniTalk.Store.get("profiles")||{}).forEach(add)')&&!chats.includes('Object.values(MiniTalk.Store.get("presence")||{}).forEach(add)'),"invite list must not re-add raw profile/presence records");
+ok(html.includes('js/features/chats.js?v=64.5.27')&&html.includes('js/adapters/realtime.js?v=64.5.49'),"room safety cache versions stale");
+console.log("ROOM_PASSWORD_INVITE_SAFETY_OK");

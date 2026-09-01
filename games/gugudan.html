@@ -411,9 +411,28 @@
                 if (index === correctAnswerIndex) continue;
                 answerSlots[index] = remainingSlots[remainingIndex++];
             }
-            const speedRanks = shuffleArray(Array.from({ length: answers.length }, (_, index) => index));
             const baseDuration = getRandomInt(4800, 5600);
-            const maxRiseHeight = containerHeight - BALL_START_BOTTOM + actualBallSize;
+
+            // 규칙적인 횡대/등간격 출발을 피하기 위한 자연스러운 분산값.
+            // 정답 슬롯의 공정성은 유지하되, 화면상 위치·높이·출발 위상·속도는 서로 독립적으로 흔듭니다.
+            const xJitterLimit = Math.max(0, Math.min(14, usableGap * 0.32));
+            const bottomRange = Math.max(28, Math.min(82, Math.floor(containerHeight * 0.12)));
+            const rawBottomOffsets = answers.map(() => Math.random() * bottomRange);
+            // 우연히 전부 비슷한 높이에 몰린 경우에만 한 공을 더 아래/위로 보내 '한 줄 출발'만 방지합니다.
+            const bottomSpread = Math.max(...rawBottomOffsets) - Math.min(...rawBottomOffsets);
+            if (bottomSpread < Math.min(24, bottomRange * 0.45) && rawBottomOffsets.length > 1) {
+                rawBottomOffsets[getRandomInt(0, rawBottomOffsets.length - 1)] = 0;
+                rawBottomOffsets[getRandomInt(0, rawBottomOffsets.length - 1)] = bottomRange;
+            }
+            const phaseOffsets = answers.map(() => Math.random() * 190);
+            const speedOffsets = answers.map(() => Math.random() * 620);
+            // 속도가 우연히 거의 같아 장시간 포개지는 상황만 피하고, 일정한 계단식 속도차는 만들지 않습니다.
+            for (let i = 1; i < speedOffsets.length; i++) {
+                let guard = 0;
+                while (speedOffsets.slice(0, i).some(v => Math.abs(v - speedOffsets[i]) < 45) && guard++ < 20) {
+                    speedOffsets[i] = Math.random() * 620;
+                }
+            }
 
             answers.forEach((ans, index) => {
                 const ball = document.createElement('div');
@@ -425,19 +444,25 @@
                 ball.style.height = `${actualBallSize}px`;
                 if (actualBallSize < 68) ball.style.fontSize = `${Math.max(1.25, actualBallSize / 38)}em`;
 
-                // 화면 폭에 맞춘 고정 슬롯을 섞어 사용하므로 시작부터 서로 완전히 겹칠 수 없습니다.
-                ball.style.left = `${positions[answerSlots[index]]}px`;
-                ball.style.bottom = `${BALL_START_BOTTOM}px`; 
+                // 슬롯 중심은 유지하되, 슬롯 안에서 좌우를 조금 흔들어 기계적인 등간격을 없앱니다.
+                const slot = answerSlots[index];
+                const leftBound = slot === 0 ? 0 : -xJitterLimit;
+                const rightBound = slot === answers.length - 1 ? 0 : xJitterLimit;
+                const xJitter = leftBound === rightBound ? leftBound : (leftBound + Math.random() * (rightBound - leftBound));
+                const startBottom = BALL_START_BOTTOM + rawBottomOffsets[index];
+                ball.style.left = `${positions[slot] + xJitter}px`;
+                ball.style.bottom = `${startBottom}px`;
 
                 ball.addEventListener('click', handleAnswerClick);
                 gameContainer.appendChild(ball);
                 activeBalls.push(ball);
 
-                const duration = baseDuration + speedRanks[index] * 180; // 공마다 서로 다른 상승 시간
+                const duration = baseDuration + speedOffsets[index]; // 공마다 자연스럽게 서로 다른 상승 시간
+                const maxRiseHeight = containerHeight - startBottom + actualBallSize;
                 
-                // requestAnimationFrame을 이용한 부상 애니메이션
+                // requestAnimationFrame을 이용한 부상 애니메이션. 시작 위상도 아주 조금씩 달라 자연스럽게 흩어집니다.
                 let animationFrameId;
-                const startTime = performance.now();
+                const startTime = performance.now() + phaseOffsets[index];
 
 
                 function animateBallUp(timestamp) {
@@ -447,11 +472,15 @@
                     }
                     
                     const elapsed = timestamp - startTime;
+                    if (elapsed < 0) {
+                        animationFrameId = requestAnimationFrame(animateBallUp);
+                        return;
+                    }
                     // 시간을 0부터 1까지의 비율로 정규화
-                    let progress = elapsed / duration; 
+                    let progress = elapsed / duration;
 
                     if (progress < 1) {
-                        const newBottom = BALL_START_BOTTOM + maxRiseHeight * progress;
+                        const newBottom = startBottom + maxRiseHeight * progress;
                         
                         ball.style.bottom = `${newBottom}px`;
                         animationFrameId = requestAnimationFrame(animateBallUp);

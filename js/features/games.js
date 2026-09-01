@@ -11,7 +11,7 @@
    ============================================================ */
 MiniTalk.Features.Games=(()=>{
   const GAMES=[
-    {id:"gugudan",title:"구구단 게임",rankingName:"구구단게임",desc:"빠르게 곱셈 문제를 풀어 점수를 올리는 게임",icon:"×",url:"games/gugudan.html?v=23",tag:"계산",bgm:"assets/sounds/games/game1.mp3"},
+    {id:"gugudan",title:"구구단 게임",rankingName:"구구단게임",desc:"빠르게 곱셈 문제를 풀어 점수를 올리는 게임",icon:"×",url:"games/gugudan.html?v=24",tag:"계산",bgm:"assets/sounds/games/game1.mp3"},
     {id:"dice",title:"주사위 합 맞추기",rankingName:"덧셈주사위",desc:"주사위 눈의 합을 계산하는 짧은 수학 게임",icon:"⚄",url:"games/dice-sum.html",tag:"계산",bgm:"assets/sounds/games/game2.mp3"},
     {id:"shape",title:"도형 추적자",rankingName:"꿈틀이도형추적자",desc:"움직이는 도형을 관찰하고 찾아내는 게임",icon:"◇",url:"games/shape-tracker.html",tag:"도형",bgm:"assets/sounds/games/game3.mp3"},
     {id:"explorer",title:"수학 탐험대",rankingName:"수학탐험대",desc:"전투와 수학 문제를 결합한 긴 플레이 게임",icon:"⚔",url:"games/math-explorer.html",tag:"탐험"},

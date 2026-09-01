@@ -6,7 +6,7 @@ ok(html.includes('const minGap = answers.length > 1'),'gugudan needs a minimum n
 ok(!html.includes('xJitterLimit'),'tiny fixed x jitter should not be the horizontal layout strategy');
 ok(!html.includes('attempts < 100'),'gugudan must not fall back to overlapping random placement');
 ok(html.includes('const speedOffsets = answers.map'),'gugudan balls need organic speed offsets');
-ok(html.includes('Math.abs(v - speedOffsets[i]) < 45'),'near-identical speeds must be separated');
+ok(html.includes('Math.abs(v - speedOffsets[i]) < 55'),'near-identical speeds must be separated');
 ok(html.includes('baseDuration + speedOffsets[index]'),'gugudan ball durations must use per-ball speed offsets');
 
 function makePositions(width,count,height,r=Math.random){

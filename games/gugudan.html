@@ -278,6 +278,8 @@
         let isGameOver = true;
         let timerInterval;
         let questionTimeout;
+        let activeRoundId = 0;
+        let roundLocked = true;
         let activeBalls = []; // 현재 화면에 떠 있는 공들을 관리하는 배열
         const correctSlotUsage = new Map();
         let lastCorrectSlot = -1;
@@ -348,6 +350,9 @@
 
         function newQuestion() {
             if (isGameOver) return;
+
+            const roundId = ++activeRoundId;
+            roundLocked = false;
             
             updateGameLimit();
             scoreElement.textContent = currentScore;
@@ -355,18 +360,20 @@
             const num1 = getRandomFactor();
             const num2 = getRandomFactor();
             correctAnswer = num1 * num2;
+            const roundAnswer = correctAnswer;
             questionElement.textContent = `${num1} x ${num2} = ?`;
 
-            const answers = generateAnswers(correctAnswer);
+            const answers = generateAnswers(roundAnswer);
 
             resetTimer();
-            startTimer(currentLimit);
+            startTimer(currentLimit, roundId);
 
             // 공 생성 및 애니메이션 시작
-            createBalls(answers);
+            createBalls(answers, roundId, roundAnswer);
 
             questionTimeout = setTimeout(() => {
-                if (!isGameOver) {
+                if (!isGameOver && !roundLocked && roundId === activeRoundId) {
+                    roundLocked = true;
                     endGame(false);
                 }
             }, currentLimit);
@@ -388,7 +395,7 @@
         }
 
         // 공 생성 및 애니메이션 설정 (겹치지 않게 배치 로직 및 부상 애니메이션 적용)
-        function createBalls(answers) {
+        function createBalls(answers, roundId, roundAnswer) {
             stopAllBalls(); // 기존 공 모두 중지 및 제거
             activeBalls = [];
             
@@ -441,7 +448,7 @@
                 return out;
             }
             const positions = buildNaturalPositions(answers.length);
-            const correctAnswerIndex = answers.findIndex(answer => Number(answer) === Number(correctAnswer));
+            const correctAnswerIndex = answers.findIndex(answer => Number(answer) === Number(roundAnswer));
             const correctSlot = nextCorrectSlot(answers.length);
             const remainingSlots = shuffleArray(Array.from({ length: answers.length }, (_, index) => index).filter(index => index !== correctSlot));
             const answerSlots = new Array(answers.length);
@@ -456,20 +463,24 @@
             // 규칙적인 횡대 출발을 피하기 위한 자연스러운 분산값.
             // 가로 위치는 위에서 이미 불규칙 간격으로 정했고, 높이·출발 위상·속도도 서로 독립적으로 흔듭니다.
             const bottomRange = Math.max(isTallPortrait ? 42 : 28, Math.min(isTallPortrait ? 150 : 92, Math.floor(containerHeight * (isTallPortrait ? 0.18 : 0.13))));
-            const rawBottomOffsets = answers.map(() => Math.random() * bottomRange);
-            // 우연히 전부 비슷한 높이에 몰린 경우에만 한 공을 더 아래/위로 보내 '한 줄 출발'만 방지합니다.
+            const lowerStartDrop = isTallPortrait ? 38 : (isMobile ? 30 : 24);
+            // 최고 출발 높이(bottomRange)는 그대로 두고, 최저 출발 높이만 조금 더 아래로 확장합니다.
+            const rawBottomOffsets = answers.map(() => -lowerStartDrop + Math.random() * (bottomRange + lowerStartDrop));
+            // 우연히 전부 비슷한 높이에 몰린 경우에만 한 공을 최저/최고 쪽으로 보내 '한 줄 출발'만 방지합니다.
             const bottomSpread = Math.max(...rawBottomOffsets) - Math.min(...rawBottomOffsets);
-            if (bottomSpread < Math.min(26, bottomRange * 0.40) && rawBottomOffsets.length > 1) {
-                rawBottomOffsets[getRandomInt(0, rawBottomOffsets.length - 1)] = 0;
+            if (bottomSpread < Math.min(30, (bottomRange + lowerStartDrop) * 0.38) && rawBottomOffsets.length > 1) {
+                rawBottomOffsets[getRandomInt(0, rawBottomOffsets.length - 1)] = -lowerStartDrop;
                 rawBottomOffsets[getRandomInt(0, rawBottomOffsets.length - 1)] = bottomRange;
             }
             const phaseOffsets = answers.map(() => Math.random() * (isTallPortrait ? 240 : 190));
-            const speedOffsets = answers.map(() => Math.random() * (isTallPortrait ? 760 : 620));
+            const speedOffsetRange = isTallPortrait ? 1040 : (isMobile ? 900 : 860);
+            // 가장 빠른 공의 최소 duration(4800ms)은 그대로 두고, 느린 쪽 duration 범위만 넓힙니다.
+            const speedOffsets = answers.map(() => Math.random() * speedOffsetRange);
             // 속도가 우연히 거의 같아 장시간 포개지는 상황만 피하고, 일정한 계단식 속도차는 만들지 않습니다.
             for (let i = 1; i < speedOffsets.length; i++) {
                 let guard = 0;
-                while (speedOffsets.slice(0, i).some(v => Math.abs(v - speedOffsets[i]) < 45) && guard++ < 20) {
-                    speedOffsets[i] = Math.random() * 620;
+                while (speedOffsets.slice(0, i).some(v => Math.abs(v - speedOffsets[i]) < 55) && guard++ < 20) {
+                    speedOffsets[i] = Math.random() * speedOffsetRange;
                 }
             }
 
@@ -478,6 +489,8 @@
                 ball.classList.add('answer-ball');
                 ball.textContent = ans;
                 ball.dataset.value = ans;
+                ball.dataset.roundId = String(roundId);
+                ball.dataset.roundAnswer = String(roundAnswer);
                 ball.style.backgroundColor = getRandomColor();
                 ball.style.width = `${actualBallSize}px`;
                 ball.style.height = `${actualBallSize}px`;
@@ -502,7 +515,7 @@
 
 
                 function animateBallUp(timestamp) {
-                    if (isGameOver || !ball.parentElement) {
+                    if (isGameOver || roundId !== activeRoundId || !ball.parentElement) {
                         cancelAnimationFrame(animationFrameId);
                         return;
                     }
@@ -590,7 +603,7 @@
             timerBar.style.backgroundColor = '#ff9800';
         }
 
-        function startTimer(duration) {
+        function startTimer(duration, roundId) {
             let timeLeft = duration;
             const startTime = performance.now();
 
@@ -601,7 +614,10 @@
                 if (timeLeft <= 0) {
                     clearInterval(timerInterval);
                     timerBar.style.width = '0%';
-                    endGame(false);
+                    if (!isGameOver && !roundLocked && roundId === activeRoundId) {
+                        roundLocked = true;
+                        endGame(false);
+                    }
                     return;
                 }
 
@@ -620,11 +636,23 @@
         // --- 이벤트 핸들러 ---
 
         function handleAnswerClick(event) {
-            if (isGameOver) return;
+            if (isGameOver || roundLocked) return;
 
-            const selectedAnswer = parseInt(event.target.dataset.value);
-            
-            if (selectedAnswer === correctAnswer) {
+            const ball = event.currentTarget;
+            const ballRoundId = Number(ball.dataset.roundId);
+            if (!Number.isFinite(ballRoundId) || ballRoundId !== activeRoundId) return;
+
+            const selectedAnswer = Number(ball.dataset.value);
+            const expectedAnswer = Number(ball.dataset.roundAnswer);
+            if (!Number.isFinite(selectedAnswer) || !Number.isFinite(expectedAnswer)) return;
+
+            // 첫 클릭 순간 현재 라운드를 잠그고 모든 제한시간 콜백을 즉시 중지합니다.
+            // 제한시간 끝자락의 정답 클릭이 뒤늦은 timer/timeout에 의해 오답으로 뒤집히는 레이스를 막습니다.
+            roundLocked = true;
+            clearInterval(timerInterval);
+            clearTimeout(questionTimeout);
+
+            if (selectedAnswer === expectedAnswer) {
                 // [옵션] 게임용 고스트: 정답 맞췄을 때 기쁨 표현
                 if (window.gameGhostUI && typeof window.gameGhostUI.react === "function") {
                     try { window.gameGhostUI.react("correct"); } catch(e) {}
@@ -632,19 +660,16 @@
 
                 currentScore += 10;
                 // 정답 공은 초록색 강조 클래스 부여
-                event.target.classList.add('answer-correct');
-                
-                // 나머지 공의 애니메이션 및 타이머를 중지
-                clearTimeout(questionTimeout);
+                ball.classList.add('answer-correct');
                 dropAllBalls(); // 공들을 낙하 및 페이드아웃 시작
-                
+
                 // 공이 사라지는 시간을 고려하여 다음 문제 시작 (0.4초 낙하 + 0.2초 페이드아웃)
                 setTimeout(() => {
-                    newQuestion();
+                    if (!isGameOver && ballRoundId === activeRoundId) newQuestion();
                 }, 700); // 0.7초 후 다음 문제 시작
 
             } else {
-                event.target.style.backgroundColor = '#f44336';
+                ball.style.backgroundColor = '#f44336';
                 endGame(false);
             }
         }
@@ -660,6 +685,7 @@
             currentLimit = INITIAL_DURATION;
             currentScore = 0;
             isGameOver = false;
+            roundLocked = true;
             gameOverScreen.style.display = 'none';
             scoreElement.textContent = '0';
             
@@ -688,6 +714,8 @@
             }
 
             isGameOver = true;
+            roundLocked = true;
+            activeRoundId += 1;
             clearInterval(timerInterval);
             clearTimeout(questionTimeout);
             stopAllBalls();

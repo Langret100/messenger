@@ -279,8 +279,7 @@
         let timerInterval;
         let questionTimeout;
         let activeBalls = []; // 현재 화면에 떠 있는 공들을 관리하는 배열
-        let correctSlotBag = [];
-        let correctSlotCount = 0;
+        const correctSlotUsage = new Map();
         let lastCorrectSlot = -1;
 
         const gameContainer = document.getElementById('game-container');
@@ -320,15 +319,20 @@
                 lastCorrectSlot = 0;
                 return 0;
             }
-            if (correctSlotCount !== count || correctSlotBag.length === 0) {
-                correctSlotCount = count;
-                correctSlotBag = shuffleArray(Array.from({ length: count }, (_, index) => index));
-                if (correctSlotBag[0] === lastCorrectSlot) {
-                    const swapIndex = correctSlotBag.findIndex(slot => slot !== lastCorrectSlot);
-                    if (swapIndex > 0) [correctSlotBag[0], correctSlotBag[swapIndex]] = [correctSlotBag[swapIndex], correctSlotBag[0]];
-                }
+            // 실제 플레이에서는 보기 수가 4개/5개 사이에서 매 문제 바뀔 수 있습니다.
+            // 개수별 슬롯 사용 횟수를 따로 누적하고, 직전 위치를 제외한 후보 중
+            // 가장 적게 사용된 위치를 선택해 연속 반복 없이 장기적으로 균등하게 배치합니다.
+            let usage = correctSlotUsage.get(count);
+            if (!usage || usage.length !== count) {
+                usage = Array(count).fill(0);
+                correctSlotUsage.set(count, usage);
             }
-            const slot = correctSlotBag.shift();
+            const candidates = Array.from({ length: count }, (_, index) => index)
+                .filter(index => index !== lastCorrectSlot);
+            const minUsage = Math.min(...candidates.map(index => usage[index]));
+            const leastUsed = candidates.filter(index => usage[index] === minUsage);
+            const slot = leastUsed[getRandomInt(0, leastUsed.length - 1)];
+            usage[slot] += 1;
             lastCorrectSlot = slot;
             return slot;
         }

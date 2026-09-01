@@ -124,7 +124,15 @@ MiniTalk.Games.ScoreService = (() => {
       const json = await response.json();
       // 랭킹 조회도 읽기 전용입니다. 코인 지급은 월요일 오전 9시 서버 트리거만 담당합니다.
       const list = Array.isArray(json.list) ? json.list : Array.isArray(json.data) ? json.data : [];
-      return { rows: merge(list.map(normalizeRemote), local), online: true };
+      // 온라인 조회가 성공한 경우에는 구글 시트가 유일한 랭킹 원본입니다.
+      // 기기 로컬 최고점은 온라인 순위에 섞지 않고, 네트워크 조회 실패 시에만 fallback으로 사용합니다.
+      const remote = list.map(normalizeRemote)
+        .sort((a, b) => {
+          const ar = Number(a.rank) || Number.MAX_SAFE_INTEGER;
+          const br = Number(b.rank) || Number.MAX_SAFE_INTEGER;
+          return ar - br || b.score - a.score;
+        });
+      return { rows: remote, online: true };
     } catch (error) {
       console.warn("게임 랭킹 불러오기 실패", error);
       return { rows: local, online: false };

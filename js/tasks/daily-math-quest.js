@@ -301,7 +301,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     const D = MiniTalk.UI.Dom;
     const body = D.el("div", { class: "quest-solver modal-stack" });
     const progress = loadProgress();
-    let variant = Math.max(0, Number(progress.attempts?.[missionId]) || 0);
+    let variant = 0;
     let questions = generate(missionId, variant);
     let wrongCount = 0;
 
@@ -326,7 +326,6 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
         if (answer !== current.answer) {
           selected.classList.add("wrong");
           wrongCount += 1;
-          progress.attempts[missionId] = (Number(progress.attempts?.[missionId]) || 0) + 1;
           if (wrongCount >= 2) {
             progress.correct[missionId] = 0;
             progress.completed[missionId] = false;
@@ -345,7 +344,6 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
           const next = nextVariant(missionId, index, current, variant);
           variant = next;
           questions = generate(missionId, variant);
-          saveProgress(progress);
           setTimeout(renderQuestion, 520);
           return;
         }

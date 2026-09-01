@@ -118,7 +118,7 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
     if (MiniTalk.Store.get("user")?.isGuest) { MiniTalk.UI.Shell.toast("게스트는 과제를 볼 수만 있어요.");return; }
     const mission = MISSIONS.find(item => item.id === missionId); if (!mission) return;
     const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), progress = loadProgress();
-    let variant=Math.max(0,Number(progress.attempts?.[missionId])||0),questions=generate(missionId,variant),wrongCount=0;
+    let variant=0,questions=generate(missionId,variant),wrongCount=0;
     function renderQuestion() {
       const index = progress.correct[missionId] || 0; body.replaceChildren();
       if (index >= 5 || progress.completed[missionId]) return renderComplete();
@@ -128,9 +128,9 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       function submit(answer, selected) {
         if(answerLocked)return;answerLocked=true;D.all(".quest-choice",choiceGrid).forEach(button=>{button.disabled=true});
         if (answer !== current.answer) {
-          selected.classList.add("wrong");wrongCount+=1;progress.attempts[missionId]=(Number(progress.attempts?.[missionId])||0)+1;
+          selected.classList.add("wrong");wrongCount+=1;
           if(wrongCount>=2){progress.correct[missionId]=0;progress.completed[missionId]=false;saveProgress(progress,{replaceCloud:true});feedback.textContent="오답이 2개가 되어 이 미션을 0/5부터 다시 시작해요.";feedback.className="quest-feedback wrong";setTimeout(()=>{MiniTalk.UI.Shell.closeModal();onProgress?.();MiniTalk.UI.Shell.toast(`${mission.title} 미션을 다시 시작해요.`)},520);return;}
-          feedback.textContent="아쉬워요. 새 문제로 바꿀게요. 한 번 더 틀리면 이 미션은 다시 시작해요.";feedback.className="quest-feedback wrong";variant=nextVariant(missionId,index,current,variant);questions=generate(missionId,variant);saveProgress(progress);setTimeout(renderQuestion,520);return;
+          feedback.textContent="아쉬워요. 새 문제로 바꿀게요. 한 번 더 틀리면 이 미션은 다시 시작해요.";feedback.className="quest-feedback wrong";variant=nextVariant(missionId,index,current,variant);questions=generate(missionId,variant);setTimeout(renderQuestion,520);return;
         }
         selected.classList.add("correct");progress.correct[missionId]=index+1;if(progress.correct[missionId]>=5)progress.completed[missionId]=true;
         saveProgress(progress); if (progress.completed[missionId] === true) onProgress?.(); if(MISSIONS.every(item=>progress.completed[item.id]))MiniTalk.Events.emit("quest:subject-complete",{subject:"korean",date:progress.date,userId:progress.userId});

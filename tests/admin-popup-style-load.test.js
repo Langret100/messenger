@@ -9,5 +9,5 @@ ok(admin.includes('link.addEventListener("load",done,{once:true})'),'stylesheet 
 ok(admin.includes('<style>${critical}</style>${styles}</head>'),'critical popup CSS and stylesheet links are not part of the initial popup head');
 ok(admin.includes('waitForAdminPopupStyles(popup.document).then'),'admin UI is still rendered before popup styles settle');
 ok(!admin.includes('for(const sheet of sourceDoc.styleSheets)'),'fragile post-document styleSheets cloning path is still present');
-ok(index.includes('js/features/admin.js?v=64.5.40'),'admin cache-busting version was not updated');
+ok(index.includes('js/features/admin.js?v=64.5.41'),'admin cache-busting version was not updated');
 console.log('ADMIN_POPUP_STYLE_LOAD_OK');

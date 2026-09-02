@@ -38,11 +38,8 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     if (!saved || saved.date !== dateKey() || saved.userId !== userId()) return emptyProgress();
     const progress = emptyProgress();
     MISSIONS.forEach(mission => {
-      progress.correct[mission.id] = Math.min(
-        QUESTIONS_PER_MISSION,
-        Math.max(0, Math.floor(Number(saved.correct?.[mission.id]) || 0))
-      );
       progress.completed[mission.id] = saved.completed?.[mission.id] === true;
+      progress.correct[mission.id] = progress.completed[mission.id] ? QUESTIONS_PER_MISSION : 0;
     });
     progress.updatedAt = Number(saved.updatedAt) || 0;
     return progress;
@@ -51,7 +48,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
   function cloudPath(progress=loadProgress()){const key=String(progress.userId||userId()).replace(/[.#$\[\]\/]/g,"_");return `moaru/v3/questProgress/${key}/math/${progress.date}`}
   function mergeProgress(base,incoming){
     const next={...base,date:base.date,userId:base.userId,correct:{...(base.correct||{})},completed:{...(base.completed||{})}};
-    MISSIONS.forEach(m=>{next.correct[m.id]=Math.min(QUESTIONS_PER_MISSION,Math.max(Number(base.correct?.[m.id])||0,Number(incoming?.correct?.[m.id])||0));next.completed[m.id]=base.completed?.[m.id]===true||incoming?.completed?.[m.id]===true});
+    MISSIONS.forEach(m=>{next.completed[m.id]=base.completed?.[m.id]===true||incoming?.completed?.[m.id]===true;next.correct[m.id]=next.completed[m.id]?QUESTIONS_PER_MISSION:0});
     next.updatedAt=Math.max(Number(base.updatedAt)||0,Number(incoming?.updatedAt)||0);return next
   }
   function saveProgress(progress, options = {}) {
@@ -302,9 +299,10 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     let variant = 0;
     let questions = generate(missionId, variant);
     let wrongCount = 0;
+    let sessionCorrect = 0;
 
     function renderQuestion() {
-      const index = progress.correct[missionId] || 0;
+      const index = sessionCorrect;
       body.replaceChildren();
       if (index >= QUESTIONS_PER_MISSION || progress.completed[missionId]) {
         renderComplete(body, mission);
@@ -347,9 +345,12 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
         }
 
         selected.classList.add("correct");
-        progress.correct[missionId] = index + 1;
-        if (progress.correct[missionId] >= QUESTIONS_PER_MISSION) progress.completed[missionId] = true;
-        saveProgress(progress);
+        sessionCorrect = index + 1;
+        if (sessionCorrect >= QUESTIONS_PER_MISSION) {
+          progress.correct[missionId] = QUESTIONS_PER_MISSION;
+          progress.completed[missionId] = true;
+          saveProgress(progress);
+        }
         if (progress.completed[missionId] === true) onProgress?.();
         if (MISSIONS.every(item => progress.completed[item.id])) MiniTalk.Events.emit("quest:subject-complete", { subject: "math", date: progress.date, userId: progress.userId });
         const missionFinished = progress.completed[missionId] === true;

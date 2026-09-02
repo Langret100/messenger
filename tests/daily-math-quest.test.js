@@ -91,6 +91,9 @@ for(const mission of missions){
 
 const initial=quest.loadProgress();
 if(Object.values(initial.correct).some(value=>value!==0))throw new Error('new daily progress must start at zero');
+ctx.MiniTalk.Persistence.set('tasks.dailyMathQuest',{date:quest.dateKey(),userId:'math-test',correct:{addition:3},completed:{addition:false}});
+const reopenedMath=quest.loadProgress();
+if(reopenedMath.correct.addition!==0||reopenedMath.completed.addition)throw new Error('incomplete math mission must reopen at 0/5');
 ctx.MiniTalk.Persistence.set('tasks.dailyMathQuest',{date:'2000-01-01',userId:'math-test',correct:{addition:3},completed:{addition:true}});
 const resetPartial=quest.loadProgress();
 if(resetPartial.correct.addition!==0||resetPartial.completed.addition)throw new Error('partial math progress must reset in the next 9 AM cycle');

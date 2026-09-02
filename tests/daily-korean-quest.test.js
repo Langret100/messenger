@@ -56,6 +56,9 @@ for(const mission of missions){
 
 const initial=quest.loadProgress();
 if(Object.values(initial.correct).some(value=>value!==0))throw new Error('new Korean progress must start at zero');
+ctx.MiniTalk.Persistence.set('tasks.dailyKoreanQuest',{date:quest.dateKey(),userId:'korean-test',correct:{spelling:4},completed:{spelling:false}});
+const reopenedKorean=quest.loadProgress();
+if(reopenedKorean.correct.spelling!==0||reopenedKorean.completed.spelling)throw new Error('incomplete Korean mission must reopen at 0/5');
 ctx.MiniTalk.Persistence.set('tasks.dailyKoreanQuest',{date:'2000-01-01',userId:'korean-test',correct:{spelling:4},completed:{spelling:true}});
 const resetPartial=quest.loadProgress();
 if(resetPartial.correct.spelling!==0||resetPartial.completed.spelling)throw new Error('partial Korean progress must reset in the next 9 AM cycle');

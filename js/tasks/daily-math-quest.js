@@ -86,20 +86,34 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     return minimum + Math.floor(rng() * (maximum - minimum + 1));
   }
 
-  function generate(missionId, variant = 0) {
-    const rng = random(hash(`${dateKey()}|${userId()}|${missionId}|${variant}`));
-    const items = [];
-    const seen = new Set();
+  function shiftDateKey(key,offset){const [year,month,day]=String(key).split("-").map(Number),date=new Date(Date.UTC(year,month-1,day+offset));return `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,"0")}-${String(date.getUTCDate()).padStart(2,"0")}`}
+
+  function generatePool(missionId, variant = 0, key = dateKey(), target = 40) {
+    const rng = random(hash(`${key}|${userId()}|${missionId}|${variant}`));
+    const items = [], seen = new Set();
     let guard = 0;
-    while (items.length < QUESTIONS_PER_MISSION && guard < 100) {
+    while (items.length < target && guard < 2400) {
       guard += 1;
-      const item = problem(missionId, rng);
-      const key = `${item.question}|${item.answer}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const item = problem(missionId, rng), signature = `${item.question}|${item.answer}`;
+      if (seen.has(signature)) continue;
+      seen.add(signature);
       items.push(item);
     }
     return items;
+  }
+
+  function generate(missionId, variant = 0, forcedDate = "") {
+    const key = forcedDate || dateKey(), current = generatePool(missionId, variant, key, 40);
+    const previous = new Set(generatePool(missionId, 0, shiftDateKey(key, -1), 40).map(problemKey));
+    const fresh = current.filter(item => !previous.has(problemKey(item)));
+    const selected = fresh.slice(0, QUESTIONS_PER_MISSION);
+    if (selected.length < QUESTIONS_PER_MISSION) {
+      for (const item of current) {
+        if (selected.length >= QUESTIONS_PER_MISSION) break;
+        if (!selected.some(existing => problemKey(existing) === problemKey(item))) selected.push(item);
+      }
+    }
+    return selected;
   }
 
   function gcd(left, right) {

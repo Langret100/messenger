@@ -27,11 +27,13 @@ function makeCtx(){
   if(!reentered.members?.b)throw new Error("existing member was asked to verify the room password again");
   const invited=await A.MiniTalk.Realtime.inviteRoomMembers(room.id,[{user_id:"c",nickname:"C"}]);
   updated=await A.MiniTalk.Realtime.getRoom(room.id);
-  if(invited!==1||!updated.members?.c)throw new Error("room invitation was not stored");
+  if(invited!==1||updated.members?.c)throw new Error("room invitation must not auto-enroll the recipient");
   if(!updated.hasPassword||!updated.passwordHash||!updated.passwordSalt)throw new Error("room invitation unexpectedly cleared password protection");
   await C.MiniTalk.Realtime.init({user_id:"c",nickname:"C"});
-  const invitedEntry=await C.MiniTalk.Realtime.joinRoom(room.id,"");
-  if(!invitedEntry.members?.c)throw new Error("invited member was asked for the password");
+  let inviteBypass=false;try{await C.MiniTalk.Realtime.joinRoom(room.id,"")}catch(error){inviteBypass=/올바르지/.test(error.message)}
+  if(!inviteBypass)throw new Error("pending invite bypassed the room password");
+  const invitedEntry=await C.MiniTalk.Realtime.joinRoom(room.id,"1234");
+  if(!invitedEntry.members?.c)throw new Error("invited user could not explicitly join with the password");
   let guestRejected=false;try{await A.MiniTalk.Realtime.inviteRoomMembers(room.id,[{user_id:"guest-test",nickname:"게스트",isGuest:true}])}catch(error){guestRejected=/선택/.test(error.message)}
   if(!guestRejected)throw new Error("guest room invitation was accepted");
   A.MiniTalk.UserDirectory={isGuest:value=>/^(?:게스트|guest)\s*\d*$/i.test(String(value?.nickname||""))};

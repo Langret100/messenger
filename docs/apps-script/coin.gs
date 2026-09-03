@@ -231,6 +231,26 @@ function handleCoinReward(e) {
 
   type = type.toUpperCase();
 
+  /*
+   * 일일 퀘스트 보상 키는 서버가 허용 형식을 직접 검증합니다.
+   * 과거/캐시 클라이언트가 날짜만 보내거나 임의 문자열을 보내면 같은 날에도
+   * 서로 다른 보상으로 인식될 수 있으므로, YYYY-MM-DD:math|korean 외에는 지급하지 않습니다.
+   */
+  let questRewardDate = "";
+  if (type === "QUEST_5CLEAR") {
+    const questKeyMatch = key.match(/^(\d{4}-\d{2}-\d{2}):(math|korean)$/);
+    if (!questKeyMatch) {
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          ok: false,
+          error: "QUEST_REWARD_KEY_OUTDATED",
+          message: "일일 퀘스트 보상 키 형식이 오래되었거나 올바르지 않습니다."
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    questRewardDate = questKeyMatch[1];
+  }
+
   // 타입별 지급 코인 양
   let delta = 0;
   if (type === "ATTEND_5D") {
@@ -284,7 +304,10 @@ function handleCoinReward(e) {
       const u = String(row[COL_LOG_USER_ID - 1] || "");
       const t = String(row[COL_LOG_TYPE - 1] || "").toUpperCase();
       const k = String(row[COL_LOG_KEY - 1] || "");
-      if (u === userId && t === type && k === key) {
+      const sameReward = u === userId && t === type && k === key;
+      // 구버전의 날짜-only QUEST_5CLEAR 로그도 같은 날 보상으로 간주해 혼합 버전 중복 지급을 막습니다.
+      const legacyQuestReward = type === "QUEST_5CLEAR" && u === userId && t === type && questRewardDate && k === questRewardDate;
+      if (sameReward || legacyQuestReward) {
         // 이미 지급된 보상
         return ContentService
           .createTextOutput(

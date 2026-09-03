@@ -16,14 +16,18 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
 
   const BANK = {
     spelling: [
-      ["다음 중 맞춤법이 바른 것은?", "웬일이야", ["왠일이야", "웬일이야", "왠 일이야", "웬 일이야"]],
+      ["다음 중 맞춤법이 바른 것은?", "웬일이야", ["왠일이야", "웬일이야", "왠 일이야", "웬일 이야"]],
       ["빈칸에 알맞은 말은? 다음 주에 다시 ___", "뵐게요", ["봴게요", "뵐께요", "뵐게요", "봴께요"]],
       ["다음 중 맞춤법이 바른 것은?", "며칠", ["몇일", "몃일", "며칠", "몇 칠"]],
       ["다음 중 맞춤법이 바른 것은?", "금세", ["금새", "금세", "금 쎄", "금쌔"]],
       ["빈칸에 알맞은 말은? 숙제를 모두 ___", "마쳤다", ["맞쳤다", "마쳤다", "마치엇다", "맏쳤다"]],
       ["다음 중 바르게 쓴 낱말은?", "깨끗이", ["깨끗히", "깨끗이", "깨끄시", "깨끗 리"]],
       ["빈칸에 알맞은 말은? 감기가 빨리 ___", "나았다", ["낳았다", "나았다", "낫았다", "낮았다"]],
-      ["빈칸에 알맞은 말은? 이 문제를 ___ 풀었니?", "어떻게", ["어떡해", "어떻게", "어떻해", "어떡게"]]
+      ["빈칸에 알맞은 말은? 이 문제를 ___ 풀었니?", "어떻게", ["어떡해", "어떻게", "어떻해", "어떡게"]],
+      ["다음 중 맞춤법이 바른 것은?", "역할", ["역활", "역할", "역할르", "역 활"]],
+      ["빈칸에 알맞은 말은? 친구와 의견을 서로 ___", "나누었다", ["나누었다", "나뉘었다", "나누웠다", "나누 었다"]],
+      ["다음 중 바르게 쓴 낱말은?", "설거지", ["설겆이", "설거지", "설것이", "설 거지"]],
+      ["빈칸에 알맞은 말은? 약속 시간을 ___ 안 된다.", "잊으면", ["잊으면", "잇으면", "잊으 면", "이즈면"]]
     ],
     expression: [
       ["비가 올 것 같아서 우산을 ___.", "챙겼다", ["접었다", "챙겼다", "잊었다", "숨겼다"]],
@@ -33,7 +37,11 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       ["발표 전에 숨을 크게 ___.", "들이마셨다", ["건너뛰었다", "들이마셨다", "내려놓았다", "밀어냈다"]],
       ["약속 시간을 꼭 ___.", "지켜야 한다", ["감춰야 한다", "지켜야 한다", "미뤄야 한다", "잊어야 한다"]],
       ["넘어진 동생을 일으켜 ___.", "주었다", ["주었다", "버렸다", "감췄다", "막았다"]],
-      ["도서관에서는 작은 목소리로 ___.", "말해야 한다", ["뛰어야 한다", "말해야 한다", "노래해야 한다", "외쳐야 한다"]]
+      ["도서관에서는 작은 목소리로 ___.", "말해야 한다", ["뛰어야 한다", "말해야 한다", "노래해야 한다", "외쳐야 한다"]],
+      ["비가 그친 뒤 창문을 ___.", "열었다", ["열었다", "접었다", "감췄다", "누웠다"]],
+      ["친구가 다쳤을 때 먼저 상태를 ___.", "살폈다", ["살폈다", "숨겼다", "밀었다", "외면했다"]],
+      ["수업 내용을 공책에 ___.", "정리했다", ["정리했다", "흩뜨렸다", "지웠다", "감췄다"]],
+      ["길을 건널 때 좌우를 잘 ___.", "살펴야 한다", ["살펴야 한다", "감아야 한다", "외쳐야 한다", "뛰어야 한다"]]
     ],
     spacing: [
       ["띄어쓰기가 바른 문장은?", "나는 할 수 있다.", ["나는 할수 있다.", "나는할 수 있다.", "나는 할 수 있다.", "나는 할 수있다."]],
@@ -43,7 +51,11 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       ["띄어쓰기가 바른 문장은?", "밥을 먹고 나서 놀았다.", ["밥을먹고 나서 놀았다.", "밥을 먹고나서 놀았다.", "밥을 먹고 나서 놀았다.", "밥을먹고나서 놀았다."]],
       ["띄어쓰기가 바른 것은?", "할머니 댁", ["할머니댁", "할머니 댁", "할 머니 댁", "할머니  댁"]],
       ["띄어쓰기가 바른 문장은?", "내일 아침에 만나자.", ["내일아침에 만나자.", "내일 아침에만나자.", "내일 아침에 만나자.", "내일아침에만나자."]],
-      ["띄어쓰기가 바른 것은?", "두 사람", ["두사람", "두 사람", "두  사람", "둘 사람"]]
+      ["띄어쓰기가 바른 것은?", "두 사람", ["두사람", "두 사람", "두  사람", "둘 사람"]],
+      ["띄어쓰기가 바른 문장은?", "오늘 비가 많이 온다.", ["오늘비가 많이 온다.", "오늘 비가많이 온다.", "오늘 비가 많이 온다.", "오늘비가많이 온다."]],
+      ["띄어쓰기가 바른 것은?", "먹을 수 있다", ["먹을수 있다", "먹을 수있다", "먹을 수 있다", "먹을수있다"]],
+      ["띄어쓰기가 바른 문장은?", "친구와 함께 걸었다.", ["친구와함께 걸었다.", "친구와 함께걸었다.", "친구와 함께 걸었다.", "친구와함께걸었다."]],
+      ["띄어쓰기가 바른 것은?", "세 권의 책", ["세권의 책", "세 권의책", "세 권의 책", "세권의책"]]
     ],
     punctuation: [
       ["기쁜 마음을 나타내는 문장은?", "우아, 정말 멋지다!", ["우아, 정말 멋지다.", "우아, 정말 멋지다?", "우아, 정말 멋지다!", "우아 정말, 멋지다"]],
@@ -53,7 +65,11 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       ["문장을 마치는 부호가 바른 것은?", "나는 학교에 간다.", ["나는 학교에 간다?", "나는 학교에 간다,", "나는 학교에 간다.", "나는 학교에 간다!"]],
       ["놀람을 나타내는 문장은?", "앗, 뜨거워!", ["앗, 뜨거워.", "앗 뜨거워?", "앗, 뜨거워!", "앗. 뜨거워,"]],
       ["부르는 말을 바르게 나타낸 것은?", "지민아, 이쪽으로 와.", ["지민아 이쪽으로, 와.", "지민아, 이쪽으로 와.", "지민아. 이쪽으로 와?", "지민아 이쪽으로 와,"]],
-      ["제목을 나타내는 문장부호가 바른 것은?", "나는 『어린 왕자』를 읽었다.", ["나는, 어린 왕자를 읽었다.", "나는 『어린 왕자』를 읽었다.", "나는? 어린 왕자를 읽었다.", "나는 어린 왕자! 를 읽었다."]]
+      ["제목을 나타내는 문장부호가 바른 것은?", "나는 『어린 왕자』를 읽었다.", ["나는, 어린 왕자를 읽었다.", "나는 『어린 왕자』를 읽었다.", "나는? 어린 왕자를 읽었다.", "나는 어린 왕자! 를 읽었다."]],
+      ["감탄하는 문장에 알맞은 부호는?", "정말 아름답구나!", ["정말 아름답구나.", "정말 아름답구나?", "정말 아름답구나!", "정말, 아름답구나?"]],
+      ["묻는 문장의 끝맺음이 바른 것은?", "몇 시에 출발하니?", ["몇 시에 출발하니.", "몇 시에 출발하니?", "몇 시에 출발하니!", "몇 시에, 출발하니."]],
+      ["쉼표를 바르게 쓴 문장은?", "민수야, 잠깐 기다려.", ["민수야 잠깐, 기다려.", "민수야, 잠깐 기다려.", "민수야. 잠깐, 기다려.", "민수야 잠깐 기다려,"]],
+      ["문장을 마치는 부호가 바른 것은?", "오늘은 날씨가 맑다.", ["오늘은 날씨가 맑다,", "오늘은 날씨가 맑다?", "오늘은 날씨가 맑다.", "오늘은 날씨가 맑다!"]]
     ],
     conjunction: [
       ["비가 왔다. ___ 우산을 썼다.", "그래서", ["하지만", "그래서", "또는", "그러나"]],
@@ -63,7 +79,11 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       ["일찍 잤다. ___ 아침에 개운했다.", "그래서", ["그래서", "그러나", "또는", "하지만"]],
       ["밖에 나가지 않았다. ___ 비가 많이 왔기 때문이다.", "왜냐하면", ["그리고", "하지만", "또는", "왜냐하면"]],
       ["동생은 매운 음식을 좋아한다. ___ 나는 좋아하지 않는다.", "반면에", ["그래서", "반면에", "그리고", "그러므로"]],
-      ["손을 씻었다. ___ 식탁에 앉았다.", "그다음", ["하지만", "왜냐하면", "그다음", "또는"]]
+      ["손을 씻었다. ___ 식탁에 앉았다.", "그다음", ["하지만", "왜냐하면", "그다음", "또는"]],
+      ["날씨가 추웠다. ___ 두꺼운 외투를 입었다.", "그래서", ["그러나", "그래서", "또는", "반면에"]],
+      ["나는 축구를 좋아한다. ___ 동생은 농구를 좋아한다.", "반면에", ["왜냐하면", "그래서", "반면에", "그러므로"]],
+      ["숙제를 끝냈다. ___ 책가방을 정리했다.", "그다음", ["그다음", "하지만", "또는", "왜냐하면"]],
+      ["버스를 타도 된다. ___ 걸어가도 된다.", "또는", ["그래서", "하지만", "또는", "왜냐하면"]]
     ]
   };
 
@@ -93,10 +113,21 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
     }
     return { instruction: "문제를 읽고 가장 알맞은 답을 고르세요.", question: raw };
   }
-  function generate(missionId, variant = 0) { const items = (BANK[missionId] || []).map(([raw, answer, choices]) => ({ ...formatQuestion(raw), answer, choices: choices.slice() })); const rng = random(hash(`${dateKey()}|${userId()}|${missionId}|korean|${variant}`)); for (let i = items.length - 1; i > 0; i -= 1) { const j = Math.floor(rng() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; } return items.slice(0, QUESTIONS_PER_MISSION).map((item,index)=>positionChoices(item,missionId,index,variant)); }
+  function daySerial(key){const [year,month,day]=String(key||dateKey()).split("-").map(Number);return Math.floor(Date.UTC(year,month-1,day)/86400000)}
+  function generate(missionId, variant = 0, forcedDate = "") {
+    const key=forcedDate||dateKey(),items=(BANK[missionId]||[]).map(([raw,answer,choices])=>({...formatQuestion(raw),answer,choices:choices.slice()}));
+    const rng=random(hash(`${userId()}|${missionId}|korean-pool`));
+    for(let i=items.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[items[i],items[j]]=[items[j],items[i]]}
+    if(!items.length)return [];
+    const start=((daySerial(key)*QUESTIONS_PER_MISSION)+(Math.max(0,Number(variant)||0)))%items.length,out=[];
+    for(let i=0;i<QUESTIONS_PER_MISSION;i+=1)out.push(items[(start+i)%items.length]);
+    return out.map((item,index)=>positionChoicesForDate(item,missionId,index,variant,key));
+  }
+  function correctPositionForDate(missionId,questionIndex=0,variant=0,key=dateKey()){const rng=random(hash(`${key}|${userId()}|${missionId}|${variant}|answer-positions`)),positions=[];while(positions.length<=questionIndex){const cycle=[0,1,2,3];for(let i=cycle.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[cycle[i],cycle[j]]=[cycle[j],cycle[i]]}if(positions.length&&cycle[0]===positions[positions.length-1])[cycle[0],cycle[1]]=[cycle[1],cycle[0]];positions.push(...cycle)}return positions[questionIndex]}
+  function positionChoicesForDate(item,missionId,questionIndex,variant,key){const rng=random(hash(`${key}|${userId()}|${missionId}|${questionIndex}|${variant}|korean-choices`)),wrong=item.choices.filter(value=>value!==item.answer);for(let i=wrong.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[wrong[i],wrong[j]]=[wrong[j],wrong[i]]}const choices=wrong.slice(0,3);choices.splice(correctPositionForDate(missionId,questionIndex,variant,key),0,item.answer);return {...item,choices}}
 
   function problemKey(item){return `${item?.instruction||""}|${item?.question||""}|${item?.answer||""}`}
-  function nextVariant(missionId,questionIndex,currentItem,currentVariant){const currentPosition=correctPosition(missionId,questionIndex,currentVariant);let candidate=Math.max(0,Number(currentVariant)||0)+1;for(let guard=0;guard<64;guard+=1,candidate+=1){const items=generate(missionId,candidate),nextItem=items[questionIndex];if(nextItem&&problemKey(nextItem)!==problemKey(currentItem)&&correctPosition(missionId,questionIndex,candidate)!==currentPosition)return candidate}return candidate}
+  function nextVariant(missionId,questionIndex,currentItem,currentVariant){const currentPosition=currentItem?.choices?.indexOf(currentItem.answer)??correctPosition(missionId,questionIndex,currentVariant);let candidate=Math.max(0,Number(currentVariant)||0)+1;for(let guard=0;guard<64;guard+=1,candidate+=1){const items=generate(missionId,candidate),nextItem=items[questionIndex],nextPosition=nextItem?.choices?.indexOf(nextItem.answer);if(nextItem&&problemKey(nextItem)!==problemKey(currentItem)&&nextPosition!==currentPosition)return candidate}return candidate}
 
   function render(onProgress) {
     const D = MiniTalk.UI.Dom, guest = Boolean(MiniTalk.Store.get("user")?.isGuest), progress = loadProgress(), grid = D.el("div", { class: "daily-quest-grid" });syncProgress(onProgress);

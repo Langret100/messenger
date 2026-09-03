@@ -68,7 +68,7 @@
       ".read": true,
       "$roomId": {
         ".write": true,
-        ".validate": "newData.hasChildren(['name']) && newData.child('name').isString() && newData.child('name').val().length <= 50"
+        ".validate": "newData.hasChildren(['name']) && newData.child('name').isString() && newData.child('name').val().length <= 50 && (!newData.child('hasPassword').exists() || newData.child('hasPassword').isBoolean()) && ((!newData.child('hasPassword').exists() || newData.child('hasPassword').val() == false) || (newData.child('passwordSalt').isString() && newData.child('passwordSalt').val().length >= 16 && newData.child('passwordHash').isString() && newData.child('passwordHash').val().length == 64)) && ((!data.child('hasPassword').exists() || data.child('hasPassword').val() == false) || (newData.child('hasPassword').exists() && newData.child('hasPassword').val() == true) || (newData.child('passwordRevision').isNumber() && ((!data.child('passwordRevision').exists() && newData.child('passwordRevision').val() >= 1) || (data.child('passwordRevision').isNumber() && newData.child('passwordRevision').val() > data.child('passwordRevision').val())) && newData.child('passwordUpdatedAt').isNumber()))"
       },
       ".indexOn": [
         "lastMessageAt"
@@ -116,7 +116,12 @@
         },
         "userRooms": {
           ".read": true,
-          ".write": true
+          "$userId": {
+            "$roomId": {
+              ".write": true,
+              ".validate": "newData.hasChildren(['role','status']) && newData.child('role').isString() && ((newData.child('status').val() == 'invited' && newData.child('invitedAt').isNumber() && newData.child('invitedAt').val() > 0) || (newData.child('status').val() == 'member' && ($roomId == 'global' || root.child('rooms').child($roomId).child('creator').val() == $userId || root.child('rooms').child($roomId).child('members').child($userId).exists()))) && (!newData.child('nickname').exists() || (newData.child('nickname').isString() && newData.child('nickname').val().length <= 30)) && (!newData.child('joinedAt').exists() || newData.child('joinedAt').isNumber()) && (!newData.child('acceptedAt').exists() || newData.child('acceptedAt').isNumber()) && (!newData.child('invitedAt').exists() || newData.child('invitedAt').isNumber())"
+            }
+          }
         },
         "roomIndexUsers": {
           ".read": true,

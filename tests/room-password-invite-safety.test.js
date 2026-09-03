@@ -14,5 +14,5 @@ ok(realtime.includes('async function clearRoomPassword(roomId)'),"password clear
 ok(!realtime.includes('allowClear'),"realtime password API must not expose an allowClear escape flag");
 ok(chats.includes('(MiniTalk.UserDirectory?.all?.()||[]).forEach(value=>'),"invite list must come from the canonical user directory");
 ok(!chats.includes('Object.values(MiniTalk.Store.get("profiles")||{}).forEach(add)')&&!chats.includes('Object.values(MiniTalk.Store.get("presence")||{}).forEach(add)'),"invite list must not re-add raw profile/presence records");
-ok(html.includes('js/features/chats.js?v=64.5.27')&&html.includes('js/adapters/realtime.js?v=64.5.49'),"room safety cache versions stale");
+ok(html.includes('js/features/chats.js?v=64.5.28')&&html.includes('js/adapters/realtime.js?v=64.5.50'),"room safety cache versions stale");
 console.log("ROOM_PASSWORD_INVITE_SAFETY_OK");

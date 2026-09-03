@@ -24,5 +24,5 @@ if(!chats.includes("stillMember=Boolean(room&&MiniTalk.Realtime.isRoomMember(roo
 if(!chats.includes("syncRooms(memberRooms,active)"))throw new Error("unread alerts must be restricted to member rooms");
 if(!chats.includes("notifyMemberRoomUpdates(memberRooms,active)"))throw new Error("inactive member rooms must produce scoped message alerts");
 if(!chats.includes("roomAlertTimes=next"))throw new Error("left rooms must be removed from the alert tracker");
-if(!chats.includes("notifyRoomInvites(memberRooms)")||!realtime.includes("invitedAt:now")||!chats.includes("notifyRoomInvite"))throw new Error("room invitations must produce a visible recipient notification");
+if(!chats.includes("notifyRoomInvites(rooms)")||!realtime.includes("invitedAt:now")||!chats.includes("notifyRoomInvite"))throw new Error("room invitations must produce a visible recipient notification");
 console.log("CHAT_ROOM_POLICY_OK");

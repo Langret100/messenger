@@ -10,6 +10,6 @@ ok(windowMode.includes("MiniTalk.Features.Auth?.returnToLogin?.()")&&!windowMode
 ok(realtime.includes("ROOM_SUMMARY_CACHE_MAX_IDLE=30*24*60*60*1000"),"room summary idle TTL is not 30 days");
 ok(realtime.includes("purgeStaleRoomSummaryCaches()")&&realtime.includes("localStorage.removeItem(storageKey)"),"stale room summary cache sweep is missing");
 ok(realtime.includes("lastAccessedAt:Date.now()")&&realtime.includes("idle>=ROOM_SUMMARY_CACHE_MAX_IDLE"),"room summary cache is not based on last use");
-ok(index.includes("js/adapters/realtime.js?v=64.5.50")&&index.includes("js/adapters/window-mode.js?v=64.5.40")&&index.includes("js/features/auth.js?v=64.5.35"),"updated scripts are not cache-busted");
+ok(index.includes("js/adapters/realtime.js?v=64.5.51")&&index.includes("js/adapters/window-mode.js?v=64.5.40")&&index.includes("js/features/auth.js?v=64.5.35"),"updated scripts are not cache-busted");
 ok(sw.includes("moaru-moa-dialogue-fusion-final"),"service-worker cache version is stale");
 console.log("PIP_SESSION_IDLE_CACHE_OK");

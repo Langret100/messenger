@@ -76,10 +76,20 @@ MiniTalk.Economy.CoinWallet = (() => {
     if (!user?.user_id || user.isGuest) return setLocal(0, "guest");
 
     let cached = snapshot();
-    if (!force && cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
-      MiniTalk.Store.set("coins", cached.value);
-      return cached.value;
+    /*
+     * 로그인 직후 Store 기본값(0)을 서버 응답까지 그대로 보여주지 않습니다.
+     * 이 사용자에게 저장된 마지막 확정 잔액이 있으면 즉시 화면에 복원하고,
+     * 서버 조회는 그대로 이어서 최신값으로 교체합니다. 오래된 캐시는 표시용일 뿐
+     * force 조회를 생략하는 근거로 사용하지 않습니다.
+     */
+    if (cached) {
+      const cachedValue = Math.floor(Number(cached.value) || 0);
+      if (value() !== cachedValue) {
+        MiniTalk.Store.set("coins", cachedValue);
+        syncConnectedBadges(cachedValue);
+      }
     }
+    if (!force && cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.value;
 
     if (inFlight) {
       if (!force) return inFlight;

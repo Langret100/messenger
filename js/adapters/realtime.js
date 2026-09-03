@@ -25,7 +25,10 @@ MiniTalk.Realtime=(()=>{
   const localRemove=key=>{try{localStorage.removeItem(localPrefix+key)}catch{}};
   const memberValue=(role="member")=>({user_id:user.user_id,nickname:user.nickname,role,status:"member",joinedAt:Date.now(),acceptedAt:Date.now()});
   const roomMembers=room=>room?.members&&typeof room.members==="object"&&!Array.isArray(room.members)?room.members:{};
-  const isPendingInviteRecord=member=>Boolean(member&&typeof member==="object"&&Number(member.invitedAt||0)>0&&!Number(member.acceptedAt||0)&&String(member.status||"")!=="member");
+  /* 신규 초대만 status:"invited"로 판정합니다.
+     구버전은 초대 순간 멤버로 저장했고 acceptedAt/status를 기록하지 않았으므로
+     invitedAt만 보고 미수락 초대로 재해석하면 정상 레거시 방이 사라집니다. */
+  const isPendingInviteRecord=member=>Boolean(member&&typeof member==="object"&&String(member.status||"")==="invited");
   const isAcceptedMemberRecord=member=>Boolean(member&&typeof member==="object"&&!isPendingInviteRecord(member));
   function parseLegacyParticipantList(value){
     if(Array.isArray(value))return value;
@@ -105,7 +108,7 @@ MiniTalk.Realtime=(()=>{
     const summary=roomSummaryValue({...value,id:String(value.id||id)}),member=Boolean(id==="global"||(membership&&String(membership.status||"")!=="invited"));
     return{...value,...summary,id:String(value.id||id),_summary:true,_detail:false,_member:member,_membership:membership&&typeof membership==="object"?membership:null}
   }
-  function membershipValue(member={}){const pending=isPendingInviteRecord(member)||String(member.status||"")==="invited";return{role:String(member.role||(pending?"invite":"member")),status:pending?"invited":"member",nickname:String(member.nickname||""),joinedAt:Number(member.joinedAt||0),acceptedAt:Number(member.acceptedAt||0),invitedAt:Number(member.invitedAt||0),invitedBy:String(member.invitedBy||"")}}
+  function membershipValue(member={}){const pending=isPendingInviteRecord(member);return{role:String(member.role||(pending?"invite":"member")),status:pending?"invited":"member",nickname:String(member.nickname||""),joinedAt:Number(member.joinedAt||0),acceptedAt:Number(member.acceptedAt||0),invitedAt:Number(member.invitedAt||0),invitedBy:String(member.invitedBy||"")}}
   const firebaseRoomValue=room=>({...room,name:String(room?.title||room?.name||"대화방")});
   async function passwordHash(password,salt){
     if(!crypto?.subtle||typeof TextEncoder==="undefined")throw new Error("이 브라우저에서는 대화방 비밀번호를 사용할 수 없습니다.");
@@ -306,14 +309,21 @@ MiniTalk.Realtime=(()=>{
   }
   async function validateIndexedMembership(roomId,membership){
     const value=membership&&typeof membership==="object"?membership:{};
-    if(roomId==="global"||String(value.status||"")==="member"){attachMemberSummary(roomId,value);return}
-    if(String(value.status||"")==="invited"){const detail=await getRoom(roomId).catch(()=>null);if(!detail){await db.ref(`${userRoomsPath(user.user_id)}/${roomId}`).remove().catch(()=>{});return}attachMemberSummary(roomId,value);return}
-    const detail=await getRoom(roomId).catch(()=>null);
-    if(!detail){await db.ref(`${userRoomsPath(user.user_id)}/${roomId}`).remove().catch(()=>{});return}
-    const record=roomMembers(detail)[String(user.user_id||"")];
-    if(record&&isPendingInviteRecord(record)){const next=membershipValue({...record,status:"invited"});await db.ref(`${userRoomsPath(user.user_id)}/${roomId}`).set(next).catch(()=>{});attachMemberSummary(roomId,next);return}
-    if(isAcceptedMemberRecord(record)||String(detail.creator||"")===String(user.user_id||"")){const next=membershipValue(record||{nickname:user.nickname,role:"owner",joinedAt:detail.createdAt||Date.now(),acceptedAt:Date.now(),status:"member"});await db.ref(`${userRoomsPath(user.user_id)}/${roomId}`).set(next).catch(()=>{});attachMemberSummary(roomId,next);return}
-    await db.ref(`${userRoomsPath(user.user_id)}/${roomId}`).remove().catch(()=>{});
+    const status=String(value.status||"");
+    if(roomId==="global"||status==="member"){attachMemberSummary(roomId,value);return}
+    if(status==="invited"){
+      /* 신규 초대는 방이 삭제된 경우에만 인덱스를 정리합니다. */
+      const detail=await getRoom(roomId).catch(()=>null);
+      if(!detail){await db.ref(`${userRoomsPath(user.user_id)}/${roomId}`).remove().catch(()=>{});return}
+      attachMemberSummary(roomId,value);return
+    }
+    /*
+     * status가 없는 값은 구버전 userRooms 데이터입니다.
+     * 구버전에는 "초대 수락" 상태 자체가 없어서 실제 사용방과 미방문 초대를
+     * 서버 데이터만으로 안전하게 구분할 수 없습니다. 따라서 자동 삭제/강등하지 않고
+     * 기존 소속으로 보존합니다. 앞으로 생성되는 초대만 status:"invited"를 사용합니다.
+     */
+    attachMemberSummary(roomId,{...value,status:"member",legacy:true});
   }
   function startMemberRoomIndexSubscription(){
     clearMemberSummarySubscriptions();const ref=db.ref(userRoomsPath(user.user_id));

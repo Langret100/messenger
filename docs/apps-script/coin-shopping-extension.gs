@@ -253,7 +253,8 @@ function handleAdminUnlock(e) {
   if (!requireKnownMoaruUserFast_(userId)) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   const token = Utilities.getUuid() + Utilities.getUuid();
   writeShopAdminSession_(userId, role, token);
-  try { cleanupExpiredShopAdminSessions_(); } catch (error) {}
+  // 전체 Script Properties 스캔은 인증 요청의 critical path에서 하지 않습니다.
+  // 만료 세션은 읽을 때 개별 정리되고, 전체 정리는 일일 cleanup 트리거에서 처리합니다.
   return shopJson_({ ok: true, admin: role === "ADMIN", shop_manager: role === "SHOP_MANAGER", role: role, admin_token: token, expires_in: SHOP_ADMIN_TOKEN_SECONDS });
 }
 
@@ -610,17 +611,23 @@ function createFreshPurchasedInventory_(userId, product, purchaseKey) {
  * 이미 차감/로그가 확정된 구매는 pending으로 남기고 shop_inventory 조회 때 재구성합니다.
  */
 const MOARU_SHOP_PENDING_PURCHASE_PREFIX = "MOARU_SHOP_PENDING_PURCHASE_";
+const MOARU_SHOP_PENDING_USER_PREFIX = "MOARU_SHOP_PENDING_USER_";
 function pendingShopPurchaseKey_(purchaseKey) {
   const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(purchaseKey || ""));
   return MOARU_SHOP_PENDING_PURCHASE_PREFIX + digest.slice(0, 12).map(function (value) { return (value & 255).toString(16).padStart(2, "0"); }).join("");
 }
+function pendingShopPurchaseUserMarkerKey_(userId) { return MOARU_SHOP_PENDING_USER_PREFIX + moaruSafeKey_(String(userId || "")); }
 function rememberPendingShopPurchase_(userId, product, purchaseKey) {
   const payload = { userId: String(userId || ""), product: normalizeShopProduct_(product || {}), purchaseKey: String(purchaseKey || ""), createdAt: Date.now() };
-  PropertiesService.getScriptProperties().setProperty(pendingShopPurchaseKey_(purchaseKey), JSON.stringify(payload));
+  const properties = PropertiesService.getScriptProperties();
+  properties.setProperty(pendingShopPurchaseKey_(purchaseKey), JSON.stringify(payload));
+  properties.setProperty(pendingShopPurchaseUserMarkerKey_(userId), "1");
   return payload;
 }
-function clearPendingShopPurchase_(purchaseKey) {
-  PropertiesService.getScriptProperties().deleteProperty(pendingShopPurchaseKey_(purchaseKey));
+function clearPendingShopPurchase_(purchaseKey, userId) {
+  const properties = PropertiesService.getScriptProperties();
+  properties.deleteProperty(pendingShopPurchaseKey_(purchaseKey));
+  if (userId) properties.deleteProperty(pendingShopPurchaseUserMarkerKey_(userId));
 }
 function reconcilePendingShopPurchases_(userId) {
   const properties = PropertiesService.getScriptProperties(), all = properties.getProperties();
@@ -675,8 +682,11 @@ function requireRegisteredShopUser_(userId, registeredUsers) {
 function handleShopInventory(e) {
   const userId = requireRegisteredShopUser_(((e && e.parameter) || {}).user_id);
   if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
-  // 결제/구매로그는 확정됐지만 서버 보관함 쓰기만 실패한 건이 있으면 먼저 복구합니다.
-  reconcilePendingShopPurchases_(userId);
+  // 정상 보관함 조회마다 Script Properties 전체를 스캔하지 않습니다.
+  // 실제로 pending 구매가 기록된 사용자만 복구 스캔을 수행합니다.
+  try {
+    if (PropertiesService.getScriptProperties().getProperty(pendingShopPurchaseUserMarkerKey_(userId)) === "1") reconcilePendingShopPurchases_(userId);
+  } catch (error) { console.warn("SHOP_PENDING_MARKER_CHECK_FAILED", error); }
   return shopJson_({ ok: true, items: readShopInventory_(userId) });
 }
 
@@ -1122,6 +1132,7 @@ function cleanupCompletedMoaruTasks() {
     cleanupMoaruTaskAssignReceipts_();
     cleanupMoaruCommandPropertiesOnce();
     cleanupMoaruShopProperties_();
+    try { cleanupExpiredShopAdminSessions_(); } catch (error) {}
     return removed;
   } finally { lock.releaseLock(); }
 }
@@ -1176,7 +1187,7 @@ function handleAdminTaskAssign(e) {
 function handleUserTaskList(e) {
   const p = (e && e.parameter) || {}, userId = requireKnownMoaruUserCached_(p.user_id);
   if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
-  cleanupCompletedMoaruTasks_();
+  // 완료 과제 전체 정리는 일일 cleanup 트리거에서 수행합니다. 읽기 요청마다 전체 Properties를 스캔하지 않습니다.
   const tasks = readMoaruTasks_().filter(function (task) { return task.userId === userId; }).sort(function (a, b) { return b.createdAt - a.createdAt; }).slice(0, 100).map(publicMoaruTask_);
   return shopJson_({ ok: true, tasks: tasks });
 }
@@ -1206,7 +1217,7 @@ function handleUserTaskSubmit(e) {
 function handleAdminTaskList(e) {
   const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
-  cleanupCompletedMoaruTasks_();
+  // 관리자 목록 읽기도 전체 정리를 동반하지 않습니다.
   const tasks = readMoaruTasks_().sort(function (a, b) { return b.updatedAt - a.updatedAt; }).slice(0, 200).map(publicMoaruTask_);
   return shopJson_({ ok: true, tasks: tasks });
 }
@@ -1394,7 +1405,7 @@ function handleShopPurchase(e) {
       const currentProduct = readShopCatalog_()[duplicate.productId] || {};
       const duplicateProduct = normalizeShopProduct_(Object.assign({}, currentProduct, { id: duplicate.productId, name: duplicate.productName || currentProduct.name || "상품", price: duplicate.price || currentProduct.price || 1 }));
       const duplicateItem = createPurchasedInventory_(userId, duplicateProduct, purchaseKey);
-      clearPendingShopPurchase_(purchaseKey);
+      clearPendingShopPurchase_(purchaseKey, userId);
       return shopJson_({ ok: true, applied: false, reason: "ALREADY_PURCHASED", newCoin: duplicate.newCoin, remaining_quantity: duplicateProduct.quantity, product_id: duplicateProduct.id, product_name: duplicateProduct.name, product_description: duplicateProduct.description || "", product_image_url: duplicateProduct.imageUrl || "", original_price: Number(currentProduct.price) || Number(duplicateProduct.price) || 0, item: duplicateItem });
     }
 
@@ -1443,7 +1454,7 @@ function handleShopPurchase(e) {
 
     const inventoryProduct = randomMode ? normalizeShopProduct_(Object.assign({}, product, { price: chargePrice })) : product;
     let inventoryItem = null, inventoryPending = false;
-    try { inventoryItem = createFreshPurchasedInventory_(userId, inventoryProduct, purchaseKey); clearPendingShopPurchase_(purchaseKey); }
+    try { inventoryItem = createFreshPurchasedInventory_(userId, inventoryProduct, purchaseKey); clearPendingShopPurchase_(purchaseKey, userId); }
     catch (inventoryError) {
       inventoryPending = true;
       try { rememberPendingShopPurchase_(userId, inventoryProduct, purchaseKey); } catch (pendingError) { console.error("SHOP_PENDING_PURCHASE_SAVE_FAILED", pendingError); }

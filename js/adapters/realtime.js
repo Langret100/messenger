@@ -403,10 +403,10 @@ MiniTalk.Realtime=(()=>{
   function startServerCommandPolling(){
     const saved=localGet(`server.tasks.${user.user_id}`,{});if(Object.keys(saved).length)emit("tasks",{...(MiniTalk.Store.get("tasks")||{}),...saved});
     /* Firebase wakeup 신호는 즉시 반응용으로 유지합니다.
-     * Apps Script 명령 큐도 기존 안정 동작처럼 10초마다 확인해 신호 누락/절전/일시 연결 문제를 빠르게 복구합니다.
+     * Apps Script 명령 큐는 Firebase wakeup 신호의 보조 복구용으로만 60초마다 확인합니다.
      * 이 폴링은 Apps Script 요청이며 Firebase Realtime Database 다운로드량과는 별개입니다. */
     pollServerCommands();
-    if(!serverCommandTimer)serverCommandTimer=setInterval(pollServerCommands,10000);
+    if(!serverCommandTimer)serverCommandTimer=setInterval(pollServerCommands,60000);
   }
 
   async function ensureDefaultRoom(){

@@ -10,5 +10,5 @@ ok(shell.includes('header?.classList.toggle("hidden",Boolean(active))'),'auth mo
 ok(css.includes('.app-shell.auth-mode{grid-template-rows:minmax(0,1fr)}'),'auth host is still confined to header grid row');
 ok(css.includes('.app-shell.auth-mode .auth-host{grid-row:1;min-height:0;height:100%}'),'auth host full-height rule missing');
 ok(auth.includes('MiniTalk.UI.Shell?.setAuthMode?.(true)')&&auth.includes('function returnToLogin()'),'PiP return/login auth mode wiring missing');
-ok(html.includes('css/app.css?v=64.5.23')&&html.includes('js/ui/shell.js?v=64.5.34'),'auth layout cache bust missing');
+ok(html.includes('css/app.css?v=64.5.23')&&html.includes('js/ui/shell.js?v=64.5.35'),'auth layout cache bust missing');
 console.log('PIP_AUTH_LAYOUT_OK');

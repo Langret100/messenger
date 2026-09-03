@@ -53,9 +53,9 @@ MiniTalk.Tasks.TaskService = (() => {
     if (!current.user_id || current.isGuest) { refreshVersion++;clearInterval(pollTimer);pollTimer = 0;activeUserId = "";inFlight = null;publish([]);return; }
     if (activeUserId !== current.user_id) { refreshVersion++;clearInterval(pollTimer);pollTimer = 0;activeUserId = current.user_id;inFlight = null; }
     /* Firebase TASK_* wakeup 신호가 즉시 갱신을 담당합니다.
-     * Apps Script 목록 폴링은 신호 누락/절전 복구용 30초 fallback만 유지해 서버 부하를 줄입니다. */
+     * Apps Script 목록 폴링은 신호 누락/절전 복구용 120초 fallback만 유지해 서버 부하를 줄입니다. */
     refresh(true).catch(error => console.warn("과제 목록을 불러오지 못했습니다.", error));
-    if (!pollTimer) pollTimer = setInterval(() => refresh(true).catch(() => {}), 30000);
+    if (!pollTimer) pollTimer = setInterval(() => refresh(true).catch(() => {}), 120000);
   }
   async function enter(){
     const current=user();

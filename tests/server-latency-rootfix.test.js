@@ -1,0 +1,17 @@
+const fs=require('fs');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const shell=fs.readFileSync('js/ui/shell.js','utf8');
+const rt=fs.readFileSync('js/adapters/realtime.js','utf8');
+const tasks=fs.readFileSync('js/tasks/task-service.js','utf8');
+const gs=fs.readFileSync('docs/apps-script/coin-shopping-extension.gs','utf8');
+const index=fs.readFileSync('index.html','utf8');
+ok(shell.includes('setTimeout(()=>{if(alive())MiniTalk.UserDirectory?.refresh?.()')&&shell.includes('},700);'),'user directory startup not staggered');
+ok(shell.includes('},1400);')&&shell.includes('},2200);'),'task/shop startup not staggered');
+ok(rt.includes('setInterval(pollServerCommands,60000)'),'server command fallback poll must be 60s');
+ok(!rt.includes('setInterval(pollServerCommands,10000)'),'10s command polling regression');
+ok(tasks.includes('setInterval(() => refresh(true).catch(() => {}), 120000)'),'task fallback poll must be 120s');
+ok(!/writeShopAdminSession_\(userId, role, token\);\s*try \{ cleanupExpiredShopAdminSessions_\(\)/.test(gs),'admin unlock still scans all sessions on critical path');
+ok(gs.includes('pendingShopPurchaseUserMarkerKey_')&&gs.includes('getProperty(pendingShopPurchaseUserMarkerKey_(userId)) === "1"'),'inventory pending recovery not marker-gated');
+ok(!/function handleUserTaskList[\s\S]{0,500}cleanupCompletedMoaruTasks_\(\)/.test(gs),'user task list still runs global cleanup');
+ok(index.includes('realtime.js?v=64.5.52')&&index.includes('shell.js?v=64.5.35')&&index.includes('task-service.js?v=64.5.27'),'latency rootfix cache bust missing');
+console.log('SERVER_LATENCY_ROOTFIX_OK');

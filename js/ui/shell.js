@@ -35,10 +35,13 @@ MiniTalk.UI.Shell=(()=>{
   async function showApp(){document.getElementById("launchView")?.classList.add("hidden");D().byId("appShell")?.classList.remove("hidden");document.documentElement.classList.add("app-visible");if(!started){started=true;MiniTalk.Features.Auth.render(D().byId("authHost"))}const user=MiniTalk.Store.get("user");if(user)await enterWorkspace(user);MiniTalk.MobileImmersive?.afterAppShown?.()}
   function startWorkspaceBackground(user){
     if(activeUserId!==user.user_id)return;
+    // Apps Script 웹앱으로 초기 요청을 한 프레임에 몰아 보내지 않습니다.
+    // 코인은 가장 먼저 시작하고, 나머지는 짧게 분산해 cold-start/동시실행 경합을 줄입니다.
+    const alive=()=>activeUserId===user.user_id;
     if(!user.isGuest)MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(error=>console.warn("코인 계정 동기화 실패",error));
-    MiniTalk.UserDirectory?.refresh?.().catch(error=>console.warn("가입자 명단을 불러오지 못했습니다.",error));
-    MiniTalk.Shopping.StoreService?.start?.(user);
-    MiniTalk.Tasks.TaskService?.start?.(user);
+    setTimeout(()=>{if(alive())MiniTalk.UserDirectory?.refresh?.().catch(error=>console.warn("가입자 명단을 불러오지 못했습니다.",error))},700);
+    setTimeout(()=>{if(alive())MiniTalk.Tasks.TaskService?.start?.(user)},1400);
+    setTimeout(()=>{if(alive())MiniTalk.Shopping.StoreService?.start?.(user)},2200);
   }
   async function enterWorkspace(user){
     if(entering||activeUserId===user.user_id)return;

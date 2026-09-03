@@ -9,5 +9,5 @@ if(!realtime.includes('startProfileCollection(legacyProfilesRef,"legacy"')||!rea
 if(!shell.includes('const realtimeReady=MiniTalk.Realtime.init(user).then(')||shell.includes('await MiniTalk.Realtime.init(user)'))throw new Error('realtime bootstrap still blocks chat workspace');
 if(!chats.includes('MiniTalk.Store.set("profiles",profiles||{})'))throw new Error('profile snapshots are not stored when they arrive');
 if(!chats.includes('const isRenderedChatRoute=()=>MiniTalk.Router.current()==="chats"')||chats.includes('if(MiniTalk.Store.get("route")!=="chats")return'))throw new Error('initial Firebase events can render the chat list before the router enters it');
-for(const ref of ['js/adapters/auth-api.js?v=64.5.40','js/adapters/realtime.js?v=64.5.51'])if(!html.includes(ref))throw new Error(`stale profile/auth cache version: ${ref}`);
+for(const ref of ['js/adapters/auth-api.js?v=64.5.40','js/adapters/realtime.js?v=64.5.52'])if(!html.includes(ref))throw new Error(`stale profile/auth cache version: ${ref}`);
 console.log('PROFILE_FIRST_RENDER_OK');

@@ -81,7 +81,18 @@ function ensureMoaruCoinAccount_(account) {
   return { ok: false, error: "REWARD_ACCOUNT_INIT_FAILED" };
 }
 
+const MOARU_SHOP_CATALOG_DATA_CACHE = "moaru-shop-catalog-data-v3";
+function clearShopCatalogCaches_() {
+  try { const cache = CacheService.getScriptCache();cache.remove(MOARU_SHOP_CATALOG_DATA_CACHE);cache.remove("moaru-shop-catalog-v2"); } catch (error) {}
+}
 function readShopCatalog_() {
+  const cache = CacheService.getScriptCache();
+  try {
+    const cached = cache.get(MOARU_SHOP_CATALOG_DATA_CACHE);
+    if (cached) { const parsed = JSON.parse(cached);if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed; }
+  } catch (error) {}
+  // 상품 데이터가 바뀌지 않은 동안에는 Script Properties 전체를 매 쇼핑 요청마다 다시 훑지 않습니다.
+  // 실제 상품 저장/삭제/재고 변경 시 clearShopCatalogCaches_()가 즉시 무효화합니다.
   const properties = PropertiesService.getScriptProperties();
   const values = properties.getProperties();
   const catalog = {};
@@ -101,6 +112,7 @@ function readShopCatalog_() {
       console.error("INVALID_SHOP_PRODUCT", key, error);
     }
   });
+  try { const raw = JSON.stringify(catalog);if (raw.length < 95000) cache.put(MOARU_SHOP_CATALOG_DATA_CACHE, raw, 120); } catch (error) {}
   return catalog;
 }
 
@@ -324,7 +336,7 @@ function handleShopProductSave(e) {
       return shopJson_({ ok: false, error: "INVALID_PRODUCT_IMAGE" });
     }
     writeShopProduct_(product);
-    CacheService.getScriptCache().remove("moaru-shop-catalog-v2");
+    clearShopCatalogCaches_();
     return shopJson_({ ok: true, product: product });
   } finally {
     lock.releaseLock();
@@ -344,7 +356,7 @@ function handleShopProductDelete(e) {
   try {
     PropertiesService.getScriptProperties().deleteProperty(shopProductPropertyKey_(productId));
     removeLegacyShopProduct_(productId);
-    CacheService.getScriptCache().remove("moaru-shop-catalog-v2");
+    clearShopCatalogCaches_();
     return shopJson_({ ok: true, deleted: productId });
   } finally {
     lock.releaseLock();
@@ -627,21 +639,28 @@ function rememberPendingShopPurchase_(userId, product, purchaseKey) {
 function clearPendingShopPurchase_(purchaseKey, userId) {
   const properties = PropertiesService.getScriptProperties();
   properties.deleteProperty(pendingShopPurchaseKey_(purchaseKey));
-  if (userId) properties.deleteProperty(pendingShopPurchaseUserMarkerKey_(userId));
+  // 사용자 marker를 여기서 바로 지우지 않습니다. 한 사용자에게 pending 구매가 여러 건이면
+  // 다른 건의 복구 기회를 잃을 수 있으므로 reconcile 완료 뒤 남은 건을 확인해 정리합니다.
 }
 function reconcilePendingShopPurchases_(userId) {
-  const properties = PropertiesService.getScriptProperties(), all = properties.getProperties();
+  const properties = PropertiesService.getScriptProperties(), all = properties.getProperties(), target = String(userId || "");
+  let remaining = false;
   Object.keys(all).filter(function (key) { return key.indexOf(MOARU_SHOP_PENDING_PURCHASE_PREFIX) === 0; }).forEach(function (key) {
     let pending = null;
     try { pending = JSON.parse(all[key] || "null"); } catch (error) { pending = null; }
-    if (!pending || String(pending.userId || "") !== String(userId || "") || !pending.purchaseKey) return;
+    if (!pending || String(pending.userId || "") !== target || !pending.purchaseKey) return;
     try {
-      createPurchasedInventory_(userId, pending.product || {}, pending.purchaseKey);
+      createPurchasedInventory_(target, pending.product || {}, pending.purchaseKey);
       properties.deleteProperty(key);
     } catch (error) {
+      remaining = true;
       console.warn("SHOP_PENDING_INVENTORY_RETRY_FAILED", pending.purchaseKey, error);
     }
   });
+  if (target) {
+    if (remaining) properties.setProperty(pendingShopPurchaseUserMarkerKey_(target), "1");
+    else properties.deleteProperty(pendingShopPurchaseUserMarkerKey_(target));
+  }
 }
 
 /** 구형 상품별 Script Properties를 새 보관함 시트로 안전하게 옮깁니다. */
@@ -673,9 +692,15 @@ function requireKnownMoaruUser_(userId, registeredUsers) {
   const users = registeredUsers || moaruRegisteredUserMap_();
   return id && users[id] ? id : "";
 }
+const MOARU_SHOP_ELIGIBLE_USER_CACHE_PREFIX = "moaru-shop-eligible-v1-";
 function requireRegisteredShopUser_(userId, registeredUsers) {
   const id = requireKnownMoaruUser_(userId, registeredUsers);
-  return id && moaruSpreadsheetRetry_(function () { return findRewardUserForShop_(id); }) ? id : "";
+  if (!id) return "";
+  const cache = CacheService.getScriptCache(), key = MOARU_SHOP_ELIGIBLE_USER_CACHE_PREFIX + moaruSafeKey_(id);
+  try { if (cache.get(key) === "1") return id; } catch (error) {}
+  const eligible = Boolean(moaruSpreadsheetRetry_(function () { return findRewardUserForShop_(id); }));
+  if (eligible) { try { cache.put(key, "1", 300); } catch (error) {} }
+  return eligible ? id : "";
 }
 
 /** POST mode=shop_inventory */
@@ -1348,13 +1373,13 @@ function decrementShopProductStock_(product) {
   if (current.quantity <= 0) return { product: current, changed: false, soldOut: true, remaining: 0 };
   const updated = normalizeShopProduct_(Object.assign({}, current, { quantity: current.quantity - 1 }));
   writeShopProduct_(updated);
-  CacheService.getScriptCache().remove("moaru-shop-catalog-v2");
+  clearShopCatalogCaches_();
   return { product: updated, changed: true, remaining: updated.quantity };
 }
 function restoreShopProductStock_(beforeProduct) {
   if (!beforeProduct || beforeProduct.quantity === null || beforeProduct.quantity === undefined) return;
   writeShopProduct_(normalizeShopProduct_(beforeProduct));
-  CacheService.getScriptCache().remove("moaru-shop-catalog-v2");
+  clearShopCatalogCaches_();
 }
 
 function findRewardUserForShop_(userId) {

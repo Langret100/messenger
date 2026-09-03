@@ -4,7 +4,7 @@ const engine=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const gs=fs.readFileSync('docs/apps-script/MOA_AI.gs','utf8');
 const html=fs.readFileSync('index.html','utf8'),app=fs.readFileSync('js/app.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
 ok(html.includes('moa-communication-engine.js?v=50'),'engine cache bust missing');
-ok(html.includes('js/app.js?v=64.5.46')&&app.includes('sw.js?v=64.5.60')&&sw.includes('moaru-moa-dialogue-fusion-final'),'cache chain missing');
+ok(html.includes('js/app.js?v=64.5.47')&&app.includes('sw.js?v=64.5.61')&&sw.includes('moaru-runtime-bundle-2'),'cache chain missing');
 const g={console,Utilities:{DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(_,x)=>Array.from(crypto.createHash('sha256').update(String(x)).digest()),base64EncodeWebSafe:b=>Buffer.from(b).toString('base64url')}};vm.createContext(g);vm.runInContext(gs,g);
 const solo=g.moaLanguagePublicRow_(['solo-snack','간식 땡긴다','나도 과자 땡김 ㅋㅋ','inform:statement','neutral','ack','간식|땡기다','food',1,'src','ev',new Date(),'active','solo','간식|땡기다',77]);
 ok(solo&&solo.tier==='solo'&&solo.confidence===.60,'solo pattern is still blocked from sync');

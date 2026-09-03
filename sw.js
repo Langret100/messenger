@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-moa-dialogue-fusion-final";
+const CACHE = "moaru-runtime-bundle-2";
 const CORE = [
   "./",
   "./index.html",
@@ -144,12 +144,21 @@ self.addEventListener("activate", event => {
 });
 
 /*
- * index.html은 캐시 무효화를 위해 ?v= 값을 사용합니다.
- * 설치 목록은 쿼리 없이 저장되므로 오프라인 조회에서는 검색 쿼리를 무시해야 합니다.
+ * JS/CSS의 ?v=는 실제 번들 경계를 뜻합니다. 네트워크 실패 때도 다른 버전의 파일을
+ * 섞어 쓰지 않도록 먼저 정확한 URL을 찾고, 그 버전이 한 번도 캐시되지 않은 경우에만
+ * 설치 시 저장한 쿼리 없는 최신 CORE 파일로 폴백합니다.
  */
-function cached(request) {
-  return caches.match(request, { ignoreSearch: true });
+function canonicalRequest(request) {
+  const url = new URL(request.url);
+  url.search = "";
+  url.hash = "";
+  return new Request(url.href, { method: "GET", credentials: request.credentials, mode: request.mode === "navigate" ? "same-origin" : request.mode });
 }
+function cachedExact(request) { return caches.match(request); }
+async function cachedCodeFallback(request) {
+  return (await cachedExact(request)) || caches.match(canonicalRequest(request));
+}
+function cachedAsset(request) { return caches.match(request, { ignoreSearch: true }); }
 
 function remember(request, response) {
   if (!response || !response.ok) return response;
@@ -168,7 +177,7 @@ self.addEventListener("fetch", event => {
       fetch(event.request)
         .then(response => remember(event.request, response))
         .catch(async () => {
-          const exactPage = await cached(event.request);
+          const exactPage = await cachedExact(event.request);
           if (exactPage) return exactPage;
           if (url.pathname.includes("/games/")) {
             return new Response("게임을 불러올 수 없습니다.", {
@@ -176,7 +185,7 @@ self.addEventListener("fetch", event => {
               headers: { "Content-Type": "text/plain; charset=utf-8" }
             });
           }
-          return cached("./index.html");
+          return caches.match("./index.html");
         })
     );
     return;
@@ -186,12 +195,12 @@ self.addEventListener("fetch", event => {
     event.respondWith(
       fetch(event.request)
         .then(response => remember(event.request, response))
-        .catch(() => cached(event.request))
+        .catch(() => cachedCodeFallback(event.request))
     );
     return;
   }
 
   event.respondWith(
-    cached(event.request).then(hit => hit || fetch(event.request).then(response => remember(event.request, response)))
+    cachedAsset(event.request).then(hit => hit || fetch(event.request).then(response => remember(event.request, response)))
   );
 });

@@ -21,9 +21,9 @@ ok(shop.includes('requireToken("SHOP")'),'shopping manager client path does not 
 for(const fn of ['handleUserTaskList','handleUserTaskSubmit']){
   const at=server.indexOf('function '+fn+'(e)');const body=server.slice(at,server.indexOf('\n}',at)+2);ok(body.includes('requireKnownMoaruUserCached_('),fn+' still re-reads login sheet');
 }
-ok(tasks.includes('setInterval(() => refresh(true).catch(() => {}), 120000)'),'task fallback polling was not reduced');
-ok(admin.includes('},120000);load();return section'),'admin task review fallback polling was not reduced');
+ok(tasks.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'),'task fallback polling was not reduced');
+ok(admin.includes('},30000);load();return section'),'admin task review fallback polling was not reduced');
 // 변경 에셋 캐시 버전 동기화
-for(const ref of ['js/adapters/realtime.js?v=64.5.52','js/shopping/store-service.js?v=64.5.25','js/tasks/task-service.js?v=64.5.27','js/features/admin.js?v=64.5.42'])ok(index.includes(ref),'cache ref missing '+ref);
-ok(sw.includes('moaru-moa-dialogue-fusion-final'),'v104 service worker cache missing');
+for(const ref of ['js/adapters/realtime.js?v=64.5.53','js/shopping/store-service.js?v=64.5.26','js/tasks/task-service.js?v=64.5.28','js/features/admin.js?v=64.5.43'])ok(index.includes(ref),'cache ref missing '+ref);
+ok(sw.includes('moaru-runtime-bundle-2'),'v104 service worker cache missing');
 console.log('V104_ADMIN_ALL_FASTPATH_OK');

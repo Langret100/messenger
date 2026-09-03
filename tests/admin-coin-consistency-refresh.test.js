@@ -7,9 +7,9 @@ ok(admin.includes('Date.now()-balanceLoadedAt<BALANCE_REFRESH_MS'),'admin balanc
 ok(admin.includes('setTimeout(async()=>')&&admin.includes('loadBalances(true);applyBalances()'),'admin coin list is not automatically revalidated');
 ok(admin.includes('text:"코인 새로고침"')&&admin.includes('coinRefresh.onclick'),'manual admin coin refresh is missing');
 ok(admin.includes('balanceLoadedAt=Date.now();MiniTalk.Realtime.notifyCommandTargets?.(targets)'),'admin mutation does not refresh its local balance timestamp');
-ok(realtime.includes('setInterval(pollServerCommands,60000)'),'user command fallback polling changed or is missing');
+ok(realtime.includes('setInterval(pollServerCommands,30000)'),'user command fallback polling changed or is missing');
 ok(notifications.includes('CoinWallet?.setLocal?.(Number(newCoin)'),'admin coin command does not apply authoritative newCoin to user wallet');
 ok(wallet.includes('coinStatus(user.user_id)'),'user wallet is not backed by coin_status');
 ok(coin.includes('const userData = getRewardUserData_(userId)')&&shopServer.includes('coins = moaruRewardCoinMap_()'),'admin/user balance endpoints no longer share the reward coin source');
-ok(html.includes('js/features/admin.js?v=64.5.42'),'admin cache version stale');
+ok(html.includes('js/features/admin.js?v=64.5.43'),'admin cache version stale');
 console.log('ADMIN_COIN_CONSISTENCY_REFRESH_OK');

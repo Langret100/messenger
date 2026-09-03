@@ -17,5 +17,5 @@ ok(roomRule.includes("passwordRevision")&&roomRule.includes("passwordUpdatedAt")
 const membershipRule=rules.rules.moaru.v3.userRooms.$userId.$roomId['.validate']||'';
 ok(membershipRule.includes("status')")||membershipRule.includes("child('status')"), 'userRooms status validation missing');
 ok(membershipRule.includes("root.child('rooms').child($roomId).child('members').child($userId).exists()"), 'userRooms member entry is not tied to actual room membership');
-ok(html.includes('realtime.js?v=64.5.52')&&html.includes('features/chats.js?v=64.5.28'), 'room rootfix cache bust missing');
+ok(html.includes('realtime.js?v=64.5.53')&&html.includes('features/chats.js?v=64.5.28'), 'room rootfix cache bust missing');
 console.log('ROOM_MEMBERSHIP_PASSWORD_ROOTFIX_OK');

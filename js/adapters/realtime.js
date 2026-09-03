@@ -127,7 +127,7 @@ MiniTalk.Realtime=(()=>{
     const ref=database.ref(".info/connected");
     let connected=false,waitTimer=0;
     const clearNotice=()=>{if(waitTimer){clearTimeout(waitTimer);waitTimer=0}};
-    const scheduleNotice=()=>{clearNotice();waitTimer=setTimeout(()=>{if(!connected)emit("connection-wait",{state:navigator.onLine===false?"offline":"waiting"})},4500)};
+    const scheduleNotice=()=>{clearNotice();waitTimer=setTimeout(()=>{if(!connected)emit("connection-wait",{state:navigator.onLine===false?"offline":"waiting"})},8000)};
     const onValue=snapshot=>{connected=snapshot.val()===true;if(connected){clearNotice();emit("connection-wait",{state:"connected"})}else scheduleNotice()};
     const onOffline=()=>{if(!connected)emit("connection-wait",{state:"offline"})};
     const onOnline=()=>{if(!connected)scheduleNotice()};
@@ -403,10 +403,10 @@ MiniTalk.Realtime=(()=>{
   function startServerCommandPolling(){
     const saved=localGet(`server.tasks.${user.user_id}`,{});if(Object.keys(saved).length)emit("tasks",{...(MiniTalk.Store.get("tasks")||{}),...saved});
     /* Firebase wakeup 신호는 즉시 반응용으로 유지합니다.
-     * Apps Script 명령 큐는 Firebase wakeup 신호의 보조 복구용으로만 60초마다 확인합니다.
+     * Apps Script 명령 큐는 Firebase wakeup 신호의 보조 복구용으로만 30초마다 확인합니다.
      * 이 폴링은 Apps Script 요청이며 Firebase Realtime Database 다운로드량과는 별개입니다. */
     pollServerCommands();
-    if(!serverCommandTimer)serverCommandTimer=setInterval(pollServerCommands,60000);
+    if(!serverCommandTimer)serverCommandTimer=setInterval(pollServerCommands,30000);
   }
 
   async function ensureDefaultRoom(){

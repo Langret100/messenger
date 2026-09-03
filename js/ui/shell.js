@@ -22,7 +22,7 @@ MiniTalk.UI.Shell=(()=>{
     let host=existing;if(!host){host=doc.createElement("div");host.id="realtimeWaitHost";host.className="realtime-wait-host";host.innerHTML='<section class="realtime-wait-card" role="status" aria-live="polite"><div class="realtime-wait-spinner" aria-hidden="true"></div><strong class="realtime-wait-title"></strong><p class="realtime-wait-copy"></p></section>';doc.body.append(host)}
     const title=host.querySelector(".realtime-wait-title"),copy=host.querySelector(".realtime-wait-copy");
     if(info.state==="offline"){if(title)title.textContent="인터넷 연결을 기다리는 중입니다.";if(copy)copy.textContent="연결이 복구되면 자동으로 계속합니다."}
-    else{if(title)title.textContent="현재 접속 인원이 많아 대기 중입니다.";if(copy){copy.replaceChildren(D().el("span",{text:"잠시 후 자동으로 다시 연결합니다."}),D().el("span",{class:"realtime-wait-note",text:"연결이 지연되는 경우에도 자동으로 다시 시도합니다."}))}}
+    else{if(title)title.textContent="실시간 서버에 다시 연결 중입니다.";if(copy){copy.replaceChildren(D().el("span",{text:"연결이 복구되면 자동으로 계속합니다."}),D().el("span",{class:"realtime-wait-note",text:"인터넷은 연결되어 있어도 Firebase 재연결에 잠시 시간이 걸릴 수 있습니다."}))}}
   }
 
   function syncImmersiveButton(){const button=D().one(".immersive-button"),full=MiniTalk.MobileImmersive?.isFullscreen?.()===true;if(!button)return;button.textContent=full?"↙":"⛶";button.setAttribute("aria-label",full?"전체 화면 종료":"전체 화면")}
@@ -35,13 +35,12 @@ MiniTalk.UI.Shell=(()=>{
   async function showApp(){document.getElementById("launchView")?.classList.add("hidden");D().byId("appShell")?.classList.remove("hidden");document.documentElement.classList.add("app-visible");if(!started){started=true;MiniTalk.Features.Auth.render(D().byId("authHost"))}const user=MiniTalk.Store.get("user");if(user)await enterWorkspace(user);MiniTalk.MobileImmersive?.afterAppShown?.()}
   function startWorkspaceBackground(user){
     if(activeUserId!==user.user_id)return;
-    // Apps Script 웹앱으로 초기 요청을 한 프레임에 몰아 보내지 않습니다.
-    // 코인은 가장 먼저 시작하고, 나머지는 짧게 분산해 cold-start/동시실행 경합을 줄입니다.
-    const alive=()=>activeUserId===user.user_id;
+    // 첫 화면을 막지 않되 기능 자체를 임의의 초 단위 타이머로 늦추지 않습니다.
+    // 쇼핑 start()는 로컬 캐시만 준비하고 실제 서버 보관함은 쇼핑 진입/실시간 신호 때 조회합니다.
     if(!user.isGuest)MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(error=>console.warn("코인 계정 동기화 실패",error));
-    setTimeout(()=>{if(alive())MiniTalk.UserDirectory?.refresh?.().catch(error=>console.warn("가입자 명단을 불러오지 못했습니다.",error))},700);
-    setTimeout(()=>{if(alive())MiniTalk.Tasks.TaskService?.start?.(user)},1400);
-    setTimeout(()=>{if(alive())MiniTalk.Shopping.StoreService?.start?.(user)},2200);
+    MiniTalk.UserDirectory?.refresh?.().catch(error=>console.warn("가입자 명단을 불러오지 못했습니다.",error));
+    MiniTalk.Tasks.TaskService?.start?.(user);
+    MiniTalk.Shopping.StoreService?.start?.(user);
   }
   async function enterWorkspace(user){
     if(entering||activeUserId===user.user_id)return;

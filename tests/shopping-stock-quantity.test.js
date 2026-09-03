@@ -9,7 +9,7 @@ const normalize=p=>{const q=p?.quantity;const has=q!==null&&q!==undefined&&Strin
 const ctx={
  console, Math:Object.create(Math), SHOP_RANDOM_PURCHASE_PRICE:3,
  requireRegisteredShopUser_:id=>String(id||''),requireKnownMoaruUser_:id=>String(id||''),requireKnownMoaruUserCached_:id=>String(id||''),shopJson_:x=>x,
- LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},CacheService:{getScriptCache:()=>({remove:()=>{}})},
+ LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},CacheService:{getScriptCache:()=>({remove:()=>{},get:()=>null,put:()=>{}})},clearShopCatalogCaches_:()=>{},
  SHEET_ID:'sheet',REWARD_SHEET:'보상',SpreadsheetApp:{openById:()=>({getSheetByName:()=>({})})},getOrCreateShopInventorySheet_:()=>({}),
  getOrCreateShopPurchaseLogSheet_:()=>({appendRow:r=>{if(state.failLog)throw new Error('LOG_FAIL');state.logs.push({purchaseKey:r[0],userId:r[1],productId:r[2],productName:r[3],price:r[4],beforeCoin:r[5],newCoin:r[6]})}}),
  findShopPurchase_:(_,key)=>state.logs.find(x=>x.purchaseKey===key)||null,

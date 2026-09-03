@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..');
 const src=fs.readFileSync(path.join(root,'docs/apps-script/coin-shopping-extension.gs'),'utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 ok(src.includes('function requireRegisteredShopUser_(userId, registeredUsers)'),'registered shop user guard was removed');
-ok(src.includes('return id && moaruSpreadsheetRetry_(function () { return findRewardUserForShop_(id); }) ? id : "";'),'shop user guard no longer requires a reward/coin account');
+ok(src.includes('findRewardUserForShop_(id)')&&src.includes('MOARU_SHOP_ELIGIBLE_USER_CACHE_PREFIX'),'shop reward-account eligibility/cache missing');
 ok(src.includes('userId = requireRegisteredShopUser_(p.user_id, registeredUsers), targetId = requireRegisteredShopUser_(p.target_user_id, registeredUsers)'),'gift sender/recipient reward-account eligibility changed');
 ok(src.includes('userId = requireRegisteredShopUser_(p.user_id, users), inventoryId'),'delivery reward-account eligibility changed');
 ok(src.includes('const userId = requireRegisteredShopUser_(((e && e.parameter) || {}).user_id);'),'inventory reward-account eligibility changed');

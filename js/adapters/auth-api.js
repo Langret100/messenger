@@ -43,36 +43,49 @@ MiniTalk.AuthApi = (() => {
   async function post(payload, timeoutMs = 20000) {
     const body = new URLSearchParams();
     Object.entries(payload).forEach(([key, value]) => body.set(key, String(value ?? "")));
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs || 20000)));
-    let response;
-    try {
-      response = await fetch(MiniTalkConfig.sheetUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-        body,
-        signal: controller.signal
-      });
-    } catch (error) {
-      if (error?.name === "AbortError") {
-        const timeoutError = new Error("서버 응답이 지연되고 있습니다. 잠시 후 다시 시도하세요.");
-        timeoutError.code = "REQUEST_TIMEOUT";
-        throw timeoutError;
+    const retryableStatus = status => [404, 429, 500, 502, 503, 504].includes(Number(status));
+    let lastNetworkError = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs || 20000)));
+      let response;
+      try {
+        response = await fetch(MiniTalkConfig.sheetUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          body,
+          signal: controller.signal
+        });
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          const timeoutError = new Error("서버 응답이 지연되고 있습니다. 잠시 후 다시 시도하세요.");
+          timeoutError.code = "REQUEST_TIMEOUT";
+          throw timeoutError;
+        }
+        lastNetworkError = error;
+        if (attempt === 0) { await new Promise(resolve => setTimeout(resolve, 350));continue; }
+        throw error;
+      } finally {
+        clearTimeout(timer);
       }
-      throw error;
-    } finally {
-      clearTimeout(timer);
+      // Apps Script 새 배포 직후/프록시 재연결 때 드물게 발생하는 일시 HTTP 오류는 한 번만 재시도합니다.
+      // POST 본문에는 구매/선물/관리자 변경용 request key가 있어 동일 요청 중복은 서버에서 막습니다.
+      if (!response.ok && retryableStatus(response.status) && attempt === 0) {
+        await new Promise(resolve => setTimeout(resolve, 350));
+        continue;
+      }
+      if (!response.ok) throw new Error(`서버 오류 ${response.status}`);
+      let data;
+      try { data = await response.json(); }
+      catch (error) { throw new Error("서버 응답을 읽지 못했습니다. 잠시 후 다시 시도해주세요."); }
+      if (!data?.ok) {
+        const error = new Error(data?.message || errorMessages[data?.error] || data?.error || "요청 실패");
+        error.code = data?.error || "REQUEST_FAILED";
+        error.data = data;
+        throw error;
+      }
+      return data;
     }
-    if (!response.ok) throw new Error(`서버 오류 ${response.status}`);
-    let data;
-    try { data = await response.json(); }
-    catch (error) { throw new Error("서버 응답을 읽지 못했습니다. 잠시 후 다시 시도해주세요."); }
-    if (!data?.ok) {
-      const error = new Error(data?.message || errorMessages[data?.error] || data?.error || "요청 실패");
-      error.code = data?.error || "REQUEST_FAILED";
-      error.data = data;
-      throw error;
-    }
-    return data;
+    throw lastNetworkError || new Error("서버에 연결하지 못했습니다.");
   }
 
   return {

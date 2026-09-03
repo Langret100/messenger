@@ -9,6 +9,8 @@ MiniTalk.Shopping.StoreService = (() => {
   const pendingPurchaseKeys = new Map();
   const pendingGiftKeys = new Map();
   const pendingDeliveryKeys = new Map();
+  const activeGiftItems = new Set();
+  const activeDeliveryItems = new Set();
 
   function user() { return MiniTalk.Store.get("user") || {}; }
   function requireLogin() { const current=user();if(!current.user_id||current.isGuest)throw new Error("로그인 후 이용할 수 있어요.");return current; }
@@ -41,6 +43,14 @@ MiniTalk.Shopping.StoreService = (() => {
     const catalog=objectValue(MiniTalk.Store.get("shopCatalog")),server={};
     rows.map(normalizeInventory).filter(item=>item.id).forEach(item=>{server[item.id]={...item,imageUrl:item.imageUrl||catalog[item.productId]?.imageUrl||""}});
     const local=objectValue(MiniTalk.Store.get("shopInventory")),serverPurchaseKeys=new Set(Object.values(server).map(item=>String(item?.purchaseKey||"")).filter(Boolean)),pending=Object.fromEntries(Object.entries(local).filter(([,item])=>item?.pendingSync&&!serverPurchaseKeys.has(String(item.purchaseKey||""))));
+    // 진행 중 배송/선물보다 먼저 시작된 보관함 조회가 늦게 돌아와도 옛 상태로 UI를 되돌리지 않습니다.
+    // 배송은 로컬 requested 상태를 우선하고, 선물은 서버 확정 전까지 옛 소유 항목의 재등장을 막습니다.
+    Object.entries(local).forEach(([id,item])=>{
+      const opKey=`${current.user_id}:${id}`;
+      if(activeDeliveryItems.has(opKey)&&item?.deliveryPending)server[id]=item;
+    });
+    const giftPrefix=`${current.user_id}:`;
+    activeGiftItems.forEach(opKey=>{if(opKey.startsWith(giftPrefix)){const id=opKey.slice(giftPrefix.length);if(id)delete server[id]}});
     // Apps Script에 같은 purchaseKey가 확인된 상품은 예전 Realtime 로컬 mirror에서 제거합니다.
     // 서버에 없는 구형 local-only 상품은 건드리지 않아 마이그레이션 전 보유품을 잃지 않습니다.
     MiniTalk.Realtime.pruneShopInventoryMirror?.(current.user_id,[...serverPurchaseKeys]);
@@ -68,7 +78,8 @@ MiniTalk.Shopping.StoreService = (() => {
     const nextUserId=!current.user_id||current.isGuest?"":String(current.user_id);
     if(activeUserId!==nextUserId){inventoryVersion++;inventoryPromise=null;activeUserId=nextUserId;const cached=activeUserId?objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{})):{};MiniTalk.Store.set("shopInventory",cached)}
     if(!activeUserId)return;
-    refreshInventory(true).catch(error=>console.warn("보관함을 불러오지 못했습니다.",error));
+    // 로그인 직후에는 저장된 보관함 캐시만 즉시 사용합니다.
+    // 실제 서버 보관함은 쇼핑 탭 진입 또는 SHOP_* 실시간 신호에서 갱신해 로그인 요청 경합을 만들지 않습니다.
   }
   async function enter(){
     shopActive=true;const current=user();hydrateCatalogCache();
@@ -170,7 +181,9 @@ MiniTalk.Shopping.StoreService = (() => {
     if(item.deliveryStatus==="requested"||item.deliveryStatus==="shipping")throw new Error("이미 배송이 진행 중입니다.");
     const pendingKey=`${current.user_id}:${id}`,requestId=pendingDeliveryKeys.get(pendingKey)||crypto.randomUUID(),previous={...item};
     pendingDeliveryKeys.set(pendingKey,requestId);
+    activeDeliveryItems.add(pendingKey);
     // 클릭 직후 보관함 카드부터 요청 상태로 바꿔 서버 왕복 시간을 UI 반응시간으로 느끼지 않게 합니다. 실패하면 원래 상태로 되돌립니다.
+    // activeDeliveryItems가 진행 중인 동안 늦게 도착한 옛 inventory 응답은 이 상태를 덮어쓸 수 없습니다.
     putLocalInventory(current,{...item,deliveryStatus:"requested",deliveryRequestedAt:Date.now(),deliveryPending:true});
     try {
       const result=await MiniTalk.AuthApi.shopRequestDelivery({userId:current.user_id,inventoryId:id,item,requestId});
@@ -182,6 +195,7 @@ MiniTalk.Shopping.StoreService = (() => {
       putLocalInventory(current,previous);
       throw error;
     } finally {
+      activeDeliveryItems.delete(pendingKey);
       pendingDeliveryKeys.delete(pendingKey);
     }
   }
@@ -189,17 +203,21 @@ MiniTalk.Shopping.StoreService = (() => {
     const current=requireLogin(),item=inventory().find(row=>row.id===id);
     if(!item||item.usedAt||item.deliveryStatus==="completed"||item.deliveryStatus==="requested"||item.deliveryStatus==="shipping")throw new Error("선물할 수 없는 상품입니다.");
     const target=recipients().find(row=>row.user_id===targetId);if(!target)throw new Error("선물할 사용자를 찾을 수 없습니다.");
-    const pendingKey=`${current.user_id}:${id}:${target.user_id}`,requestId=pendingGiftKeys.get(pendingKey)||crypto.randomUUID(),previous={...item};pendingGiftKeys.set(pendingKey,requestId);
+    const pendingKey=`${current.user_id}:${id}:${target.user_id}`,itemOpKey=`${current.user_id}:${id}`,requestId=pendingGiftKeys.get(pendingKey)||crypto.randomUUID(),previous={...item};pendingGiftKeys.set(pendingKey,requestId);
+    activeGiftItems.add(itemOpKey);
     // 선물 버튼을 누른 즉시 보관함에서 감춰 체감 지연을 없애고, 서버 실패 시 그대로 복구합니다.
+    // 진행 중에는 먼저 시작된 보관함 조회가 늦게 끝나도 이 상품을 다시 되살리지 않습니다.
     removeLocalInventory(current,id);
     try {
       await MiniTalk.AuthApi.shopGift({userId:current.user_id,nickname:current.nickname,targetId:target.user_id,inventoryId:id,item,requestId});
+      pendingGiftKeys.delete(pendingKey);
     } catch(error) {
       putLocalInventory(current,previous);
       // 실패 재시도는 같은 requestId를 재사용해야 서버의 중복 선물 방지 영수증과 정합성이 맞습니다.
       throw error;
+    } finally {
+      activeGiftItems.delete(itemOpKey);
     }
-    pendingGiftKeys.delete(pendingKey);
     if(!isActiveUser(current))return{targetId:target.user_id,targetNickname:target.nickname};
     MiniTalk.Realtime.notifyCommandTargets?.([target.user_id]);
     syncInventoryLater([async()=>{if(!isActiveUser(current))return;await MiniTalk.Realtime.removeShopInventory?.(id,current.user_id);if(isActiveUser(current))await refreshInventory(true)}]);

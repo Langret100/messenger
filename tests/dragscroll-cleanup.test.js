@@ -67,5 +67,5 @@ assert(tools.includes('MiniTalk.UI.DragScroll?.unbind?.(activeDragList)'),'tools
 assert((tools.match(/MiniTalk\.UI\.DragScroll\?\.unbind\?\.\(activeDragList\)/g)||[]).length>=2,'tools must cleanup on rerender and leave');
 assert(index.includes('js/ui/drag-scroll.js?v=11'),'drag-scroll cache-bust stale');
 assert(index.includes('js/features/tools.js?v=64.5.17'),'tools cache-bust stale');
-assert(sw.includes('moaru-moa-dialogue-fusion-final'),'service worker cache stale');
+assert(sw.includes('moaru-runtime-bundle-2'),'service worker cache stale');
 console.log('V102_DRAGSCROLL_CLEANUP_RUNTIME_OK');

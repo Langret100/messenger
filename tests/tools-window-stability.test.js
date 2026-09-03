@@ -7,7 +7,7 @@ const sw=fs.readFileSync('sw.js','utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 
 ok(html.includes('css/features/tools.css?v=23'),'tools css cache ref missing');
-ok(sw.includes('moaru-moa-dialogue-fusion-final'),'service-worker cache missing');
+ok(sw.includes('moaru-runtime-bundle-2'),'service-worker cache missing');
 ok(tools.includes('class: "card-list tools-screen"'),'tools scroll surface missing');
 ok(tools.includes('class: "tool-shortcuts section-card"'),'tools more section missing');
 ok(tools.includes('allowInteractive:".profile-summary,.modern-tool,.shortcut-row"'),'tools interactive drag allowance missing');

@@ -19,10 +19,10 @@ ok(engine.includes('if(Array.isArray(value)){legacy=value;break}'),'empty newest
 ok(/for\(const v of \[91,90,89,88,87\]\)premove\(`moa\.v\$\{v\}\.patterns\.\$\{key\}`\)/.test(engine),'fallback cache write does not clear stale older corpus versions');
 console.log('MOA_EMPTY_CORPUS_STALE_RESURRECTION_GUARD_OK');
 
-// MOA admin learning gets a longer timeout without globally slowing every other feature request.
+// MOA admin learning keeps its dedicated long-running timeout while interactive admin/shop calls use their own 7-second budget.
 ok(auth.includes('async function post(payload, timeoutMs = 20000)'),'per-request timeout support missing');
 ok(/moa_admin_learn_chats[\s\S]{0,260}\}, 45000\)/.test(auth),'MOA admin learning dedicated timeout missing');
-ok(auth.includes('const data = await post({ mode: "admin_task_list", user_id: userId, admin_token: adminToken });'),'other admin features no longer use default post path');
+ok(auth.includes('const data = await post({ mode: "admin_task_list", user_id: userId, admin_token: adminToken }, 7000);'),'interactive admin task list is not capped to 7 seconds');
 console.log('MOA_V4_TIMEOUT_ISOLATION_OK');
 
 // Learned-human replies pass the same anti-repetition/intrusive-question quality gate as built-ins.

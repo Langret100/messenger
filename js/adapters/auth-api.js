@@ -40,14 +40,14 @@ MiniTalk.AuthApi = (() => {
     NO_TASKS_SELECTED: "과제를 선택하세요.",
     TASK_DELETE_CONFLICT: "보상 처리 중인 과제는 삭제할 수 없습니다. 잠시 후 다시 확인해주세요."
   };
-  async function post(payload, timeoutMs = 7000) {
+  async function post(payload, timeoutMs = 20000) {
     const body = new URLSearchParams();
     Object.entries(payload).forEach(([key, value]) => body.set(key, String(value ?? "")));
     const retryableStatus = status => [404, 429, 500, 502, 503, 504].includes(Number(status));
-    // 처음 클릭부터 재시도까지 합쳐 화면 대기시간은 최대 7초입니다.
-    const totalBudgetMs = Math.min(7000, Math.max(1000, Number(timeoutMs || 7000))), deadline = Date.now() + totalBudgetMs;
+    // 호출별 timeout 예산 안에서 재시도까지 모두 끝냅니다. 관리자/쇼핑 UI는 각 호출에서 7000ms를 명시합니다.
+    const totalBudgetMs = Math.min(60000, Math.max(1000, Number(timeoutMs || 20000))), deadline = Date.now() + totalBudgetMs;
     const maxAttempts = 2;
-    const timeoutFailure = () => { const error = new Error("서버 응답이 7초를 넘겨 요청을 종료했습니다. 잠시 후 상태를 다시 확인해주세요.");error.code = "REQUEST_TIMEOUT";return error; };
+    const timeoutFailure = () => { const seconds = Math.max(1, Math.round(totalBudgetMs / 1000)); const error = new Error(`서버 응답이 ${seconds}초를 넘겨 요청을 종료했습니다. 잠시 후 상태를 다시 확인해주세요.`);error.code = "REQUEST_TIMEOUT";return error; };
     let lastNetworkError = null;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const remaining = deadline - Date.now();
@@ -154,17 +154,17 @@ MiniTalk.AuthApi = (() => {
         expected_description: product?.description || "",
         expected_updated_at: product?.updatedAt || 0,
         purchase_key: purchaseKey
-      });
+      }, 7000);
     },
     async shopInventory(userId) {
-      const data = await post({ mode: "shop_inventory", user_id: userId });
+      const data = await post({ mode: "shop_inventory", user_id: userId }, 7000);
       return Array.isArray(data.items) ? data.items : [];
     },
     async shopGift({ userId, nickname, targetId, inventoryId, item, requestId }) {
       return post({ mode: "shop_gift", user_id: userId, nickname, target_user_id: targetId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 7000);
     },
     async shopUse({ userId, inventoryId, item }) {
-      return post({ mode: "shop_use", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) });
+      return post({ mode: "shop_use", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) }, 7000);
     },
     async shopRequestDelivery({ userId, inventoryId, item, requestId }) {
       return post({ mode: "shop_request_delivery", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 7000);
@@ -234,7 +234,7 @@ MiniTalk.AuthApi = (() => {
       return post({ mode: "moa_admin_learning_status", user_id: userId, admin_token: adminToken });
     },
     async adminMoaLearnChats({ userId, adminToken, reset = false, batchLimit = 260, cleanup = false }) {
-      return post({ mode: "moa_admin_learn_chats", user_id: userId, admin_token: adminToken, reset: reset ? "1" : "", cleanup: cleanup ? "1" : "", batch_limit: batchLimit }, 7000);
+      return post({ mode: "moa_admin_learn_chats", user_id: userId, admin_token: adminToken, reset: reset ? "1" : "", cleanup: cleanup ? "1" : "", batch_limit: batchLimit }, 45000);
     },
     async userTaskList(userId) {
       const data = await post({ mode: "user_task_list", user_id: userId });

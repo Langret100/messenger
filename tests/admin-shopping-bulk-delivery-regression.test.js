@@ -1,8 +1,11 @@
 const fs=require('fs'),path=require('path');
 const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
 const auth=read('js/adapters/auth-api.js'),shop=read('js/features/shopping.js'),store=read('js/shopping/store-service.js'),server=read('docs/apps-script/coin-shopping-extension.gs'),route=read('docs/apps-script/Code.gs'),html=read('index.html');
-ok(auth.includes('totalBudgetMs = Math.min(7000')&&auth.includes('deadline = Date.now() + totalBudgetMs'),'interactive server wait is not capped to 7 seconds total');
-ok(!auth.includes('45000')&&!auth.includes('35000'),'long interactive timeout remains');
+ok(auth.includes('async function post(payload, timeoutMs = 20000)')&&auth.includes('deadline = Date.now() + totalBudgetMs'),'per-request total timeout budget support missing');
+ok(/shop_request_delivery_bulk[\s\S]{0,220}\}, 7000\)/.test(auth),'customer bulk delivery is not capped to 7 seconds');
+ok(/shop_delivery_complete_bulk[\s\S]{0,220}\}, 7000\)/.test(auth),'admin bulk completion is not capped to 7 seconds');
+ok(/admin_task_list[\s\S]{0,180}\}, 7000\)/.test(auth),'interactive admin requests are not capped to 7 seconds');
+ok(!auth.includes('35000'),'obsolete 35-second interactive timeout remains');
 ok(auth.includes('shopRequestDeliveryBulk')&&store.includes('requestDeliveryBulk')&&shop.includes('묶음배송'),'bulk delivery client flow missing');
 ok(route.includes('case "shop_request_delivery_bulk"')&&server.includes('function handleShopRequestDeliveryBulk(e)'),'bulk delivery server route missing');
 ok(server.includes('slice(0, 20)')&&server.includes('부분 묶음배송')&&server.includes('Spreadsheet 쓰기도 1회'),'customer bulk delivery is not bounded/atomic/single-write');

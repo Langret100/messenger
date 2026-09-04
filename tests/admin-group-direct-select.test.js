@@ -1,0 +1,13 @@
+const fs=require('fs');
+const admin=fs.readFileSync('js/features/admin.js','utf8');
+const html=fs.readFileSync('index.html','utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(admin.includes('text:"선택"'), 'group select button missing');
+ok(admin.includes('Shell.modal(`${group.name} 대상 선택`,wrap)'), 'group member picker modal missing');
+ok(admin.includes('text:"지정"'), 'group assign button missing');
+ok(admin.includes('group.members=[...current];persist();selected.clear();group.members.forEach(id=>selected.add(String(id)));drawTargets();updateCount();draw()'), 'group assign should save and immediately select targets');
+ok(!admin.includes('text:"구성원 편집"'), 'old member edit button remains');
+ok(!admin.includes('text:"현재 대상 저장"'), 'old current target save button remains');
+ok(!admin.includes('text:"대상에 불러오기"'), 'old load target button remains');
+ok(html.includes('js/features/admin.js?v=64.5.48'), 'admin cache ref not updated');
+console.log('ADMIN_GROUP_DIRECT_SELECT_OK');

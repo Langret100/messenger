@@ -257,22 +257,21 @@
 .admin-delivery-user-items{display:grid;gap:0}.admin-delivery-user-items .admin-delivery-row{border:0;border-radius:0;border-bottom:1px solid #edf0f5}.admin-delivery-user-items .admin-delivery-row:last-child{border-bottom:0}
 .admin-delivery-list{display:grid;gap:10px}
 
-/* 보관함 상품 행: 쇼핑 상품 목록처럼 정보와 액션을 한 줄에 모아 불필요한 세로 여백을 없앱니다. */
-.shop-inventory-list{gap:6px;padding:8px}
-.shop-inventory-item{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;min-height:0;padding:8px 10px;border-radius:14px}
-.shop-inventory-item:has(.shop-inventory-image){grid-template-columns:52px minmax(0,1fr) auto}
-.shop-inventory-image{width:52px;height:52px;border-radius:10px;object-fit:cover}
-.shop-inventory-copy{align-self:center;gap:2px}
-.shop-inventory-copy strong{font-size:12px;line-height:1.35}
-.shop-inventory-copy small{font-size:10px;line-height:1.35}
-.shop-inventory-actions{align-items:center;justify-content:flex-end;gap:5px;flex-wrap:nowrap}
-.shop-inventory-actions .button,.shop-inventory-actions .mini-action{min-height:34px;padding:6px 10px;white-space:nowrap}
-.shop-inventory-item.bulk-selectable{padding-left:42px}
-.shop-bulk-check{left:10px}
-@media(max-width:560px){
-  .shop-inventory-item{grid-template-columns:minmax(0,1fr) auto}
-  .shop-inventory-item:has(.shop-inventory-image){grid-template-columns:48px minmax(0,1fr) auto}
-  .shop-inventory-image{width:48px;height:48px}
-  .shop-inventory-actions{justify-content:flex-end}
-  .shop-inventory-actions .button,.shop-inventory-actions .mini-action{min-height:32px;padding:5px 9px}
+/* 보관함 상품 카드: 쇼핑탭 상품 카드와 같은 카드형 그리드를 그대로 사용합니다.
+   보관함에는 가격/재고/설명 대신 기존 선물/배송 액션만 노출합니다. */
+.shop-inventory-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px 10px 10px}
+.shop-inventory-item,.shop-inventory-item:has(.shop-inventory-image){min-width:0;min-height:0;display:grid;grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr) auto;align-items:stretch;gap:7px;padding:9px;border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:0 5px 18px rgba(14,34,68,.055)}
+.shop-inventory-image{grid-row:auto;width:100%;height:auto;aspect-ratio:4/3;border-radius:12px;object-fit:cover;background:var(--surface-3)}
+.shop-inventory-copy{min-width:0;display:grid;align-content:start;gap:3px;padding:0}
+.shop-inventory-copy strong{display:-webkit-box;overflow:hidden;font-size:12px;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.shop-inventory-copy small{display:none}
+.shop-inventory-actions{display:flex;align-items:center;justify-content:stretch;gap:6px;flex-wrap:nowrap}
+.shop-inventory-actions .button,.shop-inventory-actions .mini-action{flex:1 1 0;min-width:0;min-height:34px;padding:5px 7px;font-size:11px;white-space:nowrap}
+.shop-inventory-item.bulk-selectable{padding:9px}
+.shop-inventory-item.bulk-selectable .shop-bulk-check{left:14px;top:14px;transform:none;z-index:3;padding:4px 6px;border-radius:999px;background:color-mix(in srgb,var(--surface) 90%,transparent);box-shadow:0 2px 8px rgba(18,38,72,.12);backdrop-filter:blur(4px)}
+@media(max-width:320px){
+  .shop-inventory-list{grid-template-columns:1fr}
+  .shop-inventory-item,.shop-inventory-item:has(.shop-inventory-image){grid-template-columns:72px minmax(0,1fr);grid-template-rows:1fr auto;gap:7px 9px}
+  .shop-inventory-image{grid-row:1 / -1;width:72px;height:72px;aspect-ratio:auto}
+  .shop-inventory-actions{grid-column:2}
 }

@@ -47,7 +47,7 @@
 .shop-inventory-fab b { flex: 0 0 18px; width: 18px; min-width: 18px; height: 18px; display: grid; place-items: center; margin: 0; padding: 0; border-radius: 50%; background: var(--accent); color: white; font-size: 9px; font-variant-numeric: tabular-nums; line-height: 1; }
 .shop-inventory-fab.active b { background: white; color: var(--accent); }
 
-.shop-inventory-panel { position: absolute; z-index: 7; right: 11px; bottom: 54px; width: min(370px, calc(100% - 22px)); max-height: calc(100% - 68px); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line)); border-radius: 18px; background: color-mix(in srgb, var(--surface) 98%, transparent); box-shadow: 0 14px 38px rgba(18, 38, 72, .2); backdrop-filter: blur(18px); animation: shop-drawer-in .2s var(--ease); }
+.shop-inventory-panel { position: absolute; z-index: 7; right: 11px; bottom: 54px; width: min(370px, calc(100% - 22px)); max-height: calc(100% - 68px); display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line)); border-radius: 18px; background: color-mix(in srgb, var(--surface) 98%, transparent); box-shadow: 0 14px 38px rgba(18, 38, 72, .2); backdrop-filter: blur(18px); animation: shop-drawer-in .2s var(--ease); }
 .shop-inventory-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 13px 11px 15px; border-bottom: 1px solid var(--line); }
 .shop-inventory-panel > header > div { display: grid; gap: 3px; }
 .shop-inventory-panel > header strong { font-size: 14px; }
@@ -244,8 +244,9 @@
 
 
 /* 묶음배송 선택 UI + 관리자 요청자별 배송 묶음 */
-.shop-bulk-delivery{display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line,#e7eaf0);background:rgba(247,249,253,.96)}
-.shop-bulk-delivery .button{flex:1;min-width:0;white-space:nowrap}
+.shop-bulk-delivery{display:flex;gap:8px;align-items:center;min-width:0;padding:8px 10px;border-bottom:1px solid var(--line,#e7eaf0);background:color-mix(in srgb,var(--surface) 96%,#f7f9fd 4%);position:relative;z-index:2}
+.shop-bulk-delivery.active{background:color-mix(in srgb,var(--accent-soft) 34%,var(--surface) 66%)}
+.shop-bulk-delivery .button{flex:1 1 0;min-width:0;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .shop-inventory-item.bulk-selectable{position:relative;padding-left:76px}
 .shop-bulk-check{position:absolute;left:10px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:5px;font-size:12px;font-weight:800;cursor:pointer}
 .shop-bulk-check input{width:17px;height:17px;accent-color:#356dff}

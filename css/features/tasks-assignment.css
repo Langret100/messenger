@@ -43,7 +43,7 @@
 .admin-group-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
 .admin-group-actions .compact-button{white-space:nowrap;min-width:max-content}
 .admin-group-command:disabled{opacity:.45;cursor:not-allowed}
-.admin-group-command-modal{display:grid;gap:12px;min-width:min(520px,86vw)}
+.admin-group-command-dialog{width:min(560px,calc(100vw - 28px))}.admin-group-command-modal{display:grid;gap:12px;width:100%;min-width:0}.admin-group-command-modal>.field,.admin-group-command-modal>.field>input,.admin-group-command-modal>.field>textarea,.admin-group-command-modal>.field>select{min-width:0}.admin-group-command-modal .button-row{min-width:0}
 .admin-group-command-summary{display:grid;gap:3px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
 .admin-group-command-summary strong{font-size:14px}.admin-group-command-summary small{line-height:1.4}
-@media (max-width:760px){.admin-group-actions{justify-content:flex-start}.admin-group-row{align-items:flex-start}.admin-group-command-modal{min-width:0}}
+@media (max-width:760px){.admin-group-actions{justify-content:flex-start}.admin-group-row{align-items:flex-start}.admin-group-command-dialog{width:100%}.admin-group-command-modal{width:100%;min-width:0}}

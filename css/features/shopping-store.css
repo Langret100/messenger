@@ -256,3 +256,23 @@
 .admin-delivery-user-head strong{font-size:13px}.admin-delivery-user-head span{font-size:11px;font-weight:800;color:#62718b;background:#fff;border:1px solid #dce2ec;border-radius:999px;padding:2px 7px}
 .admin-delivery-user-items{display:grid;gap:0}.admin-delivery-user-items .admin-delivery-row{border:0;border-radius:0;border-bottom:1px solid #edf0f5}.admin-delivery-user-items .admin-delivery-row:last-child{border-bottom:0}
 .admin-delivery-list{display:grid;gap:10px}
+
+/* 보관함 상품 행: 쇼핑 상품 목록처럼 정보와 액션을 한 줄에 모아 불필요한 세로 여백을 없앱니다. */
+.shop-inventory-list{gap:6px;padding:8px}
+.shop-inventory-item{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;min-height:0;padding:8px 10px;border-radius:14px}
+.shop-inventory-item:has(.shop-inventory-image){grid-template-columns:52px minmax(0,1fr) auto}
+.shop-inventory-image{width:52px;height:52px;border-radius:10px;object-fit:cover}
+.shop-inventory-copy{align-self:center;gap:2px}
+.shop-inventory-copy strong{font-size:12px;line-height:1.35}
+.shop-inventory-copy small{font-size:10px;line-height:1.35}
+.shop-inventory-actions{align-items:center;justify-content:flex-end;gap:5px;flex-wrap:nowrap}
+.shop-inventory-actions .button,.shop-inventory-actions .mini-action{min-height:34px;padding:6px 10px;white-space:nowrap}
+.shop-inventory-item.bulk-selectable{padding-left:42px}
+.shop-bulk-check{left:10px}
+@media(max-width:560px){
+  .shop-inventory-item{grid-template-columns:minmax(0,1fr) auto}
+  .shop-inventory-item:has(.shop-inventory-image){grid-template-columns:48px minmax(0,1fr) auto}
+  .shop-inventory-image{width:48px;height:48px}
+  .shop-inventory-actions{justify-content:flex-end}
+  .shop-inventory-actions .button,.shop-inventory-actions .mini-action{min-height:32px;padding:5px 9px}
+}

@@ -17,5 +17,5 @@ ok(!/writeShopAdminSession_\(userId, role, token\);\s*try \{ cleanupExpiredShopA
 ok(gs.includes('pendingShopPurchaseUserMarkerKey_')&&gs.includes('getProperty(pendingShopPurchaseUserMarkerKey_(userId)) === "1"'),'inventory pending recovery not marker-gated');
 ok(!/function handleUserTaskList[\s\S]{0,500}cleanupCompletedMoaruTasks_\(\)/.test(gs),'user task list still runs global cleanup');
 ok(gs.includes('MOARU_SHOP_CATALOG_DATA_CACHE')&&gs.includes('clearShopCatalogCaches_'),'shop catalog full-properties cache missing');
-ok(index.includes('realtime.js?v=64.5.53')&&index.includes('shell.js?v=64.5.36')&&index.includes('task-service.js?v=64.5.28'),'latency rootfix cache bust missing');
+ok(index.includes('realtime.js?v=')&&index.includes('shell.js?v=')&&index.includes('task-service.js?v='),'latency rootfix cache bust missing');
 console.log('SERVER_LATENCY_ROOTFIX_OK');

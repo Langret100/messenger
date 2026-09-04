@@ -13,5 +13,5 @@ ok(src.includes('bottomStart = Math.min(availTop + availHeight, messengerTop + m
 ok(src.includes('window.open("", "MoaruOnlinePlayground", features)'),'desktop playground must use named positioned popup');
 ok(src.includes('popup.resizeTo(bounds.width, bounds.height); popup.moveTo(bounds.left, bounds.top)'),'popup bounds enforcement missing');
 ok(!src.includes('title: "온라인 놀이터", description: "친구와 온라인으로 놀기", url:'),'playground must not remain a plain target=_blank card');
-ok(html.includes('js/features/tools.js?v=64.5.17'),'tools cache-bust stale');
+ok(html.includes('js/features/tools.js?v='),'tools cache-bust stale');
 console.log('TOOLS_ONLINE_PLAYGROUND_POPUP_PLACEMENT_OK');

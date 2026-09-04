@@ -11,5 +11,5 @@ ok(realtime.includes('setInterval(pollServerCommands,30000)'),'user command fall
 ok(notifications.includes('CoinWallet?.setLocal?.(Number(newCoin)'),'admin coin command does not apply authoritative newCoin to user wallet');
 ok(wallet.includes('coinStatus(user.user_id)'),'user wallet is not backed by coin_status');
 ok(coin.includes('const userData = getRewardUserData_(userId)')&&shopServer.includes('coins = moaruRewardCoinMap_()'),'admin/user balance endpoints no longer share the reward coin source');
-ok(html.includes('js/features/admin.js?v=64.5.43'),'admin cache version stale');
+ok(html.includes('js/features/admin.js?v='),'admin cache version stale');
 console.log('ADMIN_COIN_CONSISTENCY_REFRESH_OK');

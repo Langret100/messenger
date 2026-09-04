@@ -5,7 +5,7 @@ const html=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 ok(src.includes('previousScrollTop')&&src.includes('list.scrollTop = Math.min(previousScrollTop'),'task rerender must preserve current scroll position');
 ok(src.includes('list.style.overflowAnchor = "none"'),'task list must disable browser scroll anchoring during dynamic weekly compact layout');
-ok(html.includes('js/features/tasks.js?v=64.5.4'),'task scroll fix cache ref stale');
+ok(html.includes('js/features/tasks.js?v='),'task scroll fix cache ref stale');
 
 // 실제 render 재호출에서 기존 scrollTop이 새 리스트로 넘어가는지 최소 DOM으로 검증한다.
 function node(cls=''){

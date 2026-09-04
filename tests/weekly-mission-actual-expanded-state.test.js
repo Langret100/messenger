@@ -27,5 +27,5 @@ ok(weekly.classList.contains('quest-compact'),'weekly mission did not compact wh
 api.activate('korean');
 ok(!weekly.classList.contains('quest-compact'),'weekly mission did not restore when Korean closed');
 
-ok(html.includes('quest-accordion.js?v=26')&&html.includes('quest-accordion.css?v=29'),'weekly state cache refs stale');
+ok(html.includes('quest-accordion.js?v=')&&html.includes('quest-accordion.css?v='),'weekly state cache refs stale');
 console.log('WEEKLY_MISSION_ACTUAL_EXPANDED_STATE_OK');

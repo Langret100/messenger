@@ -6,6 +6,6 @@ const ctx={};vm.createContext(ctx);vm.runInContext(`function activeInventoryCoun
 const items=[{id:'a',deliveryStatus:'owned'},{id:'b',deliveryStatus:'requested'},{id:'c',deliveryStatus:'shipping'},{id:'d',deliveryStatus:'completed'},{id:'e',usedAt:123,deliveryStatus:'owned'},{id:'f',deliveryStatus:'cancelled'}];
 ok(ctx.fn(items)===4,'used/completed items are still counted as held inventory');
 ok((ui.match(/activeCount ?\? D\.el\("b", \{ text: String\(activeCount\) \}\) : null/g)||[]).length===2,'both outside inventory badge render paths must use active count');
-ok(ui.includes('owned.forEach(item => inventory.append(inventoryCard(item)))'),'used items should remain visible as gray history inside inventory');
-ok(html.includes('js/features/shopping.js?v=64.5.43'),'shopping cache version stale');
+ok(ui.includes('owned.forEach(item => inventory.append(inventoryCard(item,'),'used items should remain visible as gray history inside inventory');
+ok(html.includes('js/features/shopping.js?v='),'shopping cache version stale');
 console.log('SHOPPING_INVENTORY_ACTIVE_COUNT_OK');

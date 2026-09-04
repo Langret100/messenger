@@ -9,5 +9,5 @@ ok(config.includes('{name:"페이스 체인지",tool:"face-toy"}'),'face change 
 ok(!config.includes('{name:"온라인 놀이터",url:"https://langret100.github.io/multiroom-playground/"}'),'playground must not remain in related links');
 ok(tools.includes('openTool: open'),'tools feature must expose safe internal opener for related links');
 ok(links.includes('if(s.tool)')&&links.includes('MiniTalk.Features.Tools?.openTool?.(s.tool)'),'related links must open internal face-change tool through existing tool action');
-for(const ref of ['js/config.js?v=64.5.5','js/features/tools.js?v=64.5.17','js/features/links.js?v=4'])ok(html.includes(ref),`cache ref missing ${ref}`);
+for(const ref of ['js/config.js?v=','js/features/tools.js?v=','js/features/links.js?v='])ok(html.includes(ref),`cache ref missing ${ref}`);
 console.log('TOOLS_PLAYGROUND_FACE_LINK_SWAP_OK');

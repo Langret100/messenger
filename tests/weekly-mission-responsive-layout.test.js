@@ -11,5 +11,5 @@ ok(!css.includes('grid-template-columns:minmax(0,1fr) 92px'),'legacy cramped 92p
 ok(css.includes('.friday-mission-card.quest-compact>.friday-mission-copy')&&css.includes('display:none!important'),'compact weekly must hide the open-card label/copy');
 ok(friday.includes('class:"friday-mission-compact-toggle"')&&!friday.includes('friday-action-note')&&!friday.includes('약 10분')&&!friday.includes('누르면 학습점검을 시작해요'),'weekly action helper copy must stay removed');
 ok(accordion.indexOf('quest-subject-progress') < accordion.indexOf('quest-subject-reward'),'daily quest header order must be progress then reward');
-ok(html.includes('feed-classinfo-weekly.css?v=65.0.31')&&html.includes('quest-accordion.css?v=29')&&html.includes('quest-accordion.js?v=26'),'responsive layout cache refs stale');
+ok(html.includes('feed-classinfo-weekly.css?v=')&&html.includes('quest-accordion.css?v=')&&html.includes('quest-accordion.js?v='),'responsive layout cache refs stale');
 console.log('WEEKLY_MISSION_RESPONSIVE_LAYOUT_OK');

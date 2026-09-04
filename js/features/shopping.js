@@ -299,6 +299,12 @@ MiniTalk.Features.Shopping = (() => {
   function inventoryPanel(user, owned, close) {
     const D = MiniTalk.UI.Dom;
     const panel = D.el("aside", { class: "shop-inventory-panel", "aria-label": "보관함" });
+    // Keep only the inventory drawer compact in PWA/narrow windows.
+    // Inline sizing intentionally wins over old responsive drawer rules without touching other modals/panels.
+    panel.style.left = "auto";
+    panel.style.right = "10px";
+    panel.style.width = "348px";
+    panel.style.maxWidth = "calc(100% - 20px)";
     const closeButton = D.el("button", { class: "icon-button subtle modal-close-button", type: "button", text: "×", "aria-label": "보관함 닫기", onclick: () => { bulkDeliveryMode = false;bulkDeliverySelected.clear();close(); } });
     panel.append(D.el("header", {}, [D.el("div", {}, [D.el("strong", { text: "보관함" }), D.el("small", { class: "muted", text: user.isGuest ? "로그인 후 이용할 수 있어요" : `보관 상품 ${owned.length}개` })]), closeButton]));
     const inventory = D.el("div", { class: "shop-inventory-v2-list" });

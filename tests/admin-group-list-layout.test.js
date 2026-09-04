@@ -1,0 +1,14 @@
+const fs=require('fs');
+const admin=fs.readFileSync('js/features/admin.js','utf8');
+const css=fs.readFileSync('css/features/tasks-assignment.css','utf8');
+const html=fs.readFileSync('index.html','utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(admin.includes('class:"room-member admin-target-option admin-group-target-option"'),'group rows must reuse target user row layout');
+ok(admin.includes('class:"admin-group-editor-search"'),'group member search missing');
+ok(admin.includes('placeholder:"닉네임 검색"'),'group member search placeholder missing');
+ok(!admin.includes('class:"admin-group-editor-person"'),'legacy group member row layout remains');
+ok(css.includes('.admin-group-target-option>input[type="checkbox"]'),'group checkbox right alignment missing');
+ok(css.includes('.admin-group-editor-search'),'group search styling missing');
+ok(/tasks-assignment\.css\?v=[^\"']+/.test(html),'group css cache ref missing');
+ok(/admin\.js\?v=[^\"']+/.test(html),'admin js cache ref missing');
+console.log('ADMIN_GROUP_LIST_LAYOUT_OK');

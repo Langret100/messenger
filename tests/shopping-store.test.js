@@ -22,7 +22,7 @@ ctx.MiniTalk.AuthApi={
   shopDeleteProduct:async(userId,token,id)=>{calls.push(['delete-product',userId,token,id]);return{ok:true}},
   shopInventory:async()=>Object.values(ctx.MiniTalk.Store.get('shopInventory')||{}),
   shopUse:async payload=>{calls.push(['use',payload]);return{ok:true,usedAt:Date.now()}},
-  shopGift:async payload=>{calls.push(['gift',payload]);if(rejectGift)throw new Error('gift timeout');return{ok:true}}
+  shopGift:async payload=>{calls.push(['gift',payload]);if(rejectGift){const e=new Error('gift rejected');e.code='GIFT_ITEM_NOT_AVAILABLE';throw e}return{ok:true}}
 };
 ctx.MiniTalk.AdminSession={requireToken:()=> 'admin-token'};
 ctx.MiniTalk.UserDirectory={all:()=>Object.values(ctx.MiniTalk.Store.get('profiles')||{}).filter(row=>row.user_id!=='user-a'&&!row.user_id.startsWith('guest-'))};
@@ -56,6 +56,7 @@ ctx.MiniTalk.Events.on('state:shopInventory',()=>{inventoryStateChanges++});
   const now=Date.now();
   ctx.MiniTalk.Store.set('shopInventory',{
     ready:{id:'ready',name:'연필',createdAt:now},
+    giftable:{id:'giftable',name:'선물용',createdAt:now-5},
     recent:{id:'recent',name:'노트',createdAt:now-10,usedAt:now-2*86400000},
     expired:{id:'expired',name:'지우개',createdAt:now-20,usedAt:now-8*86400000}
   });
@@ -88,7 +89,7 @@ ctx.MiniTalk.Events.on('state:shopInventory',()=>{inventoryStateChanges++});
   await service.purchase({id:'expensive',name:'노트',price:50});
   const retriedPurchaseKey=calls.filter(x=>x[0]==='purchase'&&x[1].product.id==='expensive').at(-1)[1].purchaseKey;if(retriedPurchaseKey!==failedPurchaseKey)throw new Error('purchase retry changed its idempotency key and can charge twice after a timeout');
   await service.use('ready');
-  rejectGift=true;try{await service.gift('ready','user-b')}catch{}rejectGift=false;await service.gift('ready','user-b');
+  rejectGift=true;try{await service.gift('giftable','user-b')}catch{}rejectGift=false;await service.gift('giftable','user-b');
   if(!calls.some(x=>x[0]==='use'&&x[1].inventoryId==='ready'))throw new Error('use action was not forwarded to Apps Script');
   if(!calls.some(x=>x[0]==='legacy-use'&&x[1]==='ready'))throw new Error('used state was not synchronized to Firebase inventory');
   if(!calls.some(x=>x[0]==='gift'&&x[1].targetId==='user-b'))throw new Error('gift action was not forwarded to Apps Script');

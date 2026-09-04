@@ -5,7 +5,7 @@ const store=fs.readFileSync('js/shopping/store-service.js','utf8');
 const server=fs.readFileSync('docs/apps-script/coin-shopping-extension.gs','utf8');
 ok(shop.includes('preloadDeliveryMedia()'),'delivery media preload hook missing');
 ok(shop.includes("audio.play().catch(() => {})"),'delivery audio playback missing');
-const requestBlock=store.slice(store.indexOf('async function requestDelivery'),store.indexOf('async function gift'));
+const requestBlock=store.slice(store.indexOf('async function requestDelivery'),store.indexOf('const DEFINITE_GIFT_FAILURES'));
 const returnPos=requestBlock.indexOf('return result;');
 const refreshPos=requestBlock.indexOf('refreshInventory(true).catch(()=>{});');
 ok(refreshPos>=0 && returnPos>refreshPos,'background inventory refresh arrangement missing');

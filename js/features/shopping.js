@@ -3,6 +3,11 @@ MiniTalk.Features.Shopping = (() => {
   const Service = MiniTalk.Shopping.StoreService;
   let inventoryOpen = false, refreshTimer = 0, randomOverlay = null, randomArrivalId = "", bulkDeliveryMode = false;
   const bulkDeliverySelected = new Set();
+  MiniTalk.Events.on("shopping:gift-resolved", result => {
+    if (result?.status === "sent") MiniTalk.UI.Shell.toast(`${result.targetNickname || "상대방"}님에게 선물이 정상 전송되었습니다.`);
+    else if (result?.status === "failed") MiniTalk.UI.Shell.toast(result.message || "선물을 보내지 못했습니다.");
+    else if (result?.status === "pending") MiniTalk.UI.Shell.toast(result.message || "선물 처리 결과를 확인 중입니다.");
+  });
 
   const DELIVERY_AUDIO_URLS = ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'];
   const DELIVERY_MASCOT_URL = 'assets/mascot-mini-talk.png';
@@ -497,7 +502,10 @@ MiniTalk.Features.Shopping = (() => {
       send.onclick = async () => {
         if (!selected) return MiniTalk.UI.Shell.toast("사용자를 선택하세요.");
         const original = send.textContent;send.disabled = true;send.textContent = "보내는 중…";
-        try { const result = await Service.gift(item.id, selected);MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast(`${result.targetNickname}님에게 선물했습니다.`); }
+        try {
+          const result = await Service.gift(item.id, selected);MiniTalk.UI.Shell.closeModal();
+          MiniTalk.UI.Shell.toast(result.pending ? "서버 응답이 늦어 선물 처리 결과를 백그라운드에서 확인합니다." : `${result.targetNickname}님에게 선물했습니다.`);
+        }
         catch (error) { MiniTalk.UI.Shell.toast(error.message);if(send?.isConnected){send.disabled = false;send.textContent = original;} }
       };
       search.oninput = draw;body.replaceChildren(D.el("p", { text: `${item.name}을(를) 누구에게 선물할까요?` }), search, list, send);draw();setTimeout(() => search?.focus(), 30);

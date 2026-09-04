@@ -6,7 +6,7 @@ ok(admin.includes('const BALANCE_REFRESH_MS=15000'),'admin coin refresh interval
 ok(admin.includes('Date.now()-balanceLoadedAt<BALANCE_REFRESH_MS'),'admin balance cache has no TTL');
 ok(admin.includes('setTimeout(async()=>')&&admin.includes('loadBalances(true);applyBalances()'),'admin coin list is not automatically revalidated');
 ok(admin.includes('text:"코인 새로고침"')&&admin.includes('coinRefresh.onclick'),'manual admin coin refresh is missing');
-ok(admin.includes('balanceLoadedAt=Date.now();MiniTalk.Realtime.notifyCommandTargets?.(targets)'),'admin mutation does not refresh its local balance timestamp');
+ok(admin.includes('balanceLoadedAt=Date.now();MiniTalk.Realtime.notifyCommandTargets?.(ids)'),'admin mutation does not refresh its local balance timestamp');
 ok(realtime.includes('setInterval(pollServerCommands,30000)'),'user command fallback polling changed or is missing');
 ok(notifications.includes('CoinWallet?.setLocal?.(Number(newCoin)'),'admin coin command does not apply authoritative newCoin to user wallet');
 ok(wallet.includes('coinStatus(user.user_id)'),'user wallet is not backed by coin_status');

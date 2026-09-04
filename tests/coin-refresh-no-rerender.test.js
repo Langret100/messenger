@@ -6,7 +6,7 @@ const admin=read('js/features/admin.js'),wallet=read('js/economy/coin-wallet.js'
 ok(admin.includes('data-admin-coin-user'), 'admin coin rows need stable coin nodes');
 ok(admin.includes('targetList.querySelectorAll?.("[data-admin-coin-user]")'), 'admin balance refresh must patch existing coin labels');
 ok(!/const applyBalances=\(\)=>\{[^}]*drawTargets\(\)/.test(admin), 'admin balance refresh must not rebuild the full target list');
-ok(admin.includes('MiniTalk.Realtime.notifyCommandTargets?.(targets);applyBalances();scheduleBalanceRefresh()'), 'admin coin change should patch authoritative newCoin immediately');
+ok(admin.includes('MiniTalk.Realtime.notifyCommandTargets?.(ids);return Number(result.count)||0')&&admin.includes('if(type.value==="COIN_REWARD"){applyBalances();scheduleBalanceRefresh()}'), 'admin coin change should patch authoritative newCoin immediately');
 ok(admin.includes('(result.rewarded||[]).forEach(row=>{balanceMap[row.user_id]=Math.floor(Number(row.newCoin)||0)'), 'admin coin result must use authoritative newCoin values');
 ok(wallet.includes('button.dataset.refreshing === "1"'), 'coin badge must guard repeat clicks without disabling/reflowing the button');
 ok(!wallet.includes('button.disabled = true;\n        const amount = await refresh(true);'), 'coin refresh must not toggle disabled state and blink the badge');

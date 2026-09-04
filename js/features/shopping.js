@@ -570,33 +570,54 @@ MiniTalk.Features.Shopping = (() => {
     const D = context.Dom || MiniTalk.UI.Dom, Shell = context.Shell || MiniTalk.UI.Shell;
     const panel = D.el("section", { class: "tool-card admin-delivery-panel" });
     const head = D.el("div", { class: "admin-shop-head" }), title = D.el("div", {}, [D.el("strong", { text: "배송 요청 관리" }), D.el("small", { class: "muted", text: "학생이 요청한 상품의 배송 상태를 처리합니다." })]);
-    const refresh = D.el("button", { class: "mini-action", type: "button", text: "새로고침" }), list = D.el("div", { class: "admin-delivery-list" });
-    head.append(title, refresh);panel.append(head, list);
-    let loading = false, rows = [];
+    const refresh = D.el("button", { class: "mini-action", type: "button", text: "새로고침" }), bulkComplete = D.el("button", { class: "button primary compact-button", type: "button", text: "일괄 배송완료" }), headActions = D.el("div", { class: "admin-delivery-head-actions" }, [refresh, bulkComplete]), progress = D.el("p", { class: "muted admin-delivery-bulk-progress hidden" }), list = D.el("div", { class: "admin-delivery-list" });
+    head.append(title, headActions);panel.append(head, progress, list);
+    let loading = false, bulkRunning = false, rows = [];
     const current = MiniTalk.Store.get("user") || {};
+    const payloadFor = row => ({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("SHOP"), ownerId: row.ownerId || row.owner_id, inventoryId: row.id || row.inventoryId || row.inventory_id });
+    const sameDelivery = (row, payload) => String(row.ownerId || row.owner_id || "") === String(payload.ownerId || "") && String(row.id || row.inventoryId || row.inventory_id || "") === String(payload.inventoryId || "");
+    const verifyTimedOutAction = async (row, kind, originalError) => {
+      try {
+        const latest = await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP")), payload = payloadFor(row), found = latest.find(value => sameDelivery(value, payload));
+        if (kind === "shipping" && found && String(found.deliveryStatus || found.status || "") === "shipping") { rows = latest;return { deliveryStatus: "shipping", verified: true }; }
+        if ((kind === "completed" || kind === "cancelled") && !found) { rows = latest;return { deliveryStatus: kind, verified: true }; }
+      } catch (verifyError) { console.warn("배송 상태 타임아웃 후 확인 실패", verifyError); }
+      throw originalError;
+    };
+    const performAction = async (row, kind) => {
+      const payload = payloadFor(row);
+      try {
+        let result;
+        if (kind === "shipping") result = await MiniTalk.AuthApi.shopDeliveryShipping(payload);
+        else if (kind === "completed") result = await MiniTalk.AuthApi.shopDeliveryComplete(payload);
+        else result = await MiniTalk.AuthApi.shopDeliveryCancel(payload);
+        if (String(result?.deliveryStatus || "") !== kind) throw new Error("서버 배송 상태를 확인하지 못했습니다. 다시 새로고침해주세요.");
+        return { result, payload };
+      } catch (error) {
+        if (String(error?.code || "") !== "REQUEST_TIMEOUT") throw error;
+        const result = await verifyTimedOutAction(row, kind, error);
+        return { result, payload };
+      }
+    };
+    const applyLocalSuccess = (row, kind, payload) => {
+      MiniTalk.Realtime.notifyCommandTargets?.([payload.ownerId]);
+      if (kind === "shipping") rows = rows.map(value => sameDelivery(value, payload) ? { ...value, status: "shipping", deliveryStatus: "shipping" } : value);
+      else rows = rows.filter(value => !sameDelivery(value, payload));
+    };
     const draw = () => {
       list.replaceChildren();
+      bulkComplete.disabled = bulkRunning || !rows.length;
       if (!rows.length) { list.append(empty("대기 중인 배송이 없어요", "새 배송 요청이 들어오면 여기에 표시됩니다."));return; }
       rows.forEach(row => {
         const status = String(row.deliveryStatus || row.status || "requested"), item = D.el("article", { class: `admin-delivery-row status-${status}` });
         const copy = D.el("div", { class: "admin-delivery-copy" }, [D.el("strong", { text: row.name || "상품" }), D.el("span", { text: row.nickname || row.ownerNickname || row.owner_id || row.ownerId || "학생" }), D.el("small", { class: "muted", text: status === "shipping" ? "배송중" : "배송 요청" })]);
         const buttons = D.el("div", { class: "button-row compact-row" });
         const action = async (kind, button) => {
-          if (button.disabled) return;
+          if (button.disabled || bulkRunning) return;
           const group = [...buttons.querySelectorAll("button")], original = button.textContent;group.forEach(value => value.disabled = true);button.textContent = kind === "completed" ? "완료 처리 중…" : kind === "cancelled" ? "취소 중…" : "변경 중…";
           try {
-            const payload = { userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("SHOP"), ownerId: row.ownerId || row.owner_id, inventoryId: row.id || row.inventoryId || row.inventory_id };
-            let result;
-            if (kind === "shipping") result = await MiniTalk.AuthApi.shopDeliveryShipping(payload);
-            else if (kind === "completed") result = await MiniTalk.AuthApi.shopDeliveryComplete(payload);
-            else result = await MiniTalk.AuthApi.shopDeliveryCancel(payload);
-            if (String(result?.deliveryStatus || "") !== kind) throw new Error("서버 배송 상태를 확인하지 못했습니다. 다시 새로고침해주세요.");
-            MiniTalk.Realtime.notifyCommandTargets?.([payload.ownerId]);
-            Shell.toast(kind === "completed" ? "배송완료로 처리했습니다." : kind === "cancelled" ? "배송을 취소했습니다." : "배송중으로 변경했습니다.");
-            // 상태변경 성공 뒤 배송목록 전체를 다시 읽지 않습니다. 현재 행만 즉시 반영하고 수동 새로고침은 별도 버튼으로 유지합니다.
-            if (kind === "shipping") rows = rows.map(value => value === row ? {...value,status:"shipping",deliveryStatus:"shipping"} : value);
-            else rows = rows.filter(value => value !== row);
-            draw();
+            const { payload } = await performAction(row, kind);applyLocalSuccess(row, kind, payload);
+            Shell.toast(kind === "completed" ? "배송완료로 처리했습니다." : kind === "cancelled" ? "배송을 취소했습니다." : "배송중으로 변경했습니다.");draw();
           } catch (error) {
             if (["ADMIN_SESSION_EXPIRED","ADMIN_AUTH_REQUIRED","SHOP_MANAGER_PERMISSION_REQUIRED"].includes(String(error?.code || ""))) MiniTalk.AdminSession.clear?.();
             Shell.toast(error.message || "배송 상태를 변경하지 못했습니다.");
@@ -613,7 +634,16 @@ MiniTalk.Features.Shopping = (() => {
       if (!rows.length) list.replaceChildren(D.el("p", { class: "muted", text: "배송 요청을 불러오는 중입니다." }));
       try { rows = await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP"));draw(); }
       catch (error) { if (!rows.length) list.replaceChildren(D.el("p", { class: "muted", text: error.message || "배송 요청을 불러오지 못했습니다." }));else Shell.toast(error.message || "배송 요청을 새로고침하지 못했습니다."); }
-      finally { loading = false;refresh.disabled = false; }
+      finally { loading = false;refresh.disabled = false;bulkComplete.disabled = bulkRunning || !rows.length; }
+    };
+    bulkComplete.onclick = async () => {
+      if (bulkRunning || !rows.length) return;
+      bulkRunning = true;refresh.disabled = bulkComplete.disabled = true;progress.classList.remove("hidden");
+      const queue = [...rows];let cursor = 0, completed = 0, failed = 0;
+      progress.textContent = `일괄 배송완료 처리 중… 0/${queue.length}`;
+      const worker = async () => { while (true) { const index = cursor++;if (index >= queue.length) return;const row = queue[index];try { const { payload } = await performAction(row, "completed");applyLocalSuccess(row, "completed", payload);completed++; } catch (error) { failed++;console.warn("일괄 배송완료 제외", row, error); } progress.textContent = `일괄 배송완료 처리 중… ${completed + failed}/${queue.length}`; } };
+      try { await Promise.all(Array.from({ length: Math.min(2, queue.length) }, () => worker()));try { rows = await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP")); } catch (error) { console.warn("일괄 배송완료 후 목록 확인 실패", error); }draw();Shell.toast(`${completed}건을 배송완료 처리했습니다.${failed ? ` · ${failed}건은 다시 확인해주세요.` : ""}`); }
+      finally { bulkRunning = false;progress.classList.add("hidden");refresh.disabled = false;bulkComplete.disabled = !rows.length; }
     };
     refresh.onclick = load;load();return panel;
   }

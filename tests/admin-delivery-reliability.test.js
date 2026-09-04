@@ -5,7 +5,7 @@ ok(server.includes('SHOP_ADMIN_SESSION_PROPERTY_PREFIX')&&server.includes('write
 ok(server.includes('raw = props.getProperty(propKey)')&&server.includes('cache.put(cacheKey, JSON.stringify(session), seconds)'), 'durable admin session fallback/reheat missing');
 ok(server.includes('requireKnownMoaruUserFast_')&&code.includes('rememberKnownMoaruUser_(rowUserId)')&&code.includes('rememberKnownMoaruUser_(userId)'), 'login-known-user fast path missing');
 ok(server.includes('findShopInventoryItemFresh_')&&server.includes('writeShopInventoryItem_(ownerId, item, found.row)'), 'delivery mutation still scans full owner inventory');
-ok(auth.includes('error.code = "REQUEST_TIMEOUT"')&&auth.includes('SHOP_MANAGER_PERMISSION_REQUIRED')&&auth.includes('deadline = Date.now() + totalBudgetMs')&&/shop_delivery_complete[\s\S]{0,220}7000/.test(auth), 'client timeout/auth diagnostics missing');
+ok(auth.includes('error.code = "REQUEST_TIMEOUT"')&&auth.includes('SHOP_MANAGER_PERMISSION_REQUIRED')&&auth.includes('deadline = Date.now() + totalBudgetMs')&&/shop_delivery_complete[\s\S]{0,220}10000/.test(auth), 'client timeout/auth diagnostics missing');
 ok(shopping.includes('String(result?.deliveryStatus || "") !== kind')&&shopping.includes('MiniTalk.AdminSession.clear?.()'), 'delivery confirmation/session-expiry UI missing');
 ok(!windowMode.includes('window.resizeTo('), 'messenger runtime resizeTo regression');
 ok(tools.includes('allowInteractive'), 'tools real drag fix missing');

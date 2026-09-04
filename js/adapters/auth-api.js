@@ -44,7 +44,7 @@ MiniTalk.AuthApi = (() => {
     const body = new URLSearchParams();
     Object.entries(payload).forEach(([key, value]) => body.set(key, String(value ?? "")));
     const retryableStatus = status => [404, 429, 500, 502, 503, 504].includes(Number(status));
-    // 호출별 timeout 예산 안에서 재시도까지 모두 끝냅니다. 관리자/쇼핑 UI는 각 호출에서 7000ms를 명시합니다.
+    // 호출별 timeout 예산 안에서 재시도까지 모두 끝냅니다. 관리자/쇼핑 UI는 각 호출에서 10000ms를 명시합니다.
     const totalBudgetMs = Math.min(60000, Math.max(1000, Number(timeoutMs || 20000))), deadline = Date.now() + totalBudgetMs;
     const maxAttempts = 2;
     const timeoutFailure = () => { const seconds = Math.max(1, Math.round(totalBudgetMs / 1000)); const error = new Error(`서버 응답이 ${seconds}초를 넘겨 요청을 종료했습니다. 잠시 후 상태를 다시 확인해주세요.`);error.code = "REQUEST_TIMEOUT";return error; };
@@ -108,14 +108,14 @@ MiniTalk.AuthApi = (() => {
       return data.coin ?? data.balance ?? 0;
     },
     async adminUnlock(userId, adminCode) {
-      return post({ mode: "admin_unlock", user_id: userId, admin_code: adminCode }, 7000);
+      return post({ mode: "admin_unlock", user_id: userId, admin_code: adminCode }, 10000);
     },
     async shopCatalog() {
-      const data = await post({ mode: "shop_catalog" }, 7000);
+      const data = await post({ mode: "shop_catalog" }, 10000);
       return Array.isArray(data.products) ? data.products : [];
     },
     async userDirectory(userId) {
-      const data = await post({ mode: "user_directory", user_id: userId }, 7000);
+      const data = await post({ mode: "user_directory", user_id: userId }, 10000);
       return Array.isArray(data.users) ? data.users : [];
     },
     async shopSaveProduct(userId, adminToken, product) {
@@ -129,7 +129,7 @@ MiniTalk.AuthApi = (() => {
         description: product.description || "",
         quantity: product.quantity === null || product.quantity === undefined ? "" : product.quantity,
         image_data: product.imageUrl || ""
-      }, 7000);
+      }, 10000);
     },
     async shopDeleteProduct(userId, adminToken, productId) {
       return post({
@@ -137,7 +137,7 @@ MiniTalk.AuthApi = (() => {
         user_id: userId,
         admin_token: adminToken,
         product_id: productId
-      }, 7000);
+      }, 10000);
     },
     /*
      * 서버는 상품 ID·가격을 다시 검증하고 코인 차감과 구매 키 중복 검사를
@@ -154,39 +154,39 @@ MiniTalk.AuthApi = (() => {
         expected_description: product?.description || "",
         expected_updated_at: product?.updatedAt || 0,
         purchase_key: purchaseKey
-      }, 7000);
+      }, 10000);
     },
     async shopInventory(userId) {
-      const data = await post({ mode: "shop_inventory", user_id: userId }, 7000);
+      const data = await post({ mode: "shop_inventory", user_id: userId }, 10000);
       return Array.isArray(data.items) ? data.items : [];
     },
     async shopGift({ userId, nickname, targetId, inventoryId, item, requestId }) {
-      return post({ mode: "shop_gift", user_id: userId, nickname, target_user_id: targetId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 7000);
+      return post({ mode: "shop_gift", user_id: userId, nickname, target_user_id: targetId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 10000);
     },
     async shopUse({ userId, inventoryId, item }) {
-      return post({ mode: "shop_use", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) }, 7000);
+      return post({ mode: "shop_use", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) }, 10000);
     },
     async shopRequestDelivery({ userId, inventoryId, item, requestId }) {
-      return post({ mode: "shop_request_delivery", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 7000);
+      return post({ mode: "shop_request_delivery", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 10000);
     },
     async shopRequestDeliveryBulk({ userId, inventoryIds, requestId }) {
-      return post({ mode: "shop_request_delivery_bulk", user_id: userId, inventory_ids_json: JSON.stringify(inventoryIds || []), request_id: requestId || "" }, 7000);
+      return post({ mode: "shop_request_delivery_bulk", user_id: userId, inventory_ids_json: JSON.stringify(inventoryIds || []), request_id: requestId || "" }, 10000);
     },
     async shopDeliveryList(userId, adminToken) {
-      const data = await post({ mode: "shop_delivery_list", user_id: userId, admin_token: adminToken }, 7000);
+      const data = await post({ mode: "shop_delivery_list", user_id: userId, admin_token: adminToken }, 10000);
       return Array.isArray(data.deliveries) ? data.deliveries : [];
     },
     async shopDeliveryShipping({ userId, adminToken, ownerId, inventoryId }) {
-      return post({ mode: "shop_delivery_shipping", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 7000);
+      return post({ mode: "shop_delivery_shipping", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 10000);
     },
     async shopDeliveryComplete({ userId, adminToken, ownerId, inventoryId }) {
-      return post({ mode: "shop_delivery_complete", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 7000);
+      return post({ mode: "shop_delivery_complete", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 10000);
     },
     async shopDeliveryCompleteBulk({ userId, adminToken, targets }) {
-      return post({ mode: "shop_delivery_complete_bulk", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []) }, 7000);
+      return post({ mode: "shop_delivery_complete_bulk", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []) }, 10000);
     },
     async shopDeliveryCancel({ userId, adminToken, ownerId, inventoryId }) {
-      return post({ mode: "shop_delivery_cancel", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 7000);
+      return post({ mode: "shop_delivery_cancel", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 10000);
     },
     async adminDispatch({ userId, adminToken, targets, type, payload, requestId }) {
       return post({
@@ -197,7 +197,7 @@ MiniTalk.AuthApi = (() => {
         command_type: type,
         payload_json: JSON.stringify(payload || {}),
         request_id: requestId || ""
-      }, 7000);
+      }, 10000);
     },
     async adminCoinReward({ userId, adminToken, targets, amount, reason, requestId }) {
       return post({
@@ -208,27 +208,27 @@ MiniTalk.AuthApi = (() => {
         amount,
         reason: reason || "관리자 보상",
         request_id: requestId || ""
-      }, 7000);
+      }, 10000);
     },
     async adminUserBalances(userId, adminToken) {
-      const data = await post({ mode: "admin_user_balances", user_id: userId, admin_token: adminToken }, 7000);
+      const data = await post({ mode: "admin_user_balances", user_id: userId, admin_token: adminToken }, 10000);
       return Array.isArray(data.users) ? data.users : [];
     },
     async adminTaskAssign({ userId, adminToken, targets, title, description, rewardCoin, requestId }) {
-      return post({ mode: "admin_task_assign", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []), title, description, reward_coin: rewardCoin, request_id: requestId || "" }, 7000);
+      return post({ mode: "admin_task_assign", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []), title, description, reward_coin: rewardCoin, request_id: requestId || "" }, 10000);
     },
     async adminTaskList(userId, adminToken) {
-      const data = await post({ mode: "admin_task_list", user_id: userId, admin_token: adminToken }, 7000);
+      const data = await post({ mode: "admin_task_list", user_id: userId, admin_token: adminToken }, 10000);
       return Array.isArray(data.tasks) ? data.tasks : [];
     },
     async adminTaskReview({ userId, adminToken, taskId, action, feedback }) {
-      return post({ mode: "admin_task_review", user_id: userId, admin_token: adminToken, task_id: taskId, action, feedback }, 7000);
+      return post({ mode: "admin_task_review", user_id: userId, admin_token: adminToken, task_id: taskId, action, feedback }, 10000);
     },
     async adminTaskBulkReview({ userId, adminToken, taskIds, action = "complete", feedback = "" }) {
-      return post({ mode: "admin_task_bulk_review", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []), action, feedback }, 7000);
+      return post({ mode: "admin_task_bulk_review", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []), action, feedback }, 10000);
     },
     async adminTaskBulkDelete({ userId, adminToken, taskIds }) {
-      return post({ mode: "admin_task_bulk_delete", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []) }, 7000);
+      return post({ mode: "admin_task_bulk_delete", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []) }, 10000);
     },
     async adminMoaLearningStatus(userId, adminToken) {
       return post({ mode: "moa_admin_learning_status", user_id: userId, admin_token: adminToken });

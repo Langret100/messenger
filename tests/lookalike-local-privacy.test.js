@@ -49,7 +49,7 @@ ok((code.match(/kind:"plant"/g)||[]).length>=20,'plant result pool too small');
 ok(code.includes('await revealPhase("분위기 비슷한 후보 찾는 중…",420,myRun)')&&code.includes('await revealPhase("거의 찾았다…",420,myRun)'),'analysis reveal pacing missing');
 ok(css.includes('@keyframes lookalike-reveal')&&css.includes('@keyframes lookalike-media-in'),'result reveal animation missing');
 ok(code.includes('sound("count")')&&code.includes('sound("shutter")')&&code.includes('sound("scan")')&&code.includes('sound("reveal")'),'lookalike sound cues missing');
-ok(code.includes('gsrlimit:"16"'),'image candidate search should request a broad candidate set');
+ok(code.includes('gsrlimit:"24"'),'image candidate search should request a broad candidate set');
 
 // 결정 로직 런타임: 동일 특징은 결과 객체를 내고 kind 필터를 지킨다.
 const sandbox={console,window:{},document:{},navigator:{},URLSearchParams,fetch:()=>Promise.reject(new Error('not called')),MiniTalk:{Tools:{},UI:{Dom:{}},Store:{}}};
@@ -66,4 +66,12 @@ const seen=[];
 for(let i=0;i<7;i++) seen.push(t.chooseImageCandidate('otter',candidates,()=>0).info.thumburl);
 ok(new Set(seen.slice(0,6)).size===6,'recent-image avoidance failed for same animal');
 ok(seen[0]!==seen[1],'same image repeated immediately');
+
+// 이미지/결과명 불일치 방지: 판다 결과에서 고양이 사진은 관련 후보로 인정하지 않는다.
+const panda=t.RESULTS.find(row=>row.id==='panda');
+const catCandidate={title:'File:Domestic cat portrait.jpg',info:{mime:'image/jpeg',extmetadata:{ImageDescription:{value:'A domestic cat'}}}};
+const pandaCandidate={title:'File:Giant panda portrait.jpg',info:{mime:'image/jpeg',extmetadata:{ImageDescription:{value:'A giant panda'}}}};
+ok(t.imageCandidateMatch(panda,catCandidate).relevant===false,'unrelated cat image can be selected for panda result');
+ok(t.imageCandidateMatch(panda,pandaCandidate).relevant===true,'matching panda image was rejected');
+ok(!code.includes('class:"lookalike-result-fallback",text:result.emoji'),'emoji-only image fallback must not be used');
 console.log('LOOKALIKE_LOCAL_PRIVACY_OK');

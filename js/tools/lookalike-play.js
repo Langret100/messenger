@@ -272,20 +272,42 @@ MiniTalk.Tools.LookalikePlay = (() => {
     const result=pool[index];lastResultId=result.id;return result;
   }
 
+  const IMAGE_STOP_WORDS=new Set(["animal","portrait","photo","photograph","flower","flowers","plant","plants","tree","trees","leaf","leaves","bird","macro","var","variety"]);
+  const imageWords=value=>String(value||"").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g," ").trim().split(/\s+/).filter(word=>word.length>1&&!IMAGE_STOP_WORDS.has(word));
+  const candidateText=candidate=>{
+    const meta=candidate?.info?.extmetadata||{};
+    return [candidate?.title,meta.ObjectName?.value,meta.ImageDescription?.value,meta.Categories?.value].map(value=>String(value||"").replace(/<[^>]*>/g," ").replace(/&[a-z0-9#]+;/gi," ")).join(" ").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g," ");
+  };
+  function imageCandidateMatch(result,candidate){
+    const text=` ${candidateText(candidate)} `,idTokens=imageWords(String(result?.id||"").replace(/-/g," ")),queryTokens=imageWords(result?.query),idMatches=idTokens.filter(token=>text.includes(` ${token} `)).length,queryMatches=queryTokens.filter(token=>text.includes(` ${token} `)).length;
+    const relevant=idTokens.length>=2?idMatches>=Math.min(2,idTokens.length):idTokens.length===1?idMatches>=1:queryMatches>=Math.min(2,queryTokens.length);
+    const fallbackRelevant=!relevant&&queryTokens.length>=2&&queryMatches>=2;
+    const score=idMatches*8+queryMatches*3+(text.includes(` ${queryTokens.join(" ")} `)?6:0);
+    return {relevant:relevant||fallbackRelevant,score,idMatches,queryMatches};
+  }
+  async function fetchCommonsCandidates(query,myRun){
+    const params=new URLSearchParams({action:"query",format:"json",origin:"*",generator:"search",gsrnamespace:"6",gsrlimit:"24",gsrsearch:query,prop:"imageinfo",iiprop:"url|mime|extmetadata",iiurlwidth:"900"});
+    const response=await fetch(`${COMMONS_API}?${params.toString()}`,{method:"GET",credentials:"omit",referrerPolicy:"no-referrer",cache:"no-store"});
+    if(!response.ok||myRun!==runId)return [];
+    const json=await response.json(),pages=Object.values(json?.query?.pages||{});
+    return pages.map(page=>({title:page.title,info:page.imageinfo?.[0]})).filter(candidate=>candidate.info&&/^image\/(jpeg|png|webp)$/i.test(candidate.info.mime||""));
+  }
   async function findCommonsImage(result,myRun){
     // 외부로 나가는 값은 이 공개 검색어뿐입니다. 사진/픽셀/특징값은 절대 포함하지 않습니다.
-    const query=result.query;
-    const params=new URLSearchParams({action:"query",format:"json",origin:"*",generator:"search",gsrnamespace:"6",gsrlimit:"16",gsrsearch:query,prop:"imageinfo",iiprop:"url|mime|extmetadata",iiurlwidth:"900"});
+    const query=result.query,core=imageWords(query).join(" "),queries=[query,core&&`"${core}"`,core&&`${core} ${result.kind}`].filter(Boolean),merged=[],seen=new Set();
     try{
-      const response=await fetch(`${COMMONS_API}?${params.toString()}`,{method:"GET",credentials:"omit",referrerPolicy:"no-referrer",cache:"no-store"});
-      if(!response.ok||myRun!==runId)return null;
-      const json=await response.json();
-      const pages=Object.values(json?.query?.pages||{});
-      const candidates=pages.map(p=>({title:p.title,info:p.imageinfo?.[0]})).filter(x=>x.info&&/^image\/(jpeg|png|webp)$/i.test(x.info.mime||""));
-      if(!candidates.length)return null;
-      const chosen=chooseImageCandidate(result.id,candidates),meta=chosen.info.extmetadata||{};
+      for(const searchQuery of queries){
+        const rows=await fetchCommonsCandidates(searchQuery,myRun);if(myRun!==runId)return null;
+        rows.forEach(candidate=>{const key=candidate.info?.thumburl||candidate.info?.url||candidate.title;if(key&&!seen.has(key)){seen.add(key);merged.push(candidate)}});
+        const matched=merged.filter(candidate=>imageCandidateMatch(result,candidate).relevant);
+        if(matched.length>=4)break;
+      }
+      const ranked=merged.map(candidate=>({candidate,...imageCandidateMatch(result,candidate)})).filter(row=>row.relevant).sort((a,b)=>b.score-a.score);
+      if(!ranked.length)return null;
+      const best=ranked[0].score,shortlist=ranked.filter(row=>row.score>=Math.max(1,best-3)).map(row=>row.candidate),chosen=chooseImageCandidate(result.id,shortlist),meta=chosen.info.extmetadata||{};
+      const alternates=ranked.map(row=>row.candidate).filter(candidate=>candidate!==chosen).slice(0,4).map(candidate=>candidate.info.thumburl||candidate.info.url).filter(Boolean);
       const key=chosen.info.thumburl||chosen.info.url||chosen.title;
-      return {url:chosen.info.thumburl||chosen.info.url,page:chosen.info.descriptionurl||"https://commons.wikimedia.org/",author:plain(meta.Artist?.value||""),license:plain(meta.LicenseShortName?.value||""),key};
+      return {url:chosen.info.thumburl||chosen.info.url,page:chosen.info.descriptionurl||"https://commons.wikimedia.org/",author:plain(meta.Artist?.value||""),license:plain(meta.LicenseShortName?.value||""),key,alternates};
     }catch{return null}
   }
 
@@ -305,8 +327,8 @@ MiniTalk.Tools.LookalikePlay = (() => {
   function showResult(result,image){
     const D=dom();resultPanel.replaceChildren();
     const media=D.el("div",{class:"lookalike-result-media"});
-    if(image?.url){const img=D.el("img",{class:"lookalike-result-image",alt:`${result.ko} 이미지`});img.referrerPolicy="no-referrer";img.decoding="async";img.src=image.url;media.append(img)}
-    else media.append(D.el("div",{class:"lookalike-result-fallback",text:result.emoji}));
+    if(image?.url){const img=D.el("img",{class:"lookalike-result-image",alt:`${result.ko} 이미지`}),urls=[image.url,...(image.alternates||[])].filter(Boolean);let imageIndex=0;img.referrerPolicy="no-referrer";img.decoding="async";img.onerror=()=>{imageIndex+=1;if(imageIndex<urls.length){img.src=urls[imageIndex];return}media.replaceChildren(D.el("div",{class:"lookalike-result-fallback",text:"사진을 불러오지 못했어요. 다시 찍으면 다른 사진을 찾아요."}))};img.src=urls[0];media.append(img)}
+    else media.append(D.el("div",{class:"lookalike-result-fallback",text:"사진을 불러오지 못했어요. 다시 찍으면 다른 사진을 찾아요."}));
     const copy=D.el("div",{class:"lookalike-result-copy"},[
       D.el("small",{text:"오늘의 닮은 생물"}),
       D.el("strong",{text:`${result.emoji} ${result.ko}!`}),
@@ -320,6 +342,6 @@ MiniTalk.Tools.LookalikePlay = (() => {
     if(busy)return;sound("tap");runId++;resultPanel?.replaceChildren();resultPanel?.classList.add("hidden");video?.classList.remove("hidden");await startCamera(facing);
   }
 
-  const _test={pickResult,RESULTS,wipeCanvas,COMMONS_API,findCommonsImage,chooseImageCandidate,recentImageKeys,sound};
+  const _test={pickResult,RESULTS,wipeCanvas,COMMONS_API,findCommonsImage,chooseImageCandidate,imageCandidateMatch,recentImageKeys,sound};
   return {open,dispose,isSeparate:()=>separateWindow,_test};
 })();

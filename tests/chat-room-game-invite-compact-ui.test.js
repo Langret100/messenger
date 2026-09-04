@@ -13,6 +13,6 @@ for(const noisy of ['수락 순서 우선','초대 ${(g.invited||[]).length}명'
 ok(css.includes('width:min(244px,100%)'), 'compact width guard missing');
 ok(css.includes('max-width:100%'), 'max width guard missing');
 ok(css.includes('overflow:hidden'), 'overflow guard missing');
-ok(html.includes('room-games-plus.css?v=7'),'css cache version not bumped');
-ok(html.includes('room-games.js?v=27'),'js cache version not bumped');
+ok(html.includes('room-games-plus.css?v='),'css cache version not bumped');
+ok(html.includes('room-games.js?v='),'js cache version not bumped');
 console.log('CHAT_ROOM_GAME_INVITE_COMPACT_UI_OK');

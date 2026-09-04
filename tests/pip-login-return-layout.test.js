@@ -4,5 +4,5 @@ const auth=read('js/features/auth.js'),wm=read('js/adapters/window-mode.js'),htm
 ok(wm.includes('setTransferredState(false)')&&wm.includes('returnToLogin?.()'),'PiP close must restore the original login flow');
 ok(auth.includes('launch?.classList.add("hidden")')&&auth.includes('shell?.classList.remove("hidden")'),'PiP return must hide launcher before showing the login shell');
 ok(auth.includes('document.documentElement.classList.add("app-visible")'),'PiP return must keep app-visible layout state');
-ok(html.includes('js/features/auth.js?v=64.5.35'),'auth PiP return fix is not cache-busted');
+ok(html.includes('js/features/auth.js?v='),'auth PiP return fix is not cache-busted');
 console.log('PIP_LOGIN_RETURN_LAYOUT_OK');

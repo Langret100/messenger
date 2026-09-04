@@ -303,7 +303,7 @@ function handleUserDirectory(e) {
     });
   }
   if (!users.some(function (item) { return item.user_id === requester; })) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
-  cache.put(cacheKey, JSON.stringify(users), 60);
+  cache.put(cacheKey, JSON.stringify(users), 120);
   return shopJson_({ ok: true, users: users });
 }
 
@@ -330,7 +330,7 @@ function handleShopProductSave(e) {
   }
 
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     if (product.imageUrl && !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(product.imageUrl)) {
       return shopJson_({ ok: false, error: "INVALID_PRODUCT_IMAGE" });
@@ -352,7 +352,7 @@ function handleShopProductDelete(e) {
   if (!productId) return shopJson_({ ok: false, error: "MISSING_PRODUCT_ID" });
 
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     PropertiesService.getScriptProperties().deleteProperty(shopProductPropertyKey_(productId));
     removeLegacyShopProduct_(productId);
@@ -721,7 +721,7 @@ function handleShopGift(e) {
   const inventoryId = String(p.inventory_id || "").trim(), requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100);
   if (!userId || !targetId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   if (!inventoryId || userId === targetId) return shopJson_({ ok: false, error: "INVALID_GIFT_TARGET" });
-  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     const receipts = PropertiesService.getScriptProperties(), receiptKey = requestId ? MOARU_SHOP_GIFT_REQUEST_PREFIX + requestId : "";let receipt = null;
     if (receiptKey) { try { receipt = JSON.parse(receipts.getProperty(receiptKey) || "null"); } catch (error) { receipt = null; } }
@@ -767,7 +767,7 @@ function handleShopRequestDelivery(e) {
   const p = (e && e.parameter) || {}, users = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), userId = requireRegisteredShopUser_(p.user_id, users), inventoryId = String(p.inventory_id || "").trim(), requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100);
   if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
   if (!inventoryId) return shopJson_({ ok: false, error: "MISSING_INVENTORY_ID" });
-  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     const found = findShopInventoryItemFresh_(userId, inventoryId), item = found && found.item;
     if (!item) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
@@ -781,6 +781,47 @@ function handleShopRequestDelivery(e) {
     return shopJson_({ ok: true, item: saved, deliveryStatus: "requested", deliveryRequestedAt: now, cue: { sound: "delivery-class-order", animation: "running-student" } });
   } finally { lock.releaseLock(); }
 }
+/** POST mode=shop_request_delivery_bulk: 한 사용자의 여러 보관 상품을 한 번의 요청으로 배송 접수합니다. */
+function handleShopRequestDeliveryBulk(e) {
+  const p = (e && e.parameter) || {}, users = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), userId = requireRegisteredShopUser_(p.user_id, users);
+  if (!userId) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
+  let ids = [];
+  try { ids = JSON.parse(p.inventory_ids_json || "[]"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_DELIVERY_TARGET" }); }
+  ids = Array.from(new Set((Array.isArray(ids) ? ids : []).map(function (value) { return String(value || "").trim(); }).filter(Boolean))).slice(0, 20);
+  if (ids.length < 2) return shopJson_({ ok: false, error: "INVALID_DELIVERY_TARGET" });
+  const wanted = {};ids.forEach(function (id) { wanted[id] = true; });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  try {
+    const sheet = getOrCreateShopInventorySheet_(), lastRow = sheet.getLastRow();
+    if (lastRow < 2) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+    // 선택 상품마다 시트를 다시 읽지 않고 보관함 시트를 한 번만 읽어서 대상 행을 찾습니다.
+    const values = sheet.getRange(2, 1, lastRow - 1, MOARU_SHOP_INVENTORY_HEADERS.length).getValues(), matches = [];
+    values.forEach(function (row, index) {
+      const item = shopInventoryRowToItem_(row);
+      if (item.ownerId === userId && wanted[item.id]) matches.push({ row: index + 2, item: item });
+    });
+    if (matches.length !== ids.length) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+    const now = Date.now(), saved = [];
+    // 한 항목이라도 유효하지 않으면 쓰기 전에 전체 요청을 중단해 부분 묶음배송이 생기지 않게 합니다.
+    for (let i = 0; i < matches.length; i += 1) {
+      const status = normalizeDeliveryStatus_(matches[i].item);
+      if (status === "completed" || (status !== "owned" && status !== "cancelled" && status !== "requested" && status !== "shipping")) return shopJson_({ ok: false, error: "DELIVERY_STATE_INVALID" });
+    }
+    let changed = false;
+    for (let i = 0; i < matches.length; i += 1) {
+      const entry = matches[i], item = entry.item, status = normalizeDeliveryStatus_(item);
+      if (status === "requested" || status === "shipping") { saved.push(item);continue; }
+      item.deliveryStatus = "requested";item.deliveryRequestedAt = now;delete item.deliveryShippingAt;delete item.deliveryCompletedAt;delete item.deliveryCancelledAt;delete item.deliveryHandledBy;delete item.usedAt;
+      values[entry.row - 2] = shopInventoryItemToRow_(item);saved.push(item);changed = true;
+    }
+    // 클라이언트→Apps Script도 1회, Spreadsheet 쓰기도 1회로 묶습니다.
+    if (changed) sheet.getRange(2, 1, values.length, MOARU_SHOP_INVENTORY_HEADERS.length).setValues(values);
+    clearShopInventoryCache_(userId);
+    const catalog = readShopCatalog_(), publicItems = saved.map(function (item) { return hydrateShopInventoryItem_(item, catalog); });
+    return shopJson_({ ok: true, count: publicItems.length, items: publicItems, deliveryStatus: "requested", deliveryRequestedAt: now });
+  } finally { lock.releaseLock(); }
+}
+
 /** POST mode=shop_delivery_list: ADMIN/SHOP_MANAGER 배송 목록. */
 function handleShopDeliveryList(e) {
   const p = (e && e.parameter) || {}, auth = requireShopManagerToken_(p.user_id, p.admin_token);if (!auth.ok) return shopJson_(auth);
@@ -796,7 +837,7 @@ function updateShopDeliveryByManager_(e, nextStatus) {
   const p = (e && e.parameter) || {}, auth = requireShopManagerToken_(p.user_id, p.admin_token);if (!auth.ok) return shopJson_(auth);
   const ownerId = String(p.owner_id || p.target_user_id || "").trim(), inventoryId = String(p.inventory_id || "").trim();
   if (!ownerId || !inventoryId) return shopJson_({ ok: false, error: "INVALID_DELIVERY_TARGET" });
-  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     const found = findShopInventoryItemFresh_(ownerId, inventoryId), item = found && found.item;if (!item) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
     const current = normalizeDeliveryStatus_(item), now = Date.now();
@@ -810,6 +851,27 @@ function updateShopDeliveryByManager_(e, nextStatus) {
     const saved = writeShopInventoryItem_(ownerId, item, found.row);
     enqueueMoaruCommand_(ownerId, nextStatus === "completed" ? "SHOP_DELIVERY_COMPLETED" : nextStatus === "cancelled" ? "SHOP_DELIVERY_CANCELLED" : "SHOP_DELIVERY_SHIPPING", { itemId: saved.id, name: saved.name, deliveryStatus: nextStatus }, p.user_id);
     return shopJson_({ ok: true, item: saved, deliveryStatus: nextStatus });
+  } finally { lock.releaseLock(); }
+}
+/** POST mode=shop_delivery_complete_bulk: 관리자 배송완료를 한 요청/한 시트 쓰기로 처리합니다. */
+function handleShopDeliveryCompleteBulk(e) {
+  const p = (e && e.parameter) || {}, auth = requireShopManagerToken_(p.user_id, p.admin_token);if (!auth.ok) return shopJson_(auth);
+  let raw = [];try { raw = JSON.parse(p.targets_json || "[]"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_DELIVERY_TARGET" }); }
+  const seen = {}, targets = (Array.isArray(raw) ? raw : []).map(function (row) { return { ownerId: String(row && (row.ownerId || row.owner_id) || "").trim(), inventoryId: String(row && (row.inventoryId || row.inventory_id || row.id) || "").trim() }; }).filter(function (row) { const key=row.ownerId+"|"+row.inventoryId;if(!row.ownerId||!row.inventoryId||seen[key])return false;seen[key]=true;return true; }).slice(0, 100);
+  if (!targets.length) return shopJson_({ ok: false, error: "INVALID_DELIVERY_TARGET" });
+  const wanted = {};targets.forEach(function (row) { wanted[row.ownerId+"|"+row.inventoryId]=true; });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  try {
+    const sheet = getOrCreateShopInventorySheet_(), lastRow = sheet.getLastRow();if (lastRow < 2) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+    const values = sheet.getRange(2, 1, lastRow - 1, MOARU_SHOP_INVENTORY_HEADERS.length).getValues(), found = [], now = Date.now(), owners = {};
+    values.forEach(function (row, index) { const item=shopInventoryRowToItem_(row), key=item.ownerId+"|"+item.id;if(wanted[key])found.push({index:index,item:item}); });
+    if (found.length !== targets.length) return shopJson_({ ok: false, error: "ITEM_NOT_AVAILABLE" });
+    for (let i=0;i<found.length;i+=1) { const status=normalizeDeliveryStatus_(found[i].item);if(status!=="requested"&&status!=="shipping"&&status!=="completed")return shopJson_({ok:false,error:"DELIVERY_STATE_INVALID",status:status}); }
+    let changed=0;
+    found.forEach(function (entry) { const item=entry.item,status=normalizeDeliveryStatus_(item);owners[item.ownerId]=owners[item.ownerId]||{count:0,name:item.name||"상품"};owners[item.ownerId].count+=1;if(status==="completed")return;item.deliveryStatus="completed";item.deliveryHandledBy=String(p.user_id||"");item.deliveryCompletedAt=now;item.usedAt=now;values[entry.index]=shopInventoryItemToRow_(item);changed+=1; });
+    if (changed) sheet.getRange(2, 1, values.length, MOARU_SHOP_INVENTORY_HEADERS.length).setValues(values);
+    Object.keys(owners).forEach(function (ownerId) { clearShopInventoryCache_(ownerId);const meta=owners[ownerId];enqueueMoaruCommand_(ownerId,"SHOP_DELIVERY_COMPLETED",{name:meta.count>1?meta.count+"개 상품":meta.name,count:meta.count,deliveryStatus:"completed"},p.user_id); });
+    return shopJson_({ok:true,count:found.length,changed:changed,deliveryStatus:"completed"});
   } finally { lock.releaseLock(); }
 }
 function handleShopDeliveryShipping(e) { return updateShopDeliveryByManager_(e, "shipping"); }
@@ -1016,7 +1078,7 @@ function handleAdminDispatch(e) {
   // 알 수 없는 id가 들어와도 해당 큐는 실제 로그인 사용자가 조회할 수 없고 TTL 정리 대상일 뿐입니다.
   targets = targets.map(function (id) { return String(id || "").trim(); }).filter(function (id, index, list) { return id && id.length <= 100 && list.indexOf(id) === index; }).slice(0, 200);
   const type = String(p.command_type || "NOTICE").trim().slice(0, 20), requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100);if (!targets.length) return shopJson_({ ok: false, error: "NO_TARGETS" });
-  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     targets.forEach(function (target, index) { enqueueMoaruCommand_(target, type, payload, p.user_id, requestId ? "admin-" + requestId + "-" + index : ""); });
     return shopJson_({ ok: true, count: targets.length });
@@ -1044,7 +1106,7 @@ function handleAdminCoinReward(e) {
   const requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100), registeredUsers = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), rewardCoins = moaruRewardCoinMap_();
   targets = targets.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && registeredUsers[id] && Object.prototype.hasOwnProperty.call(rewardCoins, id); }).slice(0, 200);
   if (!targets.length) return shopJson_({ ok: false, error: "NO_TARGETS" });
-  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     const receipts = PropertiesService.getScriptProperties(), receiptKey = requestId ? MOARU_ADMIN_COIN_REQUEST_PREFIX + requestId : "";let receipt = null;
     if (receiptKey) { try { receipt = JSON.parse(receipts.getProperty(receiptKey) || "null"); } catch (error) { receipt = null; } }
@@ -1177,7 +1239,7 @@ function moaruRegisteredUserMap_() {
     if (!id || isMoaruGuestIdentity_(id, username, nickname)) return;
     result[id] = nickname.slice(0, 30);
   });
-  try { cache.put(cacheKey, JSON.stringify(result), 60); } catch (error) {}
+  try { cache.put(cacheKey, JSON.stringify(result), 120); } catch (error) {}
   return result;
 }
 
@@ -1193,7 +1255,7 @@ function handleAdminTaskAssign(e) {
   try { requested = JSON.parse(p.targets_json || "[]"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" }); }
   const users = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), rewardCoins = moaruRewardCoinMap_(), targets = requested.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && users[id] && Object.prototype.hasOwnProperty.call(rewardCoins, id); }).slice(0, 200);
   if (!targets.length) return shopJson_({ ok: false, error: "NO_TARGETS" });
-  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     cleanupCompletedMoaruTasks_();
     const requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100), receiptKey = requestId ? MOARU_TASK_ASSIGN_REQUEST_PREFIX + requestId : "", receipts = PropertiesService.getScriptProperties();let receipt = null;
@@ -1225,7 +1287,7 @@ function handleUserTaskSubmit(e) {
   if (answer.length > 1000) return shopJson_({ ok: false, error: "TASK_ANSWER_TOO_LONG" });
   if (!answer.trim() && !imageData) return shopJson_({ ok: false, error: "TASK_ANSWER_REQUIRED" });
   if (imageData.length > MOARU_TASK_IMAGE_MAX_CHARS || (imageData && !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(imageData))) return shopJson_({ ok: false, error: "INVALID_TASK_IMAGE" });
-  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     cleanupCompletedMoaruTasks_();const task = readMoaruTask_(taskId);
     if (task && task.userId !== userId) return shopJson_({ ok: false, error: "TASK_NOT_FOUND" });
@@ -1290,7 +1352,7 @@ function handleAdminTaskReview(e) {
   if (["complete", "retry"].indexOf(action) < 0) return shopJson_({ ok: false, error: "INVALID_TASK_REVIEW" });
   if (feedback.length > 100) return shopJson_({ ok: false, error: "TASK_FEEDBACK_TOO_LONG" });
   if (action === "retry" && !feedback) return shopJson_({ ok: false, error: "TASK_FEEDBACK_REQUIRED" });
-  const lock = LockService.getScriptLock();if (!lock.tryLock(4000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try { cleanupCompletedMoaruTasks_();return shopJson_(reviewMoaruTaskUnlocked_(taskId, action, feedback, p.user_id)); }
   finally { lock.releaseLock(); }
 }

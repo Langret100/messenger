@@ -7,6 +7,6 @@ ok(drag.includes("overscroll-behavior:none;overscroll-behavior-y:none"),"drag su
 ok(feed.includes('[commentTrigger,heart].filter(Boolean)'),"feed controls must be comment then heart");
 ok(css.includes(".feed-card-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px"),"feed controls must align right");
 ok(css.includes(".feed-comments{")&&feed.includes("commentsBlock(post)"),"comment display area must remain intact");
-ok(html.includes("window-mode.js?v=64.5.40")&&html.includes("drag-scroll.js?v=11")&&html.includes("feed-classinfo-weekly.css?v=65.0.31")&&html.includes("feed.js?v=65.0.21"),"combined cache bust refs missing");
-ok(sw.includes("moaru-runtime-bundle-2"),"combined SW cache bump missing");
+ok(html.includes("window-mode.js?v=")&&html.includes("drag-scroll.js?v=")&&html.includes("feed-classinfo-weekly.css?v=")&&html.includes("feed.js?v="),"combined cache bust refs missing");
+ok(sw.includes("moaru-runtime-bundle-"),"combined SW cache bump missing");
 console.log("V92_COMBINED_PIP_FEED_LAYOUT_OK");

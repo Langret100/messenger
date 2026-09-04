@@ -104,10 +104,12 @@ MiniTalk.Features.Admin=(()=>{
   function groupManagementPanel({D=MiniTalk.UI.Dom,Shell=MiniTalk.UI.Shell,people=[],selected=new Set(),drawTargets=()=>{},updateCount=()=>{}}={}){
     const current=MiniTalk.Store.get("user")||{},storageKey=`admin.targetGroups.${String(current.user_id||"admin")}`;
     const cleanGroups=value=>Array.isArray(value)?value.filter(row=>row&&typeof row==="object").map((row,index)=>({id:String(row.id||`group-${index+1}`),name:String(row.name||`그룹${index+1}`).trim().slice(0,24)||`그룹${index+1}`,members:[...new Set((Array.isArray(row.members)?row.members:[]).map(String))].slice(0,200)})).slice(0,12):[];
-    let groups=cleanGroups(MiniTalk.Persistence.get(storageKey,[]));
-    if(!groups.length){groups=[1,2,3].map(index=>({id:`group-${index}`,name:`그룹${index}`,members:[]}));MiniTalk.Persistence.set(storageKey,groups)}
-    const section=D.el("section",{class:"tool-card admin-group-manager"}),head=D.el("div",{class:"admin-group-head"},[D.el("div",{},[D.el("h3",{text:"그룹 관리"}),D.el("small",{class:"muted",text:"현재 선택한 사용자를 그룹으로 저장하고, 다시 불러와 과제·코인 등을 그대로 일괄 처리합니다."})])]),list=D.el("div",{class:"admin-group-list"}),add=D.el("button",{class:"mini-action",type:"button",text:"그룹 추가"});head.append(add);section.append(head,list,D.el("small",{class:"muted modal-note",text:"그룹은 이 관리자 기기에 저장됩니다. 사용자 명단에서 사라진 계정은 불러올 때 자동 제외됩니다."}));
-    const persist=()=>MiniTalk.Persistence.set(storageKey,groups);
+    const GROUP_CACHE_TTL_MS=30*24*60*60*1000,now=Date.now(),stored=MiniTalk.Persistence.get(storageKey,null);
+    const storedGroups=Array.isArray(stored)?stored:Array.isArray(stored?.groups)?stored.groups:[],lastUsedAt=Array.isArray(stored)?now:Number(stored?.lastUsedAt||0);
+    let groups=lastUsedAt&&now-lastUsedAt>GROUP_CACHE_TTL_MS?[]:cleanGroups(storedGroups);
+    if(!groups.length)groups=[1,2,3].map(index=>({id:`group-${index}`,name:`그룹${index}`,members:[]}));
+    const section=D.el("section",{class:"tool-card admin-group-manager"}),head=D.el("div",{class:"admin-group-head"},[D.el("div",{},[D.el("h3",{text:"그룹 관리"}),D.el("small",{class:"muted",text:"현재 선택한 사용자를 그룹으로 저장하고, 다시 불러와 과제·코인 등을 그대로 일괄 처리합니다."})])]),list=D.el("div",{class:"admin-group-list"}),add=D.el("button",{class:"mini-action",type:"button",text:"그룹 추가"});head.append(add);section.append(head,list,D.el("small",{class:"muted modal-note",text:"그룹은 이 기기의 임시 캐시에 저장되며 30일 동안 사용하지 않으면 자동 삭제됩니다. 사용자 명단에서 사라진 계정은 불러올 때 자동 제외됩니다."}));
+    const persist=()=>MiniTalk.Persistence.set(storageKey,{lastUsedAt:Date.now(),groups});
     const validUserIds=()=>new Set(people.map(person=>String(person.user_id)));
     const applyGroup=group=>{const valid=validUserIds();selected.clear();group.members.forEach(id=>{if(valid.has(String(id)))selected.add(String(id))});drawTargets();updateCount();Shell.toast(`${group.name} ${selected.size}명을 선택했습니다.`)};
     const saveCurrent=group=>{group.members=[...selected].map(String);persist();draw();Shell.toast(`${group.name}에 ${group.members.length}명을 저장했습니다.`)};

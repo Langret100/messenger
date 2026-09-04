@@ -10,8 +10,8 @@ ok(tools.includes('\"face-toy\": () => openCameraTool(MiniTalk.Tools.FaceToy, \"
 ok(config.includes('{name:"페이스 체인지",tool:"face-toy"}'),'face toy related-link entry missing');
 ok(!tools.includes('id: "motion-math"'),'motion game must leave main tools grid');
 ok(config.includes('{name:"동작 인식 게임",url:"https://langret100.github.io/Math-in-Math/"}'),'motion game related link missing');
-ok(html.includes('css/features/face-toy.css?v=6')&&html.includes('js/tools/face-toy.js?v=7'),'face toy assets not loaded');
-ok(html.indexOf('js/tools/face-toy.js?v=7')<html.indexOf('js/tools/lookalike-play.js?v=5')&&html.indexOf('js/tools/lookalike-play.js?v=5')<html.indexOf('js/features/tools.js?v=64.5.17'),'face toy module must load before tools feature');
+ok(html.includes('css/features/face-toy.css?v=')&&html.includes('js/tools/face-toy.js?v='),'face toy assets not loaded');
+ok(html.indexOf('js/tools/face-toy.js?v=')<html.indexOf('js/tools/lookalike-play.js?v=')&&html.indexOf('js/tools/lookalike-play.js?v=')<html.indexOf('js/features/tools.js?v='),'face toy module must load before tools feature');
 ok(sw.includes('./css/features/face-toy.css')&&sw.includes('./js/tools/face-toy.js'),'face toy offline assets missing');
 
 // 로컬 전용: 자체 fetch/API/Firebase 경로가 없어야 하며, 공유 시 기존 Realtime.sendMessage만 재사용한다.

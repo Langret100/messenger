@@ -1,7 +1,8 @@
 /* 쇼핑 탭: 관리자 상품 카탈로그와 사용자 보관함을 표시합니다. */
 MiniTalk.Features.Shopping = (() => {
   const Service = MiniTalk.Shopping.StoreService;
-  let inventoryOpen = false, refreshTimer = 0, randomOverlay = null, randomArrivalId = "";
+  let inventoryOpen = false, refreshTimer = 0, randomOverlay = null, randomArrivalId = "", bulkDeliveryMode = false;
+  const bulkDeliverySelected = new Set();
 
   const DELIVERY_AUDIO_URLS = ['assets/sounds/delivery-order-1.mp3', 'assets/sounds/delivery-order-2.mp3'];
   const DELIVERY_MASCOT_URL = 'assets/mascot-mini-talk.png';
@@ -293,11 +294,21 @@ MiniTalk.Features.Shopping = (() => {
   function inventoryPanel(user, owned, close) {
     const D = MiniTalk.UI.Dom;
     const panel = D.el("aside", { class: "shop-inventory-panel", "aria-label": "보관함" });
-    const closeButton = D.el("button", { class: "icon-button subtle modal-close-button", type: "button", text: "×", "aria-label": "보관함 닫기", onclick: close });
+    const closeButton = D.el("button", { class: "icon-button subtle modal-close-button", type: "button", text: "×", "aria-label": "보관함 닫기", onclick: () => { bulkDeliveryMode = false;bulkDeliverySelected.clear();close(); } });
     panel.append(D.el("header", {}, [D.el("div", {}, [D.el("strong", { text: "보관함" }), D.el("small", { class: "muted", text: user.isGuest ? "로그인 후 이용할 수 있어요" : `보관 상품 ${owned.length}개` })]), closeButton]));
     const inventory = D.el("div", { class: "shop-inventory-list" });
+    const eligible = owned.filter(item => !item.usedAt && !["completed","requested","shipping"].includes(String(item.deliveryStatus || "owned")));
+    if (!user.isGuest && eligible.length >= 2) {
+      const toolbar = D.el("div", { class: `shop-bulk-delivery${bulkDeliveryMode ? " active" : ""}` });
+      const toggle = D.el("button", { class: "button secondary compact-button", type: "button", text: bulkDeliveryMode ? "묶음배송 선택 취소" : "묶음배송" });
+      const submit = D.el("button", { class: "button primary compact-button", type: "button", text: `선택 ${bulkDeliverySelected.size}개 배송요청`, disabled: bulkDeliverySelected.size < 2 });
+      const syncToolbar = () => { submit.textContent = `선택 ${bulkDeliverySelected.size}개 배송요청`;submit.disabled = bulkDeliverySelected.size < 2; };
+      toggle.onclick = () => { bulkDeliveryMode = !bulkDeliveryMode;bulkDeliverySelected.clear();const host=MiniTalk.UI.Dom.byId("viewHost");if(host)render(host,{animate:false,refreshCatalog:false,preserveScroll:true}); };
+      submit.onclick = async () => { if (submit.disabled) return;submit.disabled = toggle.disabled = true;submit.textContent = "묶음배송 요청 중…";const selectedItems=eligible.filter(item=>bulkDeliverySelected.has(String(item.id)));const primedAudio=primeDeliveryAudio();try { const result=await Service.requestDeliveryBulk(selectedItems.map(item=>item.id));MiniTalk.UI.Shell.toast(`${Number(result.count)||selectedItems.length}개 상품 묶음배송을 요청했습니다.`);if(selectedItems[0])renderDeliveryEffect({...selectedItems[0],name:`${selectedItems.length}개 묶음 상품`},{primedAudio});bulkDeliveryMode=false;bulkDeliverySelected.clear();refreshVisible(); } catch(error) { if(primedAudio?.audio){primedAudio.audio.loop=false;primedAudio.audio.pause?.();}MiniTalk.UI.Shell.toast(error.message||"묶음배송을 요청하지 못했습니다.");toggle.disabled=false;syncToolbar(); } };
+      toolbar.append(toggle);if (bulkDeliveryMode) toolbar.append(submit);panel.append(toolbar);
+    } else if (bulkDeliveryMode) { bulkDeliveryMode=false;bulkDeliverySelected.clear(); }
     if (!owned.length) inventory.append(empty(user.isGuest ? "로그인이 필요해요" : "보관함이 비어 있어요", user.isGuest ? "로그인하면 구매한 상품을 확인할 수 있어요." : "구매한 상품과 받은 선물이 여기에 모입니다."));
-    owned.forEach(item => inventory.append(inventoryCard(item)));
+    owned.forEach(item => inventory.append(inventoryCard(item, { bulkMode: bulkDeliveryMode, selected: bulkDeliverySelected.has(String(item.id)), onBulkChange: checked => { if(checked)bulkDeliverySelected.add(String(item.id));else bulkDeliverySelected.delete(String(item.id));const submit=panel.querySelector('.shop-bulk-delivery .button.primary');if(submit){submit.textContent=`선택 ${bulkDeliverySelected.size}개 배송요청`;submit.disabled=bulkDeliverySelected.size<2;} } })));
     panel.append(inventory);
     return panel;
   }
@@ -406,12 +417,13 @@ MiniTalk.Features.Shopping = (() => {
     }
   }
 
-  function inventoryCard(item) {
+  function inventoryCard(item, bulk = {}) {
     const D = MiniTalk.UI.Dom, used = Boolean(item.usedAt) || item.deliveryStatus === 'completed';
     const actions = D.el("div", { class: "shop-inventory-actions" });
     const status = String(item.deliveryStatus || (used ? 'completed' : 'owned'));
-    if (!used) {
-      const deliveryLocked = status === 'requested' || status === 'shipping';
+    const deliveryLocked = status === 'requested' || status === 'shipping';
+    const bulkEligible = !used && !deliveryLocked;
+    if (!used && !bulk.bulkMode) {
       if (!deliveryLocked) {
         const giftButton = D.el("button", { class: "button secondary compact-button", type: "button", text: "선물", onclick: () => openGift(item) });
         actions.append(giftButton);
@@ -422,7 +434,9 @@ MiniTalk.Features.Shopping = (() => {
       actions.append(deliveryButton);
     }
     const arrived = randomArrivalId && String(item.id || "") === String(randomArrivalId);
-    return D.el("article", { class: `shop-inventory-item${used ? " used" : ""}${status ? ` status-${status}` : ''}${arrived ? " random-arrived" : ""}` }, [
+    const bulkCheck = bulk.bulkMode && bulkEligible ? D.el("label", { class: "shop-bulk-check" }, [D.el("input", { type: "checkbox", checked: bulk.selected === true, "aria-label": `${item.name || "상품"} 묶음배송 선택`, onchange: event => bulk.onBulkChange?.(event.currentTarget.checked) }), D.el("span", { text: "선택" })]) : null;
+    return D.el("article", { class: `shop-inventory-item${used ? " used" : ""}${status ? ` status-${status}` : ''}${arrived ? " random-arrived" : ""}${bulk.bulkMode && bulkEligible ? " bulk-selectable" : ""}` }, [
+      bulkCheck,
       item.imageUrl ? D.el("img", { class: "shop-inventory-image", src: item.imageUrl, alt: "", loading: "lazy" }) : null,
       D.el("div", { class: "shop-inventory-copy" }, [
         D.el("strong", { text: item.name || "상품" }),
@@ -576,28 +590,14 @@ MiniTalk.Features.Shopping = (() => {
     const current = MiniTalk.Store.get("user") || {};
     const payloadFor = row => ({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("SHOP"), ownerId: row.ownerId || row.owner_id, inventoryId: row.id || row.inventoryId || row.inventory_id });
     const sameDelivery = (row, payload) => String(row.ownerId || row.owner_id || "") === String(payload.ownerId || "") && String(row.id || row.inventoryId || row.inventory_id || "") === String(payload.inventoryId || "");
-    const verifyTimedOutAction = async (row, kind, originalError) => {
-      try {
-        const latest = await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP")), payload = payloadFor(row), found = latest.find(value => sameDelivery(value, payload));
-        if (kind === "shipping" && found && String(found.deliveryStatus || found.status || "") === "shipping") { rows = latest;return { deliveryStatus: "shipping", verified: true }; }
-        if ((kind === "completed" || kind === "cancelled") && !found) { rows = latest;return { deliveryStatus: kind, verified: true }; }
-      } catch (verifyError) { console.warn("배송 상태 타임아웃 후 확인 실패", verifyError); }
-      throw originalError;
-    };
     const performAction = async (row, kind) => {
       const payload = payloadFor(row);
-      try {
-        let result;
-        if (kind === "shipping") result = await MiniTalk.AuthApi.shopDeliveryShipping(payload);
-        else if (kind === "completed") result = await MiniTalk.AuthApi.shopDeliveryComplete(payload);
-        else result = await MiniTalk.AuthApi.shopDeliveryCancel(payload);
-        if (String(result?.deliveryStatus || "") !== kind) throw new Error("서버 배송 상태를 확인하지 못했습니다. 다시 새로고침해주세요.");
-        return { result, payload };
-      } catch (error) {
-        if (String(error?.code || "") !== "REQUEST_TIMEOUT") throw error;
-        const result = await verifyTimedOutAction(row, kind, error);
-        return { result, payload };
-      }
+      let result;
+      if (kind === "shipping") result = await MiniTalk.AuthApi.shopDeliveryShipping(payload);
+      else if (kind === "completed") result = await MiniTalk.AuthApi.shopDeliveryComplete(payload);
+      else result = await MiniTalk.AuthApi.shopDeliveryCancel(payload);
+      if (String(result?.deliveryStatus || "") !== kind) throw new Error("서버 배송 상태를 확인하지 못했습니다. 다시 새로고침해주세요.");
+      return { result, payload };
     };
     const applyLocalSuccess = (row, kind, payload) => {
       MiniTalk.Realtime.notifyCommandTargets?.([payload.ownerId]);
@@ -608,25 +608,32 @@ MiniTalk.Features.Shopping = (() => {
       list.replaceChildren();
       bulkComplete.disabled = bulkRunning || !rows.length;
       if (!rows.length) { list.append(empty("대기 중인 배송이 없어요", "새 배송 요청이 들어오면 여기에 표시됩니다."));return; }
-      rows.forEach(row => {
-        const status = String(row.deliveryStatus || row.status || "requested"), item = D.el("article", { class: `admin-delivery-row status-${status}` });
-        const copy = D.el("div", { class: "admin-delivery-copy" }, [D.el("strong", { text: row.name || "상품" }), D.el("span", { text: row.nickname || row.ownerNickname || row.owner_id || row.ownerId || "학생" }), D.el("small", { class: "muted", text: status === "shipping" ? "배송중" : "배송 요청" })]);
-        const buttons = D.el("div", { class: "button-row compact-row" });
-        const action = async (kind, button) => {
-          if (button.disabled || bulkRunning) return;
-          const group = [...buttons.querySelectorAll("button")], original = button.textContent;group.forEach(value => value.disabled = true);button.textContent = kind === "completed" ? "완료 처리 중…" : kind === "cancelled" ? "취소 중…" : "변경 중…";
-          try {
-            const { payload } = await performAction(row, kind);applyLocalSuccess(row, kind, payload);
-            Shell.toast(kind === "completed" ? "배송완료로 처리했습니다." : kind === "cancelled" ? "배송을 취소했습니다." : "배송중으로 변경했습니다.");draw();
-          } catch (error) {
-            if (["ADMIN_SESSION_EXPIRED","ADMIN_AUTH_REQUIRED","SHOP_MANAGER_PERMISSION_REQUIRED"].includes(String(error?.code || ""))) MiniTalk.AdminSession.clear?.();
-            Shell.toast(error.message || "배송 상태를 변경하지 못했습니다.");
-            if (button?.isConnected) { group.forEach(value => value.disabled = false);button.textContent = original; }
-          }
-        };
-        if (status === "requested") { const shipping = D.el("button", { class: "button secondary compact-button", type: "button", text: "배송 시작" });shipping.onclick = () => action("shipping", shipping);buttons.append(shipping); }
-        const complete = D.el("button", { class: "button primary compact-button", type: "button", text: "배송완료" }), cancel = D.el("button", { class: "button secondary compact-button", type: "button", text: "취소" });
-        complete.onclick = () => action("completed", complete);cancel.onclick = () => action("cancelled", cancel);buttons.append(complete, cancel);item.append(copy, buttons);list.append(item);
+      const grouped = new Map();
+      rows.forEach(row => { const key=String(row.ownerId || row.owner_id || row.nickname || "unknown");if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(row); });
+      grouped.forEach(groupRows => {
+        const first=groupRows[0]||{}, groupBox=D.el("section", { class: "admin-delivery-user-group" }), groupHead=D.el("div", { class: "admin-delivery-user-head" }, [D.el("strong", { text: first.nickname || first.ownerNickname || first.owner_id || first.ownerId || "학생" }), D.el("span", { text: `${groupRows.length}건` })]), groupList=D.el("div", { class: "admin-delivery-user-items" });
+        groupBox.append(groupHead,groupList);list.append(groupBox);
+        groupRows.forEach(row => {
+          const status = String(row.deliveryStatus || row.status || "requested"), item = D.el("article", { class: `admin-delivery-row status-${status}` });
+          const copy = D.el("div", { class: "admin-delivery-copy" }, [D.el("strong", { text: row.name || "상품" }), D.el("small", { class: "muted", text: status === "shipping" ? "배송중" : "배송 요청" })]);
+          const buttons = D.el("div", { class: "button-row compact-row" });
+          const action = async (kind, button) => {
+            if (button.disabled || bulkRunning) return;
+            const buttonGroup = [...buttons.querySelectorAll("button")], original = button.textContent;buttonGroup.forEach(value => value.disabled = true);button.textContent = kind === "completed" ? "완료 처리 중…" : kind === "cancelled" ? "취소 중…" : "변경 중…";
+            try {
+              const { payload } = await performAction(row, kind);applyLocalSuccess(row, kind, payload);
+              Shell.toast(kind === "completed" ? "배송완료로 처리했습니다." : kind === "cancelled" ? "배송을 취소했습니다." : "배송중으로 변경했습니다.");draw();
+            } catch (error) {
+              if (["ADMIN_SESSION_EXPIRED","ADMIN_AUTH_REQUIRED","SHOP_MANAGER_PERMISSION_REQUIRED"].includes(String(error?.code || ""))) MiniTalk.AdminSession.clear?.();
+              Shell.toast(error.message || "배송 상태를 변경하지 못했습니다.");
+              if (String(error?.code || "") === "REQUEST_TIMEOUT") setTimeout(() => load().catch?.(() => {}), 0);
+              if (button?.isConnected) { buttonGroup.forEach(value => value.disabled = false);button.textContent = original; }
+            }
+          };
+          if (status === "requested") { const shipping = D.el("button", { class: "button secondary compact-button", type: "button", text: "배송 시작" });shipping.onclick = () => action("shipping", shipping);buttons.append(shipping); }
+          const complete = D.el("button", { class: "button primary compact-button", type: "button", text: "배송완료" }), cancel = D.el("button", { class: "button secondary compact-button", type: "button", text: "취소" });
+          complete.onclick = () => action("completed", complete);cancel.onclick = () => action("cancelled", cancel);buttons.append(complete, cancel);item.append(copy, buttons);groupList.append(item);
+        });
       });
     };
     const load = async () => {
@@ -639,16 +646,21 @@ MiniTalk.Features.Shopping = (() => {
     bulkComplete.onclick = async () => {
       if (bulkRunning || !rows.length) return;
       bulkRunning = true;refresh.disabled = bulkComplete.disabled = true;progress.classList.remove("hidden");
-      const queue = [...rows];let cursor = 0, completed = 0, failed = 0;
-      progress.textContent = `일괄 배송완료 처리 중… 0/${queue.length}`;
-      const worker = async () => { while (true) { const index = cursor++;if (index >= queue.length) return;const row = queue[index];try { const { payload } = await performAction(row, "completed");applyLocalSuccess(row, "completed", payload);completed++; } catch (error) { failed++;console.warn("일괄 배송완료 제외", row, error); } progress.textContent = `일괄 배송완료 처리 중… ${completed + failed}/${queue.length}`; } };
-      try { await Promise.all(Array.from({ length: Math.min(2, queue.length) }, () => worker()));try { rows = await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP")); } catch (error) { console.warn("일괄 배송완료 후 목록 확인 실패", error); }draw();Shell.toast(`${completed}건을 배송완료 처리했습니다.${failed ? ` · ${failed}건은 다시 확인해주세요.` : ""}`); }
-      finally { bulkRunning = false;progress.classList.add("hidden");refresh.disabled = false;bulkComplete.disabled = !rows.length; }
+      const queue=[...rows],targets=queue.map(row=>({ownerId:row.ownerId||row.owner_id,inventoryId:row.id||row.inventoryId||row.inventory_id}));
+      progress.textContent = `일괄 배송완료 처리 중… ${queue.length}건`;
+      try {
+        const result=await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
+        const owners=[...new Set(queue.map(row=>String(row.ownerId||row.owner_id||"")).filter(Boolean))];MiniTalk.Realtime.notifyCommandTargets?.(owners);
+        rows=[];draw();Shell.toast(`${Number(result.count)||queue.length}건을 한 번에 배송완료 처리했습니다.`);
+      } catch(error) {
+        Shell.toast(error.message||"일괄 배송완료 처리에 실패했습니다.");
+        if(String(error?.code||"")==="REQUEST_TIMEOUT") setTimeout(()=>load().catch?.(()=>{}),0);
+      } finally { bulkRunning=false;progress.classList.add("hidden");refresh.disabled=false;bulkComplete.disabled=!rows.length; }
     };
     refresh.onclick = load;load();return panel;
   }
 
-  function leave(){inventoryOpen=false;clearTimeout(refreshTimer);refreshTimer=0;Service.leave?.()}
+  function leave(){inventoryOpen=false;bulkDeliveryMode=false;bulkDeliverySelected.clear();clearTimeout(refreshTimer);refreshTimer=0;Service.leave?.()}
   return { id: "shopping", title: "쇼핑", icon: "▤", render, leave, adminPanel, deliveryAdminPanel };
 })();
 MiniTalk.Registry.register(MiniTalk.Features.Shopping);

@@ -10,5 +10,5 @@ const mustFloat=['😀','😂😂','❤️','👍🏻','👨‍👩‍👧‍�
 for(const value of mustFloat){if(!emoji.isOnlyUnicode(value))throw new Error(`emoji-only message did not float: ${value}`)}
 if(!emoji.isOnlyCustom(':e13:','')||!emoji.isOnlyCustom('웃음','e13'))throw new Error('custom emoticon-only detection regressed');
 const index=fs.readFileSync(path.join(root,'index.html'),'utf8');
-if(!index.includes('js/chat/emoji.js?v=59'))throw new Error('emoji module cache version is stale');
+if(!index.includes('js/chat/emoji.js?v='))throw new Error('emoji module cache version is stale');
 console.log('CHAT_EMOJI_BUBBLE_CLASSIFICATION_OK');

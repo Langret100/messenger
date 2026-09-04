@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const engine=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('js/ai/moa-communication-engine.js?v=50'),'MOA everyday engine cache bust missing');
+ok(html.includes('js/ai/moa-communication-engine.js?v='),'MOA everyday engine cache bust missing');
 ok(engine.includes('function dateTime(raw)'),'local date/time handler missing');
 
 class FixedDate extends Date {

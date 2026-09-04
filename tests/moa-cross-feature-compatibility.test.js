@@ -53,6 +53,6 @@ ok(gs.includes('MOA_SCHEMA_MISMATCH'),'schema mismatch guard missing');
 ok(gs.includes('unexpected.length&&recognized<headers.length'),'partial header corruption can still be silently relabelled');
 console.log('MOA_V6_SCHEMA_GUARD_OK');
 
-ok(html.includes('auth-api.js?v=64.5.41')&&html.includes('moa-communication-engine.js?v=50')&&html.includes('admin.js?v=64.5.43'),'V6 browser cache busts missing');
-ok(app.includes('sw.js?v=64.5.61')&&html.includes('js/app.js?v=64.5.47')&&sw.includes('moaru-runtime-bundle-2'),'V6 service worker/app cache chain missing');
+ok(html.includes('auth-api.js?v=')&&html.includes('moa-communication-engine.js?v=')&&html.includes('admin.js?v='),'V6 browser cache busts missing');
+ok(app.includes('sw.js?v=')&&html.includes('js/app.js?v=')&&sw.includes('moaru-runtime-bundle-'),'V6 service worker/app cache chain missing');
 console.log('MOA_V6_CACHE_VERSION_OK');

@@ -322,6 +322,9 @@ function doPost(e) {
       case "shop_request_delivery":
         return handleShopRequestDelivery(e);
 
+      case "shop_request_delivery_bulk":
+        return handleShopRequestDeliveryBulk(e);
+
       case "shop_delivery_list":
         return handleShopDeliveryList(e);
 
@@ -330,6 +333,9 @@ function doPost(e) {
 
       case "shop_delivery_complete":
         return handleShopDeliveryComplete(e);
+
+      case "shop_delivery_complete_bulk":
+        return handleShopDeliveryCompleteBulk(e);
 
       case "shop_delivery_cancel":
         return handleShopDeliveryCancel(e);

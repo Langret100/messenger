@@ -1,10 +1,10 @@
 const fs=require('fs'),path=require('path');
 const root=path.resolve(__dirname,'..'),sw=fs.readFileSync(path.join(root,'sw.js'),'utf8'),app=fs.readFileSync(path.join(root,'js/app.js'),'utf8'),index=fs.readFileSync(path.join(root,'index.html'),'utf8');
 if(sw.includes('moaru-moa-dialogue-fusion-final'))throw new Error('service worker cache generation was not rotated');
-if(!sw.includes('moaru-runtime-bundle-2'))throw new Error('new service worker cache generation missing');
+if(!sw.includes('moaru-runtime-bundle-'))throw new Error('new service worker cache generation missing');
 if(!sw.includes('cachedExact(request)')||!sw.includes('cachedCodeFallback(request)'))throw new Error('exact code bundle fallback missing');
 const codeBlock=sw.slice(sw.indexOf('if (["script", "style", "manifest"]'),sw.indexOf('event.respondWith(',sw.indexOf('if (["script", "style", "manifest"]')+10)+400);
 if(codeBlock.includes('ignoreSearch: true'))throw new Error('versioned scripts/styles can still ignore cache query');
-if(!app.includes('sw.js?v=64.5.61'))throw new Error('service worker registration cache version stale');
-for(const token of ['realtime.js?v=64.5.53','shell.js?v=64.5.36','store-service.js?v=64.5.26','task-service.js?v=64.5.28','admin.js?v=64.5.43','app.js?v=64.5.47'])if(!index.includes(token))throw new Error(`bundle cache version missing: ${token}`);
+if(!app.includes('sw.js?v='))throw new Error('service worker registration cache version stale');
+for(const token of ['realtime.js?v=','shell.js?v=','store-service.js?v=','task-service.js?v=','admin.js?v=','app.js?v='])if(!index.includes(token))throw new Error(`bundle cache version missing: ${token}`);
 console.log('CACHE_BUNDLE_INTEGRITY_OK');

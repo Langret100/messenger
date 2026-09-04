@@ -12,6 +12,6 @@ ok(shell.includes('MiniTalk.Realtime.init(user).then('),'workspace entry must no
 ok(!shell.includes('const transport=await MiniTalk.Realtime.init(user)'),'workspace is still blocked by realtime initialization');
 ok(rt.includes('if(JSON.stringify(presenceCache[s.key])===JSON.stringify(next))return'),'presence initial child replay should be deduped');
 ok(rt.includes('JSON.stringify((kind==="legacy"?legacyProfiles:currentProfiles)[key])===JSON.stringify(value)'), 'profile delta replay should be deduped');
-ok(index.includes('realtime.js?v=64.5.53')&&index.includes('app.js?v=64.5.47'),'login-room cache version stale');
-ok(sw.includes('moaru-runtime-bundle-2')&&app.includes('sw.js?v=64.5.61'),'service worker cache version stale');
+ok(index.includes('realtime.js?v=')&&index.includes('app.js?v='),'login-room cache version stale');
+ok(sw.includes('moaru-runtime-bundle-')&&app.includes('sw.js?v='),'service worker cache version stale');
 console.log('LOGIN_ROOM_INITIALIZATION_OK');

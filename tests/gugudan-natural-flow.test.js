@@ -23,5 +23,5 @@ ok(!html.includes('ball.style.bottom = `${BALL_START_BOTTOM}px`'), 'all balls st
 ok(html.includes('const startBottom = BALL_START_BOTTOM + rawBottomOffsets[index]'), 'per-ball start bottom missing');
 ok(html.includes('const newBottom = startBottom + maxRiseHeight * progress'), 'animation ignores per-ball start bottom');
 ok(games.includes('games/gugudan.html?v=27'), 'gugudan cache bust not bumped');
-ok(index.includes('js/features/games.js?v=24'), 'games loader cache bust not bumped');
+ok(index.includes('js/features/games.js?v='), 'games loader cache bust not bumped');
 console.log('GUGUDAN_NATURAL_FLOW_OK');

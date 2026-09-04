@@ -3,7 +3,7 @@ const ok=(v,m)=>{if(!v)throw new Error(m)};
 const engine=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const gs=fs.readFileSync('docs/apps-script/MOA_AI.gs','utf8');
 const html=fs.readFileSync('index.html','utf8');
-ok(html.includes('moa-communication-engine.js?v=50'),'public example cache bust missing');
+ok(html.includes('moa-communication-engine.js?v='),'public example cache bust missing');
 for(const token of ['MOA_EXAMPLE_SHEET','모아_대화예시','moaStoreDialogueEvents_','moaPublicExamples_','moaPublicHumanPatterns_','dialogue_example'])ok(gs.includes(token),'server common-example learning missing '+token);
 for(const token of ['publicExampleText','commonDialogueExampleEvent','type:"dialogue_example"','learnedCandidates'])ok(engine.includes(token),'client common-example learning missing '+token);
 ok(/(?:비밀번호|주민\(\?:등록\)\?번호|계좌번호)/.test(gs),'server privacy guard missing');

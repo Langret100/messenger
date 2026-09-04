@@ -2,8 +2,8 @@ const fs=require('fs'),path=require('path'),vm=require('vm'),cryptoNode=require(
 const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
 const shopping=read('js/features/shopping.js'),server=read('docs/apps-script/coin-shopping-extension.gs');
 const adminStart=shopping.indexOf('function deliveryAdminPanel'),adminEnd=shopping.indexOf('function leave()',adminStart),adminBody=shopping.slice(adminStart,adminEnd);
-ok(adminBody.includes('rows = rows.filter(value => value !== row)'),'admin complete/cancel does not remove only the changed row');
-ok(adminBody.includes('rows = rows.map(value => value === row ? {...value,status:"shipping"'),'admin shipping does not patch only the changed row');
+ok(adminBody.includes('rows = rows.filter(value => !sameDelivery(value, payload))'),'admin complete/cancel does not remove only the changed row');
+ok(adminBody.includes('rows = rows.map(value => sameDelivery(value, payload) ? { ...value, status: "shipping"'),'admin shipping does not patch only the changed row');
 ok(!adminBody.includes('await load();'),'admin delivery action still performs a second full list request');
 ok(shopping.includes('if (users.length || MiniTalk.UserDirectory?.loaded?.())'),'gift dialog still blocks on directory refresh even when cached users exist');
 ok(shopping.includes('send.textContent = "보내는 중…"'),'gift send lacks immediate button feedback');

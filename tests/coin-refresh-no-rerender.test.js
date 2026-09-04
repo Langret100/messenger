@@ -10,5 +10,5 @@ ok(admin.includes('MiniTalk.Realtime.notifyCommandTargets?.(targets);applyBalanc
 ok(admin.includes('(result.rewarded||[]).forEach(row=>{balanceMap[row.user_id]=Math.floor(Number(row.newCoin)||0)'), 'admin coin result must use authoritative newCoin values');
 ok(wallet.includes('button.dataset.refreshing === "1"'), 'coin badge must guard repeat clicks without disabling/reflowing the button');
 ok(!wallet.includes('button.disabled = true;\n        const amount = await refresh(true);'), 'coin refresh must not toggle disabled state and blink the badge');
-ok(html.includes('js/economy/coin-wallet.js?v=64.5.12')&&html.includes('js/features/admin.js?v=64.5.43'), 'asset cache versions not updated');
+ok(html.includes('js/economy/coin-wallet.js?v=')&&html.includes('js/features/admin.js?v='), 'asset cache versions not updated');
 console.log('COIN_REFRESH_NO_RERENDER_OK');

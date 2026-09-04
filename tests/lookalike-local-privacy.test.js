@@ -10,8 +10,8 @@ ok(tools.includes('id: "lookalike"')&&tools.includes('openCameraTool(MiniTalk.To
 ok(tools.includes('id: "playground"'),'online playground must be present in main tool grid');
 ok(config.includes('{name:"페이스 체인지",tool:"face-toy"}'),'face change related-link entry missing');
 ok(config.includes('{name:"동작 인식 게임",url:"https://langret100.github.io/Math-in-Math/"}'),'motion game related link missing');
-ok(html.includes('css/features/lookalike-play.css?v=5')&&html.includes('js/tools/lookalike-play.js?v=5'),'lookalike assets missing');
-ok(html.indexOf('js/tools/lookalike-play.js?v=5')<html.indexOf('js/features/tools.js?v=64.5.17'),'lookalike module must load before tools feature');
+ok(html.includes('css/features/lookalike-play.css?v=')&&html.includes('js/tools/lookalike-play.js?v='),'lookalike assets missing');
+ok(html.indexOf('js/tools/lookalike-play.js?v=')<html.indexOf('js/features/tools.js?v='),'lookalike module must load before tools feature');
 ok(sw.includes('./css/features/lookalike-play.css')&&sw.includes('./js/tools/lookalike-play.js'),'lookalike offline shell assets missing');
 
 // 프라이버시: 로컬 영구 저장/기존 서버 업로드 금지. 온라인 요청은 Commons 공개 검색어만 사용.

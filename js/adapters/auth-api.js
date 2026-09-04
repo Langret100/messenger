@@ -40,14 +40,19 @@ MiniTalk.AuthApi = (() => {
     NO_TASKS_SELECTED: "과제를 선택하세요.",
     TASK_DELETE_CONFLICT: "보상 처리 중인 과제는 삭제할 수 없습니다. 잠시 후 다시 확인해주세요."
   };
-  async function post(payload, timeoutMs = 20000, options = {}) {
+  async function post(payload, timeoutMs = 7000) {
     const body = new URLSearchParams();
     Object.entries(payload).forEach(([key, value]) => body.set(key, String(value ?? "")));
     const retryableStatus = status => [404, 429, 500, 502, 503, 504].includes(Number(status));
-    const retryTimeout = options.retryTimeout === true, maxAttempts = retryTimeout ? 2 : 2;
+    // 처음 클릭부터 재시도까지 합쳐 화면 대기시간은 최대 7초입니다.
+    const totalBudgetMs = Math.min(7000, Math.max(1000, Number(timeoutMs || 7000))), deadline = Date.now() + totalBudgetMs;
+    const maxAttempts = 2;
+    const timeoutFailure = () => { const error = new Error("서버 응답이 7초를 넘겨 요청을 종료했습니다. 잠시 후 상태를 다시 확인해주세요.");error.code = "REQUEST_TIMEOUT";return error; };
     let lastNetworkError = null;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs || 20000)));
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw timeoutFailure();
+      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), Math.max(1, remaining));
       let response;
       try {
         response = await fetch(MiniTalkConfig.sheetUrl, {
@@ -58,22 +63,20 @@ MiniTalk.AuthApi = (() => {
         });
       } catch (error) {
         if (error?.name === "AbortError") {
-          const timeoutError = new Error("서버 응답이 평소보다 늦습니다. 처리 상태를 확인하고 있습니다.");
-          timeoutError.code = "REQUEST_TIMEOUT";
+          const timeoutError = timeoutFailure();
           lastNetworkError = timeoutError;
-          if (retryTimeout && attempt === 0) { await new Promise(resolve => setTimeout(resolve, 500));continue; }
           throw timeoutError;
         }
         lastNetworkError = error;
-        if (attempt === 0) { await new Promise(resolve => setTimeout(resolve, 350));continue; }
+        if (attempt === 0 && deadline - Date.now() > 500) { await new Promise(resolve => setTimeout(resolve, Math.min(250, Math.max(0, deadline - Date.now() - 1))));continue; }
         throw error;
       } finally {
         clearTimeout(timer);
       }
       // Apps Script 새 배포 직후/프록시 재연결 때 드물게 발생하는 일시 HTTP 오류는 한 번만 재시도합니다.
       // POST 본문에는 구매/선물/관리자 변경용 request key가 있어 동일 요청 중복은 서버에서 막습니다.
-      if (!response.ok && retryableStatus(response.status) && attempt === 0) {
-        await new Promise(resolve => setTimeout(resolve, 350));
+      if (!response.ok && retryableStatus(response.status) && attempt === 0 && deadline - Date.now() > 500) {
+        await new Promise(resolve => setTimeout(resolve, Math.min(250, Math.max(0, deadline - Date.now() - 1))));
         continue;
       }
       if (!response.ok) throw new Error(`서버 오류 ${response.status}`);
@@ -105,14 +108,14 @@ MiniTalk.AuthApi = (() => {
       return data.coin ?? data.balance ?? 0;
     },
     async adminUnlock(userId, adminCode) {
-      return post({ mode: "admin_unlock", user_id: userId, admin_code: adminCode }, 35000, { retryTimeout: true });
+      return post({ mode: "admin_unlock", user_id: userId, admin_code: adminCode }, 7000);
     },
     async shopCatalog() {
-      const data = await post({ mode: "shop_catalog" }, 35000, { retryTimeout: true });
+      const data = await post({ mode: "shop_catalog" }, 7000);
       return Array.isArray(data.products) ? data.products : [];
     },
     async userDirectory(userId) {
-      const data = await post({ mode: "user_directory", user_id: userId }, 35000, { retryTimeout: true });
+      const data = await post({ mode: "user_directory", user_id: userId }, 7000);
       return Array.isArray(data.users) ? data.users : [];
     },
     async shopSaveProduct(userId, adminToken, product) {
@@ -126,7 +129,7 @@ MiniTalk.AuthApi = (() => {
         description: product.description || "",
         quantity: product.quantity === null || product.quantity === undefined ? "" : product.quantity,
         image_data: product.imageUrl || ""
-      }, 35000);
+      }, 7000);
     },
     async shopDeleteProduct(userId, adminToken, productId) {
       return post({
@@ -134,7 +137,7 @@ MiniTalk.AuthApi = (() => {
         user_id: userId,
         admin_token: adminToken,
         product_id: productId
-      }, 35000);
+      }, 7000);
     },
     /*
      * 서버는 상품 ID·가격을 다시 검증하고 코인 차감과 구매 키 중복 검사를
@@ -158,26 +161,32 @@ MiniTalk.AuthApi = (() => {
       return Array.isArray(data.items) ? data.items : [];
     },
     async shopGift({ userId, nickname, targetId, inventoryId, item, requestId }) {
-      return post({ mode: "shop_gift", user_id: userId, nickname, target_user_id: targetId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 35000, { retryTimeout: Boolean(requestId) });
+      return post({ mode: "shop_gift", user_id: userId, nickname, target_user_id: targetId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 7000);
     },
     async shopUse({ userId, inventoryId, item }) {
       return post({ mode: "shop_use", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}) });
     },
     async shopRequestDelivery({ userId, inventoryId, item, requestId }) {
-      return post({ mode: "shop_request_delivery", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 35000, { retryTimeout: Boolean(requestId) });
+      return post({ mode: "shop_request_delivery", user_id: userId, inventory_id: inventoryId, item_json: JSON.stringify(item || {}), request_id: requestId || "" }, 7000);
+    },
+    async shopRequestDeliveryBulk({ userId, inventoryIds, requestId }) {
+      return post({ mode: "shop_request_delivery_bulk", user_id: userId, inventory_ids_json: JSON.stringify(inventoryIds || []), request_id: requestId || "" }, 7000);
     },
     async shopDeliveryList(userId, adminToken) {
-      const data = await post({ mode: "shop_delivery_list", user_id: userId, admin_token: adminToken }, 35000, { retryTimeout: true });
+      const data = await post({ mode: "shop_delivery_list", user_id: userId, admin_token: adminToken }, 7000);
       return Array.isArray(data.deliveries) ? data.deliveries : [];
     },
     async shopDeliveryShipping({ userId, adminToken, ownerId, inventoryId }) {
-      return post({ mode: "shop_delivery_shipping", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 45000);
+      return post({ mode: "shop_delivery_shipping", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 7000);
     },
     async shopDeliveryComplete({ userId, adminToken, ownerId, inventoryId }) {
-      return post({ mode: "shop_delivery_complete", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 45000);
+      return post({ mode: "shop_delivery_complete", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 7000);
+    },
+    async shopDeliveryCompleteBulk({ userId, adminToken, targets }) {
+      return post({ mode: "shop_delivery_complete_bulk", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []) }, 7000);
     },
     async shopDeliveryCancel({ userId, adminToken, ownerId, inventoryId }) {
-      return post({ mode: "shop_delivery_cancel", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 45000);
+      return post({ mode: "shop_delivery_cancel", user_id: userId, admin_token: adminToken, owner_id: ownerId, inventory_id: inventoryId }, 7000);
     },
     async adminDispatch({ userId, adminToken, targets, type, payload, requestId }) {
       return post({
@@ -188,7 +197,7 @@ MiniTalk.AuthApi = (() => {
         command_type: type,
         payload_json: JSON.stringify(payload || {}),
         request_id: requestId || ""
-      }, 35000, { retryTimeout: Boolean(requestId) });
+      }, 7000);
     },
     async adminCoinReward({ userId, adminToken, targets, amount, reason, requestId }) {
       return post({
@@ -199,33 +208,33 @@ MiniTalk.AuthApi = (() => {
         amount,
         reason: reason || "관리자 보상",
         request_id: requestId || ""
-      }, 35000, { retryTimeout: Boolean(requestId) });
+      }, 7000);
     },
     async adminUserBalances(userId, adminToken) {
-      const data = await post({ mode: "admin_user_balances", user_id: userId, admin_token: adminToken }, 35000, { retryTimeout: true });
+      const data = await post({ mode: "admin_user_balances", user_id: userId, admin_token: adminToken }, 7000);
       return Array.isArray(data.users) ? data.users : [];
     },
     async adminTaskAssign({ userId, adminToken, targets, title, description, rewardCoin, requestId }) {
-      return post({ mode: "admin_task_assign", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []), title, description, reward_coin: rewardCoin, request_id: requestId || "" }, 35000, { retryTimeout: Boolean(requestId) });
+      return post({ mode: "admin_task_assign", user_id: userId, admin_token: adminToken, targets_json: JSON.stringify(targets || []), title, description, reward_coin: rewardCoin, request_id: requestId || "" }, 7000);
     },
     async adminTaskList(userId, adminToken) {
-      const data = await post({ mode: "admin_task_list", user_id: userId, admin_token: adminToken }, 35000, { retryTimeout: true });
+      const data = await post({ mode: "admin_task_list", user_id: userId, admin_token: adminToken }, 7000);
       return Array.isArray(data.tasks) ? data.tasks : [];
     },
     async adminTaskReview({ userId, adminToken, taskId, action, feedback }) {
-      return post({ mode: "admin_task_review", user_id: userId, admin_token: adminToken, task_id: taskId, action, feedback }, 45000);
+      return post({ mode: "admin_task_review", user_id: userId, admin_token: adminToken, task_id: taskId, action, feedback }, 7000);
     },
     async adminTaskBulkReview({ userId, adminToken, taskIds, action = "complete", feedback = "" }) {
-      return post({ mode: "admin_task_bulk_review", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []), action, feedback }, 45000);
+      return post({ mode: "admin_task_bulk_review", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []), action, feedback }, 7000);
     },
     async adminTaskBulkDelete({ userId, adminToken, taskIds }) {
-      return post({ mode: "admin_task_bulk_delete", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []) }, 45000);
+      return post({ mode: "admin_task_bulk_delete", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []) }, 7000);
     },
     async adminMoaLearningStatus(userId, adminToken) {
       return post({ mode: "moa_admin_learning_status", user_id: userId, admin_token: adminToken });
     },
     async adminMoaLearnChats({ userId, adminToken, reset = false, batchLimit = 260, cleanup = false }) {
-      return post({ mode: "moa_admin_learn_chats", user_id: userId, admin_token: adminToken, reset: reset ? "1" : "", cleanup: cleanup ? "1" : "", batch_limit: batchLimit }, 45000);
+      return post({ mode: "moa_admin_learn_chats", user_id: userId, admin_token: adminToken, reset: reset ? "1" : "", cleanup: cleanup ? "1" : "", batch_limit: batchLimit }, 7000);
     },
     async userTaskList(userId) {
       const data = await post({ mode: "user_task_list", user_id: userId });

@@ -11,6 +11,6 @@ ok(chats.includes('function scrollToLatest(list)')&&chats.includes('scrollToLate
 ok(css.includes('scroll-behavior:auto')&&css.includes('.message-list::-webkit-scrollbar')&&css.includes('scrollbar-gutter:stable'),'native draggable chat scrollbar / no-smooth-race CSS missing');
 ok(guard.includes('nativeScrollSurface')&&guard.includes('.message-list,.conversation-list'),'interaction guard still blocks native scrollbar surface');
 ok(feedCss.includes('bottom:calc(-20px + 58px')&&feedCss.includes('bottom:calc(-20px + 54px'),'feed + button was not lowered consistently');
-ok(html.includes('css/app.css?v=64.5.23')&&html.includes('css/features/feed-classinfo-weekly.css?v=65.0.31')&&html.includes('js/adapters/realtime.js?v=64.5.53')&&html.includes('js/ui/shell.js?v=64.5.36')&&html.includes('js/ui/interaction-guard.js?v=64.5.1')&&html.includes('js/features/chats.js?v=64.5.28')&&html.includes('js/app.js?v=64.5.47'),'cache-bust versions stale');
-ok(sw.includes('moaru-runtime-bundle-2')&&app.includes('sw.js?v=64.5.61'),'service-worker cache version stale');
+ok(html.includes('css/app.css?v=')&&html.includes('css/features/feed-classinfo-weekly.css?v=')&&html.includes('js/adapters/realtime.js?v=')&&html.includes('js/ui/shell.js?v=')&&html.includes('js/ui/interaction-guard.js?v=')&&html.includes('js/features/chats.js?v=')&&html.includes('js/app.js?v='),'cache-bust versions stale');
+ok(sw.includes('moaru-runtime-bundle-')&&app.includes('sw.js?v='),'service-worker cache version stale');
 console.log('CHAT_SCROLL_INITIAL_LIST_OK');

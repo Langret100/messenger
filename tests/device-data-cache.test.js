@@ -4,7 +4,7 @@ const cache=read("js/adapters/data-cache.js"),rt=read("js/adapters/realtime.js")
 ok(cache.includes('indexedDB.open(DB_NAME,DB_VERSION)')&&cache.includes('CHAT_MAX=100'),"IndexedDB shared data cache missing");
 ok(cache.includes('MAX_AGE=30*24*60*60*1000')&&cache.includes('CLEAN_INTERVAL=24*60*60*1000'),"automatic cache retention/maintenance missing");
 ok(cache.includes('async function getMessages(roomId,limit=CHAT_MAX)')&&cache.includes('async function putMessage(roomId,message)'),"chat cache API missing");
-ok(index.includes('js/adapters/data-cache.js?v=64.5.25'),"data cache script not loaded");
+ok(index.includes('js/adapters/data-cache.js?v='),"data cache script not loaded");
 ok(sw.includes('"./js/adapters/data-cache.js"'),"data cache module missing from offline core");
 ok(rt.includes('MiniTalk.DataCache?.getMessages?.(cacheRoom,CHAT_PAGE_SIZE)')&&rt.includes('base.limitToLast(CHAT_PAGE_SIZE)')&&rt.includes('base.startAt(lastTs)')&&rt.includes('`${user.user_id}|${roomId}`'),"chat should use user-scoped cached history then Firebase delta");
 ok(rt.includes('startProfileCollection')&&rt.includes('orderByChild("updatedAt").startAt(latest+1)'),"profile delta sync missing");

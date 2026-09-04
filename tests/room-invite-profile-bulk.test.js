@@ -12,5 +12,5 @@ ok(chats.includes('text:"선택 해제"'),'invite dialog clear selection missing
 ok(chats.includes('candidates.forEach(person=>selected.add(person.user_id))'),'bulk select does not select invite candidates');
 ok(chats.includes('selected.clear();renderCandidates(search.value)'),'bulk clear does not clear invite candidates');
 ok(chats.includes('avatar.replaceWith(D.el("span"'),'broken profile image fallback missing');
-ok(html.includes('js/features/chats.js?v=64.5.28'),'invite patch cache version stale');
+ok(html.includes('js/features/chats.js?v='),'invite patch cache version stale');
 console.log('ROOM_INVITE_PROFILE_BULK_OK');

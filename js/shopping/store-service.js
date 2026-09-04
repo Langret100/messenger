@@ -199,6 +199,27 @@ MiniTalk.Shopping.StoreService = (() => {
       pendingDeliveryKeys.delete(pendingKey);
     }
   }
+  async function requestDeliveryBulk(ids) {
+    const current=requireLogin(),wanted=[...new Set((Array.isArray(ids)?ids:[]).map(String).filter(Boolean))].slice(0,20);
+    if(wanted.length<2)throw new Error("묶음배송할 상품을 2개 이상 선택하세요.");
+    const items=inventory(),byId=new Map(items.map(item=>[String(item.id),item])),selected=wanted.map(id=>byId.get(id)).filter(Boolean);
+    if(selected.length!==wanted.length)throw new Error("선택한 상품 중 보관함에서 찾을 수 없는 항목이 있습니다.");
+    selected.forEach(item=>{if(item.usedAt||item.deliveryStatus==="completed"||item.deliveryStatus==="requested"||item.deliveryStatus==="shipping")throw new Error("이미 배송 중이거나 완료된 상품은 묶음배송에 넣을 수 없습니다.")});
+    const previous=new Map(selected.map(item=>[String(item.id),{...item}])),requestId=crypto.randomUUID();
+    selected.forEach(item=>{const key=`${current.user_id}:${item.id}`;activeDeliveryItems.add(key);putLocalInventory(current,{...item,deliveryStatus:"requested",deliveryRequestedAt:Date.now(),deliveryPending:true})});
+    try {
+      const result=await MiniTalk.AuthApi.shopRequestDeliveryBulk({userId:current.user_id,inventoryIds:wanted,requestId});
+      const returned=Array.isArray(result.items)?result.items:[];
+      returned.forEach(item=>putLocalInventory(current,{...item,deliveryStatus:item.deliveryStatus||"requested",deliveryPending:false}));
+      if(isActiveUser(current))refreshInventory(true).catch(()=>{});
+      return {...result,count:Number(result.count)||returned.length};
+    } catch(error) {
+      selected.forEach(item=>putLocalInventory(current,previous.get(String(item.id))));
+      throw error;
+    } finally {
+      selected.forEach(item=>activeDeliveryItems.delete(`${current.user_id}:${item.id}`));
+    }
+  }
   async function gift(id,targetId) {
     const current=requireLogin(),item=inventory().find(row=>row.id===id);
     if(!item||item.usedAt||item.deliveryStatus==="completed"||item.deliveryStatus==="requested"||item.deliveryStatus==="shipping")throw new Error("선물할 수 없는 상품입니다.");
@@ -224,5 +245,5 @@ MiniTalk.Shopping.StoreService = (() => {
     return{targetId:target.user_id,targetNickname:target.nickname};
   }
 
-  return{products,refreshCatalog,refreshInventory,start,enter,leave,saveProduct,deleteProduct,inventory,recipients,purchase,randomPurchase,use,requestDelivery,gift,normalizeProduct,normalizeInventory,isSoldOut,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
+  return{products,refreshCatalog,refreshInventory,start,enter,leave,saveProduct,deleteProduct,inventory,recipients,purchase,randomPurchase,use,requestDelivery,requestDeliveryBulk,gift,normalizeProduct,normalizeInventory,isSoldOut,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
 })();

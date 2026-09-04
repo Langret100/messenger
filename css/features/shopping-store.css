@@ -241,3 +241,17 @@
 
 /* 관리자 상품/배송 버튼은 단어 중간 줄바꿈 금지 */
 .admin-shop-head .mini-action,.admin-product-row .button,.admin-product-row .mini-action,.admin-delivery-panel .button,.admin-delivery-panel .mini-action{white-space:nowrap;word-break:keep-all;overflow-wrap:normal}.admin-delivery-head-actions{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}.admin-delivery-head-actions .button{min-height:32px;padding:6px 9px;font-size:10px}.admin-delivery-bulk-progress{margin:0;font-size:10px}.admin-delivery-row .button-row{flex-wrap:nowrap}
+
+
+/* 묶음배송 선택 UI + 관리자 요청자별 배송 묶음 */
+.shop-bulk-delivery{display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line,#e7eaf0);background:rgba(247,249,253,.96)}
+.shop-bulk-delivery .button{flex:1;min-width:0;white-space:nowrap}
+.shop-inventory-item.bulk-selectable{position:relative;padding-left:76px}
+.shop-bulk-check{position:absolute;left:10px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:5px;font-size:12px;font-weight:800;cursor:pointer}
+.shop-bulk-check input{width:17px;height:17px;accent-color:#356dff}
+.shop-inventory-actions:empty{display:none}
+.admin-delivery-user-group{border:1px solid var(--line,#e1e6ef);border-radius:14px;overflow:hidden;background:#fff}
+.admin-delivery-user-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;background:#f5f7fb;border-bottom:1px solid var(--line,#e1e6ef)}
+.admin-delivery-user-head strong{font-size:13px}.admin-delivery-user-head span{font-size:11px;font-weight:800;color:#62718b;background:#fff;border:1px solid #dce2ec;border-radius:999px;padding:2px 7px}
+.admin-delivery-user-items{display:grid;gap:0}.admin-delivery-user-items .admin-delivery-row{border:0;border-radius:0;border-bottom:1px solid #edf0f5}.admin-delivery-user-items .admin-delivery-row:last-child{border-bottom:0}
+.admin-delivery-list{display:grid;gap:10px}

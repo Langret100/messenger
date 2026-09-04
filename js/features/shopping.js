@@ -301,7 +301,7 @@ MiniTalk.Features.Shopping = (() => {
     const panel = D.el("aside", { class: "shop-inventory-panel", "aria-label": "보관함" });
     const closeButton = D.el("button", { class: "icon-button subtle modal-close-button", type: "button", text: "×", "aria-label": "보관함 닫기", onclick: () => { bulkDeliveryMode = false;bulkDeliverySelected.clear();close(); } });
     panel.append(D.el("header", {}, [D.el("div", {}, [D.el("strong", { text: "보관함" }), D.el("small", { class: "muted", text: user.isGuest ? "로그인 후 이용할 수 있어요" : `보관 상품 ${owned.length}개` })]), closeButton]));
-    const inventory = D.el("div", { class: "shop-inventory-list" });
+    const inventory = D.el("div", { class: "shop-inventory-v2-list" });
     const eligible = owned.filter(item => !item.usedAt && !["completed","requested","shipping"].includes(String(item.deliveryStatus || "owned")));
     if (!user.isGuest && eligible.length >= 2) {
       const toolbar = D.el("div", { class: `shop-bulk-delivery${bulkDeliveryMode ? " active" : ""}` });
@@ -424,7 +424,7 @@ MiniTalk.Features.Shopping = (() => {
 
   function inventoryCard(item, bulk = {}) {
     const D = MiniTalk.UI.Dom, used = Boolean(item.usedAt) || item.deliveryStatus === 'completed';
-    const actions = D.el("div", { class: "shop-inventory-actions" });
+    const actions = D.el("div", { class: "shop-inventory-v2-actions" });
     const status = String(item.deliveryStatus || (used ? 'completed' : 'owned'));
     const deliveryLocked = status === 'requested' || status === 'shipping';
     const bulkEligible = !used && !deliveryLocked;
@@ -439,11 +439,11 @@ MiniTalk.Features.Shopping = (() => {
       actions.append(deliveryButton);
     }
     const arrived = randomArrivalId && String(item.id || "") === String(randomArrivalId);
-    const bulkCheck = bulk.bulkMode && bulkEligible ? D.el("label", { class: "shop-bulk-check" }, [D.el("input", { type: "checkbox", checked: bulk.selected === true, "aria-label": `${item.name || "상품"} 묶음배송 선택`, onchange: event => bulk.onBulkChange?.(event.currentTarget.checked) }), D.el("span", { text: "선택" })]) : null;
-    return D.el("article", { class: `shop-inventory-item${used ? " used" : ""}${status ? ` status-${status}` : ''}${arrived ? " random-arrived" : ""}${bulk.bulkMode && bulkEligible ? " bulk-selectable" : ""}` }, [
+    const bulkCheck = bulk.bulkMode && bulkEligible ? D.el("label", { class: "shop-inventory-v2-check" }, [D.el("input", { type: "checkbox", checked: bulk.selected === true, "aria-label": `${item.name || "상품"} 묶음배송 선택`, onchange: event => bulk.onBulkChange?.(event.currentTarget.checked) }), D.el("span", { text: "선택" })]) : null;
+    return D.el("article", { class: `shop-inventory-v2-card${used ? " used" : ""}${status ? ` status-${status}` : ''}${arrived ? " random-arrived" : ""}${bulk.bulkMode && bulkEligible ? " bulk-selectable" : ""}` }, [
       bulkCheck,
-      item.imageUrl ? D.el("img", { class: "shop-inventory-image", src: item.imageUrl, alt: "", loading: "lazy" }) : null,
-      D.el("div", { class: "shop-inventory-copy" }, [
+      item.imageUrl ? D.el("img", { class: "shop-inventory-v2-image", src: item.imageUrl, alt: "", loading: "lazy" }) : null,
+      D.el("div", { class: "shop-inventory-v2-copy" }, [
         D.el("strong", { text: item.name || "상품" }),
         D.el("small", { class: `muted inventory-status inventory-status-${status}`, text: deliverySummary(item) })
       ]), actions

@@ -96,7 +96,7 @@ canvas,
 .shop-market-empty p,
 .shop-inventory-fab small,
 .shop-inventory-panel > header small,
-.shop-inventory-copy small {
+.shop-inventory-v2-copy small {
   font-size: max(11px, calc(var(--font-size) * .6875));
 }
 

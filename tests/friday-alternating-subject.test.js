@@ -15,6 +15,6 @@ ok(api.missionSubject(new Date('2026-08-27T12:00:00'))==='국어','next week mus
 ok(api.missionSubject(new Date('2026-09-03T12:00:00'))==='수학','third week must return to Math');
 // makeQuestions uses current Date, so verify source guarantees TOTAL=20 and each branch emits only one subject.
 ok(src.includes('for(const cat of mathCats)for(let i=0;i<4;i++)cats.push({cat,variant:i})')&&src.includes('rows.push(legacy?makeMathQuestionV4(item.cat,r):makeMathQuestion(item.cat,r,item.variant))'),'Math week does not generate balanced 20 math rows');
-ok(src.includes('const bank=legacy?korBank:korBank.concat(korExtra)')&&src.includes('rows.push(q("국어"'),'Korean week does not generate 20 Korean rows');
-const html=fs.readFileSync(path.join(root,'index.html'),'utf8');ok(html.includes('friday-grade6-mission.js?v=65.0.19'),'Friday mission cache version stale');
+ok(src.includes('korBank.concat(korExtra,korCycleExtra)')&&src.includes('cycleKoreanQuestions')&&src.includes('rows.push(q("국어"'),'Korean week does not generate 20 Korean rows');
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');ok(html.includes('friday-grade6-mission.js?v=65.0.21'),'Friday mission cache version stale');
 console.log('FRIDAY_ALTERNATING_SUBJECT_OK');

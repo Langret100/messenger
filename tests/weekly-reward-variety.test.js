@@ -2,11 +2,11 @@ const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.resolve(__dirname,'..'),src=fs.readFileSync(path.join(root,'js/tasks/friday-grade6-mission.js'),'utf8'),coin=fs.readFileSync(path.join(root,'docs/apps-script/coin.gs'),'utf8'),html=fs.readFileSync(path.join(root,'index.html'),'utf8'),sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 ok(src.includes('REWARD_COIN=5')&&coin.includes('delta = 5'),'weekly reward must be +5 on both client and server');
-ok(src.includes('QUESTION_SET_VERSION="v5"')&&src.includes('questionSetVersion:setVersion'),'versioned weekly question set missing');
+ok(src.includes('QUESTION_SET_VERSION="v7"')&&src.includes('questionSetVersion:setVersion'),'versioned weekly question set missing');
 ok(src.includes('const korExtra=[')&&src.includes('korBank.concat(korExtra)'),'expanded Korean question bank missing');
 ok(src.includes('variant:i')&&src.includes('makeMathQuestion(item.cat,r,item.variant)'),'guaranteed math template variety missing');
 ok(src.includes('saved?.questionSetVersion||(Array.isArray(saved?.answers)&&saved.answers.length?"v4":QUESTION_SET_VERSION)'),'legacy draft compatibility missing');
-ok(html.includes('friday-grade6-mission.js?v=65.0.19'),'weekly v96 cache bust missing');
+ok(html.includes('friday-grade6-mission.js?v=65.0.21'),'weekly v96 cache bust missing');
 ok(sw.includes('moaru-runtime-bundle-2'),'weekly v96 service worker id missing');
 function fixedDateClass(iso){const RealDate=Date,fixed=new RealDate(iso).getTime();return class FixedDate extends RealDate{constructor(...args){super(...(args.length?args:[fixed]))}static now(){return fixed}}}
 function load(iso,user='u1'){const sandbox={Date:fixedDateClass(iso),URLSearchParams,fetch:async()=>({ok:true,json:async()=>({ok:true})}),console,setInterval,clearInterval,setTimeout,clearTimeout,MiniTalk:{Tasks:{},Store:{get:k=>k==='user'?{user_id:user}:null},Realtime:{},UI:{},Economy:{}},MiniTalkConfig:{sheetUrl:''}};vm.createContext(sandbox);vm.runInContext(src,sandbox);return sandbox.MiniTalk.Tasks.FridayGrade6Mission}

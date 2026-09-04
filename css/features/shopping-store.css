@@ -98,7 +98,7 @@
   .shop-market-mark { width: 40px; height: 40px; border-radius: 13px; }
   .shop-market-copy { min-width: 0; }
   .shop-market-count { justify-self: end; margin: 0; }
-  .shop-inventory-panel { left: 10px; right: 10px; bottom: 54px; width: auto; max-height: min(72%, 500px); }
+  .shop-inventory-panel { left: auto; right: 10px; bottom: 54px; width: min(348px, calc(100% - 20px)); max-height: min(72%, 500px); }
   .admin-product-row { grid-template-columns: 1fr; }
   .admin-product-image { width: 64px; height: 48px; }
   .admin-product-row .button-row { justify-content: flex-end; }

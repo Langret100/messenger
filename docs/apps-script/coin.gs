@@ -14,6 +14,11 @@ const COIN_COL_REWARD_URL = 4;
 // 웹 고스트에서 쓸 기본 코인 한도 (나의 코인 (x/100) 의 100)
 const COIN_DEFAULT_COIN_LIMIT = 100;
 
+// 계정별 QR/개별 코인 관리 페이지 전용 인증값.
+// 전체 관리자 코드(MINITALK_ADMIN_CODE)와 분리하며, 속성이 없으면 01931로 최초 설정합니다.
+const COIN_MANAGER_CODE_PROPERTY = "MINITALK_COIN_MANAGER_CODE";
+const COIN_MANAGER_DEFAULT_CODE = "01931";
+
 // (추가) 코인 보상 로그 시트 설정
 // - 같은 조건으로 중복 지급을 막기 위해 사용
 // - 스키마: user_id | type | key | delta | timestamp
@@ -152,7 +157,12 @@ function processCoinChange() {
  * 값은 HTML로 내려보내지 않고 서버에서만 비교합니다.
  */
 function verifyCoinManagerCode_(providedCode) {
-  const saved = "01931";
+  const props = PropertiesService.getScriptProperties();
+  let saved = String(props.getProperty(COIN_MANAGER_CODE_PROPERTY) || "");
+  if (!saved) {
+    saved = COIN_MANAGER_DEFAULT_CODE;
+    props.setProperty(COIN_MANAGER_CODE_PROPERTY, saved);
+  }
   const provided = String(providedCode || "");
   if (saved.length !== provided.length) throw new Error("코인 관리 인증에 실패했습니다.");
   let mismatch = 0;

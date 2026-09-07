@@ -19,9 +19,9 @@
 </head>
 <body>
   <main class="container">
-    <div class="identity">사용자: <strong><?= username ?></strong><br>ID: <?= userId ?></div>
+    <div class="identity">사용자: <strong id="currentUsername"><?= username ?></strong><br>ID: <?= userId ?></div>
     <section class="coin-box"><div class="coin-label">현재 보유 코인</div><div class="coin-display" id="currentCoin"><?= coin ?></div></section>
-    <label class="field">관리자 코드<input id="adminCode" type="password" autocomplete="current-password" placeholder="스크립트 속성의 관리자 코드"></label>
+    <label class="field">코인 관리 코드<input id="adminCode" type="password" autocomplete="off" inputmode="numeric" placeholder="코인 관리 전용 코드"></label>
     <label class="field">변경 수량<input id="amount" type="number" value="1" min="1" max="100000" inputmode="numeric"></label>
     <div class="btn-grid">
       <button class="calc" onclick="setVal(1)">1</button><button class="calc" onclick="setVal(5)">5</button>
@@ -34,13 +34,18 @@
       <button class="action remove" id="btnSub" onclick="changeCoin('remove')">－ 차감</button>
     </div>
     <div id="status" role="status" aria-live="polite"></div>
-    <small class="hint">관리자 코드는 브라우저에 저장되지 않으며 서버에서 매번 검증됩니다.</small>
+    <small class="hint">코인 관리 코드는 브라우저에 저장되지 않으며 서버에서 매번 검증됩니다.</small>
   </main>
   <script>
     const userId=<?= JSON.stringify(userId) ?>;
-    const amount=document.getElementById("amount"),code=document.getElementById("adminCode"),status=document.getElementById("status"),coin=document.getElementById("currentCoin");
+    const amount=document.getElementById("amount"),code=document.getElementById("adminCode"),status=document.getElementById("status"),coin=document.getElementById("currentCoin"),username=document.getElementById("currentUsername");
     function setVal(value){amount.value=value}function addVal(value){amount.value=Math.min(100000,(parseInt(amount.value,10)||0)+value)}
     function busy(value){document.getElementById("btnAdd").disabled=value;document.getElementById("btnSub").disabled=value}
+    function refreshCoin(showStatus){
+      google.script.run.withSuccessHandler(result=>{
+        if(result&&result.success){coin.textContent=String(result.coin);if(username&&result.username)username.textContent=result.username;if(showStatus){status.style.color="#607d8b";status.textContent="현재 코인 정보를 불러왔습니다."}}
+      }).withFailureHandler(error=>{if(showStatus){status.style.color="#c62828";status.textContent=error?.message||"코인 정보를 불러오지 못했습니다."}}).getCoinManagementState(userId);
+    }
     function changeCoin(action){
       const value=parseInt(amount.value,10),adminCode=code.value;
       if(!adminCode){status.style.color="#c62828";status.textContent="관리자 코드를 입력해주세요.";return}
@@ -50,6 +55,7 @@
         .withFailureHandler(error=>{status.style.color="#c62828";status.textContent=error?.message||"처리하지 못했습니다.";busy(false)})
         .processCoinChangeAuthorized(userId,action,value,adminCode);
     }
+    document.addEventListener("DOMContentLoaded",()=>refreshCoin(false));
   </script>
 </body>
 </html>

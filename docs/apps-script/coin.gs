@@ -14,6 +14,11 @@ const COL_REWARD_URL = 4;
 // 웹 고스트에서 쓸 기본 코인 한도 (나의 코인 (x/100) 의 100)
 const DEFAULT_COIN_LIMIT = 100;
 
+// 계정별 QR/개별 링크 코인 관리 페이지 전용 인증 코드.
+// 전체 관리자 코드(MINITALK_ADMIN_CODE)와 분리하여 이 화면에서만 사용합니다.
+const COIN_MANAGER_CODE_PROPERTY = "MINITALK_COIN_MANAGER_CODE";
+const COIN_MANAGER_DEFAULT_CODE = "01931";
+
 // (추가) 코인 보상 로그 시트 설정
 // - 같은 조건으로 중복 지급을 막기 위해 사용
 // - 스키마: user_id | type | key | delta | timestamp
@@ -147,14 +152,57 @@ function processCoinChange() {
   throw new Error("DIRECT_COIN_CHANGE_DISABLED");
 }
 
-/** 기존 코인 관리 페이지용 서버 검증 API */
+/** 계정별 코인 관리 페이지 전용 코드 반환. 최초 사용 시 01931로 별도 속성을 자동 생성합니다. */
+function getCoinManagerCode_() {
+  const props = PropertiesService.getScriptProperties();
+  let saved = String(props.getProperty(COIN_MANAGER_CODE_PROPERTY) || "");
+  if (!saved) {
+    saved = COIN_MANAGER_DEFAULT_CODE;
+    props.setProperty(COIN_MANAGER_CODE_PROPERTY, saved);
+  }
+  return saved;
+}
+
+/** 계정별 코인 관리 페이지 전용 코드 검증. 전체 관리자 비밀번호와는 독립적입니다. */
+function verifyCoinManagerCode_(providedCode) {
+  const saved = getCoinManagerCode_();
+  const provided = String(providedCode || "");
+  if (!saved || saved.length !== provided.length) throw new Error("코인 관리 인증에 실패했습니다.");
+  let mismatch = 0;
+  for (let i = 0; i < saved.length; i++) mismatch |= saved.charCodeAt(i) ^ provided.charCodeAt(i);
+  if (mismatch !== 0) throw new Error("코인 관리 인증에 실패했습니다.");
+}
+
+/** 관리 페이지가 현재 시트 값을 다시 읽을 때 사용하는 서버 API */
+function getCoinManagementState(userId) {
+  const data = getRewardUserData_(String(userId || "").trim());
+  if (!data) throw new Error("사용자를 찾을 수 없습니다.");
+  return {
+    success: true,
+    userId: String(data.userId || ""),
+    username: String(data.username || ""),
+    coin: parseInt(data.coin, 10) || 0
+  };
+}
+
+/** 계정별 코인 관리 페이지용 서버 검증/변경 API */
 function processCoinChangeAuthorized(userId, action, amount, adminCode) {
-  const saved = String(PropertiesService.getScriptProperties().getProperty("MINITALK_ADMIN_CODE") || ""), provided = String(adminCode || "");
-  if (!saved || saved.length !== provided.length) throw new Error("관리자 인증에 실패했습니다.");
-  let mismatch = 0;for (let i = 0; i < saved.length; i++) mismatch |= saved.charCodeAt(i) ^ provided.charCodeAt(i);
-  if (mismatch !== 0) throw new Error("관리자 인증에 실패했습니다.");
-  const lock = LockService.getScriptLock();if (!lock.tryLock(5000)) throw new Error("처리 중입니다. 잠시 후 다시 시도해주세요.");
-  try { return processCoinChangeUnlocked_(userId, action, amount); } finally { lock.releaseLock(); }
+  verifyCoinManagerCode_(adminCode);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw new Error("처리 중입니다. 잠시 후 다시 시도해주세요.");
+  try {
+    const result = processCoinChangeUnlocked_(String(userId || "").trim(), action, amount);
+    SpreadsheetApp.flush();
+    const confirmed = getCoinManagementState(userId);
+    return {
+      success: true,
+      newCoin: confirmed.coin,
+      username: confirmed.username,
+      message: result && result.message ? result.message : "코인이 변경되었습니다."
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -569,8 +617,12 @@ function syncUsersToRewards() {
     }
   }
 
-  // 동기화 시에 사용할 웹앱 URL
-  const baseUrl = MANUAL_WEB_APP_URL;
+  // 동기화 시에는 현재 배포된 웹앱 URL을 우선 사용합니다.
+  // 배포 URL이 바뀌어도 예전 하드코딩 주소로 계정별 링크가 생성되지 않게 합니다.
+  const deployedUrl = (typeof ScriptApp !== "undefined" && ScriptApp.getService)
+    ? String(ScriptApp.getService().getUrl() || "")
+    : "";
+  const baseUrl = deployedUrl || MANUAL_WEB_APP_URL;
 
   const newData = [["user_id", "username", "coin", "url"]];
 

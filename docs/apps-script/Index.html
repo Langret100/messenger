@@ -48,7 +48,7 @@
     }
     function changeCoin(action){
       const value=parseInt(amount.value,10),adminCode=code.value;
-      if(!adminCode){status.style.color="#c62828";status.textContent="관리자 코드를 입력해주세요.";return}
+      if(!adminCode){status.style.color="#c62828";status.textContent="코인 관리 코드를 입력해주세요.";return}
       if(!Number.isInteger(value)||value<1||value>100000){status.style.color="#c62828";status.textContent="1~100000 사이 수량을 입력해주세요.";return}
       busy(true);status.style.color="#607d8b";status.textContent="처리 중…";
       google.script.run.withSuccessHandler(result=>{coin.textContent=result.newCoin;status.style.color=action==="add"?"#2e7d32":"#c62828";status.textContent=action==="add"?`코인 +${value}`:`코인 -${value}`;busy(false)})

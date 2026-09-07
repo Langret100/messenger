@@ -5,50 +5,45 @@
  *************************************************/
 
 // 보상 시트 설정
-const REWARD_SHEET = "보상";
-const COL_REWARD_USER_ID = 1;
-const COL_REWARD_USERNAME = 2;
-const COL_REWARD_COIN = 3;
-const COL_REWARD_URL = 4;
+const COIN_REWARD_SHEET_NAME = "보상";
+const COIN_COL_REWARD_USER_ID = 1;
+const COIN_COL_REWARD_USERNAME = 2;
+const COIN_COL_REWARD_COIN = 3;
+const COIN_COL_REWARD_URL = 4;
 
 // 웹 고스트에서 쓸 기본 코인 한도 (나의 코인 (x/100) 의 100)
-const DEFAULT_COIN_LIMIT = 100;
-
-// 계정별 QR/개별 링크 코인 관리 페이지 전용 인증 코드.
-// 전체 관리자 코드(MINITALK_ADMIN_CODE)와 분리하여 이 화면에서만 사용합니다.
-const COIN_MANAGER_CODE_PROPERTY = "MINITALK_COIN_MANAGER_CODE";
-const COIN_MANAGER_DEFAULT_CODE = "01931";
+const COIN_DEFAULT_COIN_LIMIT = 100;
 
 // (추가) 코인 보상 로그 시트 설정
 // - 같은 조건으로 중복 지급을 막기 위해 사용
 // - 스키마: user_id | type | key | delta | timestamp
-const REWARD_LOG_SHEET = "보상로그";
-const COL_LOG_USER_ID = 1;
-const COL_LOG_TYPE = 2;
-const COL_LOG_KEY = 3;
-const COL_LOG_DELTA = 4;
-const COL_LOG_TIME = 5;
+const COIN_REWARD_LOG_SHEET_NAME = "보상로그";
+const COIN_COL_LOG_USER_ID = 1;
+const COIN_COL_LOG_TYPE = 2;
+const COIN_COL_LOG_KEY = 3;
+const COIN_COL_LOG_DELTA = 4;
+const COIN_COL_LOG_TIME = 5;
 
 // 이 프로젝트에서 사용할 "정해진" 웹앱 URL
 // (관리용 코인 페이지에 들어가는 URL, 동기화 시 사용)
-const MANUAL_WEB_APP_URL =
+const COIN_MANUAL_WEB_APP_URL =
   "https://script.google.com/macros/s/AKfycbz6PjWqKuoTmTalX7ieq3NuhJr-6DPwFQI3c7sDCu9cSCFDt90DP4Ju0yIjfjOgyNoI6w/exec";
 
 /**
  * 보상 시트에서 user_id 로 데이터 찾기
  */
 function getRewardUserData_(userId) {
-  const sheet = getSheet_(REWARD_SHEET);
+  const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
 
   const values = sheet.getRange(2, 1, lastRow - 1, 3).getValues(); // A:C
   for (let i = 0; i < values.length; i++) {
-    if (String(values[i][COL_REWARD_USER_ID - 1]) === String(userId)) {
+    if (String(values[i][COIN_COL_REWARD_USER_ID - 1]) === String(userId)) {
       return {
-        userId: values[i][COL_REWARD_USER_ID - 1],
-        username: values[i][COL_REWARD_USERNAME - 1],
-        coin: parseInt(values[i][COL_REWARD_COIN - 1]) || 0
+        userId: values[i][COIN_COL_REWARD_USER_ID - 1],
+        username: values[i][COIN_COL_REWARD_USERNAME - 1],
+        coin: parseInt(values[i][COIN_COL_REWARD_COIN - 1]) || 0
       };
     }
   }
@@ -99,7 +94,7 @@ function renderCoinPage_(userId) {
  * - Index.html 에서 google.script.run.processCoinChange(...) 로 호출
  */
 function processCoinChangeUnlocked_(userId, action, amount) {
-  const sheet = getSheet_(REWARD_SHEET);
+  const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) throw new Error("사용자를 찾을 수 없습니다.");
 
@@ -109,9 +104,9 @@ function processCoinChangeUnlocked_(userId, action, amount) {
   let currentCoin = 0;
 
   for (let i = 0; i < values.length; i++) {
-    if (String(values[i][COL_REWARD_USER_ID - 1]) === String(userId)) {
+    if (String(values[i][COIN_COL_REWARD_USER_ID - 1]) === String(userId)) {
       rowIndex = 2 + i;
-      currentCoin = parseInt(values[i][COL_REWARD_COIN - 1]) || 0;
+      currentCoin = parseInt(values[i][COIN_COL_REWARD_COIN - 1]) || 0;
       break;
     }
   }
@@ -138,7 +133,7 @@ function processCoinChangeUnlocked_(userId, action, amount) {
     throw new Error("알 수 없는 action 값입니다.");
   }
 
-  sheet.getRange(rowIndex, COL_REWARD_COIN).setValue(newCoin);
+  sheet.getRange(rowIndex, COIN_COL_REWARD_COIN).setValue(newCoin);
 
   return {
     success: true,
@@ -152,22 +147,14 @@ function processCoinChange() {
   throw new Error("DIRECT_COIN_CHANGE_DISABLED");
 }
 
-/** 계정별 코인 관리 페이지 전용 코드 반환. 최초 사용 시 01931로 별도 속성을 자동 생성합니다. */
-function getCoinManagerCode_() {
-  const props = PropertiesService.getScriptProperties();
-  let saved = String(props.getProperty(COIN_MANAGER_CODE_PROPERTY) || "");
-  if (!saved) {
-    saved = COIN_MANAGER_DEFAULT_CODE;
-    props.setProperty(COIN_MANAGER_CODE_PROPERTY, saved);
-  }
-  return saved;
-}
-
-/** 계정별 코인 관리 페이지 전용 코드 검증. 전체 관리자 비밀번호와는 독립적입니다. */
+/** 계정별 QR/개별 링크 코인 관리 페이지 전용 코드 검증.
+ * 전체 관리자 비밀번호와 완전히 분리하며, 이 페이지의 고정 코드는 01931입니다.
+ * 값은 HTML로 내려보내지 않고 서버에서만 비교합니다.
+ */
 function verifyCoinManagerCode_(providedCode) {
-  const saved = getCoinManagerCode_();
+  const saved = "01931";
   const provided = String(providedCode || "");
-  if (!saved || saved.length !== provided.length) throw new Error("코인 관리 인증에 실패했습니다.");
+  if (saved.length !== provided.length) throw new Error("코인 관리 인증에 실패했습니다.");
   let mismatch = 0;
   for (let i = 0; i < saved.length; i++) mismatch |= saved.charCodeAt(i) ^ provided.charCodeAt(i);
   if (mismatch !== 0) throw new Error("코인 관리 인증에 실패했습니다.");
@@ -234,7 +221,7 @@ function handleCoinStatus(e) {
   const out = {
     ok: true,
     coin: coin,
-    limit: DEFAULT_COIN_LIMIT
+    limit: COIN_DEFAULT_COIN_LIMIT
   };
 
   return ContentService
@@ -349,9 +336,9 @@ function handleCoinReward(e) {
       .getValues();
     for (let i = 0; i < logValues.length; i++) {
       const row = logValues[i];
-      const u = String(row[COL_LOG_USER_ID - 1] || "");
-      const t = String(row[COL_LOG_TYPE - 1] || "").toUpperCase();
-      const k = String(row[COL_LOG_KEY - 1] || "");
+      const u = String(row[COIN_COL_LOG_USER_ID - 1] || "");
+      const t = String(row[COIN_COL_LOG_TYPE - 1] || "").toUpperCase();
+      const k = String(row[COIN_COL_LOG_KEY - 1] || "");
       const sameReward = u === userId && t === type && k === key;
       // 구버전의 날짜-only QUEST_5CLEAR 로그도 같은 날 보상으로 간주해 혼합 버전 중복 지급을 막습니다.
       const legacyQuestReward = type === "QUEST_5CLEAR" && u === userId && t === type && questRewardDate && k === questRewardDate;
@@ -583,9 +570,9 @@ function installGameWeeklyRankingRewardTrigger() {
  */
 function getOrCreateRewardLogSheet_() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  let sheet = ss.getSheetByName(REWARD_LOG_SHEET);
+  let sheet = ss.getSheetByName(COIN_REWARD_LOG_SHEET_NAME);
   if (!sheet) {
-    sheet = ss.insertSheet(REWARD_LOG_SHEET);
+    sheet = ss.insertSheet(COIN_REWARD_LOG_SHEET_NAME);
     sheet
       .getRange(1, 1, 1, 5)
       .setValues([["user_id", "type", "key", "delta", "timestamp"]]);
@@ -596,13 +583,13 @@ function getOrCreateRewardLogSheet_() {
 /**
  * 로그인 시트 → 보상 시트 동기화 + URL 생성
  * - 스프레드시트 메뉴 '코인 관리 > 동기화 실행' 으로 호출
- * - 항상 MANUAL_WEB_APP_URL 기준으로 링크 생성
+ * - 항상 COIN_MANUAL_WEB_APP_URL 기준으로 링크 생성
  */
 function syncUsersToRewards() {
   const syncLock = LockService.getScriptLock();syncLock.waitLock(20000);
   try {
   const loginSheet = getSheet_(LOGIN_SHEET);
-  const rewardsSheet = getSheet_(REWARD_SHEET);
+  const rewardsSheet = getSheet_(COIN_REWARD_SHEET_NAME);
 
   const loginData = loginSheet.getDataRange().getValues();
   const rewardsData = rewardsSheet.getDataRange().getValues();
@@ -610,9 +597,9 @@ function syncUsersToRewards() {
 
   if (rewardsData.length > 1) {
     for (let i = 1; i < rewardsData.length; i++) {
-      const uid = String(rewardsData[i][COL_REWARD_USER_ID - 1]);
+      const uid = String(rewardsData[i][COIN_COL_REWARD_USER_ID - 1]);
       existingMap[uid] = {
-        coin: rewardsData[i][COL_REWARD_COIN - 1]
+        coin: rewardsData[i][COIN_COL_REWARD_COIN - 1]
       };
     }
   }
@@ -622,7 +609,7 @@ function syncUsersToRewards() {
   const deployedUrl = (typeof ScriptApp !== "undefined" && ScriptApp.getService)
     ? String(ScriptApp.getService().getUrl() || "")
     : "";
-  const baseUrl = deployedUrl || MANUAL_WEB_APP_URL;
+  const baseUrl = deployedUrl || COIN_MANUAL_WEB_APP_URL;
 
   const newData = [["user_id", "username", "coin", "url"]];
 

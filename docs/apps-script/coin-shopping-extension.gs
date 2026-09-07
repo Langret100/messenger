@@ -7,6 +7,11 @@
  * - 중복 차감 방지 이력: "구매로그" 시트
  *************************************************/
 
+const SHOP_REWARD_SHEET_NAME = "보상";
+const SHOP_COL_REWARD_USER_ID = 1;
+const SHOP_COL_REWARD_USERNAME = 2;
+const SHOP_COL_REWARD_COIN = 3;
+const SHOP_COL_REWARD_URL = 4;
 const SHOP_CATALOG_LEGACY_PROPERTY = "SHOP_CATALOG_JSON";
 const SHOP_PRODUCT_PROPERTY_PREFIX = "SHOP_PRODUCT_";
 const SHOP_ADMIN_CODE_PROPERTY = "MINITALK_ADMIN_CODE";
@@ -72,12 +77,13 @@ function ensureMoaruCoinAccount_(account) {
   if (!userId || isMoaruGuestIdentity_(userId, username, nickname) || !username) return { ok: false, error: "INVALID_REWARD_USER" };
   const existing = getRewardUserData_(userId);
   if (existing) return { ok: true, created: false, coin: parseInt(existing.coin, 10) || 0 };
-  const sheet = getSheet_(REWARD_SHEET), headers = sheet.getRange(1, 1, 1, 4).getValues()[0].map(String);
+  const sheet = getSheet_("보상"), headers = sheet.getRange(1, 1, 1, 4).getValues()[0].map(String);
   if (headers[0] !== "user_id" || headers[1] !== "username" || headers[2] !== "coin" || headers[3] !== "url") return { ok: false, error: "REWARD_SHEET_SCHEMA_UNSUPPORTED" };
-  const url = MANUAL_WEB_APP_URL ? MANUAL_WEB_APP_URL + "?user_id=" + encodeURIComponent(userId) : "";
+  const managerBaseUrl = typeof COIN_MANUAL_WEB_APP_URL !== "undefined" && COIN_MANUAL_WEB_APP_URL ? COIN_MANUAL_WEB_APP_URL : (typeof MANUAL_WEB_APP_URL !== "undefined" ? MANUAL_WEB_APP_URL : "");
+  const url = managerBaseUrl ? managerBaseUrl + "?user_id=" + encodeURIComponent(userId) : "";
   sheet.appendRow([userId, username, 0, url]);const insertedRow = sheet.getLastRow(), created = getRewardUserData_(userId);
   if (created) return { ok: true, created: true, coin: 0 };
-  try { if (String(sheet.getRange(insertedRow, COL_REWARD_USER_ID).getValue() || "").trim() === userId) sheet.deleteRow(insertedRow); } catch (rollbackError) { console.error("REWARD_ACCOUNT_ROLLBACK_FAILED", userId, rollbackError); }
+  try { if (String(sheet.getRange(insertedRow, SHOP_COL_REWARD_USER_ID).getValue() || "").trim() === userId) sheet.deleteRow(insertedRow); } catch (rollbackError) { console.error("REWARD_ACCOUNT_ROLLBACK_FAILED", userId, rollbackError); }
   return { ok: false, error: "REWARD_ACCOUNT_INIT_FAILED" };
 }
 
@@ -1034,14 +1040,14 @@ function moaruAdminCoinChangeGuarded_(userId, signedAmount) {
   // handleAdminCoinReward가 이미 ScriptLock을 보유한 상태에서 호출됩니다. 중첩 lock 금지.
   const delta = parseInt(signedAmount, 10) || 0;
   if (!delta) return { success: false, error: "INVALID_COIN_AMOUNT" };
-  const sheet = getSheet_(REWARD_SHEET), lastRow = sheet.getLastRow();
+  const sheet = getSheet_("보상"), lastRow = sheet.getLastRow();
   if (lastRow < 2) return { success: false, error: "USER_NOT_FOUND" };
-  const values = sheet.getRange(2, 1, lastRow - 1, Math.max(COL_REWARD_COIN, COL_REWARD_USER_ID)).getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, Math.max(SHOP_COL_REWARD_COIN, SHOP_COL_REWARD_USER_ID)).getValues();
   for (let i = 0; i < values.length; i++) {
-    if (String(values[i][COL_REWARD_USER_ID - 1] || "").trim() !== String(userId || "").trim()) continue;
-    const beforeCoin = parseInt(values[i][COL_REWARD_COIN - 1], 10) || 0;
+    if (String(values[i][SHOP_COL_REWARD_USER_ID - 1] || "").trim() !== String(userId || "").trim()) continue;
+    const beforeCoin = parseInt(values[i][SHOP_COL_REWARD_COIN - 1], 10) || 0;
     const newCoin = beforeCoin + delta;
-    sheet.getRange(i + 2, COL_REWARD_COIN).setValue(newCoin);
+    sheet.getRange(i + 2, SHOP_COL_REWARD_COIN).setValue(newCoin);
     return { success: true, newCoin: newCoin, beforeCoin: beforeCoin };
   }
   return { success: false, error: "USER_NOT_FOUND" };
@@ -1049,11 +1055,11 @@ function moaruAdminCoinChangeGuarded_(userId, signedAmount) {
 
 function moaruRewardCoinMap_() {
   return moaruSpreadsheetRetry_(function () {
-    const sheet = getSheet_(REWARD_SHEET), lastRow = sheet.getLastRow(), result = {};
+    const sheet = getSheet_("보상"), lastRow = sheet.getLastRow(), result = {};
     if (lastRow < 2) return result;
     sheet.getRange(2, 1, lastRow - 1, 3).getValues().forEach(function (row) {
-      const userId = String(row[COL_REWARD_USER_ID - 1] || "").trim();
-      if (userId) result[userId] = parseInt(row[COL_REWARD_COIN - 1], 10) || 0;
+      const userId = String(row[SHOP_COL_REWARD_USER_ID - 1] || "").trim();
+      if (userId) result[userId] = parseInt(row[SHOP_COL_REWARD_COIN - 1], 10) || 0;
     });
     return result;
   });
@@ -1445,21 +1451,21 @@ function restoreShopProductStock_(beforeProduct) {
 }
 
 function findRewardUserForShop_(userId) {
-  const id = String(userId || "").trim(), sheet = getSheet_(REWARD_SHEET), lastRow = sheet.getLastRow();
+  const id = String(userId || "").trim(), sheet = getSheet_("보상"), lastRow = sheet.getLastRow();
   if (!id || lastRow < 2) return null;
-  const match = sheet.getRange(2, COL_REWARD_USER_ID, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
+  const match = sheet.getRange(2, SHOP_COL_REWARD_USER_ID, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
   if (!match) return null;
   const row = match.getRow(), values = sheet.getRange(row, 1, 1, 3).getValues()[0];
-  if (String(values[COL_REWARD_USER_ID - 1] || "").trim() !== id) return null;
-  return { sheet: sheet, row: row, userId: id, username: String(values[COL_REWARD_USERNAME - 1] || ""), coin: parseInt(values[COL_REWARD_COIN - 1], 10) || 0 };
+  if (String(values[SHOP_COL_REWARD_USER_ID - 1] || "").trim() !== id) return null;
+  return { sheet: sheet, row: row, userId: id, username: String(values[SHOP_COL_REWARD_USERNAME - 1] || ""), coin: parseInt(values[SHOP_COL_REWARD_COIN - 1], 10) || 0 };
 }
 function setRewardCoinForShopGuarded_(reward, newCoin) {
   const expected = Math.max(0, Math.floor(Number(newCoin) || 0));
-  try { reward.sheet.getRange(reward.row, COL_REWARD_COIN).setValue(expected);return { success: true, newCoin: expected }; }
+  try { reward.sheet.getRange(reward.row, SHOP_COL_REWARD_COIN).setValue(expected);return { success: true, newCoin: expected }; }
   catch (error) {
     const message = String(error && error.message || error || "");
     if (!/(?:Spreadsheet service|Service Spreadsheets|스프레드시트 서비스|문서에 액세스)/i.test(message)) throw error;
-    const actual = parseInt(moaruSpreadsheetRetry_(function () { return reward.sheet.getRange(reward.row, COL_REWARD_COIN).getValue(); }), 10) || 0;
+    const actual = parseInt(moaruSpreadsheetRetry_(function () { return reward.sheet.getRange(reward.row, SHOP_COL_REWARD_COIN).getValue(); }), 10) || 0;
     if (actual === expected) return { success: true, newCoin: actual, recovered: true };
     throw new Error("COIN_SHEET_TEMPORARY_ERROR");
   }

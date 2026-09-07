@@ -37,7 +37,7 @@
     <small class="hint">코인 관리 코드는 브라우저에 저장되지 않으며 서버에서 매번 검증됩니다.</small>
   </main>
   <script>
-    const userId=<?= JSON.stringify(userId) ?>;
+    const userId=<?!= JSON.stringify(String(userId == null ? "" : userId).trim()) ?>;
     const amount=document.getElementById("amount"),code=document.getElementById("adminCode"),status=document.getElementById("status"),coin=document.getElementById("currentCoin"),username=document.getElementById("currentUsername");
     function setVal(value){amount.value=value}function addVal(value){amount.value=Math.min(100000,(parseInt(amount.value,10)||0)+value)}
     function busy(value){document.getElementById("btnAdd").disabled=value;document.getElementById("btnSub").disabled=value}

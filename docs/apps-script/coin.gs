@@ -34,25 +34,41 @@ const COIN_COL_LOG_TIME = 5;
 const COIN_MANUAL_WEB_APP_URL =
   "https://script.google.com/macros/s/AKfycbz6PjWqKuoTmTalX7ieq3NuhJr-6DPwFQI3c7sDCu9cSCFDt90DP4Ju0yIjfjOgyNoI6w/exec";
 
-/**
- * 보상 시트에서 user_id 로 데이터 찾기
- */
-function getRewardUserData_(userId) {
-  const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
+/** user_id 비교를 모든 코인 관리 경로에서 동일하게 처리합니다. */
+function normalizeCoinUserId_(value) {
+  return String(value == null ? "" : value).trim();
+}
+
+/** 보상 시트에서 user_id 행을 찾는 단일 경로. */
+function findRewardUserRow_(sheet, userId) {
+  const targetId = normalizeCoinUserId_(userId);
+  if (!targetId) return null;
+
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
 
   const values = sheet.getRange(2, 1, lastRow - 1, 3).getValues(); // A:C
   for (let i = 0; i < values.length; i++) {
-    if (String(values[i][COIN_COL_REWARD_USER_ID - 1]) === String(userId)) {
-      return {
-        userId: values[i][COIN_COL_REWARD_USER_ID - 1],
-        username: values[i][COIN_COL_REWARD_USERNAME - 1],
-        coin: parseInt(values[i][COIN_COL_REWARD_COIN - 1]) || 0
-      };
+    if (normalizeCoinUserId_(values[i][COIN_COL_REWARD_USER_ID - 1]) === targetId) {
+      return { rowIndex: 2 + i, values: values[i] };
     }
   }
   return null;
+}
+
+/**
+ * 보상 시트에서 user_id 로 데이터 찾기
+ */
+function getRewardUserData_(userId) {
+  const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
+  const found = findRewardUserRow_(sheet, userId);
+  if (!found) return null;
+
+  return {
+    userId: normalizeCoinUserId_(found.values[COIN_COL_REWARD_USER_ID - 1]),
+    username: found.values[COIN_COL_REWARD_USERNAME - 1],
+    coin: parseInt(found.values[COIN_COL_REWARD_COIN - 1], 10) || 0
+  };
 }
 
 /**
@@ -100,22 +116,8 @@ function renderCoinPage_(userId) {
  */
 function processCoinChangeUnlocked_(userId, action, amount) {
   const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) throw new Error("사용자를 찾을 수 없습니다.");
-
-  const values = sheet.getRange(2, 1, lastRow - 1, 3).getValues(); // A:C
-
-  let rowIndex = -1;
-  let currentCoin = 0;
-
-  for (let i = 0; i < values.length; i++) {
-    if (String(values[i][COIN_COL_REWARD_USER_ID - 1]) === String(userId)) {
-      rowIndex = 2 + i;
-      currentCoin = parseInt(values[i][COIN_COL_REWARD_COIN - 1]) || 0;
-      break;
-    }
-  }
-  if (rowIndex === -1) {
+  const found = findRewardUserRow_(sheet, userId);
+  if (!found) {
     return {
       success: false,
       newCoin: null,
@@ -123,6 +125,8 @@ function processCoinChangeUnlocked_(userId, action, amount) {
     };
   }
 
+  const rowIndex = found.rowIndex;
+  const currentCoin = parseInt(found.values[COIN_COL_REWARD_COIN - 1], 10) || 0;
   const amt = parseInt(amount, 10);
   if (!amt || isNaN(amt) || amt <= 0) {
     throw new Error("잘못된 수량입니다.");
@@ -172,7 +176,7 @@ function verifyCoinManagerCode_(providedCode) {
 
 /** 관리 페이지가 현재 시트 값을 다시 읽을 때 사용하는 서버 API */
 function getCoinManagementState(userId) {
-  const data = getRewardUserData_(String(userId || "").trim());
+  const data = getRewardUserData_(normalizeCoinUserId_(userId));
   if (!data) throw new Error("사용자를 찾을 수 없습니다.");
   return {
     success: true,
@@ -188,9 +192,13 @@ function processCoinChangeAuthorized(userId, action, amount, adminCode) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) throw new Error("처리 중입니다. 잠시 후 다시 시도해주세요.");
   try {
-    const result = processCoinChangeUnlocked_(String(userId || "").trim(), action, amount);
+    const normalizedUserId = normalizeCoinUserId_(userId);
+    const result = processCoinChangeUnlocked_(normalizedUserId, action, amount);
+    if (!result || result.success !== true) {
+      throw new Error(result && result.message ? result.message : "사용자를 찾을 수 없습니다.");
+    }
     SpreadsheetApp.flush();
-    const confirmed = getCoinManagementState(userId);
+    const confirmed = getCoinManagementState(normalizedUserId);
     return {
       success: true,
       newCoin: confirmed.coin,

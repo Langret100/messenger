@@ -359,7 +359,8 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
     names.forEach(n=>addPunct(`${n}, 잠깐 기다려.`,[`${n}, 잠깐 기다려.`,`${n} 잠깐, 기다려.`,`${n}. 잠깐 기다려?`,`${n} 잠깐 기다려,`]));
     const listStarts=["준비물은","과일은","색연필은","운동 도구는","간식은","교실 물품은","여행 준비물은","미술 재료는","문구류는","채소는"];
     const listItems=[["연필","지우개","자"],["사과","배","귤"],["빨강","파랑","초록"],["공","줄넘기","라켓"],["김밥","과일","물"],["공책","교과서","필통"],["모자","물병","수건"],["붓","물감","도화지"],["연필","볼펜","형광펜"],["당근","오이","양배추"]];
-    listStarts.forEach((st,i)=>{const [a,b,c]=listItems[i],ans=`${st} ${a}, ${b}, ${c}가 있다.`;addPunct(ans,[ans,`${st} ${a} ${b} ${c}가, 있다.`,`${st}, ${a} ${b}, ${c}가 있다.`,`${st} ${a}, ${b} ${c},가 있다.`])});
+    const subjectParticle=word=>{const text=String(word||"").trim(),last=text.charAt(text.length-1),code=last.charCodeAt(0)-0xAC00;return code>=0&&code<=11171&&code%28!==0?"이":"가"};
+    listStarts.forEach((st,i)=>{const [a,b,c]=listItems[i],particle=subjectParticle(c),subject=`${c}${particle}`,ans=`${st} ${a}, ${b}, ${subject} 있다.`;addPunct(ans,[ans,`${st} ${a} ${b} ${subject}, 있다.`,`${st}, ${a} ${b}, ${subject} 있다.`,`${st} ${a}, ${b} ${subject}, 있다.`])});
     const quotes=[["민지가 말했다","내일 만나자"],["선생님이 말씀하셨다","책을 펴세요"],["지우가 물었다","같이 갈래"],["아빠가 말씀하셨다","조심해서 다녀와"],["서연이가 외쳤다","우리가 이겼어"],["친구가 말했다","정말 고마워"],["동생이 물었다","지금 먹어도 돼"],["엄마가 말씀하셨다","우산 챙겨"],["민준이가 말했다","내가 먼저 할게"],["하린이가 물었다","몇 시에 시작해"]];
     quotes.forEach(([who,line])=>{const end=/물었다/.test(who)||/갈래|돼|시작해/.test(line)?"?":".";const ans=`${who}. “${line}${end}”`;addPunct(ans,[ans,`${who}? ${line}.`,`${who}, “${line}!”`,`${who}! ${line},`])});
 

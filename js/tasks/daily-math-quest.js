@@ -201,18 +201,10 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
   }
 
   function correctPosition(missionId, questionIndex = 0, variant = 0) {
-    const rng = random(hash(`${dateKey()}|${userId()}|${missionId}|${variant}|answer-positions`));
-    const positions = [];
-    while (positions.length <= questionIndex) {
-      const cycle = [0, 1, 2, 3];
-      for (let index = cycle.length - 1; index > 0; index -= 1) {
-        const target = Math.floor(rng() * (index + 1));
-        [cycle[index], cycle[target]] = [cycle[target], cycle[index]];
-      }
-      if (positions.length && cycle[0] === positions[positions.length - 1]) [cycle[0], cycle[1]] = [cycle[1], cycle[0]];
-      positions.push(...cycle);
-    }
-    return positions[questionIndex];
+    /* 각 문제를 독립적으로 배치합니다. "첫 4문제에 0~3을 한 번씩" 같은 순환 규칙은
+       답을 몰라도 다음 정답 칸을 좁힐 수 있으므로 사용하지 않습니다. */
+    const rng = random(hash(`${dateKey()}|${userId()}|${missionId}|${questionIndex}|${variant}|answer-position-independent-v2`));
+    return Math.floor(rng() * 4);
   }
 
   /* 정답 하나와 겹치지 않는 오답 세 개를 만들고, 정답 칸은 문제마다 바뀌도록 배치합니다. */

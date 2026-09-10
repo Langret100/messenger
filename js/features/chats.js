@@ -11,7 +11,7 @@
    - unread.js      방별 미확인 수
    ============================================================ */
 MiniTalk.Features.Chats=(()=>{
-  const messagesByRoom={},renderedMessageIds={},olderStateByRoom={};let roomAlertTimes={};let renderFrame=0;let eventsBound=false,roomSnapshotReceived=false;
+  const messagesByRoom={},renderedMessageIds={},olderStateByRoom={};let roomAlertTimes={};const roomInviteSeenInMemory=new Set();let renderFrame=0;let eventsBound=false,roomSnapshotReceived=false;
   let roomListReadyWaiters=[];
   const isRenderedChatRoute=()=>MiniTalk.Router.current()==="chats";
   function bindEvents(){if(eventsBound)return;eventsBound=true;
@@ -68,7 +68,27 @@ MiniTalk.Features.Chats=(()=>{
     });
     roomAlertTimes=next;
   }
-  function notifyRoomInvites(rooms){const current=MiniTalk.Store.get("user")||{};if(!current.user_id||current.isGuest)return;const key=`chat.roomInvites.seen.${current.user_id}`,seen=new Set(MiniTalk.Persistence.get(key,[])||[]);let changed=false;Object.values(rooms||{}).forEach(room=>{if(!room?.id||room.id==="global")return;const member=room._membership||room.members?.[current.user_id],invitedAt=Number(member?.invitedAt||0);if(!invitedAt||member?.invitedBy===current.user_id)return;const marker=`${room.id}:${invitedAt}`;if(seen.has(marker))return;seen.add(marker);changed=true;MiniTalk.Features.Tools?.notifyRoomInvite?.(room)});if(changed)MiniTalk.Persistence.set(key,[...seen].slice(-200))}
+  /* 초대 알림은 "rooms 스냅샷을 받았다"가 아니라 실제 pending invite가 처음 관측되는 순간에만 냅니다.
+     그룹 탭 구독은 같은 방 목록을 여러 번 publish할 수 있으므로, 저장소 + 현재 실행 중 메모리에서 함께 중복을 막습니다. */
+  function notifyRoomInvites(rooms){
+    const current=MiniTalk.Store.get("user")||{};if(!current.user_id||current.isGuest)return;
+    const key=`chat.roomInvites.seen.${current.user_id}`,seen=new Set(MiniTalk.Persistence.get(key,[])||[]),fresh=[];
+    Object.values(rooms||{}).forEach(room=>{
+      if(!room?.id||room.id==="global")return;
+      const member=room._membership||room.members?.[current.user_id];
+      /* invitedAt가 남아 있더라도 이미 member가 된 레코드는 초대가 아닙니다. */
+      if(String(member?.status||"")!=="invited")return;
+      const invitedAt=Number(member?.invitedAt||0),invitedBy=String(member?.invitedBy||"");
+      if(!invitedAt||invitedBy===String(current.user_id))return;
+      const marker=`${room.id}:${invitedAt}`;
+      if(seen.has(marker)||roomInviteSeenInMemory.has(marker))return;
+      seen.add(marker);roomInviteSeenInMemory.add(marker);fresh.push(room);
+    });
+    if(!fresh.length)return;
+    /* notifyBanner가 라우팅/렌더를 유발해도 재진입하지 않도록 알림보다 먼저 저장합니다. */
+    MiniTalk.Persistence.set(key,[...seen].slice(-200));
+    fresh.forEach(room=>MiniTalk.Features.Tools?.notifyRoomInvite?.(room));
+  }
   function profileForMessage(message){const profiles=MiniTalk.Store.get("profiles")||{},stored=profiles[message.user_id]||profiles[message.nickname]||{},avatar=stored.avatar||message.avatar||message.profileImage||message.profile_image||message.profileImageUrl||message.avatarUrl||message.photoURL||message.photoUrl||"";return{...stored,avatar}}
   /* 방 이미지가 없으면 1:1 상대, 방 제목과 같은 사용자, 마지막 발신자 순으로 프로필을 찾습니다. */
   function roomAvatar(room){

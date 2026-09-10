@@ -19,8 +19,7 @@ for(const mission of missions){
   if(JSON.stringify(first)!==JSON.stringify(second))throw new Error(`${mission.id} questions must stay stable during the day`);
   if(new Set(first.map(item=>`${item.question}|${item.answer}`)).size!==5)throw new Error(`${mission.id} repeated a question inside one mission`);
   const answerPositions=first.map(item=>item.choices.indexOf(item.answer));
-  if(new Set(answerPositions.slice(0,4)).size!==4)throw new Error(`${mission.id} first four correct-answer positions must cover all four slots`);
-  if(answerPositions.some((position,index)=>index>0&&position===answerPositions[index-1]))throw new Error(`${mission.id} repeated the correct-answer position consecutively`);
+  if(answerPositions.some(position=>position<0||position>3))throw new Error(`${mission.id} produced an invalid correct-answer position`);
   for(const item of first){
     if(!item.instruction||!item.question||!item.answer||item.choices.length!==4)throw new Error(`${mission.id} produced an incomplete question`);
     if(item.question.startsWith('빈칸에 알맞은 말은?'))throw new Error(`${mission.id} did not separate the instruction from the question`);
@@ -28,16 +27,21 @@ for(const mission of missions){
     if(!item.choices.includes(item.answer))throw new Error(`${mission.id} choices omitted the correct answer`);
   }
 }
-const signatures=new Set();
+const signatures=new Set(),positionCoverage=Object.fromEntries(missions.map(m=>[m.id,new Set()]));
+let sawNonPermutation=false,sawConsecutiveRepeat=false;
 for(let userIndex=0;userIndex<80;userIndex+=1){
   ctx.MiniTalk.Store.set('user',{user_id:`korean-random-${userIndex}`,nickname:'테스트'});
   for(const mission of missions){
     const items=quest.generate(mission.id);
     const positions=items.map(item=>item.choices.indexOf(item.answer));
-    if(new Set(positions.slice(0,4)).size!==4||positions.some((value,index)=>index&&value===positions[index-1]))throw new Error(`${mission.id} Korean answer-position stress failure`);
+    positions.forEach(value=>positionCoverage[mission.id].add(value));
+    if(new Set(positions.slice(0,4)).size<4)sawNonPermutation=true;
+    if(positions.some((value,index)=>index>0&&value===positions[index-1]))sawConsecutiveRepeat=true;
   }
   signatures.add(JSON.stringify(quest.generate('spelling').map(item=>item.question)));
 }
+for(const mission of missions)if(positionCoverage[mission.id].size!==4)throw new Error(`${mission.id} did not use all four answer slots across users`);
+if(!sawNonPermutation||!sawConsecutiveRepeat)throw new Error('Korean answer positions still look constrained by a predictable four-slot cycle');
 if(signatures.size<30)throw new Error(`Korean random variety too low: ${signatures.size}/80`);
 ctx.MiniTalk.Store.set('user',{user_id:'korean-test',nickname:'테스트'});
 

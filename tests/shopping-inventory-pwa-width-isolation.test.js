@@ -10,5 +10,5 @@ ok(js.includes('panel.style.maxWidth = "calc(100% - 20px)"'), 'inventory panel m
 ok(js.includes('panel.style.right = "10px"'), 'inventory panel must stay right-aligned');
 ok(!/@media\s*\(max-width:\s*560px\)[\s\S]*?\.shop-inventory-panel\s*\{[^}]*width\s*:/m.test(css), 'mobile media query must not override inventory width');
 ok(/shopping-store\.css\?v=64\.4\.7/.test(html), 'shopping css cache bust missing');
-ok(/shopping\.js\?v=64\.5\.52/.test(html), 'shopping js cache bust missing');
+ok(/shopping\.js\?v=64\.5\.53/.test(html), 'shopping js cache bust missing');
 console.log('SHOPPING_INVENTORY_PWA_WIDTH_ISOLATION_OK');

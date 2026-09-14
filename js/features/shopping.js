@@ -260,12 +260,27 @@ MiniTalk.Features.Shopping = (() => {
       if(state.phase==="result"||state.phase==="closing")return;state.phase="result";randomBrake();randomFanfare();overlay.classList.remove("spinning");overlay.classList.add("result");
       setStatus(state.winner?.name||"당첨!","보관함으로 이동 중");randomConfetti(doc,overlay);state.resultId=state.result?.item?.id||"";state.timers.push(setTimeout(movePrizeToInventory,1100));
     };
+    const currentStripY=()=>{
+      const value=getComputedStyle(strip).transform;if(!value||value==="none")return 0;
+      try{if(typeof DOMMatrixReadOnly!=="undefined")return new DOMMatrixReadOnly(value).m42||0}catch{}
+      const match=value.match(/^matrix\(([^)]+)\)$/);if(match){const parts=match[1].split(",").map(Number);return Number.isFinite(parts[5])?parts[5]:0}
+      const match3d=value.match(/^matrix3d\(([^)]+)\)$/);if(match3d){const parts=match3d[1].split(",").map(Number);return Number.isFinite(parts[13])?parts[13]:0}
+      return 0;
+    };
     const settle=(fast=false)=>{
-      if(state.settling||!state.result)return;state.settling=true;try{state.rollAnimation?.cancel?.()}catch{};state.rollAnimation=null;
+      if(state.settling||!state.result)return;state.settling=true;
+      // 현재 회전 위치를 그대로 이어받아 한 번만 감속합니다.
+      // 예전처럼 회전을 cancel한 뒤 새 스트립을 translateY(0)에서 다시 시작하면
+      // 화면상 첫 상품에 한 번 멈춘 뒤 실제 당첨 상품으로 다시 움직이는 이중 정지가 생깁니다.
+      const h=sizeCells(),currentY=currentStripY();try{state.rollAnimation?.cancel?.()}catch{};state.rollAnimation=null;
+      strip.style.transition="none";strip.style.transform=`translateY(${currentY}px)`;
       const winner=state.result.product||products.find(p=>p.id===state.result.product_id)||{name:state.result.product_name||"상품",imageUrl:state.result.product_image_url||""};state.winner=winner;
-      const seq=Array.from({length:10},randomProduct);const winnerIndex=seq.length;seq.push(winner,randomProduct());
-      strip.replaceChildren(...seq.map((p,i)=>randomProductCell(p,i===winnerIndex)));const h=sizeCells();strip.style.transform="translateY(0px)";void strip.offsetHeight;
-      const target=-(winnerIndex-1)*h,duration=fast?420:820;strip.style.transition=`transform ${duration}ms cubic-bezier(.12,.72,.16,1)`;requestAnimationFrame(()=>strip.style.transform=`translateY(${target}px)`);
+      const currentCenter=Math.max(1,Math.round((-currentY)/h)+1),travelCells=fast?5:10,winnerIndex=currentCenter+travelCells;
+      while(strip.children.length<=winnerIndex+1)strip.append(randomProductCell(randomProduct()));
+      strip.querySelectorAll(".shop-random-reel-cell.active").forEach(cell=>cell.classList.remove("active"));
+      strip.children[winnerIndex].replaceWith(randomProductCell(winner,true));
+      const target=-(winnerIndex-1)*h,duration=fast?420:820;void strip.offsetHeight;
+      strip.style.transition=`transform ${duration}ms cubic-bezier(.12,.72,.16,1)`;requestAnimationFrame(()=>strip.style.transform=`translateY(${target}px)`);
       const ticks=fast?8:14;for(let i=0;i<ticks;i++){const progress=i/ticks;state.timers.push(setTimeout(randomTick,duration*(progress*progress*.88)));}
       state.timers.push(setTimeout(showWinner,duration+70));
     };

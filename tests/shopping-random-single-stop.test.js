@@ -1,0 +1,11 @@
+const fs=require("fs"),path=require("path");
+const root=path.resolve(__dirname,"..");
+const ui=fs.readFileSync(path.join(root,"js/features/shopping.js"),"utf8");
+const html=fs.readFileSync(path.join(root,"index.html"),"utf8");
+const sw=fs.readFileSync(path.join(root,"sw.js"),"utf8");
+const settle=ui.slice(ui.indexOf("const currentStripY="),ui.indexOf("const scheduleNormalSettle="));
+if(!settle.includes("currentStripY()")||!settle.includes("strip.style.transition=\"none\"")||!settle.includes("replaceWith(randomProductCell(winner,true))"))throw new Error("roulette settle does not preserve the live reel position and inject one authoritative winner");
+if(settle.includes("strip.replaceChildren")||settle.includes('strip.style.transform=\"translateY(0px)\"'))throw new Error("roulette settle still resets/rebuilds the reel and can visibly stop twice");
+if(!html.includes("js/features/shopping.js?v=64.5.53"))throw new Error("shopping cache-bust version was not advanced");
+if(!sw.includes('moaru-runtime-bundle-7'))throw new Error("service worker cache bundle was not advanced");
+console.log("SHOPPING_RANDOM_SINGLE_STOP_OK");

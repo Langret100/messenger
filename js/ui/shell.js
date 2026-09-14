@@ -52,17 +52,20 @@ MiniTalk.UI.Shell=(()=>{
       renderNav();
       await MiniTalk.Router.go("chats");
       MiniTalk.Features.Admin?.applyStoredLock?.();
-      const firstRoomListPaint=MiniTalk.Features.Chats?.waitForRoomList?.()||Promise.resolve();
+      /*
+       * 로그인 완료는 인증 성공 + 작업공간 UI 생성으로 끝납니다.
+       * Firebase 방 목록은 별도의 실시간 데이터 채널이며 로그인 완료 조건이 아닙니다.
+       * 따라서 실시간 연결이 늦거나 재연결 중이어도 로그인 로딩을 붙잡지 않습니다.
+       */
+      requestAnimationFrame(()=>{if(initialLoadingOwned){initialLoadingOwned=false;endInitialLoading()}});
 
-      /* transport 준비는 즉시 시작합니다. 로딩 오버레이만 첫 방 목록의 실제 paint까지 유지합니다. */
       const realtimeReady=MiniTalk.Realtime.init(user).then(transport=>{
         if(!user.isGuest&&transport!=="firebase"){const reason=MiniTalk.Realtime.getConnectionError?.()||"";toast(/permission-denied/i.test(reason)?"Firebase 데이터베이스 규칙을 적용해주세요.":"실시간 서버 연결을 확인해주세요.")}
         return transport
       }).catch(error=>{console.warn("실시간 데이터 채널 초기화 실패",error);if(!user.isGuest)toast("실시간 서버 연결을 확인해주세요.");return"local"});
       void realtimeReady;
-      Promise.resolve(firstRoomListPaint).then(()=>new Promise(resolve=>requestAnimationFrame(resolve))).catch(error=>console.warn("첫 대화방 목록 렌더 확인 실패",error)).finally(()=>{if(initialLoadingOwned){initialLoadingOwned=false;endInitialLoading()}});
 
-      /* 코인/가입자/과제/쇼핑 초기 조회는 첫 화면 페인트 뒤로 넘깁니다. */
+      /* 코인/가입자/과제/쇼핑 초기 조회도 첫 화면 진입을 막지 않습니다. */
       requestAnimationFrame(()=>setTimeout(()=>startWorkspaceBackground(user),0));
     }catch(error){
       if(initialLoadingOwned){initialLoadingOwned=false;endInitialLoading()}

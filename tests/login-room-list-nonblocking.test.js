@@ -1,0 +1,10 @@
+const fs=require("fs"),path=require("path");
+const shell=fs.readFileSync(path.join(__dirname,"../js/ui/shell.js"),"utf8");
+const start=shell.indexOf("async function enterWorkspace(user)");
+const end=shell.indexOf("function resetWorkspaceSession",start);
+if(start<0||end<0)throw new Error("enterWorkspace not found");
+const enter=shell.slice(start,end);
+if(/waitForRoomList/.test(enter))throw new Error("login workspace entry must not wait for Firebase room-list snapshot");
+if(!/requestAnimationFrame\(\(\)=>\{if\(initialLoadingOwned\)/.test(enter))throw new Error("workspace UI paint must release login loading");
+if(!/MiniTalk\.Realtime\.init\(user\)/.test(enter))throw new Error("realtime initialization must remain active after login");
+console.log("login room-list nonblocking regression: ok");

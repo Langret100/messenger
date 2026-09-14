@@ -26,10 +26,10 @@
 
 /* Firebase Spark 동시 연결 한도에 닿기 전 신규 접속만 대기시키는 경량 입장 화면 */
 
-.realtime-wait-host{position:fixed;inset:0;z-index:52000;display:grid;place-items:center;padding:18px;background:color-mix(in srgb,var(--surface-2) 88%,transparent);backdrop-filter:blur(12px)}
-.realtime-wait-card{width:min(330px,calc(100vw - 36px));display:grid;justify-items:center;gap:9px;padding:24px 20px;border:1px solid var(--line);border-radius:22px;background:var(--surface-raised);box-shadow:0 20px 60px rgba(15,24,42,.18);text-align:center}
-.realtime-wait-card strong{font-size:15px;letter-spacing:-.025em;line-height:1.45;text-wrap:balance}.realtime-wait-card p{margin:0;display:grid;justify-items:center;gap:3px;color:var(--muted);font-size:10px;line-height:1.5;text-align:center}.realtime-wait-card p span{display:block}.realtime-wait-note{font-size:9px;color:var(--muted-2)}
-.realtime-wait-spinner{width:28px;height:28px;border:3px solid var(--surface-3);border-top-color:var(--accent);border-radius:50%;animation:realtime-wait-spin .8s linear infinite}@keyframes realtime-wait-spin{to{transform:rotate(360deg)}}
+.realtime-wait-host{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));z-index:52000;width:min(420px,calc(100vw - 24px));transform:translateX(-50%);pointer-events:none}
+.realtime-wait-card{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;justify-items:start;column-gap:10px;row-gap:2px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--surface-raised) 94%,transparent);backdrop-filter:blur(12px);box-shadow:0 8px 26px rgba(15,24,42,.14);text-align:left}
+.realtime-wait-card strong{grid-column:2;font-size:12px;letter-spacing:-.02em;line-height:1.35;text-wrap:balance}.realtime-wait-card p{grid-column:2;margin:0;display:grid;gap:1px;color:var(--muted);font-size:9px;line-height:1.35;text-align:left}.realtime-wait-card p span{display:block}.realtime-wait-note{font-size:8px;color:var(--muted-2)}
+.realtime-wait-spinner{grid-column:1;grid-row:1 / span 2;width:20px;height:20px;border:2px solid var(--surface-3);border-top-color:var(--accent);border-radius:50%;animation:realtime-wait-spin .8s linear infinite}@keyframes realtime-wait-spin{to{transform:rotate(360deg)}}
 
 .header-heart-inline{position:relative;overflow:visible}.header-heart-inline.heart-pop{animation:feed-heart-pop .4s var(--ease)}.header-heart-particle{position:absolute;left:7px;top:-1px;color:#e0526b;font-style:normal;font-size:9px;pointer-events:none;animation:header-heart-particle .5s ease-out forwards;transform:translateX(var(--dx,0))}@keyframes header-heart-particle{0%{opacity:0;transform:translate(var(--dx,0),2px) scale(.65)}20%{opacity:1}100%{opacity:0;transform:translate(var(--dx,0),-20px) scale(1.05)}}
 

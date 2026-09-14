@@ -241,6 +241,7 @@
 .admin-delivery-user-group{border:1px solid var(--line,#e1e6ef);border-radius:14px;overflow:hidden;background:#fff}
 .admin-delivery-user-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;background:#f5f7fb;border-bottom:1px solid var(--line,#e1e6ef)}
 .admin-delivery-user-head strong{font-size:13px}.admin-delivery-user-head span{font-size:11px;font-weight:800;color:#62718b;background:#fff;border:1px solid #dce2ec;border-radius:999px;padding:2px 7px}
+.admin-delivery-user-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}.admin-delivery-user-complete{white-space:nowrap;padding:5px 9px;font-size:11px}
 .admin-delivery-user-items{display:grid;gap:0}.admin-delivery-user-items .admin-delivery-row{border:0;border-radius:0;border-bottom:1px solid #edf0f5}.admin-delivery-user-items .admin-delivery-row:last-child{border-bottom:0}
 .admin-delivery-list{display:grid;gap:10px}
 

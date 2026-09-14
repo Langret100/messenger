@@ -640,7 +640,26 @@ MiniTalk.Features.Shopping = (() => {
       const grouped = new Map();
       rows.forEach(row => { const key=String(row.ownerId || row.owner_id || row.nickname || "unknown");if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(row); });
       grouped.forEach(groupRows => {
-        const first=groupRows[0]||{}, groupBox=D.el("section", { class: "admin-delivery-user-group" }), groupHead=D.el("div", { class: "admin-delivery-user-head" }, [D.el("strong", { text: first.nickname || first.ownerNickname || first.owner_id || first.ownerId || "학생" }), D.el("span", { text: `${groupRows.length}건` })]), groupList=D.el("div", { class: "admin-delivery-user-items" });
+        const first=groupRows[0]||{}, groupBox=D.el("section", { class: "admin-delivery-user-group" }), groupCount=D.el("span", { text: `${groupRows.length}건` }), groupComplete=D.el("button", { class: "mini-action admin-delivery-user-complete", type: "button", text: "이 사용자 완료" }), groupActions=D.el("div", { class: "admin-delivery-user-actions" }, [groupCount, groupComplete]), groupHead=D.el("div", { class: "admin-delivery-user-head" }, [D.el("strong", { text: first.nickname || first.ownerNickname || first.owner_id || first.ownerId || "학생" }), groupActions]), groupList=D.el("div", { class: "admin-delivery-user-items" });
+        groupComplete.disabled=bulkRunning||!groupRows.length;
+        groupComplete.onclick=async()=>{
+          if(bulkRunning||!groupRows.length)return;
+          bulkRunning=true;refresh.disabled=bulkComplete.disabled=groupComplete.disabled=true;progress.classList.remove("hidden");
+          const queue=[...groupRows],targets=queue.map(row=>({ownerId:row.ownerId||row.owner_id,inventoryId:row.id||row.inventoryId||row.inventory_id}));
+          progress.textContent=`${first.nickname||first.ownerNickname||first.owner_id||first.ownerId||"학생"} 배송완료 처리 중… ${queue.length}건`;
+          try{
+            const result=await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
+            const ownerIds=[...new Set(queue.map(row=>String(row.ownerId||row.owner_id||"")).filter(Boolean))];MiniTalk.Realtime.notifyCommandTargets?.(ownerIds);
+            const completedKeys=new Set(targets.map(target=>`${String(target.ownerId||"")}::${String(target.inventoryId||"")}`));
+            rows=rows.filter(row=>!completedKeys.has(`${String(row.ownerId||row.owner_id||"")}::${String(row.id||row.inventoryId||row.inventory_id||"")}`));
+            draw();Shell.toast(`${Number(result.count)||queue.length}건을 이 사용자 배송완료로 처리했습니다.`);
+          }catch(error){
+            Shell.toast(error.message||"이 사용자 배송완료 처리에 실패했습니다.");
+            if(String(error?.code||"")==="REQUEST_TIMEOUT")setTimeout(()=>load().catch?.(()=>{}),0);
+          }finally{
+            bulkRunning=false;progress.classList.add("hidden");refresh.disabled=false;bulkComplete.disabled=!rows.length;if(groupComplete?.isConnected)groupComplete.disabled=false;
+          }
+        };
         groupBox.append(groupHead,groupList);list.append(groupBox);
         groupRows.forEach(row => {
           const status = String(row.deliveryStatus || row.status || "requested"), item = D.el("article", { class: `admin-delivery-row status-${status}` });

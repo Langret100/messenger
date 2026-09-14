@@ -1,7 +1,7 @@
 /* 학급 피드: 서버 최신 30개만 유지하고 5개씩 페이지 조회합니다. 미디어는 별도 경로에서 지연 로드합니다. */
 MiniTalk.Features.Feed=(()=>{
   const STATE_PATH="moaru/v3/feedState",POSTS_PATH=`${STATE_PATH}/posts`,TOTALS_PATH=`${STATE_PATH}/totals`,MEDIA_PATH="moaru/v3/feedMedia",MAX_POSTS=30,PAGE_SIZE=5,MAX_COMMENTS=20,COMMENT_LIMIT=60,PHOTO_LIMIT=60*1024,PHOTO_BLOB_TARGET=44*1024,VIDEO_LIMIT=700*1024,VIDEO_BLOB_LIMIT=500*1024,VIDEO_THUMB_LIMIT=18*1024,VIDEO_THUMB_BLOB_TARGET=12*1024,VIDEO_SECONDS=7,CLEANUP_KEY="feed.pendingMediaCleanup",POST_CACHE="feed-post",MEDIA_CACHE="feed-media",THUMB_CACHE="feed-thumb";
-  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0,feedUserKey="";const pendingLocalHeartEffects=new Set(),openCommentComposers=new Set();
+  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0,feedUserKey="";const pendingLocalHeartEffects=new Set(),pendingHeartRequests=new Set(),openCommentComposers=new Set();
   const user=()=>MiniTalk.Store.get("user")||{};
   const safeUserKey=id=>String(id||"").replace(/[.#$\[\]\/]/g,"_");
   function postRows(){return Object.values(state.posts||{}).filter(Boolean).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)||String(b.id).localeCompare(String(a.id)))}
@@ -152,19 +152,20 @@ MiniTalk.Features.Feed=(()=>{
        취소 -> 재등록 같은 반복 클릭에서도 on/off 판단과 이펙트가 뒤집히지 않습니다. */
     const post=state.posts[String(postId)]||state.posts[postId];if(!post)return;
     const u=user();if(u.isGuest)return MiniTalk.UI.Shell.toast("로그인 후 하트를 누를 수 있습니다.");if(post.user_id===u.user_id)return MiniTalk.UI.Shell.toast("내 게시물에는 하트를 누를 수 없습니다.");
-    if(button?.disabled)return;
+    const requestKey=`${safeUserKey(u.user_id)}|${String(post.id)}`;if(button?.disabled||pendingHeartRequests.has(requestKey))return;
+    pendingHeartRequests.add(requestKey);
     const uid=safeUserKey(u.user_id),postPath=`${POSTS_PATH}/${post.id}`,authorKey=safeUserKey(post.user_id);let delta=0;pendingLocalHeartEffects.add(String(post.id));
     const expectedOn=post.hearts?.[uid]!==true;
     if(button)button.disabled=true;
     playHeartFeedback(button,expectedOn,true);
-    let saved;try{saved=await MiniTalk.Realtime.cloudTransaction(postPath,current=>{if(!current)return current;const next=structuredClone(current),hearts=next.hearts||{},on=hearts[uid]===true;delta=on?-1:1;if(on)delete hearts[uid];else hearts[uid]=true;next.hearts=hearts;next.heartCount=Math.max(0,(Number(next.heartCount)||0)+delta);next.updatedAt=MiniTalk.Realtime.serverTimestamp();return next})}catch(error){pendingLocalHeartEffects.delete(String(post.id));throw error}
-    finally{if(button?.isConnected)button.disabled=false}
+    let saved;try{saved=await MiniTalk.Realtime.cloudTransaction(postPath,current=>{if(!current)return current;const next=structuredClone(current),hearts=next.hearts||{},on=hearts[uid]===true;delta=on?-1:1;if(on)delete hearts[uid];else hearts[uid]=true;next.hearts=hearts;next.heartCount=Object.values(hearts).filter(value=>value===true).length;next.updatedAt=MiniTalk.Realtime.serverTimestamp();return next})}catch(error){pendingLocalHeartEffects.delete(String(post.id));throw error}
+    finally{pendingHeartRequests.delete(requestKey);if(button?.isConnected)button.disabled=false}
     if(!saved||!delta){pendingLocalHeartEffects.delete(String(post.id));return}
     setTimeout(()=>pendingLocalHeartEffects.delete(String(post.id)),1800);
     try{await MiniTalk.Realtime.cloudTransaction(`${TOTALS_PATH}/${authorKey}`,current=>Math.max(0,(Number(current)||0)+delta))}
     catch(error){
       /* 누적 하트 갱신이 실패하면 게시물 하트도 원상복구해 둘 값이 어긋나지 않게 합니다. */
-      await MiniTalk.Realtime.cloudTransaction(postPath,current=>{if(!current)return current;const next=structuredClone(current),hearts=next.hearts||{},on=hearts[uid]===true;if(delta>0&&on){delete hearts[uid];next.heartCount=Math.max(0,(Number(next.heartCount)||0)-1)}else if(delta<0&&!on){hearts[uid]=true;next.heartCount=(Number(next.heartCount)||0)+1}next.hearts=hearts;next.updatedAt=MiniTalk.Realtime.serverTimestamp();return next}).catch(()=>{});throw error
+      await MiniTalk.Realtime.cloudTransaction(postPath,current=>{if(!current)return current;const next=structuredClone(current),hearts=next.hearts||{},on=hearts[uid]===true;if(delta>0&&on){delete hearts[uid];next.heartCount=Object.values(hearts).filter(value=>value===true).length}else if(delta<0&&!on){hearts[uid]=true;next.heartCount=Object.values(hearts).filter(value=>value===true).length}next.hearts=hearts;next.updatedAt=MiniTalk.Realtime.serverTimestamp();return next}).catch(()=>{});throw error
     }
   }
 

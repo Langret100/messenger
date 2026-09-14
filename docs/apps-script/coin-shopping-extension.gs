@@ -1101,45 +1101,87 @@ function handleAdminUserBalances(e) {
   return shopJson_({ ok: true, users: rows });
 }
 
+function moaruAdminCoinReceiptResult_(receipt) {
+  const targets = Array.isArray(receipt && receipt.targets) ? receipt.targets.map(String) : [], coins = Array.isArray(receipt && receipt.newCoins) ? receipt.newCoins : [];
+  const rewarded = targets.map(function (id, index) { return { user_id: id, newCoin: Number(coins[index]) || 0 }; });
+  return { ok: true, count: rewarded.length, amount: Number(receipt && receipt.amount) || 0, rewarded: rewarded, failed: [], reason: String(receipt && receipt.reason || "관리자 보상"), recovered: Boolean(receipt && receipt.recovered) };
+}
+
 /** POST mode=admin_coin_reward: 관리자 토큰 확인 후 등록 사용자의 코인을 증감합니다. */
 function handleAdminCoinReward(e) {
   const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
-  const amount = Number(p.amount);
+  const amount = parseInt(p.amount, 10);
   if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 100000) return shopJson_({ ok: false, error: "INVALID_COIN_AMOUNT" });
   let targets = [];
   try { targets = JSON.parse(p.targets_json || "[]"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" }); }
-  const requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100), registeredUsers = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), rewardCoins = moaruRewardCoinMap_();
-  targets = targets.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && registeredUsers[id] && Object.prototype.hasOwnProperty.call(rewardCoins, id); }).slice(0, 200);
+  const requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100), registeredUsers = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); });
+  /* 대상 순서를 요청마다 동일하게 고정합니다. 새로고침 뒤 같은 사람을 다른 순서로 선택해도 같은 request_id 계약이 깨지지 않습니다. */
+  targets = targets.map(String).filter(function (id, index, list) { return id && list.indexOf(id) === index && registeredUsers[id]; }).sort().slice(0, 200);
   if (!targets.length) return shopJson_({ ok: false, error: "NO_TARGETS" });
-  const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  const receipts = PropertiesService.getScriptProperties(), receiptKey = requestId ? MOARU_ADMIN_COIN_REQUEST_PREFIX + requestId : "";
+  let prior = null; if (receiptKey) { try { prior = JSON.parse(receipts.getProperty(receiptKey) || "null"); } catch (error) { prior = null; } }
+  if (prior && (Number(prior.amount) !== amount || JSON.stringify(prior.targets || []) !== JSON.stringify(targets))) return shopJson_({ ok: false, error: "COIN_REQUEST_CONFLICT" });
+  if (prior && prior.status === "done") return shopJson_(moaruAdminCoinReceiptResult_(prior));
+  const lock = LockService.getScriptLock(); if (!lock.tryLock(2500)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
-    const receipts = PropertiesService.getScriptProperties(), receiptKey = requestId ? MOARU_ADMIN_COIN_REQUEST_PREFIX + requestId : "";let receipt = null;
-    if (receiptKey) { try { receipt = JSON.parse(receipts.getProperty(receiptKey) || "null"); } catch (error) { receipt = null; } }
-    if (receipt && (Number(receipt.amount) !== amount || JSON.stringify(receipt.targets || []) !== JSON.stringify(targets))) return shopJson_({ ok: false, error: "COIN_REQUEST_CONFLICT" });
-    if (receipt && receipt.status === "done") return shopJson_(receipt.result);
-    if (!receipt) { receipt = { status: "pending", amount: amount, targets: targets, targetStates: {}, createdAt: Date.now() };if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify(receipt)); }
-    const rewarded = [], failed = [], states = receipt.targetStates || {};
-    targets.forEach(function (target, index) {
-      try {
-        let state = states[target];
-        if (state && state.status === "done") { rewarded.push({ user_id: target, newCoin: Number(state.newCoin) || 0 });return; }
-        if (!state) { const before = Number(rewardCoins[target]) || 0;state = states[target] = { status: "pending", beforeCoin: before, expectedCoin: amount > 0 ? before + amount : before - Math.abs(amount) };receipt.targetStates = states;if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify(receipt)); }
-        const current = moaruSpreadsheetRetry_(function () { return getRewardUserData_(target); }), currentCoin = parseInt(current && current.coin, 10) || 0;let result;
-        if (currentCoin === Number(state.expectedCoin)) result = { success: true, newCoin: currentCoin, recovered: true };
-        else if (currentCoin === Number(state.beforeCoin)) result = moaruAdminCoinChangeGuarded_(target, amount);
-        else throw new Error("COIN_REWARD_STATE_CONFLICT");
-        if (result && result.success) {
-          const newCoin = Number(result.newCoin) || 0;
-          rewarded.push({ user_id: target, newCoin: newCoin });
-          state.status = "done";state.newCoin = newCoin;if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify(receipt));
-          enqueueMoaruCommand_(target, "COIN_REWARD", { amount: amount, newCoin: newCoin, reason: String(p.reason || "관리자 보상").trim().slice(0, 80) }, p.user_id, requestId ? "coin-" + requestId + "-" + index : "");
-        } else failed.push({ user_id: target, error: "COIN_CHANGE_FAILED" });
-      } catch (error) { failed.push({ user_id: target, error: String(error && error.message || error) }); }
-    });
-    if (!rewarded.length) return shopJson_({ ok: false, error: failed.some(function (row) { return row.error === "COIN_SHEET_TEMPORARY_ERROR"; }) ? "COIN_SHEET_TEMPORARY_ERROR" : "COIN_REWARD_FAILED", failed: failed });
-    const result = { ok: true, count: rewarded.length, amount: amount, rewarded: rewarded, failed: failed, reason: String(p.reason || "관리자 보상").trim().slice(0, 80) };if (receiptKey && !failed.length) receipts.setProperty(receiptKey, JSON.stringify({ status: "done", amount: amount, targets: targets, createdAt: receipt.createdAt, result: result }));return shopJson_(result);
+    if (receiptKey) { try { prior = JSON.parse(receipts.getProperty(receiptKey) || "null"); } catch (error) { prior = null; } }
+    if (prior && prior.status === "done") return shopJson_(moaruAdminCoinReceiptResult_(prior));
+    const sheet = getSheet_(SHOP_REWARD_SHEET_NAME), lastRow = sheet.getLastRow();
+    if (lastRow < 2) return shopJson_({ ok: false, error: "NO_TARGETS" });
+    const rowCount = lastRow - 1, range = sheet.getRange(2, 1, rowCount, Math.max(SHOP_COL_REWARD_COIN, SHOP_COL_REWARD_USER_ID)), values = moaruSpreadsheetRetry_(function () { return range.getValues(); });
+    const rowByUser = {}, missing = [];
+    values.forEach(function (row, index) { const id = String(row[SHOP_COL_REWARD_USER_ID - 1] || "").trim(); if (id) rowByUser[id] = index; });
+    targets.forEach(function (id) { if (rowByUser[id] === undefined) missing.push(id); });
+    if (missing.length) return shopJson_({ ok: false, error: "NO_TARGETS", missing: missing });
+
+    /*
+     * committing 영수증은 setValues 직전에 before/expected를 저장합니다.
+     * Apps Script가 코인 기록 뒤 done 영수증을 쓰기 전에 끊겨도, 재요청에서 expected 상태를 확인해
+     * 다시 더하지 않고 완료만 복구합니다. before도 expected도 아닌 값이 섞여 있으면 중복 지급보다
+     * 안전한 충돌 반환을 택합니다.
+     */
+    let beforeCoins = prior && Array.isArray(prior.beforeCoins) ? prior.beforeCoins.map(Number) : null, expectedCoins = prior && Array.isArray(prior.expectedCoins) ? prior.expectedCoins.map(Number) : null;
+    if (prior && prior.status === "committing" && beforeCoins && expectedCoins && beforeCoins.length === targets.length && expectedCoins.length === targets.length) {
+      const alreadyApplied = targets.every(function (id, index) { return Number(values[rowByUser[id]][SHOP_COL_REWARD_COIN - 1]) === Number(expectedCoins[index]); });
+      const notApplied = targets.every(function (id, index) { return Number(values[rowByUser[id]][SHOP_COL_REWARD_COIN - 1]) === Number(beforeCoins[index]); });
+      if (alreadyApplied) {
+        const recoveredReason = String(p.reason || prior.reason || "관리자 보상").trim().slice(0, 80);
+        const doneReceipt = { status: "done", amount: amount, targets: targets, newCoins: expectedCoins, reason: recoveredReason, recovered: true, createdAt: prior.createdAt || Date.now() };
+        if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify(doneReceipt));
+        const recoveredResult = moaruAdminCoinReceiptResult_(doneReceipt);
+        recoveredResult.rewarded.forEach(function (row, index) { try { enqueueMoaruCommand_(row.user_id, "COIN_REWARD", { amount: amount, newCoin: row.newCoin, reason: recoveredReason }, p.user_id, requestId ? "coin-" + requestId + "-" + index : ""); } catch (error) { console.error("ADMIN_COIN_NOTIFY_FAILED", row.user_id, error); } });
+        return shopJson_(recoveredResult);
+      }
+      if (!notApplied) return shopJson_({ ok: false, error: "COIN_REQUEST_STATE_CONFLICT", message: "이전 코인 요청의 반영 상태를 안전하게 확정할 수 없습니다. 현재 잔액을 확인해주세요." });
+      /* 전부 before 상태면 이전 시도는 실제 코인 반영 전 종료된 것이므로 아래에서 한 번만 다시 적용합니다. */
+    } else {
+      beforeCoins = targets.map(function (id) { return parseInt(values[rowByUser[id]][SHOP_COL_REWARD_COIN - 1], 10) || 0; });
+      expectedCoins = beforeCoins.map(function (before) { return before + amount; });
+    }
+
+    const rewarded = [];
+    targets.forEach(function (id, targetIndex) { const index = rowByUser[id], next = Number(expectedCoins[targetIndex]); values[index][SHOP_COL_REWARD_COIN - 1] = next; rewarded.push({ user_id: id, newCoin: next }); });
+    if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify({ status: "committing", amount: amount, targets: targets, beforeCoins: beforeCoins, expectedCoins: expectedCoins, reason: String(p.reason || "관리자 보상").trim().slice(0, 80), createdAt: prior && prior.createdAt || Date.now() }));
+    /* 대상별 setValue 반복이 아니라 코인 열을 한 번에 기록해 중간 사용자까지만 반영되는 부분 지급 창을 없앱니다. */
+    moaruSpreadsheetRetry_(function () { sheet.getRange(2, SHOP_COL_REWARD_COIN, rowCount, 1).setValues(values.map(function (row) { return [row[SHOP_COL_REWARD_COIN - 1]]; })); return true; });
+    const result = { ok: true, count: rewarded.length, amount: amount, rewarded: rewarded, failed: [], reason: String(p.reason || "관리자 보상").trim().slice(0, 80) };
+    if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify({ status: "done", amount: amount, targets: targets, newCoins: rewarded.map(function (row) { return row.newCoin; }), reason: result.reason, createdAt: prior && prior.createdAt || Date.now() }));
+    /* 알림 큐는 코인 일괄 반영 뒤 수행합니다. 알림 실패가 코인 일부 지급으로 이어지지 않게 분리합니다. */
+    rewarded.forEach(function (row, index) { try { enqueueMoaruCommand_(row.user_id, "COIN_REWARD", { amount: amount, newCoin: row.newCoin, reason: result.reason }, p.user_id, requestId ? "coin-" + requestId + "-" + index : ""); } catch (error) { console.error("ADMIN_COIN_NOTIFY_FAILED", row.user_id, error); } });
+    return shopJson_(result);
   } finally { lock.releaseLock(); }
+}
+
+/** 10초 응답 제한 뒤에도 '취소'라고 오판하지 않도록 같은 request_id의 서버 완료 상태만 조회합니다. */
+function handleAdminCoinRewardStatus(e) {
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
+  if (!auth.ok) return shopJson_(auth);
+  const requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100);
+  if (!requestId) return shopJson_({ ok: false, error: "COIN_REWARD_PENDING" });
+  let receipt = null; try { receipt = JSON.parse(PropertiesService.getScriptProperties().getProperty(MOARU_ADMIN_COIN_REQUEST_PREFIX + requestId) || "null"); } catch (error) { receipt = null; }
+  if (receipt && receipt.status === "done") return shopJson_(moaruAdminCoinReceiptResult_(receipt));
+  return shopJson_({ ok: true, status: receipt && receipt.status || "pending", count: 0, rewarded: [], failed: [] });
 }
 
 /** POST mode=user_commands: 본인 큐 조회 및 처리 완료 항목 삭제 */

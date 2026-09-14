@@ -13,5 +13,5 @@ for(const day of koreanDates){
   previous=new Set(keys);setSignatures.add(JSON.stringify(keys));
 }
 if(setSignatures.size!==koreanDates.length)throw new Error('weekly Korean question set repeated exactly');
-if(!src.includes('QUESTION_SET_VERSION="v7"')||!src.includes('makeGeneratedKoreanQuestions'))throw new Error('weekly v7 generated/cycled bank missing');
+if(!src.includes('QUESTION_SET_VERSION="v8"')||!src.includes('makeGeneratedKoreanQuestions'))throw new Error('weekly v7 generated/cycled bank missing');
 console.log('WEEKLY_QUESTION_CYCLE_REGRESSION_OK');

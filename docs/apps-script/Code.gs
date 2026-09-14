@@ -346,6 +346,9 @@ function doPost(e) {
       case "admin_coin_reward":
         return handleAdminCoinReward(e);
 
+      case "admin_coin_reward_status":
+        return handleAdminCoinRewardStatus(e);
+
       case "admin_user_balances":
         return handleAdminUserBalances(e);
 

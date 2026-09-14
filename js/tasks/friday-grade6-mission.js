@@ -7,7 +7,7 @@
 MiniTalk.Tasks=MiniTalk.Tasks||{};
 MiniTalk.Tasks.FridayGrade6Mission=(()=>{
   const OPEN_HOUR=9,TOTAL=20,PATH="moaru/v3/fridayMission",REWARD_TYPE="WEEKLY_CHECK_OVER80",REWARD_COIN=5,ALT_ANCHOR_WEEK="2026-08-17";
-  const QUESTION_SET_VERSION="v7",mathCats=["분수·소수","비와 비율","도형","자료 해석","문장제"];
+  const QUESTION_SET_VERSION="v8",mathCats=["분수·소수","비와 비율","도형","자료 해석","문장제"];
   const korBank=[
     ["독해","'비가 와서 운동회가 연기되었다.'에서 운동회가 연기된 까닭은?","비가 와서",["비가 와서","날씨가 더워서","학생이 적어서","운동장이 넓어서"]],
     ["독해","글에서 반복되거나 강조되는 내용을 살펴보는 주된 까닭은?","중심 생각을 찾기 위해",["중심 생각을 찾기 위해","글자 수를 세기 위해","문장부호를 찾기 위해","종이 크기를 알기 위해"]],
@@ -148,9 +148,16 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
   ];
 
   function subjectRunIndex(){return Math.floor(weekNumberFromAnchor()/2)}
-  function cycleKoreanQuestions(bank,r){
-    const ordered=shuffle(bank,rng(hash(`${user().user_id||"guest"}|weekly-korean-cycle-v2`))),run=subjectRunIndex(),blockCount=Math.max(1,Math.floor(ordered.length/TOTAL)),epoch=Math.floor(run/blockCount),start=(((run*TOTAL)+(epoch*7))%ordered.length+ordered.length)%ordered.length,out=[];
-    for(let i=0;i<TOTAL;i+=1)out.push(ordered[(start+i)%ordered.length]);
+  function cycleKoreanQuestions(bank,r,uniqueVisibleText=false){
+    const ordered=shuffle(bank,rng(hash(`${user().user_id||"guest"}|weekly-korean-cycle-v2`))),run=subjectRunIndex(),blockCount=Math.max(1,Math.floor(ordered.length/TOTAL)),epoch=Math.floor(run/blockCount),legacyStart=(((run*TOTAL)+(epoch*7))%ordered.length+ordered.length)%ordered.length;
+    if(!uniqueVisibleText){const out=[];for(let i=0;i<TOTAL;i+=1)out.push(ordered[(legacyStart+i)%ordered.length]);return out}
+    /* v8 신규 세트만 화면 질문 문장 기준으로 먼저 중복을 제거한 고정 풀을 만듭니다.
+     * 그 뒤 20문항씩 연속 소비하므로, 아직 쓰지 않은 문항이 충분한 동안에는 이전 회차 문항을 다시 뽑지 않습니다.
+     * v4~v7 저장 답안 복원은 위 legacyStart 경로를 그대로 사용합니다. */
+    const seenText=new Set(),unique=[];
+    for(const item of ordered){const key=String(item&&item[1]||"").replace(/\s+/g," ").trim();if(!key||seenText.has(key))continue;seenText.add(key);unique.push(item)}
+    const start=unique.length?(((run*TOTAL)%unique.length)+unique.length)%unique.length:0,out=[];
+    for(let i=0;i<TOTAL&&unique.length;i+=1)out.push(unique[(start+i)%unique.length]);
     return out;
   }
 
@@ -274,10 +281,13 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     if(subject==="수학"){
       const cats=[];for(const cat of mathCats)for(let i=0;i<4;i++)cats.push({cat,variant:i});
       shuffle(cats,r).forEach(item=>rows.push(legacy?makeMathQuestionV4(item.cat,r):makeMathQuestion(item.cat,r,item.variant)));
-    }else if(!legacy&&!previous&&!previous6){
+    }else if(version==="v7"){
+      /* v7 저장 답안 호환용. 새 v8에서는 장소/행동을 무작위 결합하던 생성형 국어 문항을 사용하지 않습니다. */
       rows.push(...makeGeneratedKoreanQuestions());
     }else{
-      const bank=legacy?korBank:previous?korBank.concat(korExtra):korBank.concat(korExtra,korCycleExtra),selected=(legacy||previous)?shuffle(bank,r).slice(0,TOTAL):cycleKoreanQuestions(bank,r);
+      /* v8: 검수된 고정 문제은행만 순환합니다. 장소와 행동을 따로 뽑지 않으므로
+       * '박물관에서 준비 운동' 같은 의미 불일치와 이름만 바뀐 복제 문항이 생기지 않습니다. */
+      const bank=legacy?korBank:previous?korBank.concat(korExtra):korBank.concat(korExtra,korCycleExtra),selected=(legacy||previous)?shuffle(bank,r).slice(0,TOTAL):cycleKoreanQuestions(bank,r,version==="v8");
       selected.forEach(([cat,text,ans,choices])=>rows.push(q("국어",cat,text,ans,choices,r,/다음 글|다음 내용|다음 문장|짐작|요약|안내문/.test(text)?"passage":"short")));
     }
     return rows.slice(0,TOTAL).map((x,i)=>({...x,id:`q${i+1}`}));

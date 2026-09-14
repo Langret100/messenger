@@ -11,7 +11,17 @@ MiniTalk.Features.Admin=(()=>{
   const visible=()=>MiniTalk.AdminSession?.authorized?.()===true;
   let noticeTimer=0,balanceOwner="",balanceLoaded=false,balanceLoadedAt=0,balanceInFlight=null,balanceMap={},adminPopup=null,adminPopupRoot=null,closingAdminPopup=false,refreshTaskReview=()=>{};
   const BALANCE_REFRESH_MS=15000;
-  const pendingCoinRequests=new Map();
+  const pendingCoinRequests=new Map(),PENDING_COIN_STORAGE_KEY="admin.pendingCoinRequests.v1",PENDING_COIN_TTL=10*60*1000;
+  function readPendingCoinRequests(){
+    try{const now=Date.now(),rows=JSON.parse(localStorage.getItem(PENDING_COIN_STORAGE_KEY)||"[]"),keep=[];for(const row of Array.isArray(rows)?rows:[]){if(!row||!row.signature||!row.requestId||Number(row.expiresAt)<=now)continue;pendingCoinRequests.set(String(row.signature),String(row.requestId));keep.push(row)}if(keep.length)localStorage.setItem(PENDING_COIN_STORAGE_KEY,JSON.stringify(keep));else localStorage.removeItem(PENDING_COIN_STORAGE_KEY)}catch{}
+  }
+  function persistPendingCoinRequest(signature,requestId){
+    pendingCoinRequests.set(signature,requestId);try{const now=Date.now(),rows=JSON.parse(localStorage.getItem(PENDING_COIN_STORAGE_KEY)||"[]"),keep=(Array.isArray(rows)?rows:[]).filter(row=>row&&row.signature!==signature&&Number(row.expiresAt)>now);keep.push({signature,requestId,expiresAt:now+PENDING_COIN_TTL});localStorage.setItem(PENDING_COIN_STORAGE_KEY,JSON.stringify(keep))}catch{}
+  }
+  function clearPendingCoinRequest(signature){
+    pendingCoinRequests.delete(signature);try{const now=Date.now(),rows=JSON.parse(localStorage.getItem(PENDING_COIN_STORAGE_KEY)||"[]"),keep=(Array.isArray(rows)?rows:[]).filter(row=>row&&row.signature!==signature&&Number(row.expiresAt)>now);if(keep.length)localStorage.setItem(PENDING_COIN_STORAGE_KEY,JSON.stringify(keep));else localStorage.removeItem(PENDING_COIN_STORAGE_KEY)}catch{}
+  }
+  readPendingCoinRequests();
   MiniTalk.Events.on("tasks:admin-refresh",()=>refreshTaskReview());
 
   const desktopAdmin=host=>{const view=host?.ownerDocument?.defaultView||MiniTalk.UI.Dom.doc()?.defaultView||window,screenInfo=view?.screen||screen;return !MiniTalk.MobileImmersive?.isMobile?.()&&Number(screenInfo?.availWidth||view?.innerWidth||0)>=720};
@@ -64,7 +74,7 @@ MiniTalk.Features.Admin=(()=>{
   }
 
   async function executeAdminCommand({targets,type,title="",body="",coinAmount=1,imageUrl="",people=[],Shell=MiniTalk.UI.Shell}={}){
-    const ids=[...new Set((targets||[]).map(String).filter(Boolean))];
+    const ids=[...new Set((targets||[]).map(String).filter(Boolean))].sort();
     if(!ids.length)throw new Error("대상 사용자가 없습니다.");
     if(type==="IMAGE"&&!imageUrl)throw new Error("전송할 이미지를 먼저 선택하세요.");
     if(type==="COIN_REWARD"||type==="TASK"){
@@ -73,9 +83,9 @@ MiniTalk.Features.Admin=(()=>{
       if(type==="COIN_REWARD"&&(!Number.isInteger(coins)||coins===0||Math.abs(coins)>100000))throw new Error("코인 증감은 -100,000~100,000 사이에서 0을 제외한 정수로 입력하세요.");
       if(type==="COIN_REWARD"){
         const current=MiniTalk.Store.get("user")||{},reason=String(title||"").trim()||"관리자 코인 변경",signature=JSON.stringify([current.user_id,ids,coins,reason]),requestId=pendingCoinRequests.get(signature)||crypto.randomUUID();
-        pendingCoinRequests.set(signature,requestId);
+        persistPendingCoinRequest(signature,requestId);
         const result=await MiniTalk.AuthApi.adminCoinReward({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("ADMIN"),targets:ids,amount:coins,reason,requestId});
-        pendingCoinRequests.delete(signature);
+        clearPendingCoinRequest(signature);
         (result.rewarded||[]).forEach(row=>{balanceMap[row.user_id]=Math.floor(Number(row.newCoin)||0);const person=people.find?.(item=>String(item.user_id)===String(row.user_id));if(person)person.coin=balanceMap[row.user_id]});
         balanceLoaded=true;balanceLoadedAt=Date.now();MiniTalk.Realtime.notifyCommandTargets?.(ids);return Number(result.count)||0;
       }

@@ -200,15 +200,24 @@ MiniTalk.AuthApi = (() => {
       }, 10000);
     },
     async adminCoinReward({ userId, adminToken, targets, amount, reason, requestId }) {
-      return post({
-        mode: "admin_coin_reward",
-        user_id: userId,
-        admin_token: adminToken,
-        targets_json: JSON.stringify(targets || []),
-        amount,
-        reason: reason || "관리자 보상",
-        request_id: requestId || ""
-      }, 10000);
+      try {
+        return await post({
+          mode: "admin_coin_reward",
+          user_id: userId,
+          admin_token: adminToken,
+          targets_json: JSON.stringify(targets || []),
+          amount,
+          reason: reason || "관리자 보상",
+          request_id: requestId || ""
+        }, 10000);
+      } catch (error) {
+        if (error?.code !== "REQUEST_TIMEOUT" || !requestId) throw error;
+        const status = await post({ mode: "admin_coin_reward_status", user_id: userId, admin_token: adminToken, request_id: requestId }, 4000);
+        if (status?.status === "pending" || status?.status === "committing") {
+          const pending = new Error(errorMessages.COIN_REWARD_PENDING);pending.code = "COIN_REWARD_PENDING";throw pending;
+        }
+        return status;
+      }
     },
     async adminUserBalances(userId, adminToken) {
       const data = await post({ mode: "admin_user_balances", user_id: userId, admin_token: adminToken }, 10000);

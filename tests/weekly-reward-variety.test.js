@@ -2,7 +2,7 @@ const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.resolve(__dirname,'..'),src=fs.readFileSync(path.join(root,'js/tasks/friday-grade6-mission.js'),'utf8'),coin=fs.readFileSync(path.join(root,'docs/apps-script/coin.gs'),'utf8'),html=fs.readFileSync(path.join(root,'index.html'),'utf8'),sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 ok(src.includes('REWARD_COIN=5')&&coin.includes('delta = 5'),'weekly reward must be +5 on both client and server');
-ok(src.includes('QUESTION_SET_VERSION="v7"')&&src.includes('questionSetVersion:setVersion'),'versioned weekly question set missing');
+ok(src.includes('QUESTION_SET_VERSION="v8"')&&src.includes('questionSetVersion:setVersion'),'versioned weekly question set missing');
 ok(src.includes('const korExtra=[')&&src.includes('korBank.concat(korExtra)'),'expanded Korean question bank missing');
 ok(src.includes('variant:i')&&src.includes('makeMathQuestion(item.cat,r,item.variant)'),'guaranteed math template variety missing');
 ok(src.includes('saved?.questionSetVersion||(Array.isArray(saved?.answers)&&saved.answers.length?"v4":QUESTION_SET_VERSION)'),'legacy draft compatibility missing');

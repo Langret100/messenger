@@ -200,24 +200,17 @@ MiniTalk.AuthApi = (() => {
       }, 10000);
     },
     async adminCoinReward({ userId, adminToken, targets, amount, reason, requestId }) {
-      try {
-        return await post({
-          mode: "admin_coin_reward",
-          user_id: userId,
-          admin_token: adminToken,
-          targets_json: JSON.stringify(targets || []),
-          amount,
-          reason: reason || "관리자 보상",
-          request_id: requestId || ""
-        }, 10000);
-      } catch (error) {
-        if (error?.code !== "REQUEST_TIMEOUT" || !requestId) throw error;
-        const status = await post({ mode: "admin_coin_reward_status", user_id: userId, admin_token: adminToken, request_id: requestId }, 4000);
-        if (status?.status === "pending" || status?.status === "committing") {
-          const pending = new Error(errorMessages.COIN_REWARD_PENDING);pending.code = "COIN_REWARD_PENDING";throw pending;
-        }
-        return status;
-      }
+      // 관리자 대량 코인 변경은 10초를 넘길 수 있으므로 상태조회용 별도 API를 호출하지 않습니다.
+      // 호출이 끝날 때까지 관리자 전송 버튼을 잠가 중복 클릭을 막고, 최대 30초까지 원 요청의 응답을 기다립니다.
+      return post({
+        mode: "admin_coin_reward",
+        user_id: userId,
+        admin_token: adminToken,
+        targets_json: JSON.stringify(targets || []),
+        amount,
+        reason: reason || "관리자 보상",
+        request_id: requestId || ""
+      }, 30000);
     },
     async adminUserBalances(userId, adminToken) {
       const data = await post({ mode: "admin_user_balances", user_id: userId, admin_token: adminToken }, 10000);

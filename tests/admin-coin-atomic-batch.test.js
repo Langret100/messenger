@@ -5,5 +5,6 @@ ok(fn.includes('.setValues(values.map'),'admin coin must batch-write balances');
 ok(!fn.includes('moaruAdminCoinChangeGuarded_(target, amount)'),'admin coin still applies users one by one');
 ok(fn.includes('status: "done"')&&server.includes('function handleAdminCoinRewardStatus(e)'),'request receipt/status reconciliation missing');
 ok(route.includes('case "admin_coin_reward_status"'),'status route missing');
-ok(api.includes('mode: "admin_coin_reward_status"')&&api.includes('error?.code !== "REQUEST_TIMEOUT"'),'client timeout reconciliation missing');
+ok(api.includes('}, 30000);'),'admin coin request must wait up to 30 seconds');
+ok(!api.includes('const status = await post({ mode: "admin_coin_reward_status"'),'client must not require status API after timeout');
 console.log('ADMIN_COIN_ATOMIC_BATCH_OK');

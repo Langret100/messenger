@@ -14,7 +14,7 @@ ok(settings.includes('if(reserved)MiniTalk.Features.Admin?.closePopup?.()'),'fai
 
 ok(feed.includes('function sameComments(a,b)'),'feed comment change discriminator missing');
 ok(feed.includes('if(!sameComments(previous,post))patchComments(id)'),'heart-only feed update must not rebuild comments');
-ok(feed.includes('draft=oldInput?.value||""')&&feed.includes('nextInput.value=draft'),'comment draft preservation missing');
+ok(feed.includes('draft=preserveDraft?(oldInput?.value||""):""')&&feed.includes('nextInput.value=draft'),'comment draft preservation missing');
 ok(feed.includes('doc?.activeElement===oldInput')&&feed.includes('setSelectionRange'),'comment focus/caret preservation missing');
 
 ok(html.includes('css/features/tools.css?v='),'tools css cache-bust missing');

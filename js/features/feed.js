@@ -1,7 +1,7 @@
 /* 학급 피드: 서버 최신 30개만 유지하고 5개씩 페이지 조회합니다. 미디어는 별도 경로에서 지연 로드합니다. */
 MiniTalk.Features.Feed=(()=>{
   const STATE_PATH="moaru/v3/feedState",POSTS_PATH=`${STATE_PATH}/posts`,TOTALS_PATH=`${STATE_PATH}/totals`,MEDIA_PATH="moaru/v3/feedMedia",MAX_POSTS=30,PAGE_SIZE=5,MAX_COMMENTS=20,COMMENT_LIMIT=60,PHOTO_LIMIT=60*1024,PHOTO_BLOB_TARGET=44*1024,VIDEO_LIMIT=700*1024,VIDEO_BLOB_LIMIT=500*1024,VIDEO_THUMB_LIMIT=18*1024,VIDEO_THUMB_BLOB_TARGET=12*1024,VIDEO_SECONDS=7,CLEANUP_KEY="feed.pendingMediaCleanup",POST_CACHE="feed-post",MEDIA_CACHE="feed-media",THUMB_CACHE="feed-thumb";
-  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0,feedUserKey="";const pendingLocalHeartEffects=new Set(),pendingHeartRequests=new Set(),openCommentComposers=new Set();
+  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0,feedUserKey="";const pendingLocalHeartEffects=new Set(),pendingHeartRequests=new Set(),pendingCommentRequests=new Set(),openCommentComposers=new Set();
   const user=()=>MiniTalk.Store.get("user")||{};
   const safeUserKey=id=>String(id||"").replace(/[.#$\[\]\/]/g,"_");
   function canonicalHeartCount(post){return Object.values(post?.hearts||{}).filter(value=>value===true).length}
@@ -185,8 +185,14 @@ MiniTalk.Features.Feed=(()=>{
   async function addComment(post,input,button){
     const u=user();if(u.isGuest)return MiniTalk.UI.Shell.toast("로그인 후 댓글을 남길 수 있습니다.");
     const text=String(input?.value||"").trim().slice(0,COMMENT_LIMIT);if(!text)return;
-    input.disabled=true;button.disabled=true;
-    const id=crypto.randomUUID(),createdAt=Date.now(),postPath=`${POSTS_PATH}/${post.id}`;
+    const postId=String(post?.id||"");if(!postId)return;
+    const requestKey=`${safeUserKey(u.user_id)}|${postId}`;if(pendingCommentRequests.has(requestKey))return;
+    pendingCommentRequests.add(requestKey);
+    const card=input?.closest?.(".feed-card")||MiniTalk.UI.Dom.one(`.feed-card[data-post-id="${CSS.escape(postId)}"]`);
+    /* 제출 중인 문장을 실시간 댓글 패치가 '작성 중 초안'으로 복원하지 못하게
+       먼저 입력값과 포커스를 비우고 작성기를 닫습니다. 서버 저장 실패 때만 원문을 복구합니다. */
+    input.value="";input.blur?.();input.disabled=true;button.disabled=true;if(card)setCommentComposer(card,false,false);else openCommentComposers.delete(postId);
+    const id=crypto.randomUUID(),createdAt=Date.now(),postPath=`${POSTS_PATH}/${postId}`;
     try{
       await MiniTalk.Realtime.cloudTransaction(postPath,current=>{
         if(!current)return current;
@@ -196,9 +202,14 @@ MiniTalk.Features.Feed=(()=>{
         while(rows.length>MAX_COMMENTS){const old=rows.shift();if(old?.id)delete comments[old.id]}
         next.comments=comments;next.commentCount=Object.keys(comments).length;next.updatedAt=MiniTalk.Realtime.serverTimestamp();return next;
       });
-      input.value="";
-    }catch(error){MiniTalk.UI.Shell.toast("댓글을 등록하지 못했습니다.");}
-    finally{if(input.isConnected)input.disabled=false;if(button.isConnected)button.disabled=false}
+    }catch(error){
+      const currentCard=MiniTalk.UI.Dom.one(`.feed-card[data-post-id="${CSS.escape(postId)}"]`),currentInput=currentCard?.querySelector(".feed-comment-input");
+      if(currentCard){setCommentComposer(currentCard,true,false);if(currentInput){currentInput.value=text;requestAnimationFrame(()=>{if(!currentInput.isConnected)return;currentInput.focus({preventScroll:true});try{currentInput.setSelectionRange(text.length,text.length)}catch{}})}}
+      MiniTalk.UI.Shell.toast("댓글을 등록하지 못했습니다.");
+    }finally{
+      pendingCommentRequests.delete(requestKey);
+      if(input.isConnected)input.disabled=false;if(button.isConnected)button.disabled=false;
+    }
   }
   function commentsBlock(post){
     const D=MiniTalk.UI.Dom,open=openCommentComposers.has(String(post.id)),wrap=D.el("section",{class:`feed-comments${open?" compose-open":""}`,"data-feed-comments":post.id}),rows=commentRows(post),list=D.el("div",{class:"feed-comment-list"});
@@ -224,7 +235,7 @@ MiniTalk.Features.Feed=(()=>{
     if(target.closest("button,input,textarea,a,iframe,video,[contenteditable],.feed-media-placeholder"))return;
     const comments=card.querySelector("[data-feed-comments]");if(!comments)return;setCommentComposer(card,!comments.classList.contains("compose-open"),true);
   }
-  function patchComments(id){if(MiniTalk.Router.current()!=="feed")return;const post=state.posts[id],card=MiniTalk.UI.Dom.one(`.feed-card[data-post-id="${CSS.escape(String(id))}"]`);if(!post||!card)return;const current=card.querySelector("[data-feed-comments]"),oldInput=current?.querySelector(".feed-comment-input"),draft=oldInput?.value||"",doc=oldInput?.ownerDocument,focused=Boolean(oldInput&&doc?.activeElement===oldInput),start=focused?oldInput.selectionStart:null,end=focused?oldInput.selectionEnd:null;const next=commentsBlock(post),nextInput=next.querySelector(".feed-comment-input");if(nextInput&&draft)nextInput.value=draft;current?current.replaceWith(next):card.append(next);if(focused&&nextInput)requestAnimationFrame(()=>{if(!nextInput.isConnected)return;nextInput.focus({preventScroll:true});try{nextInput.setSelectionRange(start??draft.length,end??draft.length)}catch{}})}
+  function patchComments(id){if(MiniTalk.Router.current()!=="feed")return;const post=state.posts[id],card=MiniTalk.UI.Dom.one(`.feed-card[data-post-id="${CSS.escape(String(id))}"]`);if(!post||!card)return;const current=card.querySelector("[data-feed-comments]"),oldInput=current?.querySelector(".feed-comment-input"),composerOpen=openCommentComposers.has(String(id)),requestKey=`${safeUserKey(user().user_id)}|${String(id)}`,preserveDraft=composerOpen&&!pendingCommentRequests.has(requestKey),draft=preserveDraft?(oldInput?.value||""):"",doc=oldInput?.ownerDocument,focused=Boolean(preserveDraft&&oldInput&&doc?.activeElement===oldInput),start=focused?oldInput.selectionStart:null,end=focused?oldInput.selectionEnd:null;const next=commentsBlock(post),nextInput=next.querySelector(".feed-comment-input");if(nextInput&&draft)nextInput.value=draft;current?current.replaceWith(next):card.append(next);if(focused&&nextInput)requestAnimationFrame(()=>{if(!nextInput.isConnected)return;nextInput.focus({preventScroll:true});try{nextInput.setSelectionRange(start??draft.length,end??draft.length)}catch{}})}
 
   function animateHeartTarget(target,scale=.36,duration=430){
     if(!target)return;

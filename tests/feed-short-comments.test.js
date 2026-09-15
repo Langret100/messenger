@@ -9,6 +9,13 @@ ok(feed.includes('openCommentComposers')&&feed.includes('toggleCommentComposerFr
 ok(feed.includes('typeof target.closest!=="function"')&&!feed.includes('target instanceof Element'),'PiP cross-realm comment tap guard missing');
 ok(feed.includes('patchHeart(id,previous)')&&feed.includes('if(!sameComments(previous,post))patchComments(id)'),'realtime heart/comment partial patch missing');
 ok(feed.includes('while(rows.length>MAX_COMMENTS)'),'comment cap cleanup missing');
+ok(feed.includes('pendingCommentRequests=new Set()'),'comment submit in-flight guard missing');
+const addStart=feed.indexOf('async function addComment(post,input,button)'),addEnd=feed.indexOf('function commentsBlock(post)',addStart),add=feed.slice(addStart,addEnd);
+const submitStart=add.indexOf('pendingCommentRequests.add(requestKey)'),clearDraft=add.indexOf('input.value="";input.blur?.()'),closeComposer=add.indexOf('setCommentComposer(card,false,false)'),transaction=add.indexOf('await MiniTalk.Realtime.cloudTransaction(postPath');
+ok(submitStart>=0&&clearDraft>submitStart&&closeComposer>clearDraft&&transaction>closeComposer,'comment composer must clear/close before realtime transaction');
+ok(feed.includes('preserveDraft=composerOpen&&!pendingCommentRequests.has(requestKey)'),'submitted comment can still be restored as a draft by realtime patch');
+ok(feed.includes('pendingCommentRequests.delete(requestKey)'),'comment submit guard is not released');
+ok(!/function stopSub\(\)[\s\S]*?pendingCommentRequests\.clear\(\)/.test(feed),'route leave must not clear an in-flight comment request lock');
 ok(css.includes('.feed-comments')&&css.includes('.feed-comment-compose')&&css.includes('.feed-comment-input'),'comment styles missing');
 ok(css.includes('.feed-comments.compose-open .feed-comment-compose')&&css.includes('font-size:12px')&&css.includes('font-size:11px'),'comment collapse/size styles missing');
 ok(html.includes('feed-classinfo-weekly.css?v=')&&html.includes('js/features/feed.js?v='),'comment asset cache versions missing');

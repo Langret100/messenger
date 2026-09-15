@@ -1059,7 +1059,9 @@ function moaruRewardCoinMap_() {
     if (lastRow < 2) return result;
     sheet.getRange(2, 1, lastRow - 1, 3).getValues().forEach(function (row) {
       const userId = String(row[SHOP_COL_REWARD_USER_ID - 1] || "").trim();
-      if (userId) result[userId] = parseInt(row[SHOP_COL_REWARD_COIN - 1], 10) || 0;
+      // coin.gs의 findRewardUserRow_와 동일하게 첫 번째 행을 기준으로 사용합니다.
+      // 과거 중복 행이 남아 있어도 관리자 화면/일반 조회/쇼핑이 서로 다른 행을 보지 않게 합니다.
+      if (userId && result[userId] === undefined) result[userId] = parseInt(row[SHOP_COL_REWARD_COIN - 1], 10) || 0;
     });
     return result;
   });
@@ -1132,7 +1134,7 @@ function handleAdminCoinReward(e) {
     if (lastRow < 2) return shopJson_({ ok: false, error: "NO_TARGETS" });
     const rowCount = lastRow - 1, range = sheet.getRange(2, 1, rowCount, Math.max(SHOP_COL_REWARD_COIN, SHOP_COL_REWARD_USER_ID)), values = moaruSpreadsheetRetry_(function () { return range.getValues(); });
     const rowByUser = {}, missing = [];
-    values.forEach(function (row, index) { const id = String(row[SHOP_COL_REWARD_USER_ID - 1] || "").trim(); if (id) rowByUser[id] = index; });
+    values.forEach(function (row, index) { const id = String(row[SHOP_COL_REWARD_USER_ID - 1] || "").trim(); if (id && rowByUser[id] === undefined) rowByUser[id] = index; });
     targets.forEach(function (id) { if (rowByUser[id] === undefined) missing.push(id); });
     if (missing.length) return shopJson_({ ok: false, error: "NO_TARGETS", missing: missing });
 
@@ -1504,11 +1506,13 @@ function restoreShopProductStock_(beforeProduct) {
 function findRewardUserForShop_(userId) {
   const id = String(userId || "").trim(), sheet = getSheet_("보상"), lastRow = sheet.getLastRow();
   if (!id || lastRow < 2) return null;
-  const match = sheet.getRange(2, SHOP_COL_REWARD_USER_ID, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
-  if (!match) return null;
-  const row = match.getRow(), values = sheet.getRange(row, 1, 1, 3).getValues()[0];
-  if (String(values[SHOP_COL_REWARD_USER_ID - 1] || "").trim() !== id) return null;
-  return { sheet: sheet, row: row, userId: id, username: String(values[SHOP_COL_REWARD_USERNAME - 1] || ""), coin: parseInt(values[SHOP_COL_REWARD_COIN - 1], 10) || 0 };
+  // coin.gs의 findRewardUserRow_와 동일하게 위에서부터 첫 번째 일치 행만 사용합니다.
+  const values = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (String(values[i][SHOP_COL_REWARD_USER_ID - 1] || "").trim() !== id) continue;
+    return { sheet: sheet, row: i + 2, userId: id, username: String(values[i][SHOP_COL_REWARD_USERNAME - 1] || ""), coin: parseInt(values[i][SHOP_COL_REWARD_COIN - 1], 10) || 0 };
+  }
+  return null;
 }
 function setRewardCoinForShopGuarded_(reward, newCoin) {
   const expected = Math.max(0, Math.floor(Number(newCoin) || 0));

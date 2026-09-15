@@ -106,7 +106,14 @@ MiniTalk.AuthApi = (() => {
     },
     async coinStatus(user_id) {
       const data = await post({ mode: "coin_status", user_id });
-      return data.coin ?? data.balance ?? 0;
+      const raw = data.coin ?? data.balance;
+      const amount = Number(raw);
+      if (raw === undefined || raw === null || raw === "" || !Number.isFinite(amount)) {
+        const error = new Error("코인 잔액을 확인하지 못했습니다.");
+        error.code = "INVALID_COIN_STATUS";
+        throw error;
+      }
+      return Math.floor(amount);
     },
     async adminUnlock(userId, adminCode) {
       return post({ mode: "admin_unlock", user_id: userId, admin_code: adminCode }, 10000);

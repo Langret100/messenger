@@ -229,16 +229,22 @@ function handleCoinStatus(e) {
   }
 
   const userData = getRewardUserData_(userId);
+  if (!userData) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: "NO_REWARD_USER", message: "보상 시트에서 해당 사용자의 코인 계정을 찾을 수 없습니다." }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 
-  let coin = 0;
-  if (userData) {
-    const parsed = parseInt(userData.coin, 10);
-    coin = isNaN(parsed) || !isFinite(parsed) ? 0 : parsed;
+  const parsed = parseInt(userData.coin, 10);
+  if (isNaN(parsed) || !isFinite(parsed)) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: "INVALID_REWARD_COIN", message: "보상 시트의 코인 값이 올바르지 않습니다." }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 
   const out = {
     ok: true,
-    coin: coin,
+    coin: parsed,
     limit: COIN_DEFAULT_COIN_LIMIT
   };
 

@@ -5,16 +5,21 @@ MiniTalk.Features.Auth=(()=>{
   let rememberedUser=null;
 
   function save(user){
-    rememberedUser=user;
-    MiniTalk.Persistence.set(KEY,user);
-    if(!user?.isGuest&&user?.username)MiniTalk.Persistence.set(LAST_ID_KEY,user.username);
-    MiniTalk.Store.set("user",user);
-    MiniTalk.Events.emit("auth:success",user)
+    // 로그인 세션은 신원 정보만 보존합니다. 코인 잔액은 CoinWallet의 서버 스냅샷이 단독 관리합니다.
+    // 과거 로그인 응답의 coin 값이 다음 실행에서 현재 잔액처럼 복원되는 일을 막습니다.
+    const sessionUser=user&&typeof user==="object"?(({coin,...identity})=>identity)(user):user;
+    rememberedUser=sessionUser;
+    MiniTalk.Persistence.set(KEY,sessionUser);
+    if(!sessionUser?.isGuest&&sessionUser?.username)MiniTalk.Persistence.set(LAST_ID_KEY,sessionUser.username);
+    MiniTalk.Store.set("user",sessionUser);
+    MiniTalk.Events.emit("auth:success",sessionUser)
   }
   function restore(){
-    const user=MiniTalk.Persistence.get(KEY);
+    const stored=MiniTalk.Persistence.get(KEY);
+    const user=stored&&typeof stored==="object"?(({coin,...identity})=>identity)(stored):stored;
     rememberedUser=user?.user_id&&!user.isGuest?user:null;
-    if(user?.isGuest)MiniTalk.Persistence.remove(KEY);
+    if(stored?.isGuest)MiniTalk.Persistence.remove(KEY);
+    else if(stored?.user_id&&Object.prototype.hasOwnProperty.call(stored,"coin"))MiniTalk.Persistence.set(KEY,user);
     return rememberedUser
   }
 

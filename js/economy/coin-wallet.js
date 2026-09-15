@@ -60,9 +60,11 @@ MiniTalk.Economy.CoinWallet = (() => {
       })
       .catch(error => {
         console.warn("코인 잔액 조회 실패", error);
-        // 서버 조회 실패는 "현재 잔액이 바뀌었다"는 뜻이 아닙니다.
-        // 과거 캐시를 권위값처럼 다시 써서 최신 잔액을 되돌리지 않고 현재 표시값을 유지합니다.
-        return value();
+        // 요청 중 더 최신 확정값이 들어왔거나 이 사용자의 마지막 서버 스냅샷이 있으면 그것을 유지합니다.
+        if (requestRevision !== balanceRevision) return value();
+        if (cached) return Math.floor(Number(cached.value) || 0);
+        // 서버에서 한 번도 잔액을 확인하지 못한 상태를 실제 0코인으로 위장하지 않습니다.
+        throw error;
       });
 
     inFlight = request;
@@ -110,7 +112,9 @@ MiniTalk.Economy.CoinWallet = (() => {
   function badge(options = {}) {
     const D = MiniTalk.UI.Dom;
     const loginRequired = requiresLogin();
-    const count = D.el("strong", { class: "coin-count", text: loginRequired ? "로그인이 필요해요" : options.header ? String(value()) : `${value()} 코인` });
+    const known = loginRequired ? false : Boolean(snapshot()) || balanceRevision > 0;
+    const initialText = loginRequired ? "로그인이 필요해요" : known ? (options.header ? String(value()) : `${value()} 코인`) : "확인 중…";
+    const count = D.el("strong", { class: "coin-count", text: initialText });
     const button = D.el("button", {
       class: `coin-wallet-badge${options.header ? " header-coin-badge" : ""}`,
       "data-header": options.header ? "1" : "0",
@@ -125,6 +129,8 @@ MiniTalk.Economy.CoinWallet = (() => {
         try {
           const amount = await refresh(true);
           update(button, count, amount);
+        } catch (error) {
+          MiniTalk.UI.Shell?.toast?.("코인 잔액을 확인하지 못했습니다.");
         } finally {
           delete button.dataset.refreshing;
           button.removeAttribute("aria-busy");
@@ -137,7 +143,7 @@ MiniTalk.Economy.CoinWallet = (() => {
     ]);
     if (!loginRequired) refresh().then(amount => {
       if (button.isConnected) update(button, count, amount);
-    });
+    }).catch(() => {});
     return button;
   }
 

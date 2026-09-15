@@ -387,8 +387,9 @@ MiniTalk.Realtime=(()=>{
     if(!user?.user_id||user.isGuest||!MiniTalk.AuthApi?.userCommands)return;
     if(serverCommandPolling){serverCommandRepoll=true;return}
     serverCommandPolling=true;
+    const coinRevision=MiniTalk.Economy.CoinWallet?.revision?.() ?? 0;
     try{
-      const commands=await MiniTalk.AuthApi.userCommands(user.user_id),ack=[];
+      const commandState=await MiniTalk.AuthApi.userCommands(user.user_id),commands=Array.isArray(commandState)?commandState:(commandState?.commands||[]),ack=[];
       for(const command of commands){
         if(!command?.id||handledCommands.has(command.id)){if(command?.id)ack.push(command.id);continue}
         handledCommands.add(command.id);ack.push(command.id);
@@ -397,6 +398,8 @@ MiniTalk.Realtime=(()=>{
           const current={...(MiniTalk.Store.get("tasks")||{}),[task.id]:task};localSet(`server.tasks.${user.user_id}`,current);emit("tasks",current);
         }else emit("command",command);
       }
+      if(Number.isFinite(Number(commandState?.coin)))MiniTalk.Economy.CoinWallet?.setServerSnapshot?.(Number(commandState.coin),coinRevision,"command-sync");
+      else if(commands.some(command=>command?.type==="COIN_REWARD"||command?.type==="TASK_COMPLETED"))MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(()=>{});
       if(ack.length)await MiniTalk.AuthApi.userCommands(user.user_id,ack);
     }catch(error){console.warn("서버 명령 확인 실패",error)}finally{serverCommandPolling=false;if(serverCommandRepoll){serverCommandRepoll=false;queueMicrotask(pollServerCommands)}}
   }

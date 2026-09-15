@@ -60,8 +60,9 @@ MiniTalk.Economy.CoinWallet = (() => {
       })
       .catch(error => {
         console.warn("코인 잔액 조회 실패", error);
-        if (requestRevision !== balanceRevision) return value();
-        return applyLocal(cached?.value || 0, "fallback", true);
+        // 서버 조회 실패는 "현재 잔액이 바뀌었다"는 뜻이 아닙니다.
+        // 과거 캐시를 권위값처럼 다시 써서 최신 잔액을 되돌리지 않고 현재 표시값을 유지합니다.
+        return value();
       });
 
     inFlight = request;
@@ -151,5 +152,14 @@ MiniTalk.Economy.CoinWallet = (() => {
     button.setAttribute("aria-label", `보유 코인 ${amount}개. 새로고침`);
   }
 
-  return { value, refresh, setLocal, badge, requiresLogin, syncConnectedBadges };
+  function revision() { return balanceRevision; }
+
+  function setServerSnapshot(amount, startedRevision, source = "server-sync") {
+    // 서버 조회가 시작된 뒤 구매/보상처럼 더 최신인 확정값이 들어왔으면
+    // 늦게 도착한 스냅샷은 현재 화면을 덮지 않습니다.
+    if (Number(startedRevision) !== balanceRevision) return value();
+    return applyLocal(amount, source, true);
+  }
+
+  return { value, refresh, setLocal, setServerSnapshot, revision, badge, requiresLogin, syncConnectedBadges };
 })();

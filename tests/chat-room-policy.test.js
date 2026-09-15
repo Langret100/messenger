@@ -6,6 +6,8 @@ const realtime=fs.readFileSync(path.join(root,"js/adapters/realtime.js"),"utf8")
 if(!chats.includes(".sort((a,b)=>roomMessageTime(b)-roomMessageTime(a))"))throw new Error("room list must be sorted by latest message");
 if(!chats.includes("function canViewRoom(room){return MiniTalk.Realtime.isRoomMember(room)}"))throw new Error("all-tab membership filter is missing");
 if(chats.includes("isAdmin()||MiniTalk.Realtime.isRoomMember(room)"))throw new Error("administrator must not see unjoined rooms in the all tab");
+if(chats.includes("!MiniTalk.Realtime.isRoomMember(room)&&!isAdmin()"))throw new Error("administrator must not bypass normal room join/password flow");
+if(!chats.includes("if(!MiniTalk.Realtime.isRoomMember(room)){if(room.hasPassword){joinRoomDialog(room);return}"))throw new Error("unjoined password rooms must always require password, including admin-authorized sessions");
 if(!chats.includes('text:"친구 초대"')||!realtime.includes("inviteRoomMembers"))throw new Error("room invitation flow is missing");
 if(!realtime.includes("profileImage")||!realtime.includes("profile_image")||!chats.includes("profileForMessage"))throw new Error("legacy Tori profile image compatibility is missing");
 if(!realtime.includes('typeof raw==="string"'))throw new Error("direct-string legacy profile image compatibility is missing");

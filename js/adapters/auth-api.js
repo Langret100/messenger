@@ -97,7 +97,8 @@ MiniTalk.AuthApi = (() => {
   return {
     async login(username, password) {
       const data = await post({ mode: "login", username, password });
-      return { user_id: data.user_id, username, nickname: data.nickname || username };
+      const coin = data.coin !== undefined && data.coin !== null && data.coin !== "" ? Number(data.coin) : undefined;
+      return { user_id: data.user_id, username, nickname: data.nickname || username, ...(Number.isFinite(coin) ? { coin } : {}) };
     },
     async signup(username, password, nickname) {
       const data = await post({ mode: "signup", username, password, nickname });
@@ -247,7 +248,10 @@ MiniTalk.AuthApi = (() => {
     },
     async userCommands(userId, ackIds = []) {
       const data = await post({ mode: "user_commands", user_id: userId, ack_ids: (ackIds || []).join(",") });
-      return Array.isArray(data.commands) ? data.commands : [];
+      return {
+        commands: Array.isArray(data.commands) ? data.commands : [],
+        coin: Number.isFinite(Number(data.coin)) ? Number(data.coin) : null
+      };
     },
     /* MOA_CHAT_INTEGRATION_START
        MOA ownership: personal memory/style stays local.

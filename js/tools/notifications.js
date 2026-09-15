@@ -112,10 +112,11 @@ MiniTalk.Tools.Notifications = (() => {
     if (currentMode !== "mute") { vibrate([90, 45, 90]);showSystem(title, body, false); }
   }
 
-  function notifyCoinReward(amount, reason = "코인 보상", newCoin = 0) {
+  function notifyCoinReward(amount, reason = "코인 보상", newCoin = null) {
     const coins = Math.trunc(Number(amount) || 0), sign = coins > 0 ? "+" : "−", magnitude = Math.abs(coins), debit = coins < 0;
-    if (Number.isFinite(Number(newCoin)) && Number(newCoin) >= 0) MiniTalk.Economy.CoinWallet?.setLocal?.(Number(newCoin), debit ? "admin-debit" : "reward");
-    else MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(() => {});
+    // COIN_REWARD/TASK_COMPLETED 명령은 늦게 도착할 수 있으므로 payload.newCoin은
+    // 과거 시점의 잔액일 수 있습니다. 알림은 증감 안내만 담당하고 현재 잔액은
+    // user_commands 응답의 서버 스냅샷이 동기화합니다.
     const currentMode = mode(), D = MiniTalk.UI.Dom, doc = D.doc(), host = D.byId("overlayHost") || doc.body;
     D.byId("coinRewardCelebration")?.remove();
     const layer = D.el("section", { id: "coinRewardCelebration", class: "coin-reward-celebration", role: "status", "aria-live": "assertive" }, [

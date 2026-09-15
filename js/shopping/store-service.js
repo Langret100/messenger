@@ -170,8 +170,10 @@ MiniTalk.Shopping.StoreService = (() => {
     if(!isActiveUser(current))return {...result,product:won,item:stored};
     if(result.inventory_pending||!result.item){
       const pendingItem={...stored,id:`pending-${crypto.randomUUID()}`,pendingSync:true};putLocalInventory(current,pendingItem);
-      if(isActiveUser(current))await refreshInventory(true).catch(()=>{});
-      if(balance==null&&isActiveUser(current))await MiniTalk.Economy.CoinWallet.refresh(true).catch(()=>{});
+      // 당첨 결과는 서버가 이미 확정했습니다. 보관함 재확인은 결과 표시를 막지 않고
+      // 백그라운드에서 같은 purchaseKey 항목으로 화해(reconcile)합니다.
+      syncInventoryLater([async()=>{if(isActiveUser(current))await refreshInventory(true)}]);
+      if(balance==null&&isActiveUser(current))MiniTalk.Economy.CoinWallet.refresh(true).catch(()=>{});
       return {...result,product:won,item:stored};
     }
     syncInventoryLater([async()=>{if(isActiveUser(current))await refreshInventory(true)}]);

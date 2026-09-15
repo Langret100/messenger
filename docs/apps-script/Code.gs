@@ -582,11 +582,20 @@ function login_(data) {
       sheet.getRange(2 + i, 6).setValue(lastLogin);
       try { if (typeof rememberKnownMoaruUser_ === "function") rememberKnownMoaruUser_(rowUserId); } catch (cacheError) {}
 
+      let loginCoin = null;
+      try {
+        const rewardUser = typeof getRewardUserData_ === "function" ? getRewardUserData_(rowUserId) : null;
+        const parsedCoin = parseInt(rewardUser && rewardUser.coin, 10);
+        loginCoin = Number.isFinite(parsedCoin) ? parsedCoin : null;
+      } catch (coinError) {
+        console.warn("LOGIN_COIN_READ_FAILED", rowUserId, coinError);
+      }
       return jsonResponse_({
         ok: true,
         user_id: rowUserId,
         username: rowUsername,
         nickname: rowNickname,
+        coin: loginCoin,
         last_login: lastLogin
       });
     }

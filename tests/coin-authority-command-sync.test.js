@@ -1,0 +1,15 @@
+const fs=require('fs'),assert=require('assert');
+const wallet=fs.readFileSync('js/economy/coin-wallet.js','utf8');
+const notify=fs.readFileSync('js/tools/notifications.js','utf8');
+const realtime=fs.readFileSync('js/adapters/realtime.js','utf8');
+const api=fs.readFileSync('js/adapters/auth-api.js','utf8');
+const code=fs.readFileSync('docs/apps-script/Code.gs','utf8');
+const ext=fs.readFileSync('docs/apps-script/coin-shopping-extension.gs','utf8');
+assert(/function setServerSnapshot\(/.test(wallet),'wallet must support guarded server snapshots');
+assert(!/notifyCoinReward[\s\S]{0,500}setLocal\?\./.test(notify),'delayed coin notification must not overwrite current wallet balance');
+assert(/coinRevision=MiniTalk\.Economy\.CoinWallet\?\.revision/.test(realtime),'command poll must snapshot wallet revision');
+assert(/setServerSnapshot\?\.\(Number\(commandState\.coin\),coinRevision/.test(realtime),'current server coin must be applied through stale-response guard');
+assert(/coin:\s*currentCoin\(\)/.test(ext),'user_commands must return current sheet coin');
+assert(/coin:\s*loginCoin/.test(code),'login response must include current sheet coin when available');
+assert(/data\.coin !== undefined/.test(api),'old login servers without coin must not be coerced to zero');
+console.log('COIN_AUTHORITY_COMMAND_SYNC_OK');

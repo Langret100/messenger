@@ -121,10 +121,14 @@ MiniTalk.Economy.QuestReward = (() => {
     });
 
     /*
-     * 반드시 보상 POST가 끝난 뒤 "새로운" 잔액 조회를 수행합니다.
-     * CoinWallet.refresh(true)는 v91 hotfix에서 이전 in-flight 조회를 재사용하지 않습니다.
+     * 보상 서버가 같은 트랜잭션에서 확정한 newCoin을 그대로 사용합니다.
+     * 보상 직후 coin_status를 한 번 더 호출하면 네트워크 지연/락 경합 때문에
+     * "보상은 끝났는데 화면 반영은 한참 뒤"처럼 보일 수 있습니다.
      */
-    const amount = await MiniTalk.Economy.CoinWallet.refresh(true);
+    const serverCoin = Number(result.newCoin);
+    const amount = Number.isFinite(serverCoin)
+      ? MiniTalk.Economy.CoinWallet.setLocal(serverCoin, "daily-quest-reward")
+      : await MiniTalk.Economy.CoinWallet.refresh(true);
 
     if (granted) {
       MiniTalk.UI.Shell.toast(`${SUBJECTS[subject]} 퀘스트 완료 · 코인 1개 적립!`);

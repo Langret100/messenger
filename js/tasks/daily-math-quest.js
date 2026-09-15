@@ -247,13 +247,17 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     return `${item?.question || ""}|${item?.answer || ""}`;
   }
 
-  function nextVariant(missionId, questionIndex, currentItem, currentVariant) {
+  function visibleProblemKey(item) {
+    return String(item?.question || "").replace(/\s+/g, " ").trim();
+  }
+
+  function nextVariant(missionId, questionIndex, currentItem, currentVariant, seenKeys = new Set()) {
     const currentPosition = correctPosition(missionId, questionIndex, currentVariant);
     let candidate = Math.max(0, Number(currentVariant) || 0) + 1;
     for (let guard = 0; guard < 64; guard += 1, candidate += 1) {
       const items = generate(missionId, candidate);
       const nextItem = items[questionIndex];
-      if (nextItem && problemKey(nextItem) !== problemKey(currentItem) && correctPosition(missionId, questionIndex, candidate) !== currentPosition) return candidate;
+      if (nextItem && !seenKeys.has(visibleProblemKey(nextItem)) && visibleProblemKey(nextItem) !== visibleProblemKey(currentItem) && correctPosition(missionId, questionIndex, candidate) !== currentPosition) return candidate;
     }
     return candidate;
   }
@@ -317,6 +321,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     let questions = generate(missionId, variant);
     let wrongCount = 0;
     let sessionCorrect = 0;
+    const seenProblems = new Set();
 
     function renderQuestion() {
       const index = sessionCorrect;
@@ -327,6 +332,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
       }
 
       const current = questions[index];
+      seenProblems.add(visibleProblemKey(current));
       const feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" });
       const choiceGrid = D.el("div", { class: "quest-choice-grid", role: "group", "aria-label": "정답 보기" });
       let answerLocked = false;
@@ -354,7 +360,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
           }
           feedback.textContent = "아쉬워요. 새 문제로 바꿀게요. 한 번 더 틀리면 이 미션은 다시 시작해요.";
           feedback.className = "quest-feedback wrong";
-          const next = nextVariant(missionId, index, current, variant);
+          const next = nextVariant(missionId, index, current, variant, seenProblems);
           variant = next;
           questions = generate(missionId, variant);
           setTimeout(renderQuestion, 520);

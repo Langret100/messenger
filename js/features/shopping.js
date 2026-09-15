@@ -248,7 +248,10 @@ MiniTalk.Features.Shopping = (() => {
     const startRolling=()=>{
       const h=buildRollingStrip();state.startedAt=performance.now();state.phase="spinning";overlay.classList.add("spinning");tap.classList.add("hidden");setStatus("돌아가는 중","한 번 더 누르면 바로 뽑아요");randomWhoosh();
       const distance=h*72;
-      state.rollAnimation=strip.animate([{transform:"translateY(0px)"},{transform:`translateY(${-distance}px)`}],{duration:9000,easing:"linear",fill:"forwards"});
+      // 서버 당첨 결과가 오기 전에는 릴이 절대 멈추지 않습니다.
+      // 유한 9초 애니메이션은 서버가 늦을 때 임의 상품에서 먼저 멈춰
+      // 그것이 당첨 결과처럼 보이는 원인이었습니다.
+      state.rollAnimation=strip.animate([{transform:"translateY(0px)"},{transform:`translateY(${-distance}px)`}],{duration:3200,easing:"linear",iterations:Infinity});
       for(let i=0;i<34;i++)state.timers.push(setTimeout(randomTick,60+i*92));
     };
     const movePrizeToInventory=()=>{

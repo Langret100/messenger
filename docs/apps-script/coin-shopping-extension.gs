@@ -1124,6 +1124,7 @@ function handleAdminCoinReward(e) {
   if (prior && (Number(prior.amount) !== amount || JSON.stringify(prior.targets || []) !== JSON.stringify(targets))) return shopJson_({ ok: false, error: "COIN_REQUEST_CONFLICT" });
   if (prior && prior.status === "done") return shopJson_(moaruAdminCoinReceiptResult_(prior));
   const lock = LockService.getScriptLock(); if (!lock.tryLock(2500)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  let lockHeld = true;
   try {
     if (receiptKey) { try { prior = JSON.parse(receipts.getProperty(receiptKey) || "null"); } catch (error) { prior = null; } }
     if (prior && prior.status === "done") return shopJson_(moaruAdminCoinReceiptResult_(prior));
@@ -1150,6 +1151,9 @@ function handleAdminCoinReward(e) {
         const doneReceipt = { status: "done", amount: amount, targets: targets, newCoins: expectedCoins, reason: recoveredReason, recovered: true, createdAt: prior.createdAt || Date.now() };
         if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify(doneReceipt));
         const recoveredResult = moaruAdminCoinReceiptResult_(doneReceipt);
+        // 코인 원장 반영이 끝난 뒤에는 전역 ScriptLock을 먼저 놓습니다.
+        // 사용자별 알림 큐 기록까지 잠금을 잡고 있으면 일일/과제 보상이 COIN_BUSY로 밀릴 수 있습니다.
+        lock.releaseLock(); lockHeld = false;
         recoveredResult.rewarded.forEach(function (row, index) { try { enqueueMoaruCommand_(row.user_id, "COIN_REWARD", { amount: amount, newCoin: row.newCoin, reason: recoveredReason }, p.user_id, requestId ? "coin-" + requestId + "-" + index : ""); } catch (error) { console.error("ADMIN_COIN_NOTIFY_FAILED", row.user_id, error); } });
         return shopJson_(recoveredResult);
       }
@@ -1167,10 +1171,11 @@ function handleAdminCoinReward(e) {
     moaruSpreadsheetRetry_(function () { sheet.getRange(2, SHOP_COL_REWARD_COIN, rowCount, 1).setValues(values.map(function (row) { return [row[SHOP_COL_REWARD_COIN - 1]]; })); return true; });
     const result = { ok: true, count: rewarded.length, amount: amount, rewarded: rewarded, failed: [], reason: String(p.reason || "관리자 보상").trim().slice(0, 80) };
     if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify({ status: "done", amount: amount, targets: targets, newCoins: rewarded.map(function (row) { return row.newCoin; }), reason: result.reason, createdAt: prior && prior.createdAt || Date.now() }));
-    /* 알림 큐는 코인 일괄 반영 뒤 수행합니다. 알림 실패가 코인 일부 지급으로 이어지지 않게 분리합니다. */
+    /* 코인 원장과 영수증이 확정된 순간 전역 잠금을 해제합니다. 알림 큐는 원장 트랜잭션이 아닙니다. */
+    lock.releaseLock(); lockHeld = false;
     rewarded.forEach(function (row, index) { try { enqueueMoaruCommand_(row.user_id, "COIN_REWARD", { amount: amount, newCoin: row.newCoin, reason: result.reason }, p.user_id, requestId ? "coin-" + requestId + "-" + index : ""); } catch (error) { console.error("ADMIN_COIN_NOTIFY_FAILED", row.user_id, error); } });
     return shopJson_(result);
-  } finally { lock.releaseLock(); }
+  } finally { if (lockHeld) lock.releaseLock(); }
 }
 
 /** 10초 응답 제한 뒤에도 '취소'라고 오판하지 않도록 같은 request_id의 서버 완료 상태만 조회합니다. */
@@ -1190,12 +1195,16 @@ function handleUserCommands(e) {
   const ack = String(p.ack_ids || "").split(",").filter(Boolean);
   // 정상 로그인은 login_에서 6시간 사용자 캐시를 만들므로 10초 폴링마다 로그인 시트를 다시 읽지 않습니다.
   // 단순 조회는 읽기 전용 snapshot을 사용해 관리자 dispatch와의 Properties race도 피합니다.
-  if (!ack.length) return shopJson_({ ok: true, commands: readMoaruCommandsSnapshot_(userId) });
+  const currentCoin = function () {
+    const reward = moaruSpreadsheetRetry_(function () { return getRewardUserData_(userId); });
+    return parseInt(reward && reward.coin, 10) || 0;
+  };
+  if (!ack.length) return shopJson_({ ok: true, commands: readMoaruCommandsSnapshot_(userId), coin: currentCoin() });
   const lock = LockService.getScriptLock();if (!lock.tryLock(2500)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     const queue = readMoaruCommands_(userId), remaining = queue.filter(function (command) { return ack.indexOf(String(command.id)) < 0; });
     if (remaining.length !== queue.length) writeMoaruCommands_(userId, remaining);
-    return shopJson_({ ok: true, commands: remaining });
+    return shopJson_({ ok: true, commands: remaining, coin: currentCoin() });
   } finally { lock.releaseLock(); }
 }
 

@@ -126,7 +126,7 @@ MiniTalk.Tasks.TaskService = (() => {
     const payload = command.payload || {};
     if (command.type === "TASK_ASSIGNED") MiniTalk.Tools.Notifications?.notifyTask?.("새 과제가 도착했어요", `${payload.title || "과제"} · 🪙 +${Number(payload.rewardCoin) || 0}`);
     if (command.type === "TASK_RETRY") MiniTalk.Tools.Notifications?.notifyTask?.("과제를 다시 확인해주세요", payload.feedback || "관리자 피드백을 확인하고 다시 제출해주세요.");
-    if (command.type === "TASK_COMPLETED") MiniTalk.Tools.Notifications?.notifyCoinReward?.(Number(payload.amount) || 0, `${payload.title || "과제"} 완료`, Number(payload.newCoin) || 0);
+    if (command.type === "TASK_COMPLETED") MiniTalk.Tools.Notifications?.notifyCoinReward?.(Number(payload.amount) || 0, `${payload.title || "과제"} 완료`, Number.isFinite(Number(payload.newCoin)) ? Number(payload.newCoin) : null);
   });
 
   return { start, enter, refresh, submit, assign, adminList, review, bulkReview, bulkDelete, normalize, visible, COMPLETED_VISIBLE_MS };

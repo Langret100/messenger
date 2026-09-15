@@ -1,0 +1,11 @@
+const fs=require('fs'),assert=require('assert');
+const ui=fs.readFileSync('js/features/shopping.js','utf8');
+const service=fs.readFileSync('js/shopping/store-service.js','utf8');
+const start=ui.slice(ui.indexOf('const startRolling='),ui.indexOf('const movePrizeToInventory='));
+assert(/iterations:Infinity/.test(start),'roulette must keep moving until authoritative server result arrives');
+assert(!/duration:9000/.test(start),'roulette must not have a finite fake-stop deadline');
+const random=service.slice(service.indexOf('async function randomPurchase()'),service.indexOf('async function use('));
+const pending=random.slice(random.indexOf('if(result.inventory_pending||!result.item)'),random.indexOf('syncInventoryLater',random.indexOf('if(result.inventory_pending||!result.item)'))+120);
+assert(/syncInventoryLater/.test(pending),'inventory reconciliation must be background work');
+assert(!/if\(isActiveUser\(current\)\)await refreshInventory\(true\)\.catch/.test(pending),'winner display must not directly await a second inventory request');
+console.log('SHOPPING_RANDOM_AUTHORITATIVE_RESULT_OK');

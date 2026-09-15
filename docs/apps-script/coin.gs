@@ -367,7 +367,8 @@ function handleCoinReward(e) {
             JSON.stringify({
               ok: true,
               applied: false,
-              reason: "ALREADY_REWARDED"
+              reason: "ALREADY_REWARDED",
+              newCoin: parseInt((getRewardUserData_(userId) || {}).coin, 10) || 0
             })
           )
           .setMimeType(ContentService.MimeType.JSON);

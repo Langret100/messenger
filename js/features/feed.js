@@ -4,19 +4,28 @@ MiniTalk.Features.Feed=(()=>{
   let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0,feedUserKey="";const pendingLocalHeartEffects=new Set(),pendingHeartRequests=new Set(),openCommentComposers=new Set();
   const user=()=>MiniTalk.Store.get("user")||{};
   const safeUserKey=id=>String(id||"").replace(/[.#$\[\]\/]/g,"_");
+  function canonicalHeartCount(post){return Object.values(post?.hearts||{}).filter(value=>value===true).length}
   function postRows(){return Object.values(state.posts||{}).filter(Boolean).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)||String(b.id).localeCompare(String(a.id)))}
   function avatarForPost(post){const profiles=MiniTalk.Store.get("profiles")||{},profile=profiles[post?.user_id]||profiles[post?.nickname]||{};return profile.avatar||post?.avatar||"assets/mascot-avatar.png"}
   function playHeaderHeartFeedback(on=true){if(MiniTalk.Router.current()!=="feed")return;const badge=MiniTalk.UI.Dom.one(".header-heart-inline");if(!badge)return;animateHeartTarget(badge,.22,380);if(on)spawnHeartBurst(badge,3,{spread:12,rise:25,size:10,duration:560})}
   function patchHeaderHeart(animate=false,on=true){if(MiniTalk.Router.current()!=="feed")return;const host=MiniTalk.UI.Dom.byId("headerActions"),count=host?.querySelector?.(".header-heart-inline b");if(count)count.textContent=String(totalHearts);if(animate)playHeaderHeartFeedback(on)}
+  async function reconcileOwnHeartTotal(){
+    const u=user();if(!u?.user_id||u.isGuest)return totalHearts;
+    const rows=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToLast:MAX_POSTS});
+    const total=rows.reduce((sum,row)=>sum+(String(row.value?.user_id||"")===String(u.user_id)?canonicalHeartCount(row.value):0),0),uid=safeUserKey(u.user_id);
+    totalHearts=total;totalHeartReady=true;patchHeaderHeart(false,true);
+    MiniTalk.Realtime.cloudGet(`${TOTALS_PATH}/${uid}`,0).then(current=>{if(Math.max(0,Number(current)||0)!==total)return MiniTalk.Realtime.cloudSet(`${TOTALS_PATH}/${uid}`,total)}).catch(error=>console.warn("받은 하트 총합 복구 실패",error));
+    return total
+  }
   function samePostBody(a,b){return Boolean(a&&b)&&["id","user_id","nickname","avatar","text","mediaType","createdAt"].every(key=>String(a?.[key]??"")===String(b?.[key]??""))}
   function sameComments(a,b){const rows=value=>commentRows(value).map(row=>[String(row.id||""),String(row.user_id||""),String(row.nickname||""),String(row.text||""),Number(row.createdAt)||0]);return JSON.stringify(rows(a))===JSON.stringify(rows(b))}
-  function patchHeart(id,previous=null){if(MiniTalk.Router.current()!=="feed")return;const post=state.posts[id],card=MiniTalk.UI.Dom.one(`.feed-card[data-post-id="${CSS.escape(String(id))}"]`);if(!post||!card)return;const uid=safeUserKey(user().user_id),liked=post.hearts?.[uid]===true,hasHearts=(Number(post.heartCount)||0)>0,button=card.querySelector(".feed-heart");if(!button)return;button.classList.toggle("active",liked||hasHearts);const icon=button.querySelector("span"),count=button.querySelector("b"),nextCount=Number(post.heartCount)||0,prevCount=Number(previous?.heartCount)||0;if(icon)icon.textContent=(liked||hasHearts)?"♥":"♡";if(count)count.textContent=String(nextCount);if(previous&&nextCount!==prevCount){const local=pendingLocalHeartEffects.delete(String(id));if(!local)playHeartFeedback(button,nextCount>prevCount,false)}}
+  function patchHeart(id,previous=null){if(MiniTalk.Router.current()!=="feed")return;const post=state.posts[id],card=MiniTalk.UI.Dom.one(`.feed-card[data-post-id="${CSS.escape(String(id))}"]`);if(!post||!card)return;const uid=safeUserKey(user().user_id),liked=post.hearts?.[uid]===true,nextCount=canonicalHeartCount(post),prevCount=canonicalHeartCount(previous),hasHearts=nextCount>0,button=card.querySelector(".feed-heart");if(!button)return;button.classList.toggle("active",liked||hasHearts);const icon=button.querySelector("span"),count=button.querySelector("b");if(icon)icon.textContent=(liked||hasHearts)?"♥":"♡";if(count)count.textContent=String(nextCount);if(previous&&nextCount!==prevCount){const local=pendingLocalHeartEffects.delete(String(id));if(!local)playHeartFeedback(button,nextCount>prevCount,false)}}
   function patchPost(id,previous=null){if(MiniTalk.Router.current()!=="feed")return;const list=MiniTalk.UI.Dom.one(".feed-list"),post=state.posts[id];if(!list)return;if(!post){list.querySelector(`[data-post-id="${CSS.escape(String(id))}"]`)?.remove();syncFeedEmpty(list);return}const current=list.querySelector(`[data-post-id="${CSS.escape(String(id))}"]`);if(current&&samePostBody(previous,post)){patchHeart(id,previous);if(!sameComments(previous,post))patchComments(id);return}const next=postCard(post);current?current.replaceWith(next):list.append(next);sortFeedCards(list);syncFeedEmpty(list);setupLazyMedia(next)}
   function sortFeedCards(list){const cards=[...list.querySelectorAll(".feed-card")].sort((a,b)=>Number(state.posts[b.dataset.postId]?.createdAt||0)-Number(state.posts[a.dataset.postId]?.createdAt||0)||String(b.dataset.postId).localeCompare(String(a.dataset.postId)));cards.forEach(card=>list.append(card))}
   function syncFeedEmpty(list){const cards=list.querySelectorAll(".feed-card");let empty=list.querySelector(".feed-empty-state");if(cards.length){empty?.remove();return}if(!empty){empty=MiniTalk.UI.Dom.el("div",{class:"empty-state feed-empty-state"},[MiniTalk.UI.Dom.el("span",{text:"♡"}),MiniTalk.UI.Dom.el("strong",{text:"아직 게시물이 없어요"}),MiniTalk.UI.Dom.el("small",{class:"muted",text:"짧은 글과 사진·영상을 올려보세요."})]);list.append(empty)}}
   function paintCachedPosts(){if(MiniTalk.Router.current()!=="feed")return;const list=MiniTalk.UI.Dom.one(".feed-list");if(!list)return;list.replaceChildren(...postRows().map(postCard));syncFeedEmpty(list);setupLazyMedia(list)}
   function cachePost(id,value){if(!id||!value)return;MiniTalk.DataCache?.put?.(POST_CACHE,id,value,{sortAt:Number(value.updatedAt)||Number(value.createdAt)||0}).catch(()=>{})}
-  function applyPost(id,value,previous=state.posts[id]){if(!value)return;state.posts[id]={...value,id:value.id||id};cachePost(id,state.posts[id]);patchPost(id,previous)}
+  function applyPost(id,value,previous=state.posts[id]){if(!value)return;const normalized={...value,id:value.id||id};normalized.heartCount=canonicalHeartCount(normalized);state.posts[id]=normalized;cachePost(id,normalized);patchPost(id,previous)}
   function takeCachedOlder(oldest,limit=PAGE_SIZE){
     const known=new Set(Object.keys(state.posts)),cutoff=Number(oldest?.createdAt)||Number.MAX_SAFE_INTEGER,cursorId=String(oldest?.id||"");
     return cachedPostRows.filter(row=>{
@@ -46,7 +55,7 @@ MiniTalk.Features.Feed=(()=>{
       const hadVisiblePosts=postRows().length>0;
       cachedPostRows.slice(0,PAGE_SIZE).forEach(row=>{
         if(!row.value?.id)return;
-        const previous=state.posts[row.key],cachedValue={...row.value,id:row.value.id||row.key};
+        const previous=state.posts[row.key],cachedValue={...row.value,id:row.value.id||row.key};cachedValue.heartCount=canonicalHeartCount(cachedValue);
         if(!previous||Number(cachedValue.updatedAt||cachedValue.createdAt||0)>=Number(previous.updatedAt||previous.createdAt||0))state.posts[row.key]=cachedValue
       });
       /* 재진입 시 이미 보이던 피드를 비웠다가 다시 그리지 않습니다. 첫 진입에만 기기 캐시를 한 번 그립니다. */
@@ -54,6 +63,7 @@ MiniTalk.Features.Feed=(()=>{
       const latest=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToLast:PAGE_SIZE});
       /* 서버 최신 확인은 목록 전체 replace가 아니라 바뀐 카드만 조용히 반영합니다. */
       latest.forEach(row=>{if(row.value)applyPost(row.key,{...row.value,id:row.value.id||row.key},state.posts[row.key])});
+      reconcileOwnHeartTotal().catch(error=>console.warn("받은 하트 총합 확인 실패",error));
       hasMorePosts=latest.length===PAGE_SIZE;
       reconcileFeedCacheAndLimit().catch(error=>console.warn("피드 30개/기기 캐시 동기화 실패",error));
       const latestCreated=latest.reduce((max,row)=>Math.max(max,Number(row.value?.createdAt)||0),0);
@@ -164,8 +174,10 @@ MiniTalk.Features.Feed=(()=>{
     setTimeout(()=>pendingLocalHeartEffects.delete(String(post.id)),1800);
     try{await MiniTalk.Realtime.cloudTransaction(`${TOTALS_PATH}/${authorKey}`,current=>Math.max(0,(Number(current)||0)+delta))}
     catch(error){
-      /* 누적 하트 갱신이 실패하면 게시물 하트도 원상복구해 둘 값이 어긋나지 않게 합니다. */
-      await MiniTalk.Realtime.cloudTransaction(postPath,current=>{if(!current)return current;const next=structuredClone(current),hearts=next.hearts||{},on=hearts[uid]===true;if(delta>0&&on){delete hearts[uid];next.heartCount=Object.values(hearts).filter(value=>value===true).length}else if(delta<0&&!on){hearts[uid]=true;next.heartCount=Object.values(hearts).filter(value=>value===true).length}next.hearts=hearts;next.updatedAt=MiniTalk.Realtime.serverTimestamp();return next}).catch(()=>{});throw error
+      /* 받은 하트 총합은 파생 캐시입니다. 실제 게시물의 hearts 멤버십이 원장이므로
+         총합 캐시 실패 때문에 이미 성공한 하트를 되돌리지 않습니다. 작성자가 소식 탭에
+         들어오면 reconcileOwnHeartTotal()이 실제 게시물 기준으로 총합을 복구합니다. */
+      console.warn("받은 하트 총합 갱신 지연",error)
     }
   }
 
@@ -261,7 +273,7 @@ MiniTalk.Features.Feed=(()=>{
       else mediaHost.append(D.el("span",{text:"사진 불러오는 중…"}));
       card.append(mediaHost)
     }
-    const hasHearts=(Number(post.heartCount)||0)>0,heart=D.el("button",{class:`feed-heart ${(liked||hasHearts)?"active":""}`,type:"button","aria-label":"하트"},[D.el("span",{text:(liked||hasHearts)?"♥":"♡"}),D.el("b",{text:String(Number(post.heartCount)||0)})]),commentTrigger=!u.isGuest?D.el("button",{class:"feed-comment-trigger",type:"button",text:"댓글 쓰기","aria-label":"댓글 입력 열기","data-no-drag-scroll":""}):null;
+    const heartCount=canonicalHeartCount(post),hasHearts=heartCount>0,heart=D.el("button",{class:`feed-heart ${(liked||hasHearts)?"active":""}`,type:"button","aria-label":"하트"},[D.el("span",{text:(liked||hasHearts)?"♥":"♡"}),D.el("b",{text:String(heartCount)})]),commentTrigger=!u.isGuest?D.el("button",{class:"feed-comment-trigger",type:"button",text:"댓글 쓰기","aria-label":"댓글 입력 열기","data-no-drag-scroll":""}):null;
     heart.onpointerdown=primeHeartAudio;heart.onclick=()=>toggleHeart(post.id,heart);
     if(commentTrigger)commentTrigger.onclick=event=>{event.preventDefault();event.stopPropagation();setCommentComposer(card,!card.querySelector("[data-feed-comments]")?.classList.contains("compose-open"),true)};
     card.append(D.el("footer",{class:"feed-card-foot"},[commentTrigger,heart].filter(Boolean)),commentsBlock(post));card.addEventListener("click",event=>toggleCommentComposerFromCard(event,card));return card

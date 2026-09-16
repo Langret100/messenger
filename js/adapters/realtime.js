@@ -388,8 +388,10 @@ MiniTalk.Realtime=(()=>{
     if(serverCommandPolling){serverCommandRepoll=true;return}
     serverCommandPolling=true;
     const coinRevision=MiniTalk.Economy.CoinWallet?.revision?.() ?? 0;
+    const commandGeneration=initGeneration,commandUserId=user.user_id;
     try{
       const commandState=await MiniTalk.AuthApi.userCommands(user.user_id),commands=Array.isArray(commandState)?commandState:(commandState?.commands||[]),ack=[];
+      if(commandGeneration!==initGeneration||commandUserId!==user?.user_id)return;
       for(const command of commands){
         if(!command?.id||handledCommands.has(command.id)){if(command?.id)ack.push(command.id);continue}
         handledCommands.add(command.id);ack.push(command.id);
@@ -398,10 +400,10 @@ MiniTalk.Realtime=(()=>{
           const current={...(MiniTalk.Store.get("tasks")||{}),[task.id]:task};localSet(`server.tasks.${user.user_id}`,current);emit("tasks",current);
         }else emit("command",command);
       }
-      if(Number.isFinite(Number(commandState?.coin)))MiniTalk.Economy.CoinWallet?.setServerSnapshot?.(Number(commandState.coin),coinRevision,"command-sync");
+      if(commandState?.coin!==null&&commandState?.coin!==undefined&&String(commandState.coin).trim()!==""&&Number.isSafeInteger(Number(commandState.coin)))MiniTalk.Economy.CoinWallet?.setServerSnapshot?.(Number(commandState.coin),coinRevision,"command-sync");
       else if(commands.some(command=>command?.type==="COIN_REWARD"||command?.type==="TASK_COMPLETED"))MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(()=>{});
-      if(ack.length)await MiniTalk.AuthApi.userCommands(user.user_id,ack);
-    }catch(error){console.warn("서버 명령 확인 실패",error)}finally{serverCommandPolling=false;if(serverCommandRepoll){serverCommandRepoll=false;queueMicrotask(pollServerCommands)}}
+      if(ack.length)await MiniTalk.AuthApi.userCommands(commandUserId,ack);
+    }catch(error){console.warn("서버 명령 확인 실패",error)}finally{if(commandGeneration===initGeneration){serverCommandPolling=false;if(serverCommandRepoll){serverCommandRepoll=false;queueMicrotask(pollServerCommands)}}}
   }
   function startServerCommandPolling(){
     const saved=localGet(`server.tasks.${user.user_id}`,{});if(Object.keys(saved).length)emit("tasks",{...(MiniTalk.Store.get("tasks")||{}),...saved});
@@ -702,7 +704,7 @@ MiniTalk.Realtime=(()=>{
   async function cloudUpdate(path,value){requireWritableUser();await awaitTransport();const clean=safeCloudPath(path);if(mode==="firebase"&&db){await db.ref(clean).update(value);return value}const current=localGet(`cloud.${clean}`,{});localSet(`cloud.${clean}`,{...current,...value});return value}
   async function cloudRemove(path){requireWritableUser();await awaitTransport();const clean=safeCloudPath(path);if(mode==="firebase"&&db){await db.ref(clean).remove();return true}localRemove(`cloud.${clean}`);return true}
   async function cloudPush(path,value){requireWritableUser();await awaitTransport();const clean=safeCloudPath(path),id=crypto.randomUUID();if(mode==="firebase"&&db){const ref=db.ref(clean).push(),payload={...value,createdAt:value?.createdAt??firebase.database.ServerValue.TIMESTAMP};await ref.set(payload);const snap=await ref.once("value");return{id:ref.key,...(snap.val()||value)}}const payload={id,...value,createdAt:Number(value?.createdAt)||Date.now()},current=localGet(`cloud.${clean}`,{});current[id]=payload;localSet(`cloud.${clean}`,current);return payload}
-  async function cloudTransaction(path,updater){requireWritableUser();await awaitTransport();const clean=safeCloudPath(path);if(mode==="firebase"&&db){const result=await db.ref(clean).transaction(current=>updater(current));return result.snapshot?.val?.()}const current=localGet(`cloud.${clean}`,null),next=updater(current);if(next===undefined)return current;localSet(`cloud.${clean}`,next);return next}
+  async function cloudTransaction(path,updater,options={}){requireWritableUser();await awaitTransport();const clean=safeCloudPath(path);if(mode==="firebase"&&db){const result=await db.ref(clean).transaction(current=>updater(current),undefined,options.applyLocally!==false);if(options.requireCommit&&!result.committed)throw new Error("서버 저장이 취소되었습니다. 다시 확인해주세요.");return result.snapshot?.val?.()}const current=localGet(`cloud.${clean}`,null),next=updater(current);if(next===undefined){if(options.requireCommit)throw new Error("서버 저장이 취소되었습니다.");return current}localSet(`cloud.${clean}`,next);return next}
   async function cloudQueryChildren(path,options={}){
     await awaitTransport();const clean=safeCloudPath(path),orderBy=String(options.orderByChild||""),limitFirst=Math.max(0,Number(options.limitToFirst)||0),limitLast=Math.max(0,Number(options.limitToLast)||0);
     if(mode==="firebase"&&db){let query=db.ref(clean);if(orderBy)query=query.orderByChild(orderBy);if(options.startAt!==undefined)query=options.startKey!==undefined?query.startAt(options.startAt,String(options.startKey)):query.startAt(options.startAt);if(options.endAt!==undefined)query=options.endKey!==undefined?query.endAt(options.endAt,String(options.endKey)):query.endAt(options.endAt);if(limitFirst)query=query.limitToFirst(limitFirst);if(limitLast)query=query.limitToLast(limitLast);const snap=await query.once("value"),rows=[];snap.forEach(child=>rows.push({key:child.key,value:child.val()}));return rows}

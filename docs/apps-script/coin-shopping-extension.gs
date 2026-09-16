@@ -1045,7 +1045,7 @@ function moaruAdminCoinChangeGuarded_(userId, signedAmount) {
   const values = sheet.getRange(2, 1, lastRow - 1, Math.max(SHOP_COL_REWARD_COIN, SHOP_COL_REWARD_USER_ID)).getValues();
   for (let i = 0; i < values.length; i++) {
     if (String(values[i][SHOP_COL_REWARD_USER_ID - 1] || "").trim() !== String(userId || "").trim()) continue;
-    const beforeCoin = parseInt(values[i][SHOP_COL_REWARD_COIN - 1], 10) || 0;
+    const beforeCoin = requireCoinAmount_(values[i][SHOP_COL_REWARD_COIN - 1]);
     const newCoin = beforeCoin + delta;
     sheet.getRange(i + 2, SHOP_COL_REWARD_COIN).setValue(newCoin);
     return { success: true, newCoin: newCoin, beforeCoin: beforeCoin };
@@ -1061,7 +1061,7 @@ function moaruRewardCoinMap_() {
       const userId = String(row[SHOP_COL_REWARD_USER_ID - 1] || "").trim();
       // coin.gs의 findRewardUserRow_와 동일하게 첫 번째 행을 기준으로 사용합니다.
       // 과거 중복 행이 남아 있어도 관리자 화면/일반 조회/쇼핑이 서로 다른 행을 보지 않게 합니다.
-      if (userId && result[userId] === undefined) result[userId] = parseInt(row[SHOP_COL_REWARD_COIN - 1], 10) || 0;
+      if (userId && result[userId] === undefined) result[userId] = requireCoinAmount_(row[SHOP_COL_REWARD_COIN - 1]);
     });
     return result;
   });
@@ -1073,6 +1073,28 @@ function enqueueMoaruCommand_(userId, type, payload, issuedBy, commandId) {
   queue.push({ id: id, type: type, payload: payload || {}, createdAt: Date.now(), issuedBy: String(issuedBy || "admin") });
   writeMoaruCommands_(userId, queue);
   return id;
+}
+
+/** 호출자는 ScriptLock을 보유합니다. 대상별 읽기/쓰기를 한 번의 배치로 묶습니다. */
+function enqueueMoaruCommandsBatch_(entries) {
+  const properties = PropertiesService.getScriptProperties(), stored = properties.getProperties(), updates = {};
+  entries.forEach(function (entry) {
+    const key = moaruCommandKey_(entry.userId);let queue = [];
+    try { queue = JSON.parse(updates[key] || stored[key] || "[]"); } catch (error) {}
+    queue = pruneMoaruCommands_(queue);
+    if (!queue.some(function (row) { return row.id === entry.command.id; })) queue.push(entry.command);
+    updates[key] = JSON.stringify(pruneMoaruCommands_(queue));
+  });
+  if (Object.keys(updates).length) properties.setProperties(updates, false);
+}
+function notifyMoaruCoinBatch_(rewarded, amount, reason, issuedBy, requestId) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(2500)) { console.warn("ADMIN_COIN_NOTIFY_BUSY");return; }
+  try {
+    const createdAt = Date.now();
+    enqueueMoaruCommandsBatch_(rewarded.map(function (row, index) { return { userId: row.user_id, command: { id: requestId ? "coin-" + requestId + "-" + index : Utilities.getUuid(), type: "COIN_REWARD", payload: { amount: amount, newCoin: row.newCoin, reason: reason }, issuedBy: String(issuedBy), createdAt: createdAt } }; }));
+  } catch (error) { console.error("ADMIN_COIN_NOTIFY_FAILED", error); }
+  finally { lock.releaseLock(); }
 }
 
 /** POST mode=admin_dispatch: 관리자 토큰을 서버에서 확인한 뒤 사용자 큐에 기록 */
@@ -1088,7 +1110,8 @@ function handleAdminDispatch(e) {
   const type = String(p.command_type || "NOTICE").trim().slice(0, 20), requestId = String(p.request_id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 100);if (!targets.length) return shopJson_({ ok: false, error: "NO_TARGETS" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
-    targets.forEach(function (target, index) { enqueueMoaruCommand_(target, type, payload, p.user_id, requestId ? "admin-" + requestId + "-" + index : ""); });
+    const createdAt = Date.now();
+    enqueueMoaruCommandsBatch_(targets.map(function (target, index) { return { userId: target, command: { id: requestId ? "admin-" + requestId + "-" + index : Utilities.getUuid(), type: type, payload: payload, issuedBy: String(p.user_id), createdAt: createdAt } }; }));
     return shopJson_({ ok: true, count: targets.length });
   } finally { lock.releaseLock(); }
 }
@@ -1098,7 +1121,7 @@ function handleAdminUserBalances(e) {
   const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
   const users = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), coins = moaruRewardCoinMap_(), rows = Object.keys(users).map(function (userId) {
-    return { user_id: userId, nickname: users[userId], coin: coins[userId] || 0 };
+    return { user_id: userId, nickname: users[userId], coin: coins[userId] === undefined ? null : coins[userId] };
   });
   return shopJson_({ ok: true, users: rows });
 }
@@ -1156,13 +1179,13 @@ function handleAdminCoinReward(e) {
         // 코인 원장 반영이 끝난 뒤에는 전역 ScriptLock을 먼저 놓습니다.
         // 사용자별 알림 큐 기록까지 잠금을 잡고 있으면 일일/과제 보상이 COIN_BUSY로 밀릴 수 있습니다.
         lock.releaseLock(); lockHeld = false;
-        recoveredResult.rewarded.forEach(function (row, index) { try { enqueueMoaruCommand_(row.user_id, "COIN_REWARD", { amount: amount, newCoin: row.newCoin, reason: recoveredReason }, p.user_id, requestId ? "coin-" + requestId + "-" + index : ""); } catch (error) { console.error("ADMIN_COIN_NOTIFY_FAILED", row.user_id, error); } });
+        notifyMoaruCoinBatch_(recoveredResult.rewarded, amount, recoveredReason, p.user_id, requestId);
         return shopJson_(recoveredResult);
       }
       if (!notApplied) return shopJson_({ ok: false, error: "COIN_REQUEST_STATE_CONFLICT", message: "이전 코인 요청의 반영 상태를 안전하게 확정할 수 없습니다. 현재 잔액을 확인해주세요." });
       /* 전부 before 상태면 이전 시도는 실제 코인 반영 전 종료된 것이므로 아래에서 한 번만 다시 적용합니다. */
     } else {
-      beforeCoins = targets.map(function (id) { return parseInt(values[rowByUser[id]][SHOP_COL_REWARD_COIN - 1], 10) || 0; });
+      beforeCoins = targets.map(function (id) { return requireCoinAmount_(values[rowByUser[id]][SHOP_COL_REWARD_COIN - 1]); });
       expectedCoins = beforeCoins.map(function (before) { return before + amount; });
     }
 
@@ -1175,7 +1198,7 @@ function handleAdminCoinReward(e) {
     if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify({ status: "done", amount: amount, targets: targets, newCoins: rewarded.map(function (row) { return row.newCoin; }), reason: result.reason, createdAt: prior && prior.createdAt || Date.now() }));
     /* 코인 원장과 영수증이 확정된 순간 전역 잠금을 해제합니다. 알림 큐는 원장 트랜잭션이 아닙니다. */
     lock.releaseLock(); lockHeld = false;
-    rewarded.forEach(function (row, index) { try { enqueueMoaruCommand_(row.user_id, "COIN_REWARD", { amount: amount, newCoin: row.newCoin, reason: result.reason }, p.user_id, requestId ? "coin-" + requestId + "-" + index : ""); } catch (error) { console.error("ADMIN_COIN_NOTIFY_FAILED", row.user_id, error); } });
+    notifyMoaruCoinBatch_(rewarded, amount, result.reason, p.user_id, requestId);
     return shopJson_(result);
   } finally { if (lockHeld) lock.releaseLock(); }
 }
@@ -1198,15 +1221,22 @@ function handleUserCommands(e) {
   // 정상 로그인은 login_에서 6시간 사용자 캐시를 만들므로 10초 폴링마다 로그인 시트를 다시 읽지 않습니다.
   // 단순 조회는 읽기 전용 snapshot을 사용해 관리자 dispatch와의 Properties race도 피합니다.
   const currentCoin = function () {
-    const reward = moaruSpreadsheetRetry_(function () { return getRewardUserData_(userId); });
-    return parseInt(reward && reward.coin, 10) || 0;
+    try {
+      const reward = moaruSpreadsheetRetry_(function () { return getRewardUserData_(userId); });
+      return reward ? requireCoinAmount_(reward.coin) : null;
+    } catch (error) {
+      // 명령 수신은 계속하되 실패한 잔액을 확정값으로 보내지 않습니다.
+      console.warn("USER_COMMAND_COIN_UNAVAILABLE", String(error && error.message || error));
+      return null;
+    }
   };
   if (!ack.length) return shopJson_({ ok: true, commands: readMoaruCommandsSnapshot_(userId), coin: currentCoin() });
   const lock = LockService.getScriptLock();if (!lock.tryLock(2500)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     const queue = readMoaruCommands_(userId), remaining = queue.filter(function (command) { return ack.indexOf(String(command.id)) < 0; });
     if (remaining.length !== queue.length) writeMoaruCommands_(userId, remaining);
-    return shopJson_({ ok: true, commands: remaining, coin: currentCoin() });
+    // ACK는 명령 확인만 수행합니다. 잠금 안에서 시트 잔액을 중복 조회하지 않습니다.
+    return shopJson_({ ok: true, commands: remaining });
   } finally { lock.releaseLock(); }
 }
 
@@ -1510,7 +1540,7 @@ function findRewardUserForShop_(userId) {
   const values = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
   for (let i = 0; i < values.length; i++) {
     if (String(values[i][SHOP_COL_REWARD_USER_ID - 1] || "").trim() !== id) continue;
-    return { sheet: sheet, row: i + 2, userId: id, username: String(values[i][SHOP_COL_REWARD_USERNAME - 1] || ""), coin: parseInt(values[i][SHOP_COL_REWARD_COIN - 1], 10) || 0 };
+    return { sheet: sheet, row: i + 2, userId: id, username: String(values[i][SHOP_COL_REWARD_USERNAME - 1] || ""), coin: requireCoinAmount_(values[i][SHOP_COL_REWARD_COIN - 1]) };
   }
   return null;
 }
@@ -1614,4 +1644,3 @@ function handleShopPurchase(e) {
     return shopJson_({ ok: false, error: message === "COIN_SHEET_TEMPORARY_ERROR" ? message : "SHOP_PURCHASE_FAILED", message: message === "COIN_SHEET_TEMPORARY_ERROR" ? "코인 정보를 확인하지 못했습니다. 잠시 후 다시 시도해주세요." : "구매 처리 중 오류가 발생했습니다." });
   } finally { lock.releaseLock(); }
 }
-

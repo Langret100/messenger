@@ -39,6 +39,14 @@ function normalizeCoinUserId_(value) {
   return String(value == null ? "" : value).trim();
 }
 
+/** 원장의 잘못된 값은 잔액 0이 아닙니다. 읽기와 변경 모두 같은 검증을 사용합니다. */
+function requireCoinAmount_(raw) {
+  if ((typeof raw !== "number" && typeof raw !== "string") || String(raw).trim() === "" || !Number.isSafeInteger(Number(raw))) {
+    throw new Error("INVALID_REWARD_COIN");
+  }
+  return Number(raw);
+}
+
 /** 보상 시트에서 user_id 행을 찾는 단일 경로. */
 function findRewardUserRow_(sheet, userId) {
   const targetId = normalizeCoinUserId_(userId);
@@ -47,13 +55,13 @@ function findRewardUserRow_(sheet, userId) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
 
-  const values = sheet.getRange(2, 1, lastRow - 1, 3).getValues(); // A:C
-  for (let i = 0; i < values.length; i++) {
-    if (normalizeCoinUserId_(values[i][COIN_COL_REWARD_USER_ID - 1]) === targetId) {
-      return { rowIndex: 2 + i, values: values[i] };
-    }
-  }
-  return null;
+  // 검색은 ID 열에서 서버 측으로 수행하고 일치하는 한 행만 가져옵니다.
+  const escaped = targetId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = sheet.getRange(2, 1, lastRow - 1, 1).createTextFinder("^\\s*" + escaped + "\\s*$").useRegularExpression(true).matchCase(true).findAll();
+  if (!matches.length) return null;
+  const rowIndex = Math.min.apply(null, matches.map(function (match) { return match.getRow(); }));
+  return { rowIndex: rowIndex, values: sheet.getRange(rowIndex, 1, 1, 3).getValues()[0] };
+
 }
 
 /**
@@ -67,7 +75,7 @@ function getRewardUserData_(userId) {
   return {
     userId: normalizeCoinUserId_(found.values[COIN_COL_REWARD_USER_ID - 1]),
     username: found.values[COIN_COL_REWARD_USERNAME - 1],
-    coin: parseInt(found.values[COIN_COL_REWARD_COIN - 1], 10) || 0
+    coin: requireCoinAmount_(found.values[COIN_COL_REWARD_COIN - 1])
   };
 }
 
@@ -126,7 +134,7 @@ function processCoinChangeUnlocked_(userId, action, amount) {
   }
 
   const rowIndex = found.rowIndex;
-  const currentCoin = parseInt(found.values[COIN_COL_REWARD_COIN - 1], 10) || 0;
+  const currentCoin = requireCoinAmount_(found.values[COIN_COL_REWARD_COIN - 1]);
   const amt = parseInt(amount, 10);
   if (!amt || isNaN(amt) || amt <= 0) {
     throw new Error("잘못된 수량입니다.");
@@ -622,9 +630,11 @@ function syncUsersToRewards() {
 
   if (rewardsData.length > 1) {
     for (let i = 1; i < rewardsData.length; i++) {
-      const uid = String(rewardsData[i][COIN_COL_REWARD_USER_ID - 1]);
+      const uid = normalizeCoinUserId_(rewardsData[i][COIN_COL_REWARD_USER_ID - 1]);
+      if (!uid) continue;
+      if (existingMap[uid]) throw new Error("DUPLICATE_REWARD_USER");
       existingMap[uid] = {
-        coin: rewardsData[i][COIN_COL_REWARD_COIN - 1]
+        coin: requireCoinAmount_(rewardsData[i][COIN_COL_REWARD_COIN - 1])
       };
     }
   }
@@ -639,7 +649,7 @@ function syncUsersToRewards() {
   const newData = [["user_id", "username", "coin", "url"]];
 
   for (let i = 1; i < loginData.length; i++) {
-    const uid = loginData[i][0];
+    const uid = normalizeCoinUserId_(loginData[i][0]);
     if (!uid) continue;
     const username = loginData[i][1];
 
@@ -650,12 +660,12 @@ function syncUsersToRewards() {
     newData.push([uid, username, coin, url]);
   }
 
-  rewardsSheet.clearContents();
+  // 전체 시트를 비우는 순간 조회가 NO_REWARD_USER/0으로 바뀌지 않도록 한 번에 교체합니다.
+  while (newData.length < rewardsData.length) newData.push(["", "", "", ""]);
   rewardsSheet.getRange(1, 1, newData.length, 4).setValues(newData);
-  rewardsSheet.autoResizeColumns(1, 4);
-
-  SpreadsheetApp.getUi().alert("동기화 완료!");
+  SpreadsheetApp.flush();
   } finally { syncLock.releaseLock(); }
+  SpreadsheetApp.getUi().alert("동기화 완료!");
 }
 
 /**

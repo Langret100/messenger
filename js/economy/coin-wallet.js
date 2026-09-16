@@ -5,18 +5,33 @@
  */
 MiniTalk.Economy = MiniTalk.Economy || {};
 MiniTalk.Economy.CoinWallet = (() => {
-  const CACHE_KEY = "economy.coinSnapshot";
+  const CACHE_KEY = "economy.coinSnapshot.v2";
   const CACHE_TTL = 30000;
   let inFlight = null;
   let balanceRevision = 0;
+  let ownerId = null;
+  let ownerGeneration = 0;
+  let refreshQueued = null;
+  function ensureOwner() {
+    const next = MiniTalk.Store.get("user")?.user_id || "guest";
+    if (next === ownerId) return;
+    ownerId = next; ownerGeneration += 1; balanceRevision += 1;
+    inFlight = null; refreshQueued = null;
+    const saved = snapshot();
+    MiniTalk.Store.set("coins", saved ? saved.value : null);
+  }
+  function validAmount(raw) {
+    return (typeof raw === "number" || typeof raw === "string") && String(raw).trim() !== "" && Number.isSafeInteger(Number(raw));
+  }
 
   function snapshot() {
     const saved = MiniTalk.Persistence.get(CACHE_KEY, null);
-    if (!saved || saved.userId !== MiniTalk.Store.get("user")?.user_id) return null;
+    if (!saved || saved.userId !== MiniTalk.Store.get("user")?.user_id || !validAmount(saved.value)) return null;
     return saved;
   }
 
   function value() {
+    ensureOwner();
     return Math.floor(Number(MiniTalk.Store.get("coins")) || 0);
   }
 
@@ -26,7 +41,9 @@ MiniTalk.Economy.CoinWallet = (() => {
   }
 
   function applyLocal(amount, source = "local", bumpRevision = true) {
-    const next = Math.floor(Number(amount) || 0);
+    ensureOwner();
+    if (!validAmount(amount)) throw new Error("INVALID_COIN_STATUS");
+    const next = Number(amount);
     const userId = MiniTalk.Store.get("user")?.user_id || "guest";
     if (bumpRevision) balanceRevision += 1;
     MiniTalk.Store.set("coins", next);
@@ -35,7 +52,9 @@ MiniTalk.Economy.CoinWallet = (() => {
     return next;
   }
 
-  function setLocal(amount, source = "local") {
+  function setLocal(amount, source = "local", expectedUserId) {
+    ensureOwner();
+    if (expectedUserId !== undefined && expectedUserId !== ownerId) return value();
     // 구매/보상 응답처럼 더 최신인 확정값이 들어오면 그 전에 시작된 coinStatus
     // 요청은 더 이상 화면 잔액을 덮어쓸 수 없다.
     return applyLocal(amount, source, true);
@@ -51,14 +70,19 @@ MiniTalk.Economy.CoinWallet = (() => {
 
   function startServerRefresh(user, cached) {
     const requestRevision = balanceRevision;
+    const generation = ownerGeneration;
     const request = MiniTalk.AuthApi.coinStatus(user.user_id)
       .then(amount => {
+        ensureOwner();
+        if (generation !== ownerGeneration || user.user_id !== ownerId) return value();
         // 요청이 시작된 뒤 구매/보상 등에서 더 최신 확정 잔액이 반영됐다면
         // 늦게 도착한 예전 조회값은 버리고 현재 값을 유지한다.
         if (requestRevision !== balanceRevision) return value();
         return applyLocal(amount, "server", true);
       })
       .catch(error => {
+        ensureOwner();
+        if (generation !== ownerGeneration || user.user_id !== ownerId) return value();
         console.warn("코인 잔액 조회 실패", error);
         // 요청 중 더 최신 확정값이 들어왔거나 이 사용자의 마지막 서버 스냅샷이 있으면 그것을 유지합니다.
         if (requestRevision !== balanceRevision) return value();
@@ -68,14 +92,17 @@ MiniTalk.Economy.CoinWallet = (() => {
       });
 
     inFlight = request;
-    request.finally(() => {
+    const finish = () => {
       if (inFlight === request) inFlight = null;
-    });
+    };
+    request.then(finish, finish);
     return request;
   }
 
   async function refresh(force = false) {
+    ensureOwner();
     const user = MiniTalk.Store.get("user");
+    const generation = ownerGeneration;
     if (!user?.user_id || user.isGuest) return setLocal(0, "guest");
 
     let cached = snapshot();
@@ -96,23 +123,27 @@ MiniTalk.Economy.CoinWallet = (() => {
 
     if (inFlight) {
       if (!force) return inFlight;
-
-      /*
-       * 보상/구매 직후 force refresh가 이전에 시작된 잔액 조회 Promise를 그대로
-       * 재사용하면, 서버 코인은 증가했는데 화면에는 보상 전 잔액이 남을 수 있습니다.
-       * 강제 새로고침은 이전 조회를 기다린 뒤 반드시 새 요청을 보냅니다.
-       */
-      try { await inFlight; } catch (error) {}
-      cached = snapshot();
+      if (refreshQueued) return refreshQueued;
+      const waiting = inFlight;
+      const queued = waiting.catch(() => {}).then(() => {
+        ensureOwner();
+        if (generation !== ownerGeneration) return value();
+        return startServerRefresh(user, snapshot());
+      });
+      refreshQueued = queued;
+      const finish = () => { if (refreshQueued === queued) refreshQueued = null; };
+      queued.then(finish, finish);
+      return queued;
     }
 
     return startServerRefresh(user, cached);
   }
 
   function badge(options = {}) {
+    ensureOwner();
     const D = MiniTalk.UI.Dom;
     const loginRequired = requiresLogin();
-    const known = loginRequired ? false : Boolean(snapshot()) || balanceRevision > 0;
+    const known = loginRequired ? false : Boolean(snapshot());
     const initialText = loginRequired ? "로그인이 필요해요" : known ? (options.header ? String(value()) : `${value()} 코인`) : "확인 중…";
     const count = D.el("strong", { class: "coin-count", text: initialText });
     const button = D.el("button", {
@@ -158,14 +189,17 @@ MiniTalk.Economy.CoinWallet = (() => {
     button.setAttribute("aria-label", `보유 코인 ${amount}개. 새로고침`);
   }
 
-  function revision() { return balanceRevision; }
+  function revision() { ensureOwner(); return balanceRevision; }
 
   function setServerSnapshot(amount, startedRevision, source = "server-sync") {
+    ensureOwner();
     // 서버 조회가 시작된 뒤 구매/보상처럼 더 최신인 확정값이 들어왔으면
     // 늦게 도착한 스냅샷은 현재 화면을 덮지 않습니다.
     if (Number(startedRevision) !== balanceRevision) return value();
     return applyLocal(amount, source, true);
   }
+
+  MiniTalk.Events?.on?.("state:user", ensureOwner);
 
   return { value, refresh, setLocal, setServerSnapshot, revision, badge, requiresLogin, syncConnectedBadges };
 })();

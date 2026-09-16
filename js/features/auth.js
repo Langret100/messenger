@@ -12,6 +12,7 @@ MiniTalk.Features.Auth=(()=>{
     MiniTalk.Persistence.set(KEY,sessionUser);
     if(!sessionUser?.isGuest&&sessionUser?.username)MiniTalk.Persistence.set(LAST_ID_KEY,sessionUser.username);
     MiniTalk.Store.set("user",sessionUser);
+    if(user?.coin !== undefined && user?.coin !== null && String(user.coin).trim() !== "" && Number.isSafeInteger(Number(user.coin)))MiniTalk.Economy.CoinWallet?.setLocal?.(Number(user.coin),"login");
     MiniTalk.Events.emit("auth:success",sessionUser)
   }
   function restore(){
@@ -64,7 +65,6 @@ MiniTalk.Features.Auth=(()=>{
         const authReady=canReuse?Promise.resolve(rememberedUser):(signup?MiniTalk.AuthApi.signup(id,password,host.querySelector("#authNick").value.trim()):MiniTalk.AuthApi.login(id,password));
         const windowReady=prepareWindow();
         const user=await authReady;windowReady.catch(()=>{});
-        if(Number.isFinite(Number(user.coin)))MiniTalk.Economy.CoinWallet?.setLocal?.(Number(user.coin),signup?"signup":"login");
         save(user)
       }catch(error){msg.textContent=error.message||"인증에 실패했습니다.";setBusy(false)}finally{endLoading()}
     });

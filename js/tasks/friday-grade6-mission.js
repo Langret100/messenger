@@ -404,8 +404,8 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
         if(!response.ok)throw new Error(`HTTP_${response.status}`);const result=await response.json();
         if(!result||result.ok===false){const error=new Error(result?.error||"주간 보상 요청 실패");error.code=result?.error||"WEEKLY_REWARD_FAILED";throw error}
         const granted=result.applied!==false&&result.granted!==false,reward={eligible:true,amount:REWARD_COIN,acknowledged:true,granted,updatedAt:nowMs()};
-        const saved=await MiniTalk.Realtime.cloudTransaction(path(),current=>current?.completed?{...current,reward}:current),nextCoin=Number(result.newCoin);
-        if(Number.isFinite(nextCoin))MiniTalk.Economy.CoinWallet?.setLocal?.(nextCoin,"friday-weekly-reward");else await MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(()=>{});
+        const saved=await MiniTalk.Realtime.cloudTransaction(path(),current=>current?.completed?{...current,reward}:current),nextCoin=result.newCoin==null||String(result.newCoin).trim()===""?NaN:Number(result.newCoin);
+        if(Number.isFinite(nextCoin))MiniTalk.Economy.CoinWallet?.setLocal?.(nextCoin,"friday-weekly-reward",currentUser.user_id);else await MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(()=>{});
         if(granted)MiniTalk.UI.Shell.toast(`금요일 학습점검 보상 · 코인 ${REWARD_COIN}개 적립!`);return saved||{...record,reward}
       }catch(error){lastError=error;const retryable=attempt===0&&(error?.code==="COIN_BUSY"||error?.code==="COIN_SHEET_TEMPORARY_ERROR"||/^HTTP_5\d\d$/.test(String(error?.message||""))||error instanceof TypeError);if(!retryable)break;await new Promise(resolve=>setTimeout(resolve,450))}
     }

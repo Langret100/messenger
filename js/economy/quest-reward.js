@@ -125,9 +125,9 @@ MiniTalk.Economy.QuestReward = (() => {
      * 보상 직후 coin_status를 한 번 더 호출하면 네트워크 지연/락 경합 때문에
      * "보상은 끝났는데 화면 반영은 한참 뒤"처럼 보일 수 있습니다.
      */
-    const serverCoin = Number(result.newCoin);
+    const serverCoin = result.newCoin === null || result.newCoin === undefined || String(result.newCoin).trim() === "" ? NaN : Number(result.newCoin);
     const amount = Number.isFinite(serverCoin)
-      ? MiniTalk.Economy.CoinWallet.setLocal(serverCoin, "daily-quest-reward")
+      ? MiniTalk.Economy.CoinWallet.setLocal(serverCoin, "daily-quest-reward", user.user_id)
       : await MiniTalk.Economy.CoinWallet.refresh(true);
 
     if (granted) {

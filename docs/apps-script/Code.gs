@@ -15,8 +15,9 @@ const GAME_RANK_LIMIT_DEFAULT = 10;
 /**
  * 공통: 스프레드시트 / 시트 가져오기
  */
+let moaruRequestSpreadsheet_ = null;
 function getSheet_(name) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = moaruRequestSpreadsheet_ || (moaruRequestSpreadsheet_ = SpreadsheetApp.openById(SHEET_ID));
   const sheet = ss.getSheetByName(name);
   if (!sheet) {
     throw new Error("시트를 찾을 수 없습니다: " + name);
@@ -176,6 +177,12 @@ function doGet(e) {
  * 추가: coin_reward (출석/랭킹/퀘스트 코인 보상)
  */
 function doPost(e) {
+  const startedAt = Date.now();
+  moaruRequestSpreadsheet_ = null;
+  try { return moaruDoPost_(e); }
+  finally { console.info("SHEET_REQUEST", JSON.stringify({mode: String(e && e.parameter && e.parameter.mode || "json"), elapsedMs: Date.now() - startedAt})); }
+}
+function moaruDoPost_(e) {
   const req = getRequestData_(e, true);
   const data = req.data;
   const mode = req.mode;

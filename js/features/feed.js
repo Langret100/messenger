@@ -1,7 +1,7 @@
 /* 학급 피드: 서버 최신 30개만 유지하고 5개씩 페이지 조회합니다. 미디어는 별도 경로에서 지연 로드합니다. */
 MiniTalk.Features.Feed=(()=>{
   const STATE_PATH="moaru/v3/feedState",POSTS_PATH=`${STATE_PATH}/posts`,TOTALS_PATH=`${STATE_PATH}/totals`,MEDIA_PATH="moaru/v3/feedMedia",MAX_POSTS=30,PAGE_SIZE=5,MAX_COMMENTS=20,COMMENT_LIMIT=60,PHOTO_LIMIT=60*1024,PHOTO_BLOB_TARGET=44*1024,VIDEO_LIMIT=700*1024,VIDEO_BLOB_LIMIT=500*1024,VIDEO_THUMB_LIMIT=18*1024,VIDEO_THUMB_BLOB_TARGET=12*1024,VIDEO_SECONDS=7,CLEANUP_KEY="feed.pendingMediaCleanup",POST_CACHE="feed-post",MEDIA_CACHE="feed-media",THUMB_CACHE="feed-thumb";
-  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0,feedUserKey="";const pendingLocalHeartEffects=new Set(),pendingHeartRequests=new Set(),pendingCommentRequests=new Set(),openCommentComposers=new Set();
+  let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0,feedUserKey="",feedGeneration=0;const pendingLocalHeartEffects=new Set(),pendingHeartRequests=new Set(),pendingCommentRequests=new Set(),openCommentComposers=new Set();
   const user=()=>MiniTalk.Store.get("user")||{};
   const safeUserKey=id=>String(id||"").replace(/[.#$\[\]\/]/g,"_");
   function canonicalHeartCount(post){return Object.values(post?.hearts||{}).filter(value=>value===true).length}
@@ -9,13 +9,37 @@ MiniTalk.Features.Feed=(()=>{
   function avatarForPost(post){const profiles=MiniTalk.Store.get("profiles")||{},profile=profiles[post?.user_id]||profiles[post?.nickname]||{};return profile.avatar||post?.avatar||"assets/mascot-avatar.png"}
   function playHeaderHeartFeedback(on=true){if(MiniTalk.Router.current()!=="feed")return;const badge=MiniTalk.UI.Dom.one(".header-heart-inline");if(!badge)return;animateHeartTarget(badge,.22,380);if(on)spawnHeartBurst(badge,3,{spread:12,rise:25,size:10,duration:560})}
   function patchHeaderHeart(animate=false,on=true){if(MiniTalk.Router.current()!=="feed")return;const host=MiniTalk.UI.Dom.byId("headerActions"),count=host?.querySelector?.(".header-heart-inline b");if(count)count.textContent=String(totalHearts);if(animate)playHeaderHeartFeedback(on)}
+  // 게시물 멤버십과 누적 합계는 같은 Firebase 트랜잭션에서 확정합니다.
+  // 삭제된 게시물은 archived로 넘깁니다. 과거 totals 원본은 마이그레이션 기록으로 보존합니다.
+  function prepareHeartAccounting(current){
+    const next=structuredClone(current||{}),active={};
+    for(const post of Object.values(next.posts||{})){if(!post)continue;const key=safeUserKey(post.user_id);active[key]=(active[key]||0)+canonicalHeartCount(post)}
+    if(!next.heartAccounting){
+      const legacyTotals=structuredClone(next.totals||{}),legacyCarry={};
+      for(const [key,value] of Object.entries(legacyTotals))legacyCarry[key]=Math.max(0,(Number(value)||0)-(active[key]||0));
+      // legacyCarry는 검증 불가능한 옛 누적 잔여분입니다. 삭제/추정 보정하지 않고 구분 보존합니다.
+      next.heartAccounting={version:1,archived:{},legacyCarry,legacyTotals};
+    }
+    return next;
+  }
+  function recountHeartTotals(next){
+    const ledger=next.heartAccounting,totals={};
+    for(const [key,value] of Object.entries(ledger.legacyCarry||{}))totals[key]=Number(value)||0;
+    for(const [key,value] of Object.entries(ledger.archived||{}))totals[key]=(totals[key]||0)+(Number(value)||0);
+    for(const post of Object.values(next.posts||{})){if(!post)continue;const key=safeUserKey(post.user_id);post.heartCount=canonicalHeartCount(post);totals[key]=(totals[key]||0)+post.heartCount}
+    next.totals=totals;return next;
+  }
+  async function mutateHeartState(change){
+    return MiniTalk.Realtime.cloudTransaction(STATE_PATH,current=>{
+      const next=prepareHeartAccounting(current);change(next);return recountHeartTotals(next);
+    },{applyLocally:false,requireCommit:true});
+  }
   async function reconcileOwnHeartTotal(){
-    const u=user();if(!u?.user_id||u.isGuest)return totalHearts;
-    const rows=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToLast:MAX_POSTS});
-    const total=rows.reduce((sum,row)=>sum+(String(row.value?.user_id||"")===String(u.user_id)?canonicalHeartCount(row.value):0),0),uid=safeUserKey(u.user_id);
-    totalHearts=total;totalHeartReady=true;patchHeaderHeart(false,true);
-    MiniTalk.Realtime.cloudGet(`${TOTALS_PATH}/${uid}`,0).then(current=>{if(Math.max(0,Number(current)||0)!==total)return MiniTalk.Realtime.cloudSet(`${TOTALS_PATH}/${uid}`,total)}).catch(error=>console.warn("받은 하트 총합 복구 실패",error));
-    return total
+    const u=user(),generation=feedGeneration;if(!u?.user_id||u.isGuest)return totalHearts;
+    const saved=await mutateHeartState(()=>{});
+    if(generation!==feedGeneration||u.user_id!==user().user_id)return totalHearts;
+    totalHearts=Number(saved?.totals?.[safeUserKey(u.user_id)])||0;totalHeartReady=true;patchHeaderHeart(false,true);
+    return totalHearts;
   }
   function samePostBody(a,b){return Boolean(a&&b)&&["id","user_id","nickname","avatar","text","mediaType","createdAt"].every(key=>String(a?.[key]??"")===String(b?.[key]??""))}
   function sameComments(a,b){const rows=value=>commentRows(value).map(row=>[String(row.id||""),String(row.user_id||""),String(row.nickname||""),String(row.text||""),Number(row.createdAt)||0]);return JSON.stringify(rows(a))===JSON.stringify(rows(b))}
@@ -47,10 +71,11 @@ MiniTalk.Features.Feed=(()=>{
     }catch(error){console.warn("이전 소식을 불러오지 못했습니다.",error)}finally{loadingOlder=false}
   }
   async function ensureSub(){
-    if(!totalUnsub){const uid=safeUserKey(user().user_id);totalUnsub=MiniTalk.Realtime.cloudSubscribe(`${TOTALS_PATH}/${uid}`,value=>{const next=Math.max(0,Number(value)||0),animate=totalHeartReady&&next!==totalHearts,on=next>totalHearts;totalHearts=next;patchHeaderHeart(animate,on);totalHeartReady=true})}
+    const generation=feedGeneration;
+    if(!totalUnsub){const uid=safeUserKey(user().user_id);totalUnsub=MiniTalk.Realtime.cloudSubscribe(`${TOTALS_PATH}/${uid}`,value=>{if(generation!==feedGeneration)return;const next=Math.max(0,Number(value)||0),animate=totalHeartReady&&next!==totalHearts,on=next>totalHearts;totalHearts=next;patchHeaderHeart(animate,on);totalHeartReady=true})}
     if(postsUnsub||syncStarting)return;syncStarting=true;
     try{
-      const cached=await MiniTalk.DataCache?.list?.(POST_CACHE)||[];
+      const cached=await MiniTalk.DataCache?.list?.(POST_CACHE)||[];if(generation!==feedGeneration)return;
       cachedPostRows=cached.sort((a,b)=>(Number(b.value?.createdAt)||Number(b.sortAt)||0)-(Number(a.value?.createdAt)||Number(a.sortAt)||0)||String(b.key).localeCompare(String(a.key))).slice(0,MAX_POSTS);
       const hadVisiblePosts=postRows().length>0;
       cachedPostRows.slice(0,PAGE_SIZE).forEach(row=>{
@@ -61,6 +86,7 @@ MiniTalk.Features.Feed=(()=>{
       /* 재진입 시 이미 보이던 피드를 비웠다가 다시 그리지 않습니다. 첫 진입에만 기기 캐시를 한 번 그립니다. */
       if(!hadVisiblePosts)paintCachedPosts();
       const latest=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToLast:PAGE_SIZE});
+      if(generation!==feedGeneration)return;
       /* 서버 최신 확인은 목록 전체 replace가 아니라 바뀐 카드만 조용히 반영합니다. */
       latest.forEach(row=>{if(row.value)applyPost(row.key,{...row.value,id:row.value.id||row.key},state.posts[row.key])});
       reconcileOwnHeartTotal().catch(error=>console.warn("받은 하트 총합 확인 실패",error));
@@ -71,9 +97,9 @@ MiniTalk.Features.Feed=(()=>{
       const changed=(id,value)=>{if(!state.posts[id])return;applyPost(id,value,state.posts[id])};
       const remove=id=>{delete state.posts[id];openCommentComposers.delete(String(id));cachedPostRows=cachedPostRows.filter(row=>String(row.key)!==String(id));MiniTalk.DataCache?.remove?.(POST_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(MEDIA_CACHE,id).catch(()=>{});MiniTalk.DataCache?.remove?.(THUMB_CACHE,id).catch(()=>{});serverPostCount=Math.max(0,serverPostCount-1);patchPost(id)};
       postsUnsub=MiniTalk.Realtime.cloudSubscribeDelta(POSTS_PATH,{added:apply,changed,removed:remove},{orderByChild:"createdAt",startAt:latestCreated?latestCreated+1:1});
-    }finally{syncStarting=false}
+    }finally{if(generation===feedGeneration)syncStarting=false}
   }
-  function stopSub(){postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;loadingOlder=false;hasMorePosts=true;pagingArmed=false;totalHeartReady=false;serverPostCount=0;pendingLocalHeartEffects.clear();openCommentComposers.clear()}
+  function stopSub(){feedGeneration++;postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;loadingOlder=false;hasMorePosts=true;pagingArmed=false;totalHeartReady=false;serverPostCount=0;pendingLocalHeartEffects.clear();openCommentComposers.clear()}
   async function compressImageFile(file,maxSide=960,target=PHOTO_LIMIT){
     if(!file?.type?.startsWith("image/"))throw new Error("사진 파일을 선택해주세요.");
     const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("사진을 읽지 못했습니다."));r.readAsDataURL(file)});
@@ -117,12 +143,14 @@ MiniTalk.Features.Feed=(()=>{
   async function reconcileFeedCacheAndLimit(){
     const keys=await MiniTalk.Realtime.cloudKeys(POSTS_PATH),serverSet=new Set(keys.map(String)),excess=Math.max(0,keys.length-MAX_POSTS),removed=[];
     if(excess){
-      const rows=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToFirst:excess});
-      for(const row of rows){
-        const oldId=String(row.key||row.value?.id||"");if(!oldId)continue;
-        await MiniTalk.Realtime.cloudRemove(`${POSTS_PATH}/${oldId}`);serverSet.delete(oldId);removed.push(oldId);
-        try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${oldId}`)}catch{queueCleanup(oldId)}
-      }
+      const saved=await mutateHeartState(next=>{
+        const rows=Object.entries(next.posts||{}).sort((a,b)=>Number(a[1].createdAt)-Number(b[1].createdAt)||a[0].localeCompare(b[0]));
+        for(const [id,post] of rows.slice(0,Math.max(0,rows.length-MAX_POSTS))){
+          const key=safeUserKey(post.user_id),ledger=next.heartAccounting;ledger.archived[key]=(ledger.archived[key]||0)+canonicalHeartCount(post);delete next.posts[id];
+        }
+      });
+      const retained=new Set(Object.keys(saved?.posts||{}));
+      for(const id of keys){if(retained.has(id))continue;serverSet.delete(id);removed.push(id);try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{queueCleanup(id)}}
     }
     serverPostCount=Math.min(MAX_POSTS,serverSet.size);
     const cached=await MiniTalk.DataCache?.list?.(POST_CACHE,{touchRecords:false})||[];
@@ -146,7 +174,7 @@ MiniTalk.Features.Feed=(()=>{
       try{await MiniTalk.Realtime.cloudSet(`${MEDIA_PATH}/${id}`,mediaValue)}
       catch(error){throw new Error("사진·영상을 저장하지 못했습니다. 게시물은 등록되지 않았습니다.")}
     }
-    try{await MiniTalk.Realtime.cloudSet(`${POSTS_PATH}/${id}`,{...meta,updatedAt:MiniTalk.Realtime.serverTimestamp()})}catch(error){if(media?.data){try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{queueCleanup(id)}}throw error}
+    try{const updatedAt=MiniTalk.Realtime.serverTimestamp();await mutateHeartState(next=>{next.posts=next.posts||{};next.posts[id]={...meta,updatedAt}})}catch(error){if(media?.data){try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{queueCleanup(id)}}throw error}
     MiniTalk.DataCache?.put?.(POST_CACHE,id,meta,{sortAt:createdAt}).catch(()=>{});
     if(media?.data){
       const cachedMedia={type:media.type,data:media.data,size:Number(media.size)||0,createdAt,thumbnail:media.thumbnail||""};
@@ -164,21 +192,23 @@ MiniTalk.Features.Feed=(()=>{
     const u=user();if(u.isGuest)return MiniTalk.UI.Shell.toast("로그인 후 하트를 누를 수 있습니다.");if(post.user_id===u.user_id)return MiniTalk.UI.Shell.toast("내 게시물에는 하트를 누를 수 없습니다.");
     const requestKey=`${safeUserKey(u.user_id)}|${String(post.id)}`;if(button?.disabled||pendingHeartRequests.has(requestKey))return;
     pendingHeartRequests.add(requestKey);
-    const uid=safeUserKey(u.user_id),postPath=`${POSTS_PATH}/${post.id}`,authorKey=safeUserKey(post.user_id);let delta=0;pendingLocalHeartEffects.add(String(post.id));
+    const uid=safeUserKey(u.user_id),generation=feedGeneration;
     const expectedOn=post.hearts?.[uid]!==true;
-    if(button)button.disabled=true;
+    pendingLocalHeartEffects.add(String(post.id));if(button)button.disabled=true;
     playHeartFeedback(button,expectedOn,true);
-    let saved;try{saved=await MiniTalk.Realtime.cloudTransaction(postPath,current=>{if(!current)return current;const next=structuredClone(current),hearts=next.hearts||{},on=hearts[uid]===true;delta=on?-1:1;if(on)delete hearts[uid];else hearts[uid]=true;next.hearts=hearts;next.heartCount=Object.values(hearts).filter(value=>value===true).length;next.updatedAt=MiniTalk.Realtime.serverTimestamp();return next})}catch(error){pendingLocalHeartEffects.delete(String(post.id));throw error}
-    finally{pendingHeartRequests.delete(requestKey);if(button?.isConnected)button.disabled=false}
-    if(!saved||!delta){pendingLocalHeartEffects.delete(String(post.id));return}
-    setTimeout(()=>pendingLocalHeartEffects.delete(String(post.id)),1800);
-    try{await MiniTalk.Realtime.cloudTransaction(`${TOTALS_PATH}/${authorKey}`,current=>Math.max(0,(Number(current)||0)+delta))}
-    catch(error){
-      /* 받은 하트 총합은 파생 캐시입니다. 실제 게시물의 hearts 멤버십이 원장이므로
-         총합 캐시 실패 때문에 이미 성공한 하트를 되돌리지 않습니다. 작성자가 소식 탭에
-         들어오면 reconcileOwnHeartTotal()이 실제 게시물 기준으로 총합을 복구합니다. */
-      console.warn("받은 하트 총합 갱신 지연",error)
-    }
+    const updatedAt=MiniTalk.Realtime.serverTimestamp();
+    try{
+      const saved=await mutateHeartState(next=>{
+        const target=next.posts?.[post.id];if(!target)return;
+        const hearts=target.hearts||{};
+        // 재시도/다른 탭의 동일 요청에서도 토글을 다시 뒤집지 않고 클릭 의도를 적용합니다.
+        if(expectedOn)hearts[uid]=true;else delete hearts[uid];
+        target.hearts=hearts;target.updatedAt=updatedAt;
+      });
+      if(!saved?.posts?.[post.id])throw new Error("이미 정리된 게시물입니다.");
+      if(generation===feedGeneration&&u.user_id===user().user_id)applyPost(post.id,saved.posts[post.id]);
+    }catch(error){pendingLocalHeartEffects.delete(String(post.id));MiniTalk.UI.Shell.toast(error.message||"하트를 저장하지 못했습니다.")}
+    finally{pendingHeartRequests.delete(requestKey);if(button?.isConnected)button.disabled=false;setTimeout(()=>pendingLocalHeartEffects.delete(String(post.id)),1800)}
   }
 
   function commentRows(post){return Object.values(post?.comments||{}).filter(row=>row&&row.text).sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0)||String(a.id).localeCompare(String(b.id)))}
@@ -194,9 +224,9 @@ MiniTalk.Features.Feed=(()=>{
     input.value="";input.blur?.();input.disabled=true;button.disabled=true;if(card)setCommentComposer(card,false,false);else openCommentComposers.delete(postId);
     const id=crypto.randomUUID(),createdAt=Date.now(),postPath=`${POSTS_PATH}/${postId}`;
     try{
-      await MiniTalk.Realtime.cloudTransaction(postPath,current=>{
-        if(!current)return current;
-        const next=structuredClone(current),comments=next.comments||{};
+      await mutateHeartState(feed=>{
+        const next=feed.posts?.[postId];if(!next)return;
+        const comments=next.comments||{};
         comments[id]={id,user_id:u.user_id,nickname:u.nickname||"사용자",text,createdAt};
         const rows=Object.values(comments).filter(Boolean).sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0)||String(a.id).localeCompare(String(b.id)));
         while(rows.length>MAX_COMMENTS){const old=rows.shift();if(old?.id)delete comments[old.id]}
@@ -265,8 +295,8 @@ MiniTalk.Features.Feed=(()=>{
   function playHeartFeedback(button,on,sound=true){
     if(!button)return;animateHeartTarget(button,.42,440);if(on)spawnHeartBurst(button,6,{spread:14,rise:42,size:13,duration:700});if(sound)playHeartSound(on);
   }
-  function headerHeartBadge(){const D=MiniTalk.UI.Dom;return D.el("div",{class:"header-heart-inline","aria-label":`받은 하트 ${totalHearts}개`},[D.el("span",{text:"♥"}),D.el("b",{text:String(totalHearts)})])}
-  function render(host){if(!host)return;const currentFeedUser=safeUserKey(user().user_id||"guest");if(feedUserKey&&feedUserKey!==currentFeedUser){state={posts:{}};cachedPostRows=[];serverPostCount=0}feedUserKey=currentFeedUser;MiniTalk.UI.Shell.setHeader("소식",[headerHeartBadge()]);const D=MiniTalk.UI.Dom,u=user(),shell=D.el("section",{class:"view feed-shell"}),scroller=D.el("div",{class:"feed-view"}),list=D.el("div",{class:"feed-list"});postRows().slice(0,PAGE_SIZE).forEach(post=>list.append(postCard(post)));if(!postRows().length)list.append(D.el("div",{class:"empty-state feed-empty-state"},[D.el("span",{text:"♡"}),D.el("strong",{text:"아직 게시물이 없어요"}),D.el("small",{class:"muted",text:"짧은 글과 사진·영상을 올려보세요."})]));scroller.append(list);shell.append(scroller);if(!u.isGuest)shell.append(D.el("button",{class:"feed-fab",type:"button","aria-label":"게시물 올리기",onclick:compose},[D.el("span",{text:"＋"})]));host.replaceChildren(shell);pagingArmed=false;scroller.addEventListener("pointerdown",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("touchmove",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("wheel",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("scroll",()=>{if(pagingArmed&&scroller.scrollTop+scroller.clientHeight>=scroller.scrollHeight-180)loadOlderPosts()},{passive:true});MiniTalk.UI.DragScroll?.bind?.(scroller);setupLazyMedia(scroller);ensureSub()}
+  function headerHeartBadge(){const D=MiniTalk.UI.Dom;return D.el("div",{class:"header-heart-inline","aria-label":`받은 하트 ${totalHearts}개`},[D.el("span",{text:"♥"}),D.el("b",{text:totalHeartReady?String(totalHearts):"확인 중…"})])}
+  function render(host){if(!host)return;const currentFeedUser=safeUserKey(user().user_id||"guest");if(feedUserKey&&feedUserKey!==currentFeedUser){stopSub();totalHearts=0;state={posts:{}};cachedPostRows=[];serverPostCount=0}feedUserKey=currentFeedUser;MiniTalk.UI.Shell.setHeader("소식",[headerHeartBadge()]);const D=MiniTalk.UI.Dom,u=user(),shell=D.el("section",{class:"view feed-shell"}),scroller=D.el("div",{class:"feed-view"}),list=D.el("div",{class:"feed-list"});postRows().slice(0,PAGE_SIZE).forEach(post=>list.append(postCard(post)));if(!postRows().length)list.append(D.el("div",{class:"empty-state feed-empty-state"},[D.el("span",{text:"♡"}),D.el("strong",{text:"아직 게시물이 없어요"}),D.el("small",{class:"muted",text:"짧은 글과 사진·영상을 올려보세요."})]));scroller.append(list);shell.append(scroller);if(!u.isGuest)shell.append(D.el("button",{class:"feed-fab",type:"button","aria-label":"게시물 올리기",onclick:compose},[D.el("span",{text:"＋"})]));host.replaceChildren(shell);pagingArmed=false;scroller.addEventListener("pointerdown",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("touchmove",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("wheel",()=>{pagingArmed=true},{passive:true});scroller.addEventListener("scroll",()=>{if(pagingArmed&&scroller.scrollTop+scroller.clientHeight>=scroller.scrollHeight-180)loadOlderPosts()},{passive:true});MiniTalk.UI.DragScroll?.bind?.(scroller);setupLazyMedia(scroller);ensureSub()}
   function youtubePlayer(text){const D=MiniTalk.UI.Dom,id=MiniTalk.Chat.Linkify?.youtubeId?.(text);if(!id)return null;return D.el("div",{class:"feed-youtube-player"},[D.el("iframe",{src:`https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?playsinline=1&rel=0`,title:"YouTube 영상",loading:"lazy",allow:"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",allowfullscreen:true,referrerpolicy:"strict-origin-when-cross-origin"})])}
   function videoPlayButton(host){
     const button=MiniTalk.UI.Dom.el("button",{class:"feed-video-play",type:"button","aria-label":"영상 재생",text:"▶"});

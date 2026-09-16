@@ -9,7 +9,7 @@ MiniTalk.Features.Admin=(()=>{
   function enforceAdminPopupBounds(win,b){const apply=()=>{try{win.resizeTo(b.width,b.height);win.moveTo(b.left,b.top)}catch{}};apply();setTimeout(apply,80);setTimeout(apply,260)}
   MiniTalk.Events.on("rt:command",handleCommand);
   const visible=()=>MiniTalk.AdminSession?.authorized?.()===true;
-  let noticeTimer=0,balanceOwner="",balanceLoaded=false,balanceLoadedAt=0,balanceInFlight=null,balanceMap={},adminPopup=null,adminPopupRoot=null,closingAdminPopup=false,refreshTaskReview=()=>{};
+  let noticeTimer=0,balanceOwner="",balanceGeneration=0,balanceLoaded=false,balanceLoadedAt=0,balanceInFlight=null,balanceMap={},adminPopup=null,adminPopupRoot=null,closingAdminPopup=false,refreshTaskReview=()=>{};
   const BALANCE_REFRESH_MS=15000;
   const pendingCoinRequests=new Map(),PENDING_COIN_STORAGE_KEY="admin.pendingCoinRequests.v1",PENDING_COIN_TTL=10*60*1000;
   function readPendingCoinRequests(){
@@ -58,13 +58,11 @@ MiniTalk.Features.Admin=(()=>{
 
   async function loadBalances(force=false){
     const current=MiniTalk.Store.get("user")||{},owner=String(current.user_id||"");
-    if(owner!==balanceOwner){balanceOwner=owner;balanceLoaded=false;balanceLoadedAt=0;balanceMap={}}
+    if(owner!==balanceOwner){balanceGeneration++;balanceInFlight=null;balanceOwner=owner;balanceLoaded=false;balanceLoadedAt=0;balanceMap={}}
     if(!force&&balanceLoaded&&Date.now()-balanceLoadedAt<BALANCE_REFRESH_MS)return balanceMap;
-    if(balanceInFlight){
-      if(!force)return balanceInFlight;
-      try{await balanceInFlight}catch{}
-    }
-    const request=MiniTalk.AuthApi.adminUserBalances(owner,MiniTalk.AdminSession.requireToken("ADMIN")).then(rows=>{const next={};rows.forEach(row=>next[row.user_id]=Math.floor(Number(row.coin)||0));balanceMap=next;balanceLoaded=true;balanceLoadedAt=Date.now();return balanceMap});
+    if(balanceInFlight)return balanceInFlight;
+    const generation=balanceGeneration;
+    const request=MiniTalk.AuthApi.adminUserBalances(owner,MiniTalk.AdminSession.requireToken("ADMIN")).then(rows=>{if(generation!==balanceGeneration||owner!==String(MiniTalk.Store.get("user")?.user_id||""))return balanceMap;const next={};rows.forEach(row=>next[row.user_id]=MiniTalk.AuthApi.balanceValue(row.coin));balanceMap=next;balanceLoaded=true;balanceLoadedAt=Date.now();return balanceMap});
     balanceInFlight=request;
     try{return await request}finally{if(balanceInFlight===request)balanceInFlight=null}
   }
@@ -109,7 +107,7 @@ MiniTalk.Features.Admin=(()=>{
     if(!MiniTalk.UserDirectory?.loaded?.()){const loading=D.el("section",{class:"tool-card"},[D.el("strong",{text:"권한 갱신 중…"})]);list.append(loading);view.append(list);host.replaceChildren(view);MiniTalk.UserDirectory.refresh().then(()=>{if(isActiveAdminHost(host))render(host)}).catch(error=>{loading.replaceChildren(D.el("strong",{text:"권한을 갱신하지 못했습니다."}),D.el("small",{class:"muted",text:error.message||"Apps Script 배포 상태를 확인하세요."}))});return}
     // v104: 코인 잔액 조회가 느려도 잠금/공지/알람/과제 등 전체 관리자 화면을 막지 않습니다.
     // 잔액은 COIN_REWARD를 선택했을 때만 비동기로 가져오며, 관리자 명령 자체는 즉시 사용할 수 있습니다.
-    const card=D.el("section",{class:"tool-card admin-command-card"}),selected=new Set(),people=users().map(person=>({...person,coin:balanceLoaded?(balanceMap[person.user_id]??0):null}));
+    const card=D.el("section",{class:"tool-card admin-command-card"}),selected=new Set(),people=users().map(person=>({...person,coin:balanceLoaded?(balanceMap[person.user_id]??null):null}));
     card.append(D.el("h3",{text:"대상 사용자"}));
     const controls=D.el("div",{class:"admin-target-controls"}),selectAll=D.el("button",{class:"mini-action",type:"button",text:"전체 선택"}),clearAll=D.el("button",{class:"mini-action",type:"button",text:"선택 해제"}),count=D.el("span",{class:"muted admin-selected-count",text:"0명 선택"});controls.append(selectAll,clearAll,count);
     const search=D.el("input",{class:"search",placeholder:"닉네임 검색","aria-label":"대상 사용자 검색"}),targetList=D.el("div",{class:"admin-target-list"});
@@ -122,7 +120,7 @@ MiniTalk.Features.Admin=(()=>{
     let selectedEffectImage="";const mediaPreview=D.el("img",{class:"admin-effect-preview",src:"assets/ui/quest-stamp.png",alt:"전송 효과 미리보기"}),gallery=D.el("button",{class:"button secondary compact-button",type:"button",text:"이미지 선택"}),camera=D.el("button",{class:"button secondary compact-button",type:"button",text:"카메라 촬영"}),mediaField=D.el("section",{class:"field admin-effect-field hidden"},[D.el("span",{text:"전송할 이미지"}),mediaPreview,D.el("div",{class:"button-row compact-row"},[gallery,camera]),D.el("small",{class:"muted",text:"이미지는 서버에 업로드한 뒤 선택한 사용자 화면 중앙에 표시됩니다."})]);
     const chooseEffectImage=async cameraMode=>{gallery.disabled=camera.disabled=true;try{const payload=await MiniTalk.Chat.Attachments.image({camera:cameraMode});if(!payload)return;if(!payload.imageUrl)throw new Error("이미지 업로드 서버가 URL을 반환하지 않았습니다.");selectedEffectImage=payload.imageUrl;mediaPreview.src=selectedEffectImage;mediaPreview.alt="선택한 이미지 미리보기"}catch(error){Shell.toast(error.message||"이미지를 선택하지 못했습니다.")}finally{gallery.disabled=camera.disabled=false}};gallery.onclick=()=>chooseEffectImage(false);camera.onclick=()=>chooseEffectImage(true);
     let balanceRefreshTimer=0;
-    const applyBalances=()=>{people.forEach(person=>person.coin=balanceMap[person.user_id]??0);if(type.value!=="COIN_REWARD"||!targetList.isConnected)return;targetList.querySelectorAll?.("[data-admin-coin-user]").forEach(node=>{const userId=String(node.dataset.adminCoinUser||""),person=people.find(item=>String(item.user_id)===userId),coin=person?.coin==null?null:Number(person.coin),countNode=node.querySelector("b");if(countNode)countNode.textContent=coin==null?"…":String(coin);node.setAttribute("aria-label",coin==null?"현재 코인 확인 중":`현재 보유 ${coin}코인`)})};
+    const applyBalances=()=>{people.forEach(person=>person.coin=balanceMap[person.user_id]??null);if(type.value!=="COIN_REWARD"||!targetList.isConnected)return;targetList.querySelectorAll?.("[data-admin-coin-user]").forEach(node=>{const userId=String(node.dataset.adminCoinUser||""),person=people.find(item=>String(item.user_id)===userId),coin=person?.coin==null?null:Number(person.coin),countNode=node.querySelector("b");if(countNode)countNode.textContent=coin==null?"…":String(coin);node.setAttribute("aria-label",coin==null?"현재 코인 확인 중":`현재 보유 ${coin}코인`)})};
     const stopBalanceRefresh=()=>{if(balanceRefreshTimer){clearTimeout(balanceRefreshTimer);balanceRefreshTimer=0}};
     const scheduleBalanceRefresh=()=>{stopBalanceRefresh();if(type.value!=="COIN_REWARD"||!targetList.isConnected)return;balanceRefreshTimer=setTimeout(async()=>{balanceRefreshTimer=0;if(type.value!=="COIN_REWARD"||!targetList.isConnected)return;try{await loadBalances(true);applyBalances()}catch(error){console.warn("관리자 코인 잔액 자동 갱신 실패",error)}scheduleBalanceRefresh()},BALANCE_REFRESH_MS)};
     const refreshBalances=async(force=true)=>{if(coinRefresh.dataset.refreshing==="1")return balanceMap;coinRefresh.dataset.refreshing="1";coinRefresh.setAttribute("aria-busy","true");try{await loadBalances(force);applyBalances();return balanceMap}finally{delete coinRefresh.dataset.refreshing;coinRefresh.removeAttribute("aria-busy");scheduleBalanceRefresh()}};

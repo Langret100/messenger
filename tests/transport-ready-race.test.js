@@ -6,7 +6,7 @@ ok(rt.includes('mode="initializing"'),'realtime must distinguish initializing fr
 ok(rt.includes('async function awaitTransport()'),'transport readiness gate missing');
 ok(rt.includes('function deferSubscription(setup)'),'subscription deferral helper missing');
 ok(rt.includes('async function cloudSet(path,value){requireWritableUser();await awaitTransport();'),'cloud writes can fall into local storage during Firebase bootstrap');
-ok(rt.includes('async function cloudTransaction(path,updater){requireWritableUser();await awaitTransport();'),'transactions can fall into local storage during Firebase bootstrap');
+ok(rt.includes('async function cloudTransaction(path,updater,options={}){requireWritableUser();await awaitTransport();'),'transactions can fall into local storage during Firebase bootstrap');
 ok(rt.includes('async function sendMessage(roomId,payload){\n    await awaitTransport();'),'chat send can race Firebase bootstrap');
 ok(rt.includes('requestedMessageRoom=String(roomId)'),'message subscription intent must survive transport bootstrap');
 ok(rt.includes('roomListRequested=true;await awaitTransport();await roomIndexReady'),'group summary subscription must survive transport/index bootstrap');

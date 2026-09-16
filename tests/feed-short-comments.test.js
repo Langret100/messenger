@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f
 const ok=(v,m)=>{if(!v)throw new Error(m)};
 const feed=read('js/features/feed.js'),css=read('css/features/feed-classinfo-weekly.css'),html=read('index.html'),sw=read('sw.js'),app=read('js/app.js');
 ok(feed.includes('MAX_COMMENTS=20')&&feed.includes('COMMENT_LIMIT=60'),'short-comment limits missing');
-ok(feed.includes('function addComment(post,input,button)')&&feed.includes('cloudTransaction(postPath'),'comment transaction missing');
+ok(feed.includes('function addComment(post,input,button)')&&feed.includes('await mutateHeartState(feed=>'),'comment transaction missing');
 ok(feed.includes('function commentsBlock(post)')&&feed.includes('짧게 댓글 달기…'),'inline comment UI missing');
 ok(feed.includes('openCommentComposers')&&feed.includes('toggleCommentComposerFromCard')&&feed.includes('setCommentComposer(card,!comments.classList.contains("compose-open"),true)'),'tap-to-open comment composer missing');
 ok(feed.includes('typeof target.closest!=="function"')&&!feed.includes('target instanceof Element'),'PiP cross-realm comment tap guard missing');
@@ -11,7 +11,7 @@ ok(feed.includes('patchHeart(id,previous)')&&feed.includes('if(!sameComments(pre
 ok(feed.includes('while(rows.length>MAX_COMMENTS)'),'comment cap cleanup missing');
 ok(feed.includes('pendingCommentRequests=new Set()'),'comment submit in-flight guard missing');
 const addStart=feed.indexOf('async function addComment(post,input,button)'),addEnd=feed.indexOf('function commentsBlock(post)',addStart),add=feed.slice(addStart,addEnd);
-const submitStart=add.indexOf('pendingCommentRequests.add(requestKey)'),clearDraft=add.indexOf('input.value="";input.blur?.()'),closeComposer=add.indexOf('setCommentComposer(card,false,false)'),transaction=add.indexOf('await MiniTalk.Realtime.cloudTransaction(postPath');
+const submitStart=add.indexOf('pendingCommentRequests.add(requestKey)'),clearDraft=add.indexOf('input.value="";input.blur?.()'),closeComposer=add.indexOf('setCommentComposer(card,false,false)'),transaction=add.indexOf('await mutateHeartState(feed=>');
 ok(submitStart>=0&&clearDraft>submitStart&&closeComposer>clearDraft&&transaction>closeComposer,'comment composer must clear/close before realtime transaction');
 ok(feed.includes('preserveDraft=composerOpen&&!pendingCommentRequests.has(requestKey)'),'submitted comment can still be restored as a draft by realtime patch');
 ok(feed.includes('pendingCommentRequests.delete(requestKey)'),'comment submit guard is not released');

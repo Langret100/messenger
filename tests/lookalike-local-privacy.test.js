@@ -73,5 +73,11 @@ const catCandidate={title:'File:Domestic cat portrait.jpg',info:{mime:'image/jpe
 const pandaCandidate={title:'File:Giant panda portrait.jpg',info:{mime:'image/jpeg',extmetadata:{ImageDescription:{value:'A giant panda'}}}};
 ok(t.imageCandidateMatch(panda,catCandidate).relevant===false,'unrelated cat image can be selected for panda result');
 ok(t.imageCandidateMatch(panda,pandaCandidate).relevant===true,'matching panda image was rejected');
+// 한 단어만 겹치는 Commons 후보는 제목/설명에 실제 대상이 없으면 거부해야 한다.
+const seal=t.RESULTS.find(row=>row.id==='seal');
+const waxSeal={title:'File:Royal seal of a city.jpg',info:{mime:'image/jpeg',extmetadata:{ImageDescription:{value:'A wax seal used on a historical document'},Categories:{value:'Seals;History'}}}};
+const harborSeal={title:'File:Harbor seal portrait.jpg',info:{mime:'image/jpeg',extmetadata:{ImageDescription:{value:'A harbor seal resting by the sea'}}}};
+ok(t.imageCandidateMatch(seal,waxSeal).relevant===false,'wax seal can be selected for harbor seal result');
+ok(t.imageCandidateMatch(seal,harborSeal).relevant===true,'matching harbor seal image was rejected');
 ok(!code.includes('class:"lookalike-result-fallback",text:result.emoji'),'emoji-only image fallback must not be used');
 console.log('LOOKALIKE_LOCAL_PRIVACY_OK');

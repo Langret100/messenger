@@ -274,16 +274,31 @@ MiniTalk.Tools.LookalikePlay = (() => {
 
   const IMAGE_STOP_WORDS=new Set(["animal","portrait","photo","photograph","flower","flowers","plant","plants","tree","trees","leaf","leaves","bird","macro","var","variety"]);
   const imageWords=value=>String(value||"").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g," ").trim().split(/\s+/).filter(word=>word.length>1&&!IMAGE_STOP_WORDS.has(word));
-  const candidateText=candidate=>{
+  const cleanImageText=value=>String(value||"").replace(/<[^>]*>/g," ").replace(/&[a-z0-9#]+;/gi," ").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g," ");
+  const candidateTexts=candidate=>{
     const meta=candidate?.info?.extmetadata||{};
-    return [candidate?.title,meta.ObjectName?.value,meta.ImageDescription?.value,meta.Categories?.value].map(value=>String(value||"").replace(/<[^>]*>/g," ").replace(/&[a-z0-9#]+;/gi," ")).join(" ").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g," ");
+    const core=[candidate?.title,meta.ObjectName?.value,meta.ImageDescription?.value].map(cleanImageText).join(" ");
+    const categories=cleanImageText(meta.Categories?.value);
+    return {core:` ${core} `,all:` ${core} ${categories} `};
   };
   function imageCandidateMatch(result,candidate){
-    const text=` ${candidateText(candidate)} `,idTokens=imageWords(String(result?.id||"").replace(/-/g," ")),queryTokens=imageWords(result?.query),idMatches=idTokens.filter(token=>text.includes(` ${token} `)).length,queryMatches=queryTokens.filter(token=>text.includes(` ${token} `)).length;
-    const relevant=idTokens.length>=2?idMatches>=Math.min(2,idTokens.length):idTokens.length===1?idMatches>=1:queryMatches>=Math.min(2,queryTokens.length);
-    const fallbackRelevant=!relevant&&queryTokens.length>=2&&queryMatches>=2;
-    const score=idMatches*8+queryMatches*3+(text.includes(` ${queryTokens.join(" ")} `)?6:0);
-    return {relevant:relevant||fallbackRelevant,score,idMatches,queryMatches};
+    /* Commons 검색은 같은 단어가 들어간 사람 이름·문장·문장(紋章) 사진도 섞일 수 있습니다.
+       결과명과 사진이 어긋나는 것보다 사진을 생략하는 편이 낫기 때문에, 카테고리 한 단어만
+       맞는 후보는 쓰지 않고 제목/객체명/설명에서 실제 검색 대상 토큰이 확인된 것만 허용합니다. */
+    const {core,all}=candidateTexts(candidate),idTokens=imageWords(String(result?.id||"").replace(/-/g," ")),queryTokens=imageWords(result?.query);
+    const coreIdMatches=idTokens.filter(token=>core.includes(` ${token} `)).length,coreQueryMatches=queryTokens.filter(token=>core.includes(` ${token} `)).length;
+    const allIdMatches=idTokens.filter(token=>all.includes(` ${token} `)).length,allQueryMatches=queryTokens.filter(token=>all.includes(` ${token} `)).length;
+    let relevant=false;
+    if(queryTokens.length>=2){
+      const required=Math.min(2,queryTokens.length);
+      relevant=coreQueryMatches>=required || (coreQueryMatches>=1&&allQueryMatches>=required);
+    }else if(queryTokens.length===1){
+      relevant=coreQueryMatches===1;
+    }else if(idTokens.length){
+      relevant=coreIdMatches>=Math.min(2,idTokens.length);
+    }
+    const score=coreQueryMatches*12+coreIdMatches*10+allQueryMatches*3+allIdMatches*2+(queryTokens.length&&core.includes(` ${queryTokens.join(" ")} `)?10:0);
+    return {relevant,score,idMatches:allIdMatches,queryMatches:allQueryMatches,coreIdMatches,coreQueryMatches};
   }
   async function fetchCommonsCandidates(query,myRun){
     const params=new URLSearchParams({action:"query",format:"json",origin:"*",generator:"search",gsrnamespace:"6",gsrlimit:"24",gsrsearch:query,prop:"imageinfo",iiprop:"url|mime|extmetadata",iiurlwidth:"900"});

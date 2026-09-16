@@ -5,6 +5,7 @@
 MiniTalk.Tasks = MiniTalk.Tasks || {};
 MiniTalk.Tasks.DailyMathQuest = (() => {
   const STORAGE_KEY = "tasks.dailyMathQuest";
+  const SEEN_STORAGE_KEY = "tasks.dailyMathQuestSeen";
   const QUESTIONS_PER_MISSION = 5;
   const MISSIONS = [
     { id: "addition", icon: "+", title: "덧셈", description: "세 자리 수까지 더하기" },
@@ -21,6 +22,29 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
 
   function userId() {
     return MiniTalk.Store.get("user")?.user_id || "guest";
+  }
+
+  function loadDailySeen() {
+    const base={date:dateKey(),userId:userId(),missions:{}};
+    const saved=MiniTalk.Persistence.get(SEEN_STORAGE_KEY,null);
+    if(!saved||saved.date!==base.date||saved.userId!==base.userId)return base;
+    const missions={};
+    MISSIONS.forEach(mission=>{missions[mission.id]=Array.isArray(saved.missions?.[mission.id])?saved.missions[mission.id].map(String).filter(Boolean).slice(-240):[]});
+    return {...base,missions};
+  }
+
+  function saveDailySeen(state){MiniTalk.Persistence.set(SEEN_STORAGE_KEY,state)}
+
+  function remainingQuestionsAreFresh(items,startIndex,seenKeys){
+    const local=new Set();
+    for(let index=startIndex;index<QUESTIONS_PER_MISSION;index+=1){const key=visibleProblemKey(items[index]);if(!key||seenKeys.has(key)||local.has(key))return false;local.add(key)}
+    return true;
+  }
+
+  function firstFreshVariant(missionId,seenKeys,startIndex=0,startVariant=0){
+    let candidate=Math.max(0,Number(startVariant)||0);
+    for(let guard=0;guard<512;guard+=1,candidate+=1){const items=generate(missionId,candidate);if(remainingQuestionsAreFresh(items,startIndex,seenKeys))return candidate}
+    return -1;
   }
 
   function emptyProgress() {
@@ -254,10 +278,10 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
   function nextVariant(missionId, questionIndex, currentItem, currentVariant, seenKeys = new Set()) {
     const currentPosition = correctPosition(missionId, questionIndex, currentVariant);
     let candidate = Math.max(0, Number(currentVariant) || 0) + 1;
-    for (let guard = 0; guard < 64; guard += 1, candidate += 1) {
+    for (let guard = 0; guard < 512; guard += 1, candidate += 1) {
       const items = generate(missionId, candidate);
       const nextItem = items[questionIndex];
-      if (nextItem && !seenKeys.has(visibleProblemKey(nextItem)) && visibleProblemKey(nextItem) !== visibleProblemKey(currentItem) && correctPosition(missionId, questionIndex, candidate) !== currentPosition) return candidate;
+      if (nextItem && !seenKeys.has(visibleProblemKey(nextItem)) && visibleProblemKey(nextItem) !== visibleProblemKey(currentItem) && correctPosition(missionId, questionIndex, candidate) !== currentPosition && remainingQuestionsAreFresh(items,questionIndex,seenKeys)) return candidate;
     }
     return candidate;
   }
@@ -317,11 +341,15 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     const D = MiniTalk.UI.Dom;
     const body = D.el("div", { class: "quest-solver modal-stack" });
     const progress = loadProgress();
+    const dailySeen=loadDailySeen();
+    const seenProblems = new Set();
+    (dailySeen.missions?.[missionId]||[]).forEach(key=>seenProblems.add(key));
     let variant = 0;
+    const freshStart=firstFreshVariant(missionId,seenProblems,0,0);
+    if(freshStart<0){seenProblems.clear();dailySeen.missions[missionId]=[];saveDailySeen(dailySeen)}else variant=freshStart;
     let questions = generate(missionId, variant);
     let wrongCount = 0;
     let sessionCorrect = 0;
-    const seenProblems = new Set();
 
     function renderQuestion() {
       const index = sessionCorrect;
@@ -333,6 +361,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
 
       const current = questions[index];
       seenProblems.add(visibleProblemKey(current));
+      dailySeen.missions[missionId]=[...seenProblems].slice(-240);saveDailySeen(dailySeen);
       const feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" });
       const choiceGrid = D.el("div", { class: "quest-choice-grid", role: "group", "aria-label": "정답 보기" });
       let answerLocked = false;
@@ -418,6 +447,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
 
   function resetForTests() {
     MiniTalk.Persistence.remove(STORAGE_KEY);
+    MiniTalk.Persistence.remove(SEEN_STORAGE_KEY);
   }
 
   return { render, generate, choices, loadProgress, dateKey, missions: () => MISSIONS.slice(), resetForTests };

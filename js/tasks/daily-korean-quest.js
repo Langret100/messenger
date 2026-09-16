@@ -5,6 +5,7 @@
 MiniTalk.Tasks = MiniTalk.Tasks || {};
 MiniTalk.Tasks.DailyKoreanQuest = (() => {
   const STORAGE_KEY = "tasks.dailyKoreanQuest";
+  const SEEN_STORAGE_KEY = "tasks.dailyKoreanQuestSeen";
   const QUESTIONS_PER_MISSION = 5;
   const MISSIONS = [
     { id: "spelling", icon: "가", title: "맞춤법", description: "바르게 쓴 낱말 찾기" },
@@ -396,6 +397,8 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
     return MiniTalk.Tasks.DailyQuestClock.dateKey(current);
   }
   const userId = () => MiniTalk.Store.get("user")?.user_id || "guest";
+  function loadDailySeen(){const base={date:dateKey(),userId:userId(),missions:{}};const saved=MiniTalk.Persistence.get(SEEN_STORAGE_KEY,null);if(!saved||saved.date!==base.date||saved.userId!==base.userId)return base;const missions={};MISSIONS.forEach(mission=>{missions[mission.id]=Array.isArray(saved.missions?.[mission.id])?saved.missions[mission.id].map(String).filter(Boolean).slice(-240):[]});return {...base,missions}}
+  function saveDailySeen(state){MiniTalk.Persistence.set(SEEN_STORAGE_KEY,state)}
   function hash(text) { let value = 2166136261; for (const char of text) { value ^= char.charCodeAt(0); value = Math.imul(value, 16777619); } return value >>> 0; }
   function random(seed) { let state = seed >>> 0; return () => { state += 0x6D2B79F5; let value = state; value = Math.imul(value ^ value >>> 15, value | 1); value ^= value + Math.imul(value ^ value >>> 7, value | 61); return ((value ^ value >>> 14) >>> 0) / 4294967296; }; }
   function correctPosition(missionId, questionIndex = 0, variant = 0) { const rng=random(hash(`${dateKey()}|${userId()}|${missionId}|${questionIndex}|${variant}|answer-position-independent-v2`));return Math.floor(rng()*4)}
@@ -450,7 +453,9 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
 
   function problemKey(item){return `${item?.instruction||""}|${item?.question||""}|${item?.answer||""}`}
   function visibleProblemKey(item){return `${String(item?.instruction||"").replace(/\s+/g," ").trim()}|${String(item?.question||"").replace(/\s+/g," ").trim()}`}
-  function nextVariant(missionId,questionIndex,currentItem,currentVariant,seenKeys=new Set()){const currentPosition=currentItem?.choices?.indexOf(currentItem.answer)??correctPosition(missionId,questionIndex,currentVariant);let candidate=Math.max(0,Number(currentVariant)||0)+1;for(let guard=0;guard<64;guard+=1,candidate+=1){const items=generate(missionId,candidate),nextItem=items[questionIndex],nextPosition=nextItem?.choices?.indexOf(nextItem.answer);if(nextItem&&!seenKeys.has(visibleProblemKey(nextItem))&&visibleProblemKey(nextItem)!==visibleProblemKey(currentItem)&&nextPosition!==currentPosition)return candidate}return candidate}
+  function remainingQuestionsAreFresh(items,startIndex,seenKeys){const local=new Set();for(let index=startIndex;index<QUESTIONS_PER_MISSION;index+=1){const key=visibleProblemKey(items[index]);if(!key||seenKeys.has(key)||local.has(key))return false;local.add(key)}return true}
+  function firstFreshVariant(missionId,seenKeys,startIndex=0,startVariant=0){let candidate=Math.max(0,Number(startVariant)||0);for(let guard=0;guard<512;guard+=1,candidate+=1){const items=generate(missionId,candidate);if(remainingQuestionsAreFresh(items,startIndex,seenKeys))return candidate}return -1}
+  function nextVariant(missionId,questionIndex,currentItem,currentVariant,seenKeys=new Set()){const currentPosition=currentItem?.choices?.indexOf(currentItem.answer)??correctPosition(missionId,questionIndex,currentVariant);let candidate=Math.max(0,Number(currentVariant)||0)+1;for(let guard=0;guard<512;guard+=1,candidate+=1){const items=generate(missionId,candidate),nextItem=items[questionIndex],nextPosition=nextItem?.choices?.indexOf(nextItem.answer);if(nextItem&&!seenKeys.has(visibleProblemKey(nextItem))&&visibleProblemKey(nextItem)!==visibleProblemKey(currentItem)&&nextPosition!==currentPosition&&remainingQuestionsAreFresh(items,questionIndex,seenKeys))return candidate}return candidate}
 
   function render(onProgress) {
     const D = MiniTalk.UI.Dom, guest = Boolean(MiniTalk.Store.get("user")?.isGuest), progress = loadProgress(), grid = D.el("div", { class: "daily-quest-grid" });syncProgress(onProgress);
@@ -471,12 +476,12 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
   function openMission(missionId, onProgress) {
     if (MiniTalk.Store.get("user")?.isGuest) { MiniTalk.UI.Shell.toast("게스트는 과제를 볼 수만 있어요.");return; }
     const mission = MISSIONS.find(item => item.id === missionId); if (!mission) return;
-    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), progress = loadProgress();
-    let variant=0,questions=generate(missionId,variant),wrongCount=0,sessionCorrect=0;const seenProblems=new Set();
+    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), progress = loadProgress(),dailySeen=loadDailySeen();
+    const seenProblems=new Set();(dailySeen.missions?.[missionId]||[]).forEach(key=>seenProblems.add(key));let variant=0;const freshStart=firstFreshVariant(missionId,seenProblems,0,0);if(freshStart<0){seenProblems.clear();dailySeen.missions[missionId]=[];saveDailySeen(dailySeen)}else variant=freshStart;let questions=generate(missionId,variant),wrongCount=0,sessionCorrect=0;
     function renderQuestion() {
       const index = sessionCorrect; body.replaceChildren();
       if (index >= 5 || progress.completed[missionId]) return renderComplete();
-      const current = questions[index];seenProblems.add(visibleProblemKey(current));const feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" }), choiceGrid = D.el("div", { class: "quest-choice-grid korean-choice-grid", role: "group", "aria-label": "정답 보기" });
+      const current = questions[index];seenProblems.add(visibleProblemKey(current));dailySeen.missions[missionId]=[...seenProblems].slice(-240);saveDailySeen(dailySeen);const feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" }), choiceGrid = D.el("div", { class: "quest-choice-grid korean-choice-grid", role: "group", "aria-label": "정답 보기" });
       let answerLocked=false;
       current.choices.forEach(answer => { const button = D.el("button", { class: "quest-choice korean-choice", type: "button", text: answer }); button.onclick = () => submit(answer, button); choiceGrid.append(button); });
       function submit(answer, selected) {
@@ -497,6 +502,6 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
     MiniTalk.UI.Shell.modal(`${mission.title} 미션`,body);renderQuestion();
   }
 
-  function resetForTests() { MiniTalk.Persistence.remove(STORAGE_KEY); }
+  function resetForTests() { MiniTalk.Persistence.remove(STORAGE_KEY); MiniTalk.Persistence.remove(SEEN_STORAGE_KEY); }
   return { render, generate, loadProgress, dateKey, missions: () => MISSIONS.slice(), resetForTests };
 })();

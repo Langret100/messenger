@@ -42,7 +42,7 @@ MiniTalk.Chat.Attachments=(()=>{
   }
   function uploadErrorMessage(code){
     const raw=String(code||"");
-    if(/public_sharing_(failed|blocked)|공유/i.test(raw))return "파일 공개 권한을 설정하지 못했습니다. Google Drive 공유 설정을 확인해주세요.";
+    if(/upload_folder_sharing_blocked|upload_folder_not_public|public_sharing_(failed|blocked)|공유/i.test(raw))return "Google Drive 업로드 폴더를 링크 공개로 설정하지 못했습니다. Apps Script 실행 계정의 Drive 공유 정책을 확인해주세요.";
     if(/too_large/i.test(raw))return "파일이 업로드 서버의 허용 크기를 초과했습니다.";
     if(/empty_data|invalid_data/i.test(raw))return "파일 데이터를 서버로 전달하지 못했습니다. 다시 시도해주세요.";
     return raw&&raw!=="false"?raw:"파일 업로드에 실패했습니다.";
@@ -53,7 +53,7 @@ MiniTalk.Chat.Attachments=(()=>{
     const res=await fetch(endpoint,{method:"POST",body,cache:"no-store"});const txt=await res.text();let j={};try{j=JSON.parse(txt||"{}") }catch{}const url=j.url||j.file_url||j.fileUrl||j.image_url||j.link||j.downloadUrl||"";if(!res.ok||j.ok===false||!url)throw new Error(uploadErrorMessage(j.error||(!res.ok?`HTTP ${res.status}`:"")));return url;
   }
   async function image({camera=false}={}){const file=await pick({accept:"image/*",capture:camera});if(!file)return null;const dataUrl=await compressImage(file);return{type:"image",image:dataUrl,text:"[사진]",inlineImage:true}}
-  async function uploadFile(f){if(!f)return null;if(f.size>MAX_FILE)throw new Error("파일은 5MB 이하만 보낼 수 있습니다.");const data=await readData(f),saved=await MiniTalk.Realtime.saveChatFile(f,data);return{type:"file",fileRef:saved.id,fileName:saved.name||f.name,fileMime:saved.mime||f.type||"application/octet-stream",fileSize:saved.size||f.size||0,text:`[파일] ${saved.name||f.name}`,uploadState:"ready"}}
+  async function uploadFile(f){if(!f)return null;if(f.size>MAX_FILE)throw new Error("파일은 5MB 이하만 보낼 수 있습니다.");const data=await readData(f);const url=await upload("social_upload_file",f,data);return{type:"file",fileUrl:url,fileName:f.name,text:`[파일] ${f.name}`,uploadState:"ready"}}
   async function file(){const f=await pick();if(!f)return null;return uploadFile(f)}
   async function files(handlers){
     const selected=await pick({multiple:true});if(!selected.length)return{sent:0,total:0,failed:[]};

@@ -71,8 +71,8 @@ function handleSocialUploadImage_(e) {
     // ★ 폴더 ID 우선순위: 요청 파라미터(folderId 등) > SOCIAL_UPLOAD_FOLDER_ID
     var folderId = SOCIAL_UPLOAD_FOLDER_ID;
  
-    var file = _saveToDrive_(blob, folderId);
-    _makePublic_(file);
+    var folder = _getPublicUploadFolder_(folderId);
+    var file = folder.createFile(blob);
  
     return jsonResponse_({
       ok: true,
@@ -108,8 +108,8 @@ function handleSocialUploadFile_(e) {
     // ★ 폴더 ID 우선순위: 요청 파라미터(folderId 등) > SOCIAL_UPLOAD_FOLDER_ID
     var folderId = SOCIAL_UPLOAD_FOLDER_ID;
  
-    var file = _saveToDrive_(blob, folderId);
-    _makePublic_(file);
+    var folder = _getPublicUploadFolder_(folderId);
+    var file = folder.createFile(blob);
  
     return jsonResponse_({
       ok: true,
@@ -210,36 +210,42 @@ function _pickFolderId_(p) {
   ).trim();
 }
  
-function _saveToDrive_(blob, folderId) {
-  if (folderId) {
-    var folder = DriveApp.getFolderById(folderId);
-    return folder.createFile(blob);
+function _getPublicUploadFolder_(folderId) {
+  if (!folderId) throw new Error("upload_folder_not_configured");
+  var folder = DriveApp.getFolderById(folderId);
+
+  // 파일을 만든 뒤 개별 공유 권한이 전파되기를 기다리지 않습니다.
+  // 업로드 전 전용 폴더 자체를 링크 공개로 보장해 새 파일이 처음부터 접근 가능하도록 합니다.
+  var access = folder.getSharingAccess();
+  if (access !== DriveApp.Access.ANYONE_WITH_LINK && access !== DriveApp.Access.ANYONE) {
+    try {
+      folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      access = folder.getSharingAccess();
+    } catch (e) {
+      throw new Error("upload_folder_sharing_blocked: " + String(e));
+    }
   }
-  // folderId가 없으면 루트(가능하면 이 경로는 타지 않도록 위에서 기본값을 채움)
-  return DriveApp.createFile(blob);
+  if (access !== DriveApp.Access.ANYONE_WITH_LINK && access !== DriveApp.Access.ANYONE) {
+    throw new Error("upload_folder_not_public");
+  }
+  return folder;
 }
- 
+
+
 function _makePublic_(file) {
-  // 링크가 있는 사람 누구나 보기가 실제 적용된 경우에만 성공으로 처리합니다.
+  // 광고 이미지 기존 동작 유지. 소통 파일 업로드에서는 사용하지 않습니다.
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    var access = file.getSharingAccess();
-    if (access !== DriveApp.Access.ANYONE_WITH_LINK && access !== DriveApp.Access.ANYONE) {
-      throw new Error("public_sharing_failed");
-    }
-    return true;
   } catch (e) {
-    Logger.log("setSharing 실패: " + e);
-    throw new Error("public_sharing_blocked: " + String(e));
+    Logger.log("setSharing 실패(무시): " + e);
   }
 }
- 
+
 function _directViewUrl_(fileId) {
-  // 채팅 이미지의 <img src>에 사용할 직접 표시 주소
+  // <img src>로 바로 표시 가능한 형태
   return "https://drive.google.com/uc?export=view&id=" + encodeURIComponent(String(fileId));
 }
 
 function _shareViewUrl_(fileId) {
-  // 일반 파일은 uc?export=view 대신 Drive의 공유 보기 페이지로 엽니다.
   return "https://drive.google.com/file/d/" + encodeURIComponent(String(fileId)) + "/view?usp=sharing";
 }

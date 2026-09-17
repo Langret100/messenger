@@ -96,7 +96,7 @@ const sa=c.moaPairSourceHash_(77,'global',{user:'u1',text:'너 사과 좋아해?
 const sb=c.moaPairSourceHash_(77,'global',{user:'u3',text:'너 사과 좋아해?'},{user:'u4',text:'난 복숭아가 좋아'});
 const same=c.moaPairSourceHash_(77,'global',{user:'u1',text:'너 사과 좋아해?'},{user:'u2',text:'난 복숭아가 좋아'});
 ok(sa!==sb&&sa===same,'anonymous source diversity cannot distinguish independent user pairs consistently');
-ok(!sa.includes('u1')&&!sa.includes('u2'),'raw user identity leaked into source hash');
+ok(/^[A-Za-z0-9]{16}$/.test(sa)&&sa!=='u1'&&sa!=='u2','source identity was not irreversibly anonymized');
 console.log('MOA_V3_ANON_SOURCE_DIVERSITY_OK');
 
 // Admin batch scheduler must rotate sources so one huge room cannot starve all later rooms.

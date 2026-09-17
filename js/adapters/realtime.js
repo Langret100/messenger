@@ -518,7 +518,7 @@ MiniTalk.Realtime=(()=>{
       roomId,user_id:user.user_id,nickname:user.nickname,
       type:payload.type||(payload.fileUrl?"file":(payload.image||payload.imageUrl?"image":"text")),
       text:payload.text||"",image:payload.image||null,imageUrl:payload.imageUrl||null,
-      fileUrl:payload.fileUrl||null,fileName:payload.fileName||null,uploadState:payload.uploadState||null,emoticon:payload.emoticon||null,game:payload.game&&typeof payload.game==="object"?payload.game:null,clientTs:Date.now(),ts:Date.now()
+      fileUrl:payload.fileUrl||null,fileRef:payload.fileRef||null,fileName:payload.fileName||null,fileMime:payload.fileMime||null,fileSize:Number(payload.fileSize)||0,uploadState:payload.uploadState||null,emoticon:payload.emoticon||null,game:payload.game&&typeof payload.game==="object"?payload.game:null,clientTs:Date.now(),ts:Date.now()
     };
     const preview=roomMessagePreview(message);
     if(mode==="firebase"){
@@ -534,10 +534,36 @@ MiniTalk.Realtime=(()=>{
   async function updateMessage(roomId,messageId,patch){
     await awaitTransport();requireWritableUser();
     const room=String(roomId||""),id=String(messageId||"");if(!room||!id)throw new Error("수정할 메시지가 없습니다.");
-    const allowed={};for(const key of ["text","fileUrl","fileName","uploadState"]){if(Object.prototype.hasOwnProperty.call(patch||{},key))allowed[key]=patch[key]??null}
+    const allowed={};for(const key of ["text","fileUrl","fileRef","fileName","fileMime","fileSize","uploadState"]){if(Object.prototype.hasOwnProperty.call(patch||{},key))allowed[key]=patch[key]??null}
     if(mode==="firebase"){await db.ref(`${messagesPath(room)}/${id}`).update(allowed);return{id,...allowed}}
     const key=`messages.${room}`,list=localGet(key,[]),index=list.findIndex(message=>String(message?.id||"")===id);if(index<0)throw new Error("수정할 메시지를 찾지 못했습니다.");list[index]={...list[index],...allowed};localSet(key,list);broadcast("message",list[index]);return list[index];
   }
+  const CHAT_FILE_ROOT="messages/__chat_files__";
+  async function saveChatFile(file,dataUrl){
+    await awaitTransport();requireWritableUser();
+    if(mode!=="firebase"||!db)throw new Error("파일 전송 서버에 연결되지 않았습니다.");
+    const raw=String(dataUrl||""),comma=raw.indexOf(","),data=comma>=0?raw.slice(comma+1):raw;
+    if(!data)throw new Error("파일 데이터가 비어 있습니다.");
+    const id=crypto.randomUUID(),value={user_id:user.user_id,nickname:user.nickname,ts:firebase.database.ServerValue.TIMESTAMP,name:String(file?.name||"file").slice(0,120),mime:String(file?.type||"application/octet-stream").slice(0,120),size:Number(file?.size)||0,data};
+    await db.ref(`${CHAT_FILE_ROOT}/${id}`).set(value);
+    return{id,name:value.name,mime:value.mime,size:value.size};
+  }
+  async function removeChatFile(fileRef){
+    await awaitTransport();if(mode!=="firebase"||!db||!fileRef)return false;
+    await db.ref(`${CHAT_FILE_ROOT}/${String(fileRef)}`).remove();return true;
+  }
+  async function loadChatFile(fileRef){
+    await awaitTransport();if(mode!=="firebase"||!db)throw new Error("파일 서버에 연결되지 않았습니다.");
+    const id=String(fileRef||"");if(!id)throw new Error("파일 정보가 없습니다.");
+    const snap=await db.ref(`${CHAT_FILE_ROOT}/${id}`).once("value"),value=snap.val();
+    if(!value?.data)throw new Error("파일을 찾지 못했습니다.");
+    return{id,name:String(value.name||"file"),mime:String(value.mime||"application/octet-stream"),size:Number(value.size)||0,data:String(value.data)};
+  }
+  async function downloadChatFile(fileRef,fallbackName="file"){
+    const value=await loadChatFile(fileRef),binary=atob(value.data),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i+=1)bytes[i]=binary.charCodeAt(i);
+    const blob=new Blob([bytes],{type:value.mime||"application/octet-stream"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=value.name||fallbackName||"file";a.rel="noopener";a.style.display="none";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);return true;
+  }
+
   async function getRoom(roomId){
     await awaitTransport();
     if(mode==="firebase"){const snap=await db.ref(`${MiniTalkConfig.paths.rooms}/${roomId}`).once("value");return snap.exists()?normalizeRoom(roomId,snap.val()||{}):null}
@@ -743,5 +769,5 @@ MiniTalk.Realtime=(()=>{
     })
   }
 
-  return{init,cleanup,startRoomListSubscription,stopRoomListSubscription,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,loadOlderMessages,sendMessage,updateMessage,removeGameMessages,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,clearRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,notifyCommandTargets,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,removeShopInventory,pruneShopInventoryMirror,giftShopInventory,cloudGet,cloudKeys,cloudSet,cloudUpdate,cloudRemove,cloudPush,cloudTransaction,cloudQueryChildren,cloudSubscribe,cloudSubscribeChildren,cloudSubscribeDelta,serverTimestamp};
+  return{init,cleanup,startRoomListSubscription,stopRoomListSubscription,getMode:()=>mode,isFirebaseAuthenticated:()=>firebaseAuthenticated,getConnectionError:()=>connectionError,subscribeMessages,unsubscribeMessages,loadOlderMessages,sendMessage,updateMessage,saveChatFile,removeChatFile,loadChatFile,downloadChatFile,removeGameMessages,createRoom,getRoom,joinRoom,isRoomMember,updateRoomPassword,clearRoomPassword,removeRoomMember,inviteRoomMembers,leaveRoom,saveProfile,sendCommand,sendCommands,notifyCommandTargets,assignTask,assignTasks,submitTask,addShopInventory,useShopInventory,removeShopInventory,pruneShopInventoryMirror,giftShopInventory,cloudGet,cloudKeys,cloudSet,cloudUpdate,cloudRemove,cloudPush,cloudTransaction,cloudQueryChildren,cloudSubscribe,cloudSubscribeChildren,cloudSubscribeDelta,serverTimestamp};
 })();

@@ -7,15 +7,15 @@
 MiniTalk.Chat=MiniTalk.Chat||{};
 MiniTalk.Chat.Attachments=(()=>{
   const MAX_FILE=5*1024*1024;
-  function pick({accept="*/*",capture=false}={}){return new Promise(resolve=>{
+  function pick({accept="*/*",capture=false,multiple=false}={}){return new Promise(resolve=>{
     const doc=MiniTalk.UI?.Dom?.doc?.()||document,win=doc.defaultView||window,input=doc.createElement("input");let done=false,focusTimer=0;
-    input.type="file";input.accept=accept;if(capture)input.setAttribute("capture","environment");input.style.display="none";doc.body.append(input);
-    const finish=file=>{if(done)return;done=true;clearTimeout(focusTimer);win.removeEventListener("focus",onFocus,true);input.remove();resolve(file||null)};
-    const onFocus=()=>{clearTimeout(focusTimer);focusTimer=setTimeout(()=>{if(!done&&!input.files?.length)finish(null)},450)};
-    input.addEventListener("change",()=>finish(input.files?.[0]||null),{once:true});
-    input.addEventListener("cancel",()=>finish(null),{once:true});
+    input.type="file";input.accept=accept;input.multiple=!!multiple;if(capture)input.setAttribute("capture","environment");input.style.display="none";doc.body.append(input);
+    const finish=files=>{if(done)return;done=true;clearTimeout(focusTimer);win.removeEventListener("focus",onFocus,true);input.remove();const list=Array.from(files||[]);resolve(multiple?list:(list[0]||null))};
+    const onFocus=()=>{clearTimeout(focusTimer);focusTimer=setTimeout(()=>{if(!done&&!input.files?.length)finish([])},450)};
+    input.addEventListener("change",()=>finish(input.files),{once:true});
+    input.addEventListener("cancel",()=>finish([]),{once:true});
     win.addEventListener("focus",onFocus,true);
-    try{input.click()}catch(error){finish(null);throw error}
+    try{input.click()}catch(error){finish([]);throw error}
   })}
   const readData=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("파일을 읽지 못했습니다."));r.readAsDataURL(file)});
   const CHAT_IMAGE_DATA_LIMIT=60*1024,CHAT_IMAGE_BLOB_TARGET=44*1024;
@@ -40,12 +40,40 @@ MiniTalk.Chat.Attachments=(()=>{
     }
     throw new Error("사진을 Firebase 저장 기준 60KB 이하로 줄이지 못했습니다. 다른 사진을 선택해주세요.");
   }
+  function uploadErrorMessage(code){
+    const raw=String(code||"");
+    if(/public_sharing_(failed|blocked)|공유/i.test(raw))return "파일 공개 권한을 설정하지 못했습니다. Google Drive 공유 설정을 확인해주세요.";
+    if(/too_large/i.test(raw))return "파일이 업로드 서버의 허용 크기를 초과했습니다.";
+    if(/empty_data|invalid_data/i.test(raw))return "파일 데이터를 서버로 전달하지 못했습니다. 다시 시도해주세요.";
+    return raw&&raw!=="false"?raw:"파일 업로드에 실패했습니다.";
+  }
   async function upload(mode,file,dataUrl){
     const endpoint=MiniTalkConfig.sheetUrl;if(!endpoint)throw new Error("업로드 서버가 설정되지 않았습니다.");
     const body=new URLSearchParams();body.set("mode",mode);body.set("mime",file.type||"application/octet-stream");body.set("filename",file.name||"file");body.set("size",String(file.size||0));body.set("data",String(dataUrl||"").split(",").pop());const u=MiniTalk.Store.get("user")||{};body.set("user_id",u.user_id||"");body.set("nickname",u.nickname||"");body.set("ts",String(Date.now()));
-    const res=await fetch(endpoint,{method:"POST",body});const txt=await res.text();let j={};try{j=JSON.parse(txt||"{}") }catch{}const url=j.url||j.file_url||j.fileUrl||j.image_url||j.link||j.downloadUrl||"";if(!res.ok||!url)throw new Error(j.error||"업로드 서버가 파일 URL을 반환하지 않았습니다.");return url;
+    const res=await fetch(endpoint,{method:"POST",body,cache:"no-store"});const txt=await res.text();let j={};try{j=JSON.parse(txt||"{}") }catch{}const url=j.url||j.file_url||j.fileUrl||j.image_url||j.link||j.downloadUrl||"";if(!res.ok||j.ok===false||!url)throw new Error(uploadErrorMessage(j.error||(!res.ok?`HTTP ${res.status}`:"")));return url;
   }
   async function image({camera=false}={}){const file=await pick({accept:"image/*",capture:camera});if(!file)return null;const dataUrl=await compressImage(file);return{type:"image",image:dataUrl,text:"[사진]",inlineImage:true}}
-  async function file(){const f=await pick();if(!f)return null;if(f.size>MAX_FILE)throw new Error("파일은 5MB 이하만 보낼 수 있습니다.");const data=await readData(f);const url=await upload("social_upload_file",f,data);return{type:"file",fileUrl:url,fileName:f.name,text:`[파일] ${f.name}`}}
-  return{image,file};
+  async function uploadFile(f){if(!f)return null;if(f.size>MAX_FILE)throw new Error("파일은 5MB 이하만 보낼 수 있습니다.");const data=await readData(f);const url=await upload("social_upload_file",f,data);return{type:"file",fileUrl:url,fileName:f.name,text:`[파일] ${f.name}`,uploadState:"ready"}}
+  async function file(){const f=await pick();if(!f)return null;return uploadFile(f)}
+  async function files(handlers){
+    const selected=await pick({multiple:true});if(!selected.length)return{sent:0,total:0,failed:[]};
+    const oversized=selected.filter(f=>f.size>MAX_FILE);if(oversized.length)throw new Error(`파일은 각각 5MB 이하만 보낼 수 있습니다: ${oversized.map(f=>f.name).join(", ")}`);
+    const legacy=typeof handlers==="function"?handlers:null,onStart=!legacy&&handlers?.onStart,onReady=!legacy&&handlers?.onReady,onFail=!legacy&&handlers?.onFail;
+    let sent=0;const failed=[];
+    for(let index=0;index<selected.length;index+=1){
+      const f=selected[index];let token=null;
+      try{
+        if(typeof onStart==="function")token=await onStart(f,{index,total:selected.length});
+        const payload=await uploadFile(f);
+        if(legacy)await legacy(payload,{file:f,index,total:selected.length});
+        else if(typeof onReady==="function")await onReady(payload,{file:f,index,total:selected.length,token});
+        sent+=1;
+      }catch(error){
+        const item={name:f.name,error:error?.message||"업로드 실패"};failed.push(item);
+        if(typeof onFail==="function")try{await onFail(error,{file:f,index,total:selected.length,token})}catch(_){}
+      }
+    }
+    return{sent,total:selected.length,failed};
+  }
+  return{image,file,files,uploadFile,compressImage,CHAT_IMAGE_DATA_LIMIT};
 })();

@@ -113,7 +113,7 @@ function handleSocialUploadFile_(e) {
  
     return jsonResponse_({
       ok: true,
-      url: _directViewUrl_(file.getId()),
+      url: _shareViewUrl_(file.getId()),
       file_id: file.getId(),
       name: file.getName()
     });
@@ -220,15 +220,26 @@ function _saveToDrive_(blob, folderId) {
 }
  
 function _makePublic_(file) {
-  // 링크가 있는 사람 누구나 보기
+  // 링크가 있는 사람 누구나 보기가 실제 적용된 경우에만 성공으로 처리합니다.
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var access = file.getSharingAccess();
+    if (access !== DriveApp.Access.ANYONE_WITH_LINK && access !== DriveApp.Access.ANYONE) {
+      throw new Error("public_sharing_failed");
+    }
+    return true;
   } catch (e) {
-    Logger.log("setSharing 실패(무시): " + e);
+    Logger.log("setSharing 실패: " + e);
+    throw new Error("public_sharing_blocked: " + String(e));
   }
 }
  
 function _directViewUrl_(fileId) {
-  // <img src>로 바로 표시 가능한 형태
+  // 채팅 이미지의 <img src>에 사용할 직접 표시 주소
   return "https://drive.google.com/uc?export=view&id=" + encodeURIComponent(String(fileId));
+}
+
+function _shareViewUrl_(fileId) {
+  // 일반 파일은 uc?export=view 대신 Drive의 공유 보기 페이지로 엽니다.
+  return "https://drive.google.com/file/d/" + encodeURIComponent(String(fileId)) + "/view?usp=sharing";
 }

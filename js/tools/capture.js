@@ -28,12 +28,15 @@ MiniTalk.Tools.Capture = (() => {
 
       const scale = Math.min(1, 1200 / Math.max(width, height));
       const canvas = MiniTalk.UI.Dom.doc().createElement("canvas");
-      canvas.width = Math.round(width * scale);
-      canvas.height = Math.round(height * scale);
-      canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-      const data = canvas.toDataURL("image/jpeg", 0.68);
-      if (data.length > 850000) throw new Error("캡처 이미지가 너무 큽니다.");
-      return data;
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      const ctx = canvas.getContext("2d", { alpha: false });
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("캡처 이미지를 만들지 못했습니다.")), "image/jpeg", 0.82));
+      if (!MiniTalk.Chat?.Attachments?.compressImage) throw new Error("캡처 압축 모듈을 불러오지 못했습니다.");
+      return await MiniTalk.Chat.Attachments.compressImage(blob);
     } finally {
       stream.getTracks().forEach(track => track.stop());
     }

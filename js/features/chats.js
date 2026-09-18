@@ -199,7 +199,7 @@ MiniTalk.Features.Chats=(()=>{
     // keepScrollbar는 thumb/track 직접 조작을 커스텀 드래그가 가로채지 않게 합니다.
     MiniTalk.UI.DragScroll?.bind?.(list,{keepScrollbar:true});
     list.addEventListener("scroll",()=>{if(list.scrollTop<=72)loadOlderMessages(roomId,list).catch(error=>console.warn("이전 대화 불러오기 실패",error))},{passive:true});
-    const composer=buildComposer(roomId);view.append(list,composer.root);host.replaceChildren(view);scrollToLatest(list)
+    const composer=buildComposer(roomId);view.append(list,composer.root);bindFileDrop(view,roomId);host.replaceChildren(view);scrollToLatest(list)
   }
   function scrollToLatest(list){if(!list)return;list.scrollTop=list.scrollHeight;requestAnimationFrame(()=>{if(list.isConnected)list.scrollTop=list.scrollHeight})}
   async function loadOlderMessages(roomId,list){
@@ -227,6 +227,22 @@ MiniTalk.Features.Chats=(()=>{
     const nodes=sorted.map((message,i)=>{const n=messageNode(message),key=String(message.id||`${message.user_id||""}:${message.ts||0}:${i}`),fresh=!seen.has(key);if(fresh&&(initial?i>=Math.max(0,sorted.length-4):true))n.classList.add("message-enter");seen.add(key);return n});
     list.replaceChildren(...nodes)
   }
+  function fileUploadHandlers(roomId){return{
+    onStart:async file=>sendPayload(roomId,{type:"file",fileName:file.name,text:`[파일] ${file.name}`,uploadState:"pending"}),
+    onReady:async(payload,{token})=>{if(token?.id)await MiniTalk.Realtime.updateMessage(roomId,token.id,{fileUrl:payload.fileUrl,fileName:payload.fileName,text:payload.text,uploadState:"ready"});else await sendPayload(roomId,payload)},
+    onFail:async(error,{file,token})=>{const reason=String(error?.message||"파일 업로드에 실패했습니다.");if(token?.id)await MiniTalk.Realtime.updateMessage(roomId,token.id,{text:`[파일 업로드 실패] ${file.name}: ${reason}`,fileUrl:null,uploadState:"failed"})}
+  }}
+  async function finishFileUploadResult(result){if(result?.failed?.length){const details=result.failed.map(item=>`${item.name}: ${item.error}`).join(" / ");throw new Error(`${result.sent}/${result.total}개 전송 완료. ${details}`)}return result}
+  async function chooseAndUploadFiles(roomId){return finishFileUploadResult(await MiniTalk.Chat.Attachments.files(fileUploadHandlers(roomId)))}
+  async function uploadDroppedFiles(roomId,files){return finishFileUploadResult(await MiniTalk.Chat.Attachments.uploadFiles(files,fileUploadHandlers(roomId)))}
+  function bindFileDrop(view,roomId){
+    if(!view||MiniTalk.Store.get("user")?.isGuest)return;const D=MiniTalk.UI.Dom,overlay=D.el("div",{class:"chat-file-drop-overlay","aria-hidden":"true"},[D.el("div",{class:"chat-file-drop-card"},[D.el("strong",{text:"파일을 놓아 업로드"}),D.el("small",{text:"여러 파일도 한 번에 보낼 수 있어요"})])]);view.append(overlay);let depth=0,busy=false;
+    const hasFiles=e=>Array.from(e?.dataTransfer?.types||[]).includes("Files");
+    view.addEventListener("dragenter",e=>{if(!hasFiles(e))return;e.preventDefault();depth+=1;view.classList.add("file-drag-active")});
+    view.addEventListener("dragover",e=>{if(!hasFiles(e))return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect="copy";view.classList.add("file-drag-active")});
+    view.addEventListener("dragleave",e=>{if(!hasFiles(e))return;e.preventDefault();depth=Math.max(0,depth-1);if(depth===0)view.classList.remove("file-drag-active")});
+    view.addEventListener("drop",async e=>{if(!hasFiles(e))return;e.preventDefault();e.stopPropagation();depth=0;view.classList.remove("file-drag-active");const files=Array.from(e.dataTransfer?.files||[]);if(!files.length||busy)return;busy=true;try{await uploadDroppedFiles(roomId,files)}catch(error){MiniTalk.UI.Shell.toast(error?.message||"파일 업로드에 실패했습니다.")}finally{busy=false}});
+  }
   function buildComposer(roomId){
     const D=MiniTalk.UI.Dom;let menuOpen=false,emojiOpen=false;
     const root=D.el("section",{class:"composer-zone"});
@@ -239,11 +255,7 @@ MiniTalk.Features.Chats=(()=>{
     const addAction=(icon,label,fn)=>{const labelNode=D.el("small",{text:label}),b=D.el("button",{type:"button",class:"attach-action"},[D.el("span",{text:icon}),labelNode]);let busy=false;b.onclick=async()=>{if(busy)return;tray.classList.add("hidden");menuOpen=false;plus.classList.remove("active");busy=true;b.disabled=true;labelNode.textContent=`${label} 중…`;try{await fn()}catch(e){if(e?.message&&!/취소/.test(e.message))MiniTalk.UI.Shell.toast(e.message)}finally{busy=false;b.disabled=false;labelNode.textContent=label}};tray.append(b)};
     addAction("▧","사진",async()=>{const payload=await MiniTalk.Chat.Attachments.image({camera:false});if(payload)await sendPayload(roomId,payload)});
     addAction("◉","카메라",async()=>{const payload=await MiniTalk.Chat.Attachments.image({camera:true});if(payload)await sendPayload(roomId,payload)});
-    addAction("⌁","파일",async()=>{const result=await MiniTalk.Chat.Attachments.files({
-      onStart:async file=>sendPayload(roomId,{type:"file",fileName:file.name,text:`[파일] ${file.name}`,uploadState:"pending"}),
-      onReady:async(payload,{token})=>{if(token?.id)await MiniTalk.Realtime.updateMessage(roomId,token.id,{fileUrl:payload.fileUrl,fileName:payload.fileName,text:payload.text,uploadState:"ready"});else await sendPayload(roomId,payload)},
-      onFail:async(error,{file,token})=>{const reason=String(error?.message||"파일 업로드에 실패했습니다.");if(token?.id)await MiniTalk.Realtime.updateMessage(roomId,token.id,{text:`[파일 업로드 실패] ${file.name}: ${reason}`,fileUrl:null,uploadState:"failed"})}
-    });if(result.failed.length){const details=result.failed.map(item=>`${item.name}: ${item.error}`).join(" / ");throw new Error(`${result.sent}/${result.total}개 전송 완료. ${details}`)}});
+    addAction("⌁","파일",async()=>chooseAndUploadFiles(roomId));
     addAction("▣","캡처",async()=>MiniTalk.Tools.Capture.captureAndSend(roomId));
     addAction("♟","게임",async()=>MiniTalk.Chat.RoomGames.open(roomId));
     plus.onclick=()=>{menuOpen=!menuOpen;tray.classList.toggle("hidden",!menuOpen);emojiPanel.classList.add("hidden");emojiOpen=false;plus.classList.toggle("active",menuOpen)};

@@ -69,9 +69,9 @@ MiniTalk.Chat.Attachments=(()=>{
     const u=MiniTalk.Store.get("user")||{};body.set("user_id",u.user_id||"");body.set("nickname",u.nickname||"");body.set("ts",String(Date.now()));
     let lastError=null;
     for(let attempt=0;attempt<3;attempt+=1){
-      try{return await uploadRequest(endpoint,body)}catch(error){
+      try{body.set("attempt",String(attempt));return await uploadRequest(endpoint,body)}catch(error){
         lastError=error;
-        if(attempt<2)await new Promise(resolve=>setTimeout(resolve,450*(attempt+1)));
+        if(attempt<2)await new Promise(resolve=>setTimeout(resolve,350*(attempt+1)));
       }
     }
     throw lastError||new Error("파일 업로드에 실패했습니다.");
@@ -79,25 +79,24 @@ MiniTalk.Chat.Attachments=(()=>{
   async function image({camera=false}={}){const file=await pick({accept:"image/*",capture:camera});if(!file)return null;const dataUrl=await compressImage(file);return{type:"image",image:dataUrl,text:"[사진]",inlineImage:true}}
   async function uploadFile(f){if(!f)return null;if(f.size>MAX_FILE)throw new Error("파일은 5MB 이하만 보낼 수 있습니다.");const data=await readData(f);const url=await upload("social_upload_file",f,data);return{type:"file",fileUrl:url,fileName:f.name,text:`[파일] ${f.name}`,uploadState:"ready"}}
   async function file(){const f=await pick();if(!f)return null;return uploadFile(f)}
-  async function files(handlers){
-    const selected=await pick({multiple:true});if(!selected.length)return{sent:0,total:0,failed:[]};
+  async function uploadFiles(selectedInput,handlers){
+    const selected=Array.from(selectedInput||[]).filter(file=>file&&typeof file.name==="string");if(!selected.length)return{sent:0,total:0,failed:[]};
     const oversized=selected.filter(f=>f.size>MAX_FILE);if(oversized.length)throw new Error(`파일은 각각 5MB 이하만 보낼 수 있습니다: ${oversized.map(f=>f.name).join(", ")}`);
-    const legacy=typeof handlers==="function"?handlers:null,onStart=!legacy&&handlers?.onStart,onReady=!legacy&&handlers?.onReady,onFail=!legacy&&handlers?.onFail;
-    let sent=0;const failed=[];
-    for(let index=0;index<selected.length;index+=1){
-      const f=selected[index];let token=null;
-      try{
-        if(typeof onStart==="function")token=await onStart(f,{index,total:selected.length});
-        const payload=await uploadFile(f);
-        if(legacy)await legacy(payload,{file:f,index,total:selected.length});
-        else if(typeof onReady==="function")await onReady(payload,{file:f,index,total:selected.length,token});
-        sent+=1;
-      }catch(error){
-        const item={name:f.name,error:error?.message||"업로드 실패"};failed.push(item);
-        if(typeof onFail==="function")try{await onFail(error,{file:f,index,total:selected.length,token})}catch(_){}
-      }
-    }
+    const legacy=typeof handlers==="function"?handlers:null,onStart=!legacy&&handlers?.onStart,onReady=!legacy&&handlers?.onReady,onFail=!legacy&&handlers?.onFail,tokens=new Array(selected.length).fill(null);
+    if(typeof onStart==="function"){for(let index=0;index<selected.length;index+=1)tokens[index]=await onStart(selected[index],{index,total:selected.length})}
+    let sent=0,nextIndex=0;const failed=[];
+    const worker=async()=>{for(;;){const index=nextIndex++;if(index>=selected.length)return;const f=selected[index],token=tokens[index];try{
+      const payload=await uploadFile(f);
+      if(legacy)await legacy(payload,{file:f,index,total:selected.length});
+      else if(typeof onReady==="function")await onReady(payload,{file:f,index,total:selected.length,token});
+      sent+=1;
+    }catch(error){
+      const item={name:f.name,error:error?.message||"업로드 실패"};failed.push(item);
+      if(typeof onFail==="function")try{await onFail(error,{file:f,index,total:selected.length,token})}catch(_){}
+    }} };
+    const workers=Array.from({length:Math.min(2,selected.length)},()=>worker());await Promise.all(workers);
     return{sent,total:selected.length,failed};
   }
-  return{image,file,files,uploadFile,compressImage,CHAT_IMAGE_DATA_LIMIT};
+  async function files(handlers){const selected=await pick({multiple:true});return uploadFiles(selected,handlers)}
+  return{image,file,files,uploadFiles,uploadFile,compressImage,CHAT_IMAGE_DATA_LIMIT};
 })();

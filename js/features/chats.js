@@ -233,8 +233,8 @@ MiniTalk.Features.Chats=(()=>{
     addAction("⌁","파일",async()=>{const result=await MiniTalk.Chat.Attachments.files({
       onStart:async file=>sendPayload(roomId,{type:"file",fileName:file.name,text:`[파일] ${file.name}`,uploadState:"pending"}),
       onReady:async(payload,{token})=>{if(token?.id)await MiniTalk.Realtime.updateMessage(roomId,token.id,{fileUrl:payload.fileUrl,fileName:payload.fileName,text:payload.text,uploadState:"ready"});else await sendPayload(roomId,payload)},
-      onFail:async(error,{file,token})=>{if(token?.id)await MiniTalk.Realtime.updateMessage(roomId,token.id,{text:`[파일 업로드 실패] ${file.name}`,fileUrl:null,uploadState:"failed"})}
-    });if(result.failed.length){const names=result.failed.map(item=>item.name).join(", ");throw new Error(`${result.sent}/${result.total}개 전송 완료. 실패: ${names}`)}});
+      onFail:async(error,{file,token})=>{const reason=String(error?.message||"파일 업로드에 실패했습니다.");if(token?.id)await MiniTalk.Realtime.updateMessage(roomId,token.id,{text:`[파일 업로드 실패] ${file.name}: ${reason}`,fileUrl:null,uploadState:"failed"})}
+    });if(result.failed.length){const details=result.failed.map(item=>`${item.name}: ${item.error}`).join(" / ");throw new Error(`${result.sent}/${result.total}개 전송 완료. ${details}`)}});
     addAction("▣","캡처",async()=>MiniTalk.Tools.Capture.captureAndSend(roomId));
     addAction("♟","게임",async()=>MiniTalk.Chat.RoomGames.open(roomId));
     plus.onclick=()=>{menuOpen=!menuOpen;tray.classList.toggle("hidden",!menuOpen);emojiPanel.classList.add("hidden");emojiOpen=false;plus.classList.toggle("active",menuOpen)};

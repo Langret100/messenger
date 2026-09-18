@@ -42,7 +42,7 @@ MiniTalk.Chat.Attachments=(()=>{
   }
   function uploadErrorMessage(code){
     const raw=String(code||"");
-    if(/public_sharing_(failed|blocked)|공유/i.test(raw))return "Google Drive 파일 공유 권한을 설정하지 못했습니다. Apps Script 실행 계정의 Drive 공유 정책을 확인해주세요.";
+    if(/drive_link_sharing_unavailable|public_sharing_(failed|blocked)|공유/i.test(raw))return "Google Drive 링크 공유 권한을 만들지 못했습니다. 학교/기관 계정이면 외부공유 또는 도메인 링크공유 정책을 확인해주세요.";
     if(/too_large/i.test(raw))return "파일이 업로드 서버의 허용 크기를 초과했습니다.";
     if(/empty_data|invalid_data/i.test(raw))return "파일 데이터를 서버로 전달하지 못했습니다. 다시 시도해주세요.";
     return raw&&raw!=="false"?raw:"파일 업로드에 실패했습니다.";

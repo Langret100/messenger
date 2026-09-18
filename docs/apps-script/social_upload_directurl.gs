@@ -215,6 +215,51 @@ function _normalizeUploadToken_(value) {
   return token;
 }
 
+function _isReadableLinkAccess_(access) {
+  return access === DriveApp.Access.ANYONE ||
+         access === DriveApp.Access.ANYONE_WITH_LINK ||
+         access === DriveApp.Access.DOMAIN ||
+         access === DriveApp.Access.DOMAIN_WITH_LINK;
+}
+
+function _ensureReadableLink_(file) {
+  var errors = [];
+  try {
+    if (_isReadableLinkAccess_(file.getSharingAccess())) return "existing";
+  } catch (e0) {
+    errors.push("getSharingAccess=" + String(e0));
+  }
+
+  // 일반 Google 계정/외부공유 허용 Workspace에서는 이 경로가 정상입니다.
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    try { if (_isReadableLinkAccess_(file.getSharingAccess())) return "anyone_with_link"; } catch (_e1) {}
+    return "anyone_with_link";
+  } catch (e1) {
+    errors.push("ANYONE_WITH_LINK=" + String(e1));
+  }
+
+  // 학교/기관 Workspace에서 외부 공개가 막혀 있는 경우 같은 도메인 사용자용 링크 공유로 폴백합니다.
+  try {
+    if (DriveApp.Access.DOMAIN_WITH_LINK) {
+      file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
+      try { if (_isReadableLinkAccess_(file.getSharingAccess())) return "domain_with_link"; } catch (_e2) {}
+      return "domain_with_link";
+    }
+  } catch (e2) {
+    errors.push("DOMAIN_WITH_LINK=" + String(e2));
+  }
+
+  // 폴더 권한을 상속받아 이미 읽을 수 있는 파일일 수 있으므로 마지막으로 다시 확인합니다.
+  try {
+    if (_isReadableLinkAccess_(file.getSharingAccess())) return "inherited";
+  } catch (e3) {
+    errors.push("finalAccess=" + String(e3));
+  }
+
+  throw new Error("drive_link_sharing_unavailable: " + errors.join(" | "));
+}
+
 function _saveUploadIdempotent_(blob, folderId, baseName, uploadToken) {
   if (!folderId) throw new Error("upload_folder_not_configured");
   var folder = DriveApp.getFolderById(folderId);
@@ -222,17 +267,21 @@ function _saveUploadIdempotent_(blob, folderId, baseName, uploadToken) {
   var finalName = "up_" + token + "_" + String(baseName || "file");
 
   // 동일 요청이 서버까지 도착한 뒤 응답만 유실되면 브라우저가 재시도할 수 있습니다.
-  // 같은 token은 기존 Drive 파일을 재사용하여 중복 파일을 만들지 않습니다.
+  // 같은 token은 기존 Drive 파일을 재사용하고, 공유 상태도 다시 확인합니다.
   var existing = folder.getFilesByName(finalName);
-  if (existing.hasNext()) return existing.next();
+  if (existing.hasNext()) {
+    var reused = existing.next();
+    _ensureReadableLink_(reused);
+    return reused;
+  }
 
   blob.setName(finalName);
   var file = folder.createFile(blob);
   try {
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    _ensureReadableLink_(file);
   } catch (e) {
     try { file.setTrashed(true); } catch (_trashErr) {}
-    throw new Error("public_sharing_failed: " + String(e));
+    throw e;
   }
   return file;
 }

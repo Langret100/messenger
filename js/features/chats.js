@@ -234,9 +234,31 @@ MiniTalk.Features.Chats=(()=>{
   }}
   async function finishFileUploadResult(result){if(result?.failed?.length){const details=result.failed.map(item=>`${item.name}: ${item.error}`).join(" / ");throw new Error(`${result.sent}/${result.total}개 전송 완료. ${details}`)}return result}
   async function chooseAndUploadFiles(roomId){return finishFileUploadResult(await MiniTalk.Chat.Attachments.files(fileUploadHandlers(roomId)))}
-  async function uploadDroppedFiles(roomId,files){return finishFileUploadResult(await MiniTalk.Chat.Attachments.uploadFiles(files,fileUploadHandlers(roomId)))}
+  function isDroppedImage(file){return String(file?.type||"").toLowerCase().startsWith("image/")}
+  async function uploadDroppedFiles(roomId,files){
+    const selected=Array.from(files||[]).filter(Boolean);
+    if(!selected.length)return{sent:0,total:0,failed:[]};
+    const imageFiles=selected.filter(isDroppedImage),regularFiles=selected.filter(file=>!isDroppedImage(file));
+    let sent=0;const failed=[];
+    // 드롭한 이미지는 Drive 파일 업로드를 거치지 않고 기존 '사진 첨부'와 같은
+    // 압축(60KB 기준) -> image 메시지 경로로 전송합니다.
+    for(const file of imageFiles){
+      try{
+        const image=await MiniTalk.Chat.Attachments.compressImage(file);
+        await sendPayload(roomId,{type:"image",image,text:"[사진]",inlineImage:true});
+        sent+=1;
+      }catch(error){failed.push({name:file.name||"이미지",error:error?.message||"이미지 전송 실패"})}
+    }
+    // 이미지가 아닌 파일만 기존 Google Drive 파일 업로드 경로를 사용합니다.
+    if(regularFiles.length){
+      const result=await MiniTalk.Chat.Attachments.uploadFiles(regularFiles,fileUploadHandlers(roomId));
+      sent+=Number(result?.sent||0);
+      failed.push(...(result?.failed||[]));
+    }
+    return finishFileUploadResult({sent,total:selected.length,failed});
+  }
   function bindFileDrop(view,roomId){
-    if(!view||MiniTalk.Store.get("user")?.isGuest)return;const D=MiniTalk.UI.Dom,overlay=D.el("div",{class:"chat-file-drop-overlay","aria-hidden":"true"},[D.el("div",{class:"chat-file-drop-card"},[D.el("strong",{text:"파일을 놓아 업로드"}),D.el("small",{text:"여러 파일도 한 번에 보낼 수 있어요"})])]);view.append(overlay);let depth=0,busy=false;
+    if(!view||MiniTalk.Store.get("user")?.isGuest)return;const D=MiniTalk.UI.Dom,overlay=D.el("div",{class:"chat-file-drop-overlay","aria-hidden":"true"},[D.el("div",{class:"chat-file-drop-card"},[D.el("strong",{text:"파일을 놓아 업로드"}),D.el("small",{text:"이미지는 사진으로, 나머지는 파일로 전송돼요"})])]);view.append(overlay);let depth=0,busy=false;
     const hasFiles=e=>Array.from(e?.dataTransfer?.types||[]).includes("Files");
     view.addEventListener("dragenter",e=>{if(!hasFiles(e))return;e.preventDefault();depth+=1;view.classList.add("file-drag-active")});
     view.addEventListener("dragover",e=>{if(!hasFiles(e))return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect="copy";view.classList.add("file-drag-active")});

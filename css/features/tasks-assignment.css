@@ -47,3 +47,16 @@
 .admin-group-command-summary{display:grid;gap:3px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
 .admin-group-command-summary strong{font-size:14px}.admin-group-command-summary small{line-height:1.4}
 @media (max-width:760px){.admin-group-actions{justify-content:flex-start}.admin-group-row{align-items:flex-start}.admin-group-command-dialog{width:100%}.admin-group-command-modal{width:100%;min-width:0}}
+
+/* 코인 증감은 상태 변화 피드백이므로 전역 reduced-motion에서도 0ms 정지화면이 되지 않게
+   짧고 완만한 최소 모션만 유지합니다. */
+@media(prefers-reduced-motion:reduce){
+  .coin-reward-celebration{animation:coin-layer-in .12s ease both!important}
+  .coin-reward-celebration.leaving{animation:coin-layer-out .18s ease both!important}
+  .coin-reward-burst{animation:coin-burst-in .28s ease-out both!important}
+  .coin-reward-burst img{animation:coin-spin-pop .42s ease-out both!important}
+  .coin-reward-rays{animation:coin-rays .65s ease 2 alternate!important}
+  .coin-reward-burst.debit{animation:coin-debit-burst .28s ease-out both!important}
+  .coin-reward-burst.debit img{animation:coin-drain .45s ease-out both!important}
+  .coin-reward-burst.debit .coin-reward-rays{animation:coin-minus-pulse .35s ease 2 alternate!important}
+}

@@ -1120,8 +1120,11 @@ function handleAdminDispatch(e) {
 function handleAdminUserBalances(e) {
   const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
-  const users = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); }), coins = moaruRewardCoinMap_(), rows = Object.keys(users).map(function (userId) {
-    return { user_id: userId, nickname: users[userId], coin: coins[userId] === undefined ? null : coins[userId] };
+  // 관리자 화면은 user_directory를 이미 별도로 보유합니다. 여기서 로그인 시트를 다시
+  // 전체 조회하면 관리자 진입 직후 같은 명단을 중복으로 읽게 되어 느려집니다.
+  // 코인 원장만 한 번 읽고 user_id -> coin만 반환하고, 닉네임/누락 계정 병합은 클라이언트가 합니다.
+  const coins = moaruRewardCoinMap_(), rows = Object.keys(coins).map(function (userId) {
+    return { user_id: userId, coin: coins[userId] };
   });
   return shopJson_({ ok: true, users: rows });
 }

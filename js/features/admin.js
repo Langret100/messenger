@@ -104,10 +104,12 @@ MiniTalk.Features.Admin=(()=>{
       list.append(MiniTalk.Features.Shopping.adminPanel(()=>render(host),{Dom:D,Shell}),MiniTalk.Features.Shopping.deliveryAdminPanel({Dom:D,Shell}));
       view.append(list);host.replaceChildren(view);return
     }
-    if(!MiniTalk.UserDirectory?.loaded?.()){const loading=D.el("section",{class:"tool-card"},[D.el("strong",{text:"권한 갱신 중…"})]);list.append(loading);view.append(list);host.replaceChildren(view);MiniTalk.UserDirectory.refresh().then(()=>{if(isActiveAdminHost(host))render(host)}).catch(error=>{loading.replaceChildren(D.el("strong",{text:"권한을 갱신하지 못했습니다."}),D.el("small",{class:"muted",text:error.message||"Apps Script 배포 상태를 확인하세요."}))});return}
+    if(!MiniTalk.UserDirectory?.loaded?.()){const warmed=MiniTalk.UserDirectory?.warm?.()||[];if(!warmed.length){const loading=D.el("section",{class:"tool-card"},[D.el("strong",{text:"사용자 목록 불러오는 중…"})]);list.append(loading);view.append(list);host.replaceChildren(view);MiniTalk.UserDirectory.refresh().then(()=>{if(isActiveAdminHost(host))render(host)}).catch(error=>{loading.replaceChildren(D.el("strong",{text:"사용자 목록을 불러오지 못했습니다."}),D.el("small",{class:"muted",text:error.message||"Apps Script 배포 상태를 확인하세요."}))});return}}
     // v104: 코인 잔액 조회가 느려도 잠금/공지/알람/과제 등 전체 관리자 화면을 막지 않습니다.
     // 잔액은 COIN_REWARD를 선택했을 때만 비동기로 가져오며, 관리자 명령 자체는 즉시 사용할 수 있습니다.
     const card=D.el("section",{class:"tool-card admin-command-card"}),selected=new Set(),people=users().map(person=>({...person,coin:balanceLoaded?(balanceMap[person.user_id]??null):null}));
+    // 화면 렌더를 막지 않고 코인 원장을 미리 한 번 받아둡니다. 코인 명령을 선택할 때 대기 시간을 숨깁니다.
+    if(!balanceLoaded||Date.now()-balanceLoadedAt>=BALANCE_REFRESH_MS)loadBalances(false).catch(error=>console.warn("관리자 코인 잔액 사전 조회 실패",error));
     card.append(D.el("h3",{text:"대상 사용자"}));
     const controls=D.el("div",{class:"admin-target-controls"}),selectAll=D.el("button",{class:"mini-action",type:"button",text:"전체 선택"}),clearAll=D.el("button",{class:"mini-action",type:"button",text:"선택 해제"}),count=D.el("span",{class:"muted admin-selected-count",text:"0명 선택"});controls.append(selectAll,clearAll,count);
     const search=D.el("input",{class:"search",placeholder:"닉네임 검색","aria-label":"대상 사용자 검색"}),targetList=D.el("div",{class:"admin-target-list"});

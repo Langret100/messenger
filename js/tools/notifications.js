@@ -26,9 +26,26 @@ MiniTalk.Tools.Notifications = (() => {
     return "시스템 알림 권한 허용";
   }
 
+  let sharedNotifyAudio = null, audioPrimed = false;
+  function notifyAudio() {
+    if (!sharedNotifyAudio) { sharedNotifyAudio = new Audio("assets/sounds/notify.mp3");sharedNotifyAudio.preload = "auto"; }
+    return sharedNotifyAudio;
+  }
+  function primeAudio() {
+    if (audioPrimed || mode() !== "sound") return;
+    try {
+      const audio = notifyAudio(), volume = audio.volume;audio.volume = 0;audio.currentTime = 0;
+      const pending = audio.play();
+      if (pending?.then) pending.then(() => { audio.pause();audio.currentTime = 0;audio.volume = volume;audioPrimed = true; }).catch(() => { audio.volume = volume; });
+    } catch {}
+  }
+  window.addEventListener?.("pointerdown", primeAudio, { passive: true });
+  window.addEventListener?.("keydown", primeAudio, { passive: true });
   function playSound() {
     try {
-      new Audio("assets/sounds/notify.mp3").play().catch(() => {});
+      const audio = notifyAudio();audio.volume = 1;audio.currentTime = 0;
+      const pending = audio.play();
+      pending?.catch?.(error => console.warn("알림 소리 재생이 브라우저에 의해 제한되었습니다.", error));
     } catch (error) {
       console.warn("알림 소리 재생 실패", error);
     }
@@ -127,7 +144,10 @@ MiniTalk.Tools.Notifications = (() => {
         D.el("small", { text: String(reason || "코인 보상").slice(0, 80) })
       ])
     ]);
-    host.append(layer);setTimeout(() => layer.classList.add("leaving"), 2200);setTimeout(() => layer.remove(), 2700);
+    host.append(layer);
+    // 서버 지연과 무관하게 DOM에 붙은 시점부터 연출 시간을 온전히 보장합니다.
+    setTimeout(() => { if (layer.isConnected) layer.classList.add("leaving"); }, 2300);
+    setTimeout(() => { if (layer.isConnected) layer.remove(); }, 2800);
     MiniTalk.UI.Shell.toast(`🪙 ${sign}${magnitude}`);
     if (currentMode === "sound") playSound();
     if (currentMode !== "mute") { vibrate(debit ? [180, 70, 180] : [90, 45, 120, 45, 160]);showSystem("모아루 코인 변경", `${reason} · ${sign}${magnitude}`, false); }

@@ -71,8 +71,8 @@ function handleSocialUploadImage_(e) {
     // ★ 폴더 ID 우선순위: 요청 파라미터(folderId 등) > SOCIAL_UPLOAD_FOLDER_ID
     var folderId = SOCIAL_UPLOAD_FOLDER_ID;
  
-    var folder = _getPublicUploadFolder_(folderId);
-    var file = folder.createFile(blob);
+    var uploadToken = _normalizeUploadToken_(p.upload_token);
+    var file = _saveUploadIdempotent_(blob, folderId, name, uploadToken);
  
     return jsonResponse_({
       ok: true,
@@ -108,8 +108,8 @@ function handleSocialUploadFile_(e) {
     // ★ 폴더 ID 우선순위: 요청 파라미터(folderId 등) > SOCIAL_UPLOAD_FOLDER_ID
     var folderId = SOCIAL_UPLOAD_FOLDER_ID;
  
-    var folder = _getPublicUploadFolder_(folderId);
-    var file = folder.createFile(blob);
+    var uploadToken = _normalizeUploadToken_(p.upload_token);
+    var file = _saveUploadIdempotent_(blob, folderId, safeName, uploadToken);
  
     return jsonResponse_({
       ok: true,
@@ -210,25 +210,31 @@ function _pickFolderId_(p) {
   ).trim();
 }
  
-function _getPublicUploadFolder_(folderId) {
+function _normalizeUploadToken_(value) {
+  var token = String(value || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
+  return token;
+}
+
+function _saveUploadIdempotent_(blob, folderId, baseName, uploadToken) {
   if (!folderId) throw new Error("upload_folder_not_configured");
   var folder = DriveApp.getFolderById(folderId);
+  var token = uploadToken || Utilities.getUuid().replace(/-/g, "");
+  var finalName = "up_" + token + "_" + String(baseName || "file");
 
-  // 파일을 만든 뒤 개별 공유 권한이 전파되기를 기다리지 않습니다.
-  // 업로드 전 전용 폴더 자체를 링크 공개로 보장해 새 파일이 처음부터 접근 가능하도록 합니다.
-  var access = folder.getSharingAccess();
-  if (access !== DriveApp.Access.ANYONE_WITH_LINK && access !== DriveApp.Access.ANYONE) {
-    try {
-      folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      access = folder.getSharingAccess();
-    } catch (e) {
-      throw new Error("upload_folder_sharing_blocked: " + String(e));
-    }
+  // 동일 요청이 서버까지 도착한 뒤 응답만 유실되면 브라우저가 재시도할 수 있습니다.
+  // 같은 token은 기존 Drive 파일을 재사용하여 중복 파일을 만들지 않습니다.
+  var existing = folder.getFilesByName(finalName);
+  if (existing.hasNext()) return existing.next();
+
+  blob.setName(finalName);
+  var file = folder.createFile(blob);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (e) {
+    try { file.setTrashed(true); } catch (_trashErr) {}
+    throw new Error("public_sharing_failed: " + String(e));
   }
-  if (access !== DriveApp.Access.ANYONE_WITH_LINK && access !== DriveApp.Access.ANYONE) {
-    throw new Error("upload_folder_not_public");
-  }
-  return folder;
+  return file;
 }
 
 

@@ -42,15 +42,39 @@ MiniTalk.Chat.Attachments=(()=>{
   }
   function uploadErrorMessage(code){
     const raw=String(code||"");
-    if(/upload_folder_sharing_blocked|upload_folder_not_public|public_sharing_(failed|blocked)|공유/i.test(raw))return "Google Drive 업로드 폴더를 링크 공개로 설정하지 못했습니다. Apps Script 실행 계정의 Drive 공유 정책을 확인해주세요.";
+    if(/public_sharing_(failed|blocked)|공유/i.test(raw))return "Google Drive 파일 공유 권한을 설정하지 못했습니다. Apps Script 실행 계정의 Drive 공유 정책을 확인해주세요.";
     if(/too_large/i.test(raw))return "파일이 업로드 서버의 허용 크기를 초과했습니다.";
     if(/empty_data|invalid_data/i.test(raw))return "파일 데이터를 서버로 전달하지 못했습니다. 다시 시도해주세요.";
     return raw&&raw!=="false"?raw:"파일 업로드에 실패했습니다.";
   }
+  function makeUploadToken(){
+    try{return crypto.randomUUID().replace(/-/g,"")}catch(_){return `${Date.now().toString(36)}${Math.random().toString(36).slice(2,14)}`}
+  }
+  async function uploadRequest(endpoint,body,timeoutMs=25000){
+    const controller=typeof AbortController!=="undefined"?new AbortController():null;
+    const timer=controller?setTimeout(()=>controller.abort(),timeoutMs):0;
+    try{
+      const res=await fetch(endpoint,{method:"POST",body,cache:"no-store",signal:controller?.signal});
+      const txt=await res.text();let j={};
+      try{j=JSON.parse(txt||"{}") }catch{throw new Error("업로드 서버 응답을 읽지 못했습니다.")}
+      const url=j.url||j.file_url||j.fileUrl||j.image_url||j.link||j.downloadUrl||"";
+      if(!res.ok||j.ok===false||!url)throw new Error(uploadErrorMessage(j.error||(!res.ok?`HTTP ${res.status}`:"")));
+      return url;
+    }finally{if(timer)clearTimeout(timer)}
+  }
   async function upload(mode,file,dataUrl){
     const endpoint=MiniTalkConfig.sheetUrl;if(!endpoint)throw new Error("업로드 서버가 설정되지 않았습니다.");
-    const body=new URLSearchParams();body.set("mode",mode);body.set("mime",file.type||"application/octet-stream");body.set("filename",file.name||"file");body.set("size",String(file.size||0));body.set("data",String(dataUrl||"").split(",").pop());const u=MiniTalk.Store.get("user")||{};body.set("user_id",u.user_id||"");body.set("nickname",u.nickname||"");body.set("ts",String(Date.now()));
-    const res=await fetch(endpoint,{method:"POST",body,cache:"no-store"});const txt=await res.text();let j={};try{j=JSON.parse(txt||"{}") }catch{}const url=j.url||j.file_url||j.fileUrl||j.image_url||j.link||j.downloadUrl||"";if(!res.ok||j.ok===false||!url)throw new Error(uploadErrorMessage(j.error||(!res.ok?`HTTP ${res.status}`:"")));return url;
+    const token=makeUploadToken(),body=new URLSearchParams();
+    body.set("mode",mode);body.set("mime",file.type||"application/octet-stream");body.set("filename",file.name||"file");body.set("size",String(file.size||0));body.set("data",String(dataUrl||"").split(",").pop());body.set("upload_token",token);
+    const u=MiniTalk.Store.get("user")||{};body.set("user_id",u.user_id||"");body.set("nickname",u.nickname||"");body.set("ts",String(Date.now()));
+    let lastError=null;
+    for(let attempt=0;attempt<3;attempt+=1){
+      try{return await uploadRequest(endpoint,body)}catch(error){
+        lastError=error;
+        if(attempt<2)await new Promise(resolve=>setTimeout(resolve,450*(attempt+1)));
+      }
+    }
+    throw lastError||new Error("파일 업로드에 실패했습니다.");
   }
   async function image({camera=false}={}){const file=await pick({accept:"image/*",capture:camera});if(!file)return null;const dataUrl=await compressImage(file);return{type:"image",image:dataUrl,text:"[사진]",inlineImage:true}}
   async function uploadFile(f){if(!f)return null;if(f.size>MAX_FILE)throw new Error("파일은 5MB 이하만 보낼 수 있습니다.");const data=await readData(f);const url=await upload("social_upload_file",f,data);return{type:"file",fileUrl:url,fileName:f.name,text:`[파일] ${f.name}`,uploadState:"ready"}}

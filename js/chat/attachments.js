@@ -67,14 +67,11 @@ MiniTalk.Chat.Attachments=(()=>{
     const token=makeUploadToken(),body=new URLSearchParams();
     body.set("mode",mode);body.set("mime",file.type||"application/octet-stream");body.set("filename",file.name||"file");body.set("size",String(file.size||0));body.set("data",String(dataUrl||"").split(",").pop());body.set("upload_token",token);
     const u=MiniTalk.Store.get("user")||{};body.set("user_id",u.user_id||"");body.set("nickname",u.nickname||"");body.set("ts",String(Date.now()));
-    let lastError=null;
-    for(let attempt=0;attempt<3;attempt+=1){
-      try{body.set("attempt",String(attempt));return await uploadRequest(endpoint,body)}catch(error){
-        lastError=error;
-        if(attempt<2)await new Promise(resolve=>setTimeout(resolve,350*(attempt+1)));
-      }
-    }
-    throw lastError||new Error("파일 업로드에 실패했습니다.");
+    // 파일 업로드는 코인/상점과 같은 Apps Script 웹앱을 사용합니다.
+    // 브라우저 요청을 취소해도 이미 시작된 Apps Script 실행이 서버에서 계속될 수 있으므로
+    // 자동 재요청을 겹쳐 보내지 않습니다. 한 사용자 동작당 서버 업로드 실행은 정확히 한 번입니다.
+    body.set("attempt","0");
+    return uploadRequest(endpoint,body,30000);
   }
   async function image({camera=false}={}){const file=await pick({accept:"image/*",capture:camera});if(!file)return null;const dataUrl=await compressImage(file);return{type:"image",image:dataUrl,text:"[사진]",inlineImage:true}}
   async function uploadFile(f){if(!f)return null;if(f.size>MAX_FILE)throw new Error("파일은 5MB 이하만 보낼 수 있습니다.");const data=await readData(f);const url=await upload("social_upload_file",f,data);return{type:"file",fileUrl:url,fileName:f.name,text:`[파일] ${f.name}`,uploadState:"ready"}}
@@ -84,17 +81,21 @@ MiniTalk.Chat.Attachments=(()=>{
     const oversized=selected.filter(f=>f.size>MAX_FILE);if(oversized.length)throw new Error(`파일은 각각 5MB 이하만 보낼 수 있습니다: ${oversized.map(f=>f.name).join(", ")}`);
     const legacy=typeof handlers==="function"?handlers:null,onStart=!legacy&&handlers?.onStart,onReady=!legacy&&handlers?.onReady,onFail=!legacy&&handlers?.onFail,tokens=new Array(selected.length).fill(null);
     if(typeof onStart==="function"){for(let index=0;index<selected.length;index+=1)tokens[index]=await onStart(selected[index],{index,total:selected.length})}
-    let sent=0,nextIndex=0;const failed=[];
-    const worker=async()=>{for(;;){const index=nextIndex++;if(index>=selected.length)return;const f=selected[index],token=tokens[index];try{
-      const payload=await uploadFile(f);
-      if(legacy)await legacy(payload,{file:f,index,total:selected.length});
-      else if(typeof onReady==="function")await onReady(payload,{file:f,index,total:selected.length,token});
-      sent+=1;
-    }catch(error){
-      const item={name:f.name,error:error?.message||"업로드 실패"};failed.push(item);
-      if(typeof onFail==="function")try{await onFail(error,{file:f,index,total:selected.length,token})}catch(_){}
-    }} };
-    const workers=Array.from({length:Math.min(2,selected.length)},()=>worker());await Promise.all(workers);
+    let sent=0;const failed=[];
+    // 이 Apps Script 배포는 코인/과제/상점 API와 공유됩니다.
+    // 여러 파일을 동시에 올려 서버 실행을 점유하지 않고 선택 순서대로 한 건씩 처리합니다.
+    for(let index=0;index<selected.length;index+=1){
+      const f=selected[index],token=tokens[index];
+      try{
+        const payload=await uploadFile(f);
+        if(legacy)await legacy(payload,{file:f,index,total:selected.length});
+        else if(typeof onReady==="function")await onReady(payload,{file:f,index,total:selected.length,token});
+        sent+=1;
+      }catch(error){
+        const item={name:f.name,error:error?.message||"업로드 실패"};failed.push(item);
+        if(typeof onFail==="function")try{await onFail(error,{file:f,index,total:selected.length,token})}catch(_){}
+      }
+    }
     return{sent,total:selected.length,failed};
   }
   async function files(handlers){const selected=await pick({multiple:true});return uploadFiles(selected,handlers)}

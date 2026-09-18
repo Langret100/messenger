@@ -1,0 +1,16 @@
+const fs=require('fs');
+const s=fs.readFileSync('docs/apps-script/coin-shopping-extension.gs','utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+const start=s.indexOf('function handleShopPurchase(e)');
+const end=s.indexOf('\n}', start)+2;
+const f=s.slice(start,end);
+ok(start>=0,'shop_purchase handler missing');
+const release=f.indexOf('lock.releaseLock()');
+const fresh=f.indexOf('createFreshPurchasedInventory_');
+const duplicate=f.indexOf('createPurchasedInventory_');
+ok(release>=0,'shop_purchase must release ScriptLock');
+ok(fresh>release,'fresh inventory write must happen after global ScriptLock release');
+ok(duplicate>release,'duplicate/retry inventory recovery must happen after global ScriptLock release');
+ok(/logSheet\.appendRow/.test(f.slice(0,release)),'coin/stock/purchase log commit must stay inside lock');
+ok(/setRewardCoinForShopGuarded_/.test(f.slice(0,release)),'coin debit must stay inside lock');
+console.log('COIN_SHOP_LOCK_ISOLATION_OK');

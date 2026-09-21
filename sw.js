@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-runtime-bundle-31";
+const CACHE = "moaru-runtime-bundle-32";
 const CORE = [
   "./",
   "./index.html",
@@ -42,6 +42,7 @@ const CORE = [
   "./js/adapters/window-mode.js",
   "./js/adapters/mobile-immersive.js",
   "./js/admin/session.js",
+  "./js/economy/runtime.js",
   "./js/economy/coin-wallet.js",
   "./js/economy/quest-reward.js",
   "./js/shopping/store-service.js",

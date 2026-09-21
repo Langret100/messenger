@@ -217,6 +217,37 @@
               ".validate": "newData.hasChildren(['week','index','answers','completed']) && newData.child('week').isString() && newData.child('week').val().length <= 16 && newData.child('index').isNumber() && newData.child('index').val() >= 0 && newData.child('index').val() <= 20 && newData.child('completed').isBoolean()"
             }
           }
+        },
+        "economyRuntime": {
+          ".read": true,
+          ".write": true,
+          "users": {
+            "$userKey": {
+              ".validate": "!newData.exists() || ((!newData.child('balance').exists() || (newData.child('balance').isNumber() && newData.child('balance').val() >= 0)) && (!newData.child('revision').exists() || (newData.child('revision').isNumber() && newData.child('revision').val() >= 0)) && (!newData.child('active').exists() || newData.child('active').isBoolean()))"
+            }
+          },
+          "balances": {
+            "$userKey": {
+              ".validate": "!newData.exists() || (newData.child('userId').isString() && newData.child('balance').isNumber() && newData.child('balance').val() >= 0 && newData.child('revision').isNumber())"
+            }
+          },
+          "active": {
+            "$userKey": {
+              ".validate": "!newData.exists() || newData.val() == true"
+            }
+          },
+          "stock": {
+            "$productKey": {
+              ".validate": "!newData.exists() || (newData.child('productId').isString() && newData.child('revision').isNumber() && (!newData.child('qty').exists() || (newData.child('qty').isNumber() && newData.child('qty').val() >= 0)) && (!newData.child('unlimited').exists() || newData.child('unlimited').isBoolean()))"
+            }
+          },
+          "inventory": {
+            "$userKey": {
+              "$itemKey": {
+                ".validate": "!newData.exists() || (newData.child('id').isString() && newData.child('productId').isString() && newData.child('ownerId').isString())"
+              }
+            }
+          }
         }
       }
     }

@@ -80,6 +80,7 @@ MiniTalk.Features.Auth=(()=>{
      서버 연결과 현재 화면만 정리하고 저장된 로그인 세션(KEY)은 그대로 둡니다. */
   function returnToLogin(){
     MiniTalk.AdminSession?.clear?.();
+    MiniTalk.Economy.Runtime?.stop?.();
     MiniTalk.Realtime.cleanup?.();
     MiniTalk.Store.set("user",null);
     MiniTalk.UI.Shell?.resetWorkspaceSession?.();
@@ -94,6 +95,6 @@ MiniTalk.Features.Auth=(()=>{
     host?.classList.remove("hidden");
     if(host)render(host);
   }
-  function logout(){MiniTalk.AdminSession?.clear?.();MiniTalk.Realtime.cleanup?.();MiniTalk.Persistence.remove(KEY);rememberedUser=null;location.reload()}
+  function logout(){MiniTalk.AdminSession?.clear?.();MiniTalk.Economy.Runtime?.stop?.();MiniTalk.Realtime.cleanup?.();MiniTalk.Persistence.remove(KEY);rememberedUser=null;location.reload()}
   return{render,restore,returnToLogin,logout};
 })();

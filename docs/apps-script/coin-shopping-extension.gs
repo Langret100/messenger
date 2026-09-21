@@ -1197,6 +1197,7 @@ function handleAdminCoinReward(e) {
     if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify({ status: "committing", amount: amount, targets: targets, beforeCoins: beforeCoins, expectedCoins: expectedCoins, reason: String(p.reason || "관리자 보상").trim().slice(0, 80), createdAt: prior && prior.createdAt || Date.now() }));
     /* 대상별 setValue 반복이 아니라 코인 열을 한 번에 기록해 중간 사용자까지만 반영되는 부분 지급 창을 없앱니다. */
     moaruSpreadsheetRetry_(function () { sheet.getRange(2, SHOP_COL_REWARD_COIN, rowCount, 1).setValues(values.map(function (row) { return [row[SHOP_COL_REWARD_COIN - 1]]; })); return true; });
+    rewarded.forEach(function (row) { try { if (typeof mirrorMoaruCoinToFirebase_ === "function") mirrorMoaruCoinToFirebase_(row.user_id, row.newCoin, "admin-coin", requestId ? "admin:" + requestId : "admin:" + Utilities.getUuid()); } catch (mirrorError) { console.error("ADMIN_COIN_FIREBASE_MIRROR_FAILED", row.user_id, mirrorError); } });
     const result = { ok: true, count: rewarded.length, amount: amount, rewarded: rewarded, failed: [], reason: String(p.reason || "관리자 보상").trim().slice(0, 80) };
     if (receiptKey) receipts.setProperty(receiptKey, JSON.stringify({ status: "done", amount: amount, targets: targets, newCoins: rewarded.map(function (row) { return row.newCoin; }), reason: result.reason, createdAt: prior && prior.createdAt || Date.now() }));
     /* 코인 원장과 영수증이 확정된 순간 전역 잠금을 해제합니다. 알림 큐는 원장 트랜잭션이 아닙니다. */
@@ -1663,14 +1664,20 @@ function handleShopPurchase(e) {
     lock.releaseLock();
   }
 
+  // 구형 Apps Script 구매 경로로 처리된 경우에도 Firebase 현재 코인을 맞춰 다음 실시간 연결에서 오래된 값이 보이지 않게 합니다.
+  try { if (typeof mirrorMoaruCoinToFirebase_ === "function") mirrorMoaruCoinToFirebase_(userId, finalized.newCoin, "legacy-shop-purchase", "purchase:" + purchaseKey); } catch (mirrorError) { console.error("SHOP_FIREBASE_MIRROR_FAILED", mirrorError); }
+
   // 여기부터는 전역 코인 Lock 밖입니다. 느린 보관함 기록이 과제 보상/다른 구매를 막지 않습니다.
   const inventoryProduct = randomMode ? normalizeShopProduct_(Object.assign({}, finalized.product, { price: finalized.chargePrice })) : finalized.product;
   let inventoryItem = null, inventoryPending = false;
   try {
-    inventoryItem = finalized.duplicate
-      ? createPurchasedInventory_(userId, inventoryProduct, purchaseKey)
-      : createFreshPurchasedInventory_(userId, inventoryProduct, purchaseKey);
-    clearPendingShopPurchase_(purchaseKey, userId);
+    if (finalized.duplicate) {
+      inventoryItem = createPurchasedInventory_(userId, inventoryProduct, purchaseKey);
+      clearPendingShopPurchase_(purchaseKey, userId);
+    } else {
+      try { inventoryItem = createFreshPurchasedInventory_(userId, inventoryProduct, purchaseKey); clearPendingShopPurchase_(purchaseKey, userId); }
+      catch (freshInventoryError) { throw freshInventoryError; }
+    }
   } catch (inventoryError) {
     inventoryPending = true;
     try { rememberPendingShopPurchase_(userId, inventoryProduct, purchaseKey); } catch (pendingError) { console.error("SHOP_PENDING_PURCHASE_SAVE_FAILED", pendingError); }

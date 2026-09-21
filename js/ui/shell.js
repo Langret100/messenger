@@ -37,7 +37,7 @@ MiniTalk.UI.Shell=(()=>{
     if(activeUserId!==user.user_id)return;
     // 첫 화면을 막지 않되 기능 자체를 임의의 초 단위 타이머로 늦추지 않습니다.
     // 쇼핑 start()는 로컬 캐시만 준비하고 실제 서버 보관함은 쇼핑 진입/실시간 신호 때 조회합니다.
-    if(!user.isGuest)MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(error=>console.warn("코인 계정 동기화 실패",error));
+    if(!user.isGuest){MiniTalk.Economy.Runtime?.start?.(user);MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(error=>console.warn("코인 계정 동기화 실패",error))}
     MiniTalk.UserDirectory?.refresh?.().catch(error=>console.warn("가입자 명단을 불러오지 못했습니다.",error));
     MiniTalk.Tasks.TaskService?.start?.(user);
     MiniTalk.Shopping.StoreService?.start?.(user);

@@ -399,10 +399,9 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     let lastError=null;
     for(let attempt=0;attempt<2;attempt++){
       try{
-        const body=new URLSearchParams({mode:"coin_reward",user_id:String(currentUser.user_id),reward_type:REWARD_TYPE,reward_key:String(record.week||weekKey()),score_percent:String(scorePercent(record))});
-        const response=await fetch(MiniTalkConfig.sheetUrl,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},body});
-        if(!response.ok)throw new Error(`HTTP_${response.status}`);const result=await response.json();
-        if(!result||result.ok===false){const error=new Error(result?.error||"주간 보상 요청 실패");error.code=result?.error||"WEEKLY_REWARD_FAILED";throw error}
+        let result;
+        if(MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime){const runtime=await MiniTalk.Economy.Runtime.reward({userId:String(currentUser.user_id),rewardType:REWARD_TYPE,rewardKey:String(record.week||weekKey()),amount:REWARD_COIN,reason:"금요일 학습점검"});result={ok:true,applied:runtime.applied,granted:runtime.applied,newCoin:runtime.newCoin}}
+        else{const body=new URLSearchParams({mode:"coin_reward",user_id:String(currentUser.user_id),reward_type:REWARD_TYPE,reward_key:String(record.week||weekKey()),score_percent:String(scorePercent(record))});const response=await fetch(MiniTalkConfig.sheetUrl,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},body});if(!response.ok)throw new Error(`HTTP_${response.status}`);result=await response.json();if(!result||result.ok===false){const error=new Error(result?.error||"주간 보상 요청 실패");error.code=result?.error||"WEEKLY_REWARD_FAILED";throw error}}
         const granted=result.applied!==false&&result.granted!==false,reward={eligible:true,amount:REWARD_COIN,acknowledged:true,granted,updatedAt:nowMs()};
         const saved=await MiniTalk.Realtime.cloudTransaction(path(),current=>current?.completed?{...current,reward}:current),nextCoin=result.newCoin==null||String(result.newCoin).trim()===""?NaN:Number(result.newCoin);
         if(Number.isFinite(nextCoin))MiniTalk.Economy.CoinWallet?.setLocal?.(nextCoin,"friday-weekly-reward",currentUser.user_id);else await MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(()=>{});

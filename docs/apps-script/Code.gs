@@ -293,6 +293,10 @@ function moaruDoPost_(e) {
       case "coin_status":
         return handleCoinStatus(e);
 
+      // Firebase 경제 런타임 처리 결과를 Sheets 장기 원장에 비동기 반영
+      case "economy_sheet_sync":
+        return handleEconomySheetSync(e);
+
       // 🔹 로그인 사용자 관리자 고유 코드 인증
       case "admin_unlock":
         return handleAdminUnlock(e);
@@ -537,6 +541,17 @@ function signup_(data) {
     else moaNickParts.forEach(function(k){ try { moaNickCache.remove(k); } catch (_) {} });
   } catch (cacheError) {}
   try { if (typeof rememberKnownMoaruUser_ === "function") rememberKnownMoaruUser_(userId); } catch (cacheError) {}
+  // 경제 런타임을 사용 중이면 신규 보상계정을 즉시 활성 사용자로 미러링합니다.
+  // 실패해도 회원가입/보상 시트가 권위 데이터이므로 가입 자체를 되돌리지는 않습니다.
+  try {
+    if (typeof moaruEconomyCreateFirebaseUser_ === "function") {
+      moaruEconomyCreateFirebaseUser_({ userId: userId, username: username, coin: Number(coinAccount.coin) || 0 });
+      const props = PropertiesService.getScriptProperties();
+      let active = [];
+      try { active = JSON.parse(props.getProperty(MOARU_ECONOMY_ACTIVE_SNAPSHOT_PROP) || "[]"); } catch (_) { active = []; }
+      if (active.indexOf(userId) < 0) { active.push(userId); props.setProperty(MOARU_ECONOMY_ACTIVE_SNAPSHOT_PROP, JSON.stringify(active)); }
+    }
+  } catch (economyError) { console.error("SIGNUP_ECONOMY_MIRROR_FAILED", userId, economyError); }
 
   return jsonResponse_({
     ok: true,

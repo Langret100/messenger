@@ -23,20 +23,28 @@ MiniTalk.Economy.QuestReward = (() => {
   }
 
   async function requestReward(user, subject, date) {
+    if (MiniTalk.Realtime?.getMode?.() === "firebase" && MiniTalk.Economy.Runtime) {
+      const runtime = await MiniTalk.Economy.Runtime.reward({
+        userId: String(user.user_id),
+        rewardType: "QUEST_5CLEAR",
+        rewardKey: `${date}:${subject}`,
+        amount: 1,
+        reason: `${SUBJECTS[subject]} 일일 퀘스트`
+      });
+      return { ok: true, applied: runtime.applied, granted: runtime.applied, newCoin: runtime.newCoin };
+    }
     const body = new URLSearchParams({
       mode: "coin_reward",
       user_id: String(user.user_id),
       reward_type: "QUEST_5CLEAR",
       reward_key: `${date}:${subject}`
     });
-
     const response = await fetch(MiniTalkConfig.sheetUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
       body
     });
     if (!response.ok) throw new Error(`HTTP_${response.status}`);
-
     const result = await response.json();
     if (!result || result.ok === false) {
       const error = new Error(result?.error || "COIN_REWARD_FAILED");

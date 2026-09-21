@@ -151,6 +151,9 @@ function processCoinChangeUnlocked_(userId, action, amount) {
   }
 
   sheet.getRange(rowIndex, COIN_COL_REWARD_COIN).setValue(newCoin);
+  // 구형/관리용 Apps Script 코인 변경 경로도 Firebase 실시간 잔액과 맞춥니다.
+  // Firebase 미러 실패는 Sheets 원장 변경을 되돌리지 않으며 다음 로그인/관리 동기화에서 복구됩니다.
+  try { if (typeof mirrorMoaruCoinToFirebase_ === "function") mirrorMoaruCoinToFirebase_(userId, newCoin, "legacy-coin-change", "sheet:" + Utilities.getUuid()); } catch (mirrorError) { console.error("COIN_FIREBASE_MIRROR_FAILED", mirrorError); }
 
   return {
     success: true,
@@ -539,6 +542,9 @@ function runGameWeeklyRankingRewards() {
   }
 
   const results = [];
+  // 보상탭에서 삭제된 사용자는 과거 게임 점수가 남아 있어도 주간 보상 계산 자체에서 제외합니다.
+  // 사용자마다 보상 시트를 반복 조회하지 않고 한 번 만든 활성 사용자 맵을 모든 게임에 재사용합니다.
+  const activeRewardUsers = typeof moaruRewardCoinMap_ === "function" ? moaruRewardCoinMap_() : null;
   GAME_SHEETS.forEach(function(gameName) {
     try {
       const sheet = getGameSheetSafe_(gameName);
@@ -550,13 +556,18 @@ function runGameWeeklyRankingRewards() {
       }
 
       const count = Math.min(3, lastRow - 1);
-      const rows = sheet.getRange(2, 1, count, 4).getValues();
+      const sourceCount = activeRewardUsers ? (lastRow - 1) : count;
+      const allRows = sheet.getRange(2, 1, sourceCount, 4).getValues();
+      const rows = allRows.filter(function(row) {
+        const id = String(row[0] || "").trim();
+        if (!id) return false;
+        if (activeRewardUsers) return Object.prototype.hasOwnProperty.call(activeRewardUsers, id);
+        return !!getRewardUserData_(id);
+      }).slice(0, 3);
       const users = [];
       rows.forEach(function(row, index) {
         const userId = String(row[0] || "").trim();
-        if (!userId) return;
-        const rank = Number(row[3]) || (index + 1);
-        if (rank < 1 || rank > 3) return;
+        const rank = index + 1;
         const reward = awardGameWeeklyTop3_(gameName, userId, rank);
         users.push({ user_id: userId, rank: rank, applied: !!(reward && reward.applied), reason: reward && reward.reason ? reward.reason : "" });
       });

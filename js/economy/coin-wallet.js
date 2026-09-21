@@ -71,7 +71,18 @@ MiniTalk.Economy.CoinWallet = (() => {
   function startServerRefresh(user, cached) {
     const requestRevision = balanceRevision;
     const generation = ownerGeneration;
-    const request = MiniTalk.AuthApi.coinStatus(user.user_id)
+    const request = (async () => {
+      // 실시간 운영 중에는 Firebase의 작은 balance 경로만 먼저 읽습니다.
+      // 로그인 응답에서 막 받은 코인값은 Firebase 사용자 최초 생성에만 사용하고,
+      // 저장된 과거 캐시로 삭제된 경제 사용자를 되살리지 않습니다.
+      if (MiniTalk.Realtime?.getMode?.() === "firebase" && MiniTalk.Economy.Runtime) {
+        const amount = await MiniTalk.Economy.Runtime.balance(user.user_id).catch(() => null);
+        if (amount !== null) return amount;
+      }
+      // Firebase 경제 계정이 아직 초기 이전되지 않은 경우에만 Sheets 값을 표시용으로 읽습니다.
+      // 브라우저에서 이 값으로 Firebase 사용자를 자동 생성하지 않아, 보상탭에서 삭제된 사용자가 되살아나는 일을 막습니다.
+      return MiniTalk.AuthApi.coinStatus(user.user_id);
+    })()
       .then(amount => {
         ensureOwner();
         if (generation !== ownerGeneration || user.user_id !== ownerId) return value();
@@ -84,10 +95,8 @@ MiniTalk.Economy.CoinWallet = (() => {
         ensureOwner();
         if (generation !== ownerGeneration || user.user_id !== ownerId) return value();
         console.warn("코인 잔액 조회 실패", error);
-        // 요청 중 더 최신 확정값이 들어왔거나 이 사용자의 마지막 서버 스냅샷이 있으면 그것을 유지합니다.
         if (requestRevision !== balanceRevision) return value();
         if (cached) return Math.floor(Number(cached.value) || 0);
-        // 서버에서 한 번도 잔액을 확인하지 못한 상태를 실제 0코인으로 위장하지 않습니다.
         throw error;
       });
 

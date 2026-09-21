@@ -625,7 +625,11 @@ MiniTalk.Features.Shopping = (() => {
     const performAction = async (row, kind) => {
       const payload = payloadFor(row);
       let result;
-      if (kind === "shipping") result = await MiniTalk.AuthApi.shopDeliveryShipping(payload);
+      MiniTalk.AdminSession.requireToken("SHOP");
+      if(MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime){
+        result=await MiniTalk.Economy.Runtime.adminDelivery({targets:[payload],status:kind,requestId:`${Date.now()}:${crypto.randomUUID()}`});
+        result={...result,deliveryStatus:kind};
+      }else if (kind === "shipping") result = await MiniTalk.AuthApi.shopDeliveryShipping(payload);
       else if (kind === "completed") result = await MiniTalk.AuthApi.shopDeliveryComplete(payload);
       else result = await MiniTalk.AuthApi.shopDeliveryCancel(payload);
       if (String(result?.deliveryStatus || "") !== kind) throw new Error("서버 배송 상태를 확인하지 못했습니다. 다시 새로고침해주세요.");
@@ -651,7 +655,7 @@ MiniTalk.Features.Shopping = (() => {
           const queue=[...groupRows],targets=queue.map(row=>({ownerId:row.ownerId||row.owner_id,inventoryId:row.id||row.inventoryId||row.inventory_id}));
           progress.textContent=`${first.nickname||first.ownerNickname||first.owner_id||first.ownerId||"학생"} 배송완료 처리 중… ${queue.length}건`;
           try{
-            const result=await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
+            MiniTalk.AdminSession.requireToken("SHOP");const result=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime?await MiniTalk.Economy.Runtime.adminDelivery({targets,status:"completed",requestId:`${Date.now()}:${crypto.randomUUID()}`}):await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
             const ownerIds=[...new Set(queue.map(row=>String(row.ownerId||row.owner_id||"")).filter(Boolean))];MiniTalk.Realtime.notifyCommandTargets?.(ownerIds);
             const completedKeys=new Set(targets.map(target=>`${String(target.ownerId||"")}::${String(target.inventoryId||"")}`));
             rows=rows.filter(row=>!completedKeys.has(`${String(row.ownerId||row.owner_id||"")}::${String(row.id||row.inventoryId||row.inventory_id||"")}`));
@@ -690,7 +694,7 @@ MiniTalk.Features.Shopping = (() => {
     const load = async () => {
       if (loading) return;loading = true;refresh.disabled = true;
       if (!rows.length) list.replaceChildren(D.el("p", { class: "muted", text: "배송 요청을 불러오는 중입니다." }));
-      try { rows = await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP"));draw(); }
+      try { MiniTalk.AdminSession.requireToken("SHOP");rows=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime?await MiniTalk.Economy.Runtime.deliveryList():await MiniTalk.AuthApi.shopDeliveryList(current.user_id, MiniTalk.AdminSession.requireToken("SHOP"));const people=new Map((MiniTalk.UserDirectory?.all?.()||[]).map(p=>[String(p.user_id),p]));rows=rows.map(row=>{const owner=String(row.ownerId||row.owner_id||"");return{...row,ownerId:owner,owner_id:owner,nickname:row.nickname||people.get(owner)?.nickname||owner}});draw(); }
       catch (error) { if (!rows.length) list.replaceChildren(D.el("p", { class: "muted", text: error.message || "배송 요청을 불러오지 못했습니다." }));else Shell.toast(error.message || "배송 요청을 새로고침하지 못했습니다."); }
       finally { loading = false;refresh.disabled = false;bulkComplete.disabled = bulkRunning || !rows.length; }
     };
@@ -700,7 +704,7 @@ MiniTalk.Features.Shopping = (() => {
       const queue=[...rows],targets=queue.map(row=>({ownerId:row.ownerId||row.owner_id,inventoryId:row.id||row.inventoryId||row.inventory_id}));
       progress.textContent = `일괄 배송완료 처리 중… ${queue.length}건`;
       try {
-        const result=await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
+        MiniTalk.AdminSession.requireToken("SHOP");const result=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime?await MiniTalk.Economy.Runtime.adminDelivery({targets,status:"completed",requestId:`${Date.now()}:${crypto.randomUUID()}`}):await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
         const owners=[...new Set(queue.map(row=>String(row.ownerId||row.owner_id||"")).filter(Boolean))];MiniTalk.Realtime.notifyCommandTargets?.(owners);
         rows=[];draw();Shell.toast(`${Number(result.count)||queue.length}건을 한 번에 배송완료 처리했습니다.`);
       } catch(error) {

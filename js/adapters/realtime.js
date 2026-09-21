@@ -79,18 +79,36 @@ MiniTalk.Realtime=(()=>{
   function normalizeRoom(id,value={}){
     const participantSource=value.participants??value.memberNames??value.member_names??(Array.isArray(value.members)||typeof value.members==="string"?value.members:[]);
     const participants=parseLegacyParticipantList(participantSource);
-    const members={};
-    Object.entries(roomMembers(value)).forEach(([key,entry])=>{
+    const members={},structuredMembers=Object.entries(roomMembers(value)),legacyMembers=[],modernNicknames=new Set(),legacyNicknames=new Set();
+    structuredMembers.forEach(([key,entry])=>{
       const member=entry&&typeof entry==="object"?entry:{nickname:String(entry||key)};
       const nickname=String(member.nickname||member.name||key).trim();
-      /* 같은 닉네임을 가진 다른 사용자를 현재 사용자로 승격하지 않습니다. */
-      const memberId=String(member.user_id||member.userId||key);
-      members[memberId]={...member,user_id:memberId,nickname}
+      const memberId=String(member.user_id||member.userId||key).trim();if(!memberId)return;
+      const synthetic=/^legacy-/i.test(String(key))||/^legacy-/i.test(memberId);
+      if(synthetic){legacyMembers.push({key,member,memberId,nickname});return}
+      /* 동일 계정이 members 안에서 다른 Firebase key로 남아 있어도 실제 user_id 하나로 합칩니다. */
+      members[memberId]={...members[memberId],...member,user_id:memberId,nickname:nickname||members[memberId]?.nickname||memberId};
+      if(nickname)modernNicknames.add(nickname)
     });
+    /* 예전 정규화 결과가 saveRoom을 거쳐 members 안에 legacy-* 로 저장된 방도 있습니다.
+       이런 합성 멤버는 실제 user_id 멤버와 같은 닉네임이면 유령 중복이므로 버리고,
+       합성 멤버끼리도 같은 닉네임은 한 번만 유지합니다. 실제 user_id가 서로 다른 사용자는
+       닉네임이 같아도 절대 합치지 않습니다. */
+    legacyMembers.forEach(({member,memberId,nickname})=>{
+      if(!nickname||modernNicknames.has(nickname)||legacyNicknames.has(nickname))return;
+      legacyNicknames.add(nickname);members[memberId]={...member,user_id:memberId,nickname}
+    });
+    /* 구형 participants/memberNames는 호환용 미러입니다. 실제 user_id members가 있는 방에서는
+       문자열 미러를 다시 멤버로 만들지 않습니다. 명시적 user_id object만 누락 계정을 보완하고,
+       진짜 레거시 방에서는 합성 닉네임도 한 번만 복구합니다. */
+    const hasModernMembers=modernNicknames.size>0||Object.keys(members).some(id=>!/^legacy-/i.test(id));
     participants.forEach((entry,index)=>{
+      const isObject=entry&&typeof entry==="object",explicitId=String(isObject&&(entry.user_id||entry.userId)||"").trim();
       const nickname=String(typeof entry==="string"?entry:(entry?.nickname||entry?.name||"")).trim();if(!nickname)return;
-      const memberId=String((typeof entry==="object"&&(entry.user_id||entry.userId))||`legacy-${index}-${nickname.replace(/[.#$\[\]/]/g,"-")}`);
-      members[memberId]={...(typeof entry==="object"?entry:{}),user_id:memberId,nickname,role:index===0?"owner":"member",joinedAt:Number((typeof entry==="object"&&entry.joinedAt)||0)}
+      if(explicitId){if(members[explicitId])return;members[explicitId]={...(isObject?entry:{}),user_id:explicitId,nickname,role:index===0?"owner":"member",joinedAt:Number((isObject&&entry.joinedAt)||0)};modernNicknames.add(nickname);return}
+      if(hasModernMembers||modernNicknames.has(nickname)||legacyNicknames.has(nickname))return;
+      const memberId=`legacy-${index}-${nickname.replace(/[.#$\[\]/]/g,"-")}`;
+      legacyNicknames.add(nickname);members[memberId]={user_id:memberId,nickname,role:index===0?"owner":"member",joinedAt:0}
     });
     const creatorRaw=String(value.creator||value.creator_user_id||value.owner||"");
     /* 방장도 닉네임 일치만으로 현재 사용자라고 간주하지 않습니다. */

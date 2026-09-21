@@ -25,12 +25,12 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
   }
 
   function loadDailySeen() {
-    const base={date:dateKey(),userId:userId(),missions:{}};
+    const base={date:dateKey(),userId:userId(),missions:{},recent:[]};
     const saved=MiniTalk.Persistence.get(SEEN_STORAGE_KEY,null);
     if(!saved||saved.date!==base.date||saved.userId!==base.userId)return base;
     const missions={};
     MISSIONS.forEach(mission=>{missions[mission.id]=Array.isArray(saved.missions?.[mission.id])?saved.missions[mission.id].map(String).filter(Boolean).slice(-240):[]});
-    return {...base,missions};
+    return {...base,missions,recent:Array.isArray(saved.recent)?saved.recent.map(String).filter(Boolean).slice(-240):[]};
   }
 
   function saveDailySeen(state){MiniTalk.Persistence.set(SEEN_STORAGE_KEY,state)}
@@ -343,10 +343,11 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     const progress = loadProgress();
     const dailySeen=loadDailySeen();
     const seenProblems = new Set();
+    (dailySeen.recent||[]).forEach(key=>seenProblems.add(key));
     (dailySeen.missions?.[missionId]||[]).forEach(key=>seenProblems.add(key));
     let variant = 0;
     const freshStart=firstFreshVariant(missionId,seenProblems,0,0);
-    if(freshStart<0){seenProblems.clear();dailySeen.missions[missionId]=[];saveDailySeen(dailySeen)}else variant=freshStart;
+    if(freshStart<0){seenProblems.clear();dailySeen.missions[missionId]=[];dailySeen.recent=[];saveDailySeen(dailySeen)}else variant=freshStart;
     let questions = generate(missionId, variant);
     let wrongCount = 0;
     let sessionCorrect = 0;
@@ -361,7 +362,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
 
       const current = questions[index];
       seenProblems.add(visibleProblemKey(current));
-      dailySeen.missions[missionId]=[...seenProblems].slice(-240);saveDailySeen(dailySeen);
+      dailySeen.missions[missionId]=[...seenProblems].slice(-240);dailySeen.recent=[...(dailySeen.recent||[]),visibleProblemKey(current)].filter((value,index,array)=>array.lastIndexOf(value)===index).slice(-240);saveDailySeen(dailySeen);
       const feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" });
       const choiceGrid = D.el("div", { class: "quest-choice-grid", role: "group", "aria-label": "정답 보기" });
       let answerLocked = false;

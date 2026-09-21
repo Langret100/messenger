@@ -518,7 +518,7 @@ MiniTalk.Features.Shopping = (() => {
     const draw = () => {
       if (!search || !list) return;
       const q = search.value.trim().toLowerCase(), shown = users.filter(row => row.nickname.toLowerCase().includes(q));
-      list.replaceChildren(...shown.map(row => { const radio = D.el("input", { type: "radio", name: "giftTarget", value: row.user_id, "aria-label": `${row.nickname} 선택` });radio.checked = selected === row.user_id;radio.onchange = () => { selected = row.user_id;draw(); };return D.el("label", { class: `gift-user-option${selected === row.user_id ? " selected" : ""}` }, [D.el("span", { class: "gift-user-avatar", text: row.nickname.slice(0, 1) }), D.el("strong", { text: row.nickname }), radio]); }));
+      list.replaceChildren(...shown.map(row => { const radio = D.el("input", { type: "radio", name: "giftTarget", value: row.user_id, "aria-label": `${row.nickname} 선택` });radio.checked = selected === row.user_id;radio.onchange = () => { selected = row.user_id;draw(); };let avatar;if(row.avatar){avatar=D.el("img",{class:"gift-user-avatar profile-image",src:row.avatar,alt:`${row.nickname} 프로필`});avatar.onerror=()=>{avatar.onerror=null;avatar.replaceWith(D.el("span",{class:"gift-user-avatar",text:row.nickname.slice(0,1)}))}}else avatar=D.el("span", { class: "gift-user-avatar", text: row.nickname.slice(0, 1) });return D.el("label", { class: `gift-user-option${selected === row.user_id ? " selected" : ""}` }, [avatar, D.el("strong", { text: row.nickname }), radio]); }));
       if (!shown.length) list.append(empty("검색 결과가 없어요", "다른 닉네임으로 검색해보세요."));
     };
     const mount = () => {

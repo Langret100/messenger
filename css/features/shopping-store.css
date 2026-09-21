@@ -77,6 +77,7 @@
 .gift-user-option { display: grid; grid-template-columns: 34px minmax(0, 1fr) 18px; align-items: center; gap: 9px; min-height: 46px; padding: 6px 8px; border: 1px solid transparent; border-radius: 12px; cursor: pointer; }
 .gift-user-option:hover, .gift-user-option.selected { border-color: color-mix(in srgb, var(--accent) 34%, var(--line)); background: var(--surface); }
 .gift-user-avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 900; }
+.gift-user-avatar.profile-image { object-fit: cover; }
 .gift-user-option strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .gift-user-option input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
 

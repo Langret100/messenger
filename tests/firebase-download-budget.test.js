@@ -1,8 +1,8 @@
 const fs=require('fs'),path=require('path'),root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8'),ok=(v,m)=>{if(!v)throw new Error(m)};
 const feed=read('js/features/feed.js'),rt=read('js/adapters/realtime.js'),chat=read('js/features/chats.js'),att=read('js/chat/attachments.js'),profile=read('js/tools/profile-editor.js'),classInfo=read('js/tools/class-info.js'),cache=read('js/adapters/data-cache.js'),rules=JSON.parse(read('database.rules.json')),html=read('index.html'),sw=read('sw.js'),app=read('js/app.js');
-ok(feed.includes('MAX_POSTS=30')&&feed.includes('PAGE_SIZE=5'),'feed must retain 30 posts and page by 5');
-ok(feed.includes('cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToLast:PAGE_SIZE})'),'feed initial server read must be latest 5 only');
+ok(feed.includes('MAX_POSTS=30')&&feed.includes('INITIAL_SIZE=6')&&feed.includes('PAGE_SIZE=5'),'feed must retain 30 posts, initially load 6, and page older posts by 5');
+ok(feed.includes('cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToLast:INITIAL_SIZE})'),'feed initial server read must be latest 6 only');
 ok(feed.includes('endAt:Number(oldest.createdAt)')&&feed.includes('limitToLast:PAGE_SIZE+1'),'feed older page cursor query missing');
 ok(feed.includes('reconcileFeedCacheAndLimit()')&&feed.includes('cloudKeys(POSTS_PATH)')&&feed.includes('const saved=await mutateHeartState(next=>')&&!feed.includes('cloudGet(POSTS_PATH'),'feed 30-post server pruning/cache reconciliation must use shallow keys plus the atomic feed-state transaction');
 ok(feed.includes('PHOTO_LIMIT=60*1024')&&feed.includes('PHOTO_BLOB_TARGET=44*1024'),'feed photo Firebase budget missing');

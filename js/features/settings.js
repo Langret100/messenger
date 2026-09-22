@@ -16,7 +16,24 @@ MiniTalk.Features.Settings=(()=>{
   }
   function openAdminUnlock(){
     const D=MiniTalk.UI.Dom,body=D.el("div",{class:"modal-stack"}),input=D.el("input",{type:"password",maxlength:"80",autocomplete:"off",placeholder:"총괄 관리자 또는 쇼핑몰 관리자 비밀번호"}),submit=D.el("button",{class:"button primary",type:"button",text:"페이지 인증"});
-    submit.onclick=async()=>{submit.disabled=true;try{const role=await MiniTalk.AdminSession.unlock(input.value);MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.renderNav();MiniTalk.UI.Shell.toast(role==="SHOP_MANAGER"?"쇼핑몰 관리 페이지 인증이 완료되었습니다.":"총괄 관리 페이지 인증이 완료되었습니다.");await MiniTalk.Router.go("admin")}catch(error){MiniTalk.UI.Shell.toast(error.message||"관리 페이지 인증에 실패했습니다.");input.select();submit.disabled=false}};
+    submit.onclick=async()=>{
+      submit.disabled=true;
+      // 브라우저 팝업 차단을 피하기 위해 사용자 클릭 동기 구간에서 빈 관리자 창만 예약합니다.
+      // 이 단계는 권한 부여가 아니며 실제 관리자 페이지는 Apps Script 인증 성공 후에만 열립니다.
+      const reserved=MiniTalk.Features.Admin?.reservePopup?.(MiniTalk.UI.Dom.byId("viewHost"))===true;
+      try{
+        const role=await MiniTalk.AdminSession.unlock(input.value);
+        MiniTalk.UI.Shell.closeModal();
+        MiniTalk.UI.Shell.renderNav();
+        MiniTalk.UI.Shell.toast(role==="SHOP_MANAGER"?"쇼핑몰 관리 페이지 인증이 완료되었습니다.":"총괄 관리 페이지 인증이 완료되었습니다.");
+        await MiniTalk.Router.go("admin");
+      }catch(error){
+        if(reserved)MiniTalk.Features.Admin?.closePopup?.();
+        MiniTalk.UI.Shell.toast(error.message||"관리 페이지 인증에 실패했습니다.");
+        input.select();
+        submit.disabled=false;
+      }
+    };
     input.onkeydown=event=>{if(event.key==="Enter"){event.preventDefault();submit.click()}};
     body.append(D.el("p",{class:"muted modal-note",text:"입력한 비밀번호는 Apps Script에서 확인하며, 성공한 관리 페이지 세션에서만 해당 관리 기능을 사용할 수 있습니다. 사용자 계정 자체에 관리자 권한을 부여하지 않습니다."}),D.el("label",{class:"field"},[D.el("span",{text:"관리 페이지 비밀번호"}),input]),submit);MiniTalk.UI.Shell.modal("관리 페이지 인증",body);setTimeout(()=>input.focus(),30)
   }

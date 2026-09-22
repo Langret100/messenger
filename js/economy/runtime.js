@@ -31,8 +31,10 @@ MiniTalk.Economy.Runtime=(()=>{
           mirror={userId:id,balance:Number(legacy),revision:1,updatedAt:now()};
         }catch(error){
           // 기존 보상 시트에도 실제 계정이 없는 경우만 예전과 동일하게 실패한다.
-          if(error?.code==="NO_REWARD_USER")return null;
-          throw error;
+          if(error?.code==="NO_REWARD_USER"){
+            const prepared=await ensureRegisteredRewardAccount(id);
+            mirror={userId:id,balance:Number(prepared.coin)||0,revision:1,updatedAt:now()};
+          }else throw error;
         }
       }
       const created=await MiniTalk.Realtime.cloudTransaction(userPath(id),value=>{
@@ -57,6 +59,14 @@ MiniTalk.Economy.Runtime=(()=>{
     const token=MiniTalk.AdminSession?.requireToken?.("ADMIN");
     if(!current.user_id||!token){const e=new Error("관리자 인증이 필요합니다.");e.code="ADMIN_AUTH_REQUIRED";throw e}
     const body=new URLSearchParams({mode:"economy_admin_ensure_user",user_id:String(current.user_id),admin_token:String(token),target_user_id:String(id)});
+    const response=await fetch(MiniTalkConfig.sheetUrl,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},body});
+    if(!response.ok){const e=new Error(`서버 오류 ${response.status}`);e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
+    const data=await response.json();
+    if(!data?.ok){const e=new Error(data?.message||data?.error||"코인 계정을 준비하지 못했습니다.");e.code=data?.error||"ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
+    return{coin:Number(data.coin)||0,userId:String(data.user_id||id),created:Boolean(data.created)};
+  }
+  async function ensureRegisteredRewardAccount(id){
+    const body=new URLSearchParams({mode:"economy_ensure_user",user_id:String(id)});
     const response=await fetch(MiniTalkConfig.sheetUrl,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},body});
     if(!response.ok){const e=new Error(`서버 오류 ${response.status}`);e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
     const data=await response.json();
@@ -94,11 +104,50 @@ MiniTalk.Economy.Runtime=(()=>{
     if(status==="inactive"){const e=new Error("NO_REWARD_USER");e.code="NO_REWARD_USER";throw e}if(status==="insufficient"){const e=new Error("코인이 부족합니다.");e.code="INSUFFICIENT_COIN";throw e}const state=after||obj(value);if(!int(state.balance))throw new Error("ECONOMY_TRANSACTION_FAILED");await mirrorBalance(userId,state);if(status==="applied")flushPending(userId).catch(()=>{});return{applied:status==="applied",duplicate:status==="duplicate",newCoin:Number(state.balance),revision:Number(state.revision)||0}
   }
   const reward=args=>applyDelta({userId:args.userId,amount:args.amount,operationId:`reward:${args.rewardType}:${args.rewardKey}:${args.userId}`,type:String(args.rewardType||"REWARD"),reason:args.reason,meta:{rewardKey:String(args.rewardKey||"").slice(0,120)}});
-  async function adminAdjust({targets,amount,requestId,reason="관리자 코인 변경"}){assertFirebase();const ids=[...new Set((targets||[]).map(String).filter(Boolean))],delta=Math.floor(Number(amount)),issuer=String(MiniTalk.Store.get("user")?.user_id||"");if(!ids.length)throw new Error("NO_TARGETS");if(!Number.isSafeInteger(delta)||delta===0)throw new Error("INVALID_COIN_AMOUNT");
-    // 관리자 지급은 명시적인 재활성화 의사로 취급합니다. 등록 사용자가 보상 시트에서 빠져 있으면
-    // 계정을 준비한 뒤 실제 코인 증감은 계속 Firebase transaction에서 처리합니다.
-    for(let i=0;i<ids.length;i+=16)await Promise.all(ids.slice(i,i+16).map(ensureAdminTargetState));
-    const rows=[];for(let i=0;i<ids.length;i+=16)rows.push(...await Promise.all(ids.slice(i,i+16).map(async id=>{const r=await applyDelta({userId:id,amount:delta,operationId:`admin:${requestId}:${id}`,type:"ADMIN_COIN",reason,meta:{issuedBy:issuer,requestId:String(requestId||"")},allowNegative:true});return{user_id:id,newCoin:r.newCoin,applied:r.applied}})));return{ok:true,count:rows.length,rewarded:rows}}
+  async function adminAdjust({targets,amount,requestId,reason="관리자 코인 변경"}){
+    assertFirebase();
+    const ids=[...new Set((targets||[]).map(String).filter(Boolean))],delta=Math.floor(Number(amount)),issuer=String(MiniTalk.Store.get("user")?.user_id||"");
+    if(!ids.length)throw new Error("NO_TARGETS");
+    if(!Number.isSafeInteger(delta)||delta===0)throw new Error("INVALID_COIN_AMOUNT");
+
+    // 관리자 코인 변경은 '계정 준비'와 '잔액 변경'을 같은 사용자 transaction 흐름 안에서 끝냅니다.
+    // V4처럼 준비 직후 applyDelta()가 다시 active 상태를 검사해 NO_REWARD_USER로 되돌아가는
+    // 이중 판정을 하지 않습니다. 등록 여부/기존 잔액 확인은 Firebase 상태가 없을 때만 1회 수행합니다.
+    const adjustOne=async id=>{
+      let seedCoin=null;
+      const existing=await readUser(id);
+      if(!(existing.active&&int(existing.balance))){
+        const prepared=await ensureAdminRewardAccount(id);
+        seedCoin=Number(prepared.coin)||0;
+      }
+      const operation=`admin:${requestId}:${id}`,encoded=opKey(operation);
+      let status="applied",after=null;
+      const value=await MiniTalk.Realtime.cloudTransaction(userPath(id),current=>{
+        let s=obj(current);
+        if(!s.active||!int(s.balance)){
+          if(seedCoin===null){status="missing";return undefined}
+          s={...s,userId:String(id),active:true,balance:seedCoin,revision:Math.max(1,Number(s.revision)||1),updatedAt:now(),recentOps:obj(s.recentOps),pending:obj(s.pending)};
+        }
+        const ops=pruneOps(s.recentOps);
+        if(ops[encoded]){status="duplicate";after=s;return s}
+        const before=Number(s.balance),next=before+delta,revision=(Number(s.revision)||0)+1,ts=now();
+        ops[encoded]={type:"ADMIN_COIN",amount:delta,ts,balanceAfter:next,reason:String(reason||"").slice(0,80),persistent:true,issuedBy:issuer,requestId:String(requestId||"")};
+        const n={...s,userId:String(id),active:true,balance:next,revision,updatedAt:ts,lastTxnId:operation,recentOps:ops};
+        n.pending=appendPending(n,{type:"coin",txnId:operation,eventType:"ADMIN_COIN",amount:delta,reason:String(reason||"").slice(0,80),balance:next,revision,issuedBy:issuer,requestId:String(requestId||"")});
+        after=n;return n;
+      });
+      if(status==="missing"){const e=new Error("관리자 코인 대상 계정을 준비하지 못했습니다.");e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
+      const state=after||obj(value);
+      if(!state.active||!int(state.balance)){const e=new Error("관리자 코인 변경 결과를 확인하지 못했습니다.");e.code="ECONOMY_TRANSACTION_FAILED";throw e}
+      await Promise.all([MiniTalk.Realtime.cloudSet(activePath(id),true),mirrorBalance(id,state)]);
+      if(status==="applied")flushPending(id).catch(()=>{});
+      return{user_id:id,newCoin:Number(state.balance),applied:status==="applied"};
+    };
+
+    const rows=[];
+    for(let i=0;i<ids.length;i+=16)rows.push(...await Promise.all(ids.slice(i,i+16).map(adjustOne)));
+    return{ok:true,count:rows.length,rewarded:rows};
+  }
   function stockValue(p){return p.quantity==null?{unlimited:true,qty:null}:{unlimited:false,qty:Math.max(0,Math.floor(Number(p.quantity)||0))}}
   async function seedProduct(p,force=false){if(!p?.id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;const sv=stockValue(p),cat=Number(p.updatedAt)||0;return MiniTalk.Realtime.cloudTransaction(stockPath(p.id),cur=>{const s=obj(cur);if(!force&&Object.keys(s).length)return s;return{...s,productId:String(p.id),qty:sv.qty,unlimited:sv.unlimited,catalogUpdatedAt:cat,revision:(Number(s.revision)||0)+1,updatedAt:now()}})}
   async function seedCatalog(){return true}
@@ -114,11 +163,11 @@ MiniTalk.Economy.Runtime=(()=>{
   async function markInventoryReady(uid,key){if(!uid||!key)return;await MiniTalk.Realtime.cloudUpdate(`${userPath(uid)}/recentOps/${opKey(`purchase:${key}`)}`,{inventoryReady:true})}
   async function settlePurchaseItem(uid,item){const purchaseKey=String(item?.purchaseKey||"").trim();if(!uid||!purchaseKey)return;await markInventoryReady(uid,purchaseKey).catch(()=>{})}
   async function purchase({userId,product,purchaseKey,chargePrice,originalPrice=null,randomPurchase=false}){
-    assertFirebase();if(!(await ensureUserState(userId))){const e=new Error("코인 계정이 아직 동기화되지 않았습니다.");e.code="NO_REWARD_USER";throw e}const prior=await existingPurchase(userId,purchaseKey);if(prior?.result){if(!prior.inventoryReady){const path=`${inventoryPath(userId)}/${itemKey(prior.item.id)}`,exists=await MiniTalk.Realtime.cloudGet(path,null);if(!exists)await MiniTalk.Realtime.cloudSet(path,prior.item);await markInventoryReady(userId,purchaseKey).catch(()=>{})}return{...prior.result,item:prior.item,applied:false,duplicate:true}}
+    assertFirebase();if(!(await ensureUserState(userId))){const e=new Error("코인 계정을 준비하지 못했습니다. 잠시 후 다시 시도해주세요.");e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}const prior=await existingPurchase(userId,purchaseKey);if(prior?.result){if(!prior.inventoryReady){const path=`${inventoryPath(userId)}/${itemKey(prior.item.id)}`,exists=await MiniTalk.Realtime.cloudGet(path,null);if(!exists)await MiniTalk.Realtime.cloudSet(path,prior.item);await markInventoryReady(userId,purchaseKey).catch(()=>{})}return{...prior.result,item:prior.item,applied:false,duplicate:true}}
     const stock=await reserveStock(product,purchaseKey),encoded=opKey(`purchase:${purchaseKey}`),inventoryId=inventoryIdForPurchase(purchaseKey);let status="applied",after=null,result=null;
     try{await MiniTalk.Realtime.cloudTransaction(userPath(userId),cur=>{const s=obj(cur);if(!s.active||!int(s.balance)){status="inactive";return undefined}const ops=pruneOps(s.recentOps);if(ops[encoded]){status="duplicate";after=s;result=ops[encoded].result;return s}const before=Number(s.balance),price=Math.max(0,Math.floor(Number(chargePrice)||0));if(before<price){status="insufficient";return undefined}const revision=(Number(s.revision)||0)+1,ts=now(),item={id:inventoryId,ownerId:String(userId),productId:String(product.id),name:String(product.name||"상품"),description:String(product.description||""),imageUrl:String(product.imageUrl||""),price,originalPrice:Number(originalPrice??product.price)||price,purchaseKey:String(purchaseKey),purchasedAt:ts,createdAt:ts,deliveryStatus:"owned"};result={ok:true,applied:true,random_purchase:Boolean(randomPurchase),remaining_quantity:stock.remaining,stock_revision:stock.revision,product_id:String(product.id),product_name:item.name,product_description:item.description,product_image_url:item.imageUrl,product_updated_at:Number(product.updatedAt)||0,original_price:item.originalPrice,price,newCoin:before-price,item};ops[encoded]={type:"purchase",ts,productId:String(product.id),amount:-price,balanceAfter:result.newCoin,item,result,inventoryReady:false};const n={...s,balance:result.newCoin,revision,updatedAt:ts,lastTxnId:`purchase:${purchaseKey}`,recentOps:ops};n.pending=appendPending(n,{type:"purchase",txnId:`purchase:${purchaseKey}`,purchaseKey:String(purchaseKey),balance:result.newCoin,revision,coinBefore:before,item,productId:String(product.id),remainingQuantity:stock.remaining,stockRevision:stock.revision});after=n;return n})}catch(error){const committed=await existingPurchase(userId,purchaseKey).catch(()=>null);if(!committed)await finishReservation(product.id,stock.reservationKey,true);throw error}
     if(status==="duplicate"){await finishReservation(product.id,stock.reservationKey,true);const p=await existingPurchase(userId,purchaseKey);return{...(p?.result||result),item:p?.item||result?.item,applied:false,duplicate:true}}
-    if(status==="inactive"||status==="insufficient"){await finishReservation(product.id,stock.reservationKey,true);const e=new Error(status==="insufficient"?"코인이 부족합니다.":"NO_REWARD_USER");e.code=status==="insufficient"?"INSUFFICIENT_COIN":"NO_REWARD_USER";throw e}
+    if(status==="inactive"||status==="insufficient"){await finishReservation(product.id,stock.reservationKey,true);const e=new Error(status==="insufficient"?"코인이 부족합니다.":"코인 상태가 갱신되어 다시 확인이 필요합니다.");e.code=status==="insufficient"?"INSUFFICIENT_COIN":"ECONOMY_STATE_RETRY";throw e}
     try{await MiniTalk.Realtime.cloudSet(`${inventoryPath(userId)}/${itemKey(result.item.id)}`,result.item);await markInventoryReady(userId,purchaseKey)}catch(e){console.warn("Firebase 보관함 기록 지연",e)}await finishReservation(product.id,stock.reservationKey,false);await mirrorBalance(userId,after);flushPending(userId).catch(()=>{});return result
   }
   function weightedPick(ps){const rows=ps.filter(p=>p?.id&&Number(p.price)>0&&!(p.quantity!=null&&Number(p.quantity)<=0));if(!rows.length)return null;const low=rows.filter(p=>Number(p.price)<=2),high=rows.filter(p=>Number(p.price)>2),group=low.length&&high.length?(Math.random()<.7?low:high):(low.length?low:high),w=p=>1/Math.max(1,Number(p.price)||1);let c=Math.random()*group.reduce((a,p)=>a+w(p),0);for(const p of group){c-=w(p);if(c<=0)return p}return group[group.length-1]}

@@ -297,6 +297,10 @@ function moaruDoPost_(e) {
       case "economy_sheet_sync":
         return handleEconomySheetSync(e);
 
+      // 로그인 등록 사용자의 기존 코인 계정을 Firebase 최초 접근 시 자동 준비
+      case "economy_ensure_user":
+        return handleEconomyEnsureUser(e);
+
       // 관리자 코인 지급 대상의 누락 코인 계정 준비
       case "economy_admin_ensure_user":
         return handleEconomyAdminEnsureUser(e);

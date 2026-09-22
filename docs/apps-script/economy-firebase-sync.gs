@@ -14,6 +14,7 @@ const MOARU_ECONOMY_FIREBASE_DB_URL = "https://web-ghost-c447b-default-rtdb.fire
 const MOARU_ECONOMY_FIREBASE_ROOT = "moaru/v3/economyRuntime";
 const MOARU_ECONOMY_ACTIVE_SNAPSHOT_PROP = "MOARU_ECONOMY_ACTIVE_USERS_V1";
 const MOARU_ECONOMY_REV_PREFIX = "MOARU_ECONOMY_REV_";
+const MOARU_ECONOMY_REMOVED_PREFIX = "MOARU_ECONOMY_REMOVED_";
 const MOARU_ECONOMY_STOCK_REV_PREFIX = "MOARU_ECONOMY_STOCK_REV_";
 const MOARU_ECONOMY_LOG_SHEET = "모아루_경제기록";
 const MOARU_ECONOMY_LOG_HEADERS = ["txn_id","user_id","type","amount","balance","reason","created_at"];
@@ -80,6 +81,7 @@ function moaruEconomyActivePath_(userId) { return MOARU_ECONOMY_FIREBASE_ROOT + 
 function moaruEconomyStockPath_(productId) { return MOARU_ECONOMY_FIREBASE_ROOT + "/stock/" + moaruEconomyFirebaseKey_(productId); }
 function moaruEconomyInventoryPath_(userId) { return MOARU_ECONOMY_FIREBASE_ROOT + "/inventory/" + moaruEconomyFirebaseKey_(userId); }
 function moaruEconomyRevisionKey_(userId) { return MOARU_ECONOMY_REV_PREFIX + moaruSafeKey_(userId); }
+function moaruEconomyRemovedKey_(userId) { return MOARU_ECONOMY_REMOVED_PREFIX + moaruSafeKey_(userId); }
 function moaruEconomyStockRevisionKey_(productId) { return MOARU_ECONOMY_STOCK_REV_PREFIX + moaruSafeKey_(productId); }
 
 
@@ -227,6 +229,7 @@ function syncMoaruEconomyUsersToFirebase() {
 
   removed.forEach(function (id) {
     const key = moaruEconomyFirebaseKey_(id);
+    props.setProperty(moaruEconomyRemovedKey_(id), "1");
     groups.active[key] = null;
     groups.balances[key] = null;
     groups.inventory[key] = null;
@@ -236,6 +239,7 @@ function syncMoaruEconomyUsersToFirebase() {
 
   rows.forEach(function (row) {
     const id = String(row.userId || "").trim();
+    props.deleteProperty(moaruEconomyRemovedKey_(id));
     const key = moaruEconomyFirebaseKey_(id);
     const existing = users[key];
     let value;
@@ -321,6 +325,7 @@ function setupMoaruEconomyFirebaseSync() {
   const removed = previous.filter(function (id) { return !currentSet[id]; });
   removed.forEach(function (id) {
     const key = moaruEconomyFirebaseKey_(id);
+    props.setProperty(moaruEconomyRemovedKey_(id), "1");
     groups.active[key] = null;
     groups.balances[key] = null;
     groups.inventory[key] = null;
@@ -330,6 +335,7 @@ function setupMoaruEconomyFirebaseSync() {
 
   rows.forEach(function (row) {
     const id = String(row.userId || "").trim();
+    props.deleteProperty(moaruEconomyRemovedKey_(id));
     const key = moaruEconomyFirebaseKey_(id);
     const existing = usersBefore[key];
     const value = existing && existing.active !== false && existing.balance !== undefined
@@ -443,6 +449,53 @@ function syncPurchaseEventToSheets_(userId, event) {
   }
 }
 
+
+/** 기존 로그인 등록 사용자의 보상 시트 행을 필요할 때 1회 준비합니다.
+ * 과거에 보상탭에서 명시적으로 삭제된 사용자는 tombstone 때문에 자동 복구하지 않습니다. */
+function ensureMoaruRewardAccountForRegisteredUser_(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return { ok: false, error: "NO_USER_ID" };
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(moaruEconomyRemovedKey_(id)) === "1") return { ok: false, error: "ECONOMY_USER_REMOVED" };
+
+  let reward = getRewardUserData_(id);
+  if (reward) return { ok: true, created: false, user_id: id, coin: Number(reward.coin) || 0 };
+
+  const registered = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); });
+  if (!registered[id]) return { ok: false, error: "LOGIN_REQUIRED", message: "등록된 사용자가 아닙니다." };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return { ok: false, error: "COIN_BUSY" };
+  try {
+    reward = getRewardUserData_(id);
+    if (reward) return { ok: true, created: false, user_id: id, coin: Number(reward.coin) || 0 };
+    if (props.getProperty(moaruEconomyRemovedKey_(id)) === "1") return { ok: false, error: "ECONOMY_USER_REMOVED" };
+
+    let username = String(registered[id] || "").trim();
+    if (!username) {
+      const loginSheet = getSheet_(LOGIN_SHEET), lastRow = loginSheet.getLastRow();
+      if (lastRow >= 2) {
+        const rows = loginSheet.getRange(2, 1, lastRow - 1, 2).getValues();
+        for (let i = 0; i < rows.length; i++) if (String(rows[i][0] || "").trim() === id) { username = String(rows[i][1] || "").trim(); break; }
+      }
+    }
+    if (!username) username = id;
+    const deployedUrl = (typeof ScriptApp !== "undefined" && ScriptApp.getService) ? String(ScriptApp.getService().getUrl() || "") : "";
+    const baseUrl = deployedUrl || (typeof COIN_MANUAL_WEB_APP_URL !== "undefined" ? COIN_MANUAL_WEB_APP_URL : "");
+    const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
+    sheet.appendRow([id, username, 0, baseUrl ? baseUrl + "?user_id=" + encodeURIComponent(id) : ""]);
+    SpreadsheetApp.flush();
+    props.deleteProperty(moaruEconomyRemovedKey_(id));
+    return { ok: true, created: true, user_id: id, coin: 0 };
+  } finally { lock.releaseLock(); }
+}
+
+/** 현재 로그인 사용자가 Firebase 경제 상태를 처음 만들 때 사용합니다. 코인 증감은 하지 않습니다. */
+function handleEconomyEnsureUser(e) {
+  const p = (e && e.parameter) || {}, userId = String(p.user_id || "").trim();
+  return shopJson_(ensureMoaruRewardAccountForRegisteredUser_(userId));
+}
+
 /** 관리자 코인 지급 대상이 보상 시트에서 빠진 경우에만 명시적으로 계정을 준비합니다.
  * 일반 구매/미션/자동 보상에서는 호출하지 않으므로 삭제 사용자가 일반 동작으로 되살아나지 않습니다. */
 function handleEconomyAdminEnsureUser(e) {
@@ -450,38 +503,7 @@ function handleEconomyAdminEnsureUser(e) {
   if (!auth.ok) return shopJson_(auth);
   const targetId = String(p.target_user_id || "").trim();
   if (!targetId) return shopJson_({ ok: false, error: "NO_TARGETS" });
-
-  const registered = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); });
-  if (!registered[targetId]) return shopJson_({ ok: false, error: "LOGIN_REQUIRED", message: "등록된 사용자가 아닙니다." });
-
-  let reward = getRewardUserData_(targetId);
-  if (reward) return shopJson_({ ok: true, created: false, user_id: targetId, coin: Number(reward.coin) || 0 });
-
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) return shopJson_({ ok: false, error: "COIN_BUSY" });
-  try {
-    reward = getRewardUserData_(targetId);
-    if (reward) return shopJson_({ ok: true, created: false, user_id: targetId, coin: Number(reward.coin) || 0 });
-
-    const loginSheet = getSheet_(LOGIN_SHEET), lastRow = loginSheet.getLastRow();
-    let username = "";
-    if (lastRow >= 2) {
-      const rows = loginSheet.getRange(2, 1, lastRow - 1, 2).getValues();
-      for (let i = 0; i < rows.length; i++) {
-        if (String(rows[i][0] || "").trim() === targetId) { username = String(rows[i][1] || "").trim(); break; }
-      }
-    }
-    if (!username) username = String(registered[targetId] || targetId).trim();
-    const deployedUrl = (typeof ScriptApp !== "undefined" && ScriptApp.getService) ? String(ScriptApp.getService().getUrl() || "") : "";
-    const baseUrl = deployedUrl || (typeof COIN_MANUAL_WEB_APP_URL !== "undefined" ? COIN_MANUAL_WEB_APP_URL : "");
-    const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
-    sheet.appendRow([targetId, username, 0, baseUrl ? baseUrl + "?user_id=" + encodeURIComponent(targetId) : ""]);
-    SpreadsheetApp.flush();
-
-    // 방금 추가한 행을 같은 요청에서 TextFinder로 다시 찾아 성공 여부를 판정하지 않습니다.
-    // appendRow/flush가 성공했으면 0코인 계정 생성은 완료된 것이며 Firebase 상태는 클라이언트가 즉시 준비합니다.
-    return shopJson_({ ok: true, created: true, user_id: targetId, coin: 0 });
-  } finally { lock.releaseLock(); }
+  return shopJson_(ensureMoaruRewardAccountForRegisteredUser_(targetId));
 }
 
 /** Firebase 클라이언트 처리 완료 후 Sheets 장기 원장에 비동기 반영 */
@@ -490,10 +512,16 @@ function handleEconomySheetSync(e) {
   if (!userId) return shopJson_({ ok: false, error: "NO_USER_ID" });
   let event = {};
   try { event = JSON.parse(String(p.event_json || "{}")) || {}; } catch (error) { return shopJson_({ ok: false, error: "INVALID_EVENT_JSON" }); }
-  const reward = findRewardUserForShop_(userId);
+  let reward = findRewardUserForShop_(userId);
   if (!reward) {
-    try { purgeMoaruEconomyUser_(userId); } catch (error) {}
-    return shopJson_({ ok: false, error: "NO_REWARD_USER" });
+    const ensured = ensureMoaruRewardAccountForRegisteredUser_(userId);
+    if (!ensured || !ensured.ok) {
+      // 명시적으로 삭제된 사용자이거나 로그인 등록도 없는 경우에만 Firebase 상태를 정리합니다.
+      try { purgeMoaruEconomyUser_(userId); } catch (error) {}
+      return shopJson_({ ok: false, error: ensured && ensured.error || "NO_REWARD_USER" });
+    }
+    reward = findRewardUserForShop_(userId);
+    if (!reward) return shopJson_({ ok: false, error: "ECONOMY_SHEET_ACCOUNT_CREATE_FAILED" });
   }
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return shopJson_({ ok: false, error: "COIN_BUSY" });

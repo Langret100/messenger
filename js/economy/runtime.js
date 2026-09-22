@@ -116,16 +116,29 @@ MiniTalk.Economy.Runtime=(()=>{
     if(!ids.length)throw new Error("NO_TARGETS");
     if(!Number.isSafeInteger(delta)||delta===0)throw new Error("INVALID_COIN_AMOUNT");
 
-    // 관리자 코인 변경은 '계정 준비'와 '잔액 변경'을 같은 사용자 transaction 흐름 안에서 끝냅니다.
-    // V4처럼 준비 직후 applyDelta()가 다시 active 상태를 검사해 NO_REWARD_USER로 되돌아가는
-    // 이중 판정을 하지 않습니다. 등록 여부/기존 잔액 확인은 Firebase 상태가 없을 때만 1회 수행합니다.
+    // 기존 관리자 기능에서 이미 검증된 admin_user_balances를 초기 seed 원장으로 사용합니다.
+    // 정상 사용자를 위해 새 economy_admin_ensure_user API를 매번 거치지 않습니다.
+    // Firebase 상태가 없는 대상만 한 번 seed하고, 실제 증감은 아래 Firebase transaction에서 처리합니다.
+    const existingById=new Map();
+    await Promise.all(ids.map(async id=>{existingById.set(id,await readUser(id))}));
+    const missingIds=ids.filter(id=>{const row=existingById.get(id)||{};return !(row.active&&int(row.balance))});
+    const seedById=new Map();
+    if(missingIds.length){
+      const token=MiniTalk.AdminSession?.requireToken?.("ADMIN");
+      const legacyRows=await MiniTalk.AuthApi.adminUserBalances(issuer,token);
+      const legacyMap=new Map((legacyRows||[]).map(row=>[String(row.user_id||row.userId||""),Number(row.coin??row.balance)]));
+      missingIds.forEach(id=>{const value=legacyMap.get(String(id));if(Number.isSafeInteger(value))seedById.set(String(id),value)});
+      // 정말 보상 시트에도 없는 신규/복구 대상만 보조 API를 사용합니다.
+      for(const id of missingIds){
+        if(seedById.has(String(id)))continue;
+        const prepared=await ensureAdminRewardAccount(id);
+        seedById.set(String(id),Number(prepared.coin)||0);
+      }
+    }
     const adjustOne=async id=>{
       let seedCoin=null;
-      const existing=await readUser(id);
-      if(!(existing.active&&int(existing.balance))){
-        const prepared=await ensureAdminRewardAccount(id);
-        seedCoin=Number(prepared.coin)||0;
-      }
+      const existing=existingById.get(id)||{};
+      if(!(existing.active&&int(existing.balance)))seedCoin=seedById.get(String(id));
       const operation=`admin:${requestId}:${id}`,encoded=opKey(operation);
       let status="applied",after=null;
       const value=await MiniTalk.Realtime.cloudTransaction(userPath(id),current=>{

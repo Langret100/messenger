@@ -455,35 +455,32 @@ function handleEconomyAdminEnsureUser(e) {
   if (!registered[targetId]) return shopJson_({ ok: false, error: "LOGIN_REQUIRED", message: "등록된 사용자가 아닙니다." });
 
   let reward = getRewardUserData_(targetId);
-  if (reward) {
-    try { moaruEconomyCreateFirebaseUser_({ userId: targetId, username: reward.username, coin: reward.coin }); } catch (error) { console.error("ECONOMY_ADMIN_ENSURE_FIREBASE_FAILED", targetId, error); }
-    return shopJson_({ ok: true, created: false, user_id: targetId, coin: Number(reward.coin) || 0 });
-  }
+  if (reward) return shopJson_({ ok: true, created: false, user_id: targetId, coin: Number(reward.coin) || 0 });
 
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return shopJson_({ ok: false, error: "COIN_BUSY" });
   try {
     reward = getRewardUserData_(targetId);
-    if (!reward) {
-      const loginSheet = getSheet_(LOGIN_SHEET), lastRow = loginSheet.getLastRow();
-      let username = "";
-      if (lastRow >= 2) {
-        const rows = loginSheet.getRange(2, 1, lastRow - 1, 2).getValues();
-        for (let i = 0; i < rows.length; i++) {
-          if (String(rows[i][0] || "").trim() === targetId) { username = String(rows[i][1] || "").trim(); break; }
-        }
+    if (reward) return shopJson_({ ok: true, created: false, user_id: targetId, coin: Number(reward.coin) || 0 });
+
+    const loginSheet = getSheet_(LOGIN_SHEET), lastRow = loginSheet.getLastRow();
+    let username = "";
+    if (lastRow >= 2) {
+      const rows = loginSheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (let i = 0; i < rows.length; i++) {
+        if (String(rows[i][0] || "").trim() === targetId) { username = String(rows[i][1] || "").trim(); break; }
       }
-      if (!username) username = String(registered[targetId] || targetId).trim();
-      const deployedUrl = (typeof ScriptApp !== "undefined" && ScriptApp.getService) ? String(ScriptApp.getService().getUrl() || "") : "";
-      const baseUrl = deployedUrl || (typeof COIN_MANUAL_WEB_APP_URL !== "undefined" ? COIN_MANUAL_WEB_APP_URL : "");
-      const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
-      sheet.appendRow([targetId, username, 0, baseUrl ? baseUrl + "?user_id=" + encodeURIComponent(targetId) : ""]);
-      SpreadsheetApp.flush();
-      reward = getRewardUserData_(targetId);
     }
-    if (!reward) return shopJson_({ ok: false, error: "NO_REWARD_USER" });
-    moaruEconomyCreateFirebaseUser_({ userId: targetId, username: reward.username, coin: reward.coin });
-    return shopJson_({ ok: true, created: true, user_id: targetId, coin: Number(reward.coin) || 0 });
+    if (!username) username = String(registered[targetId] || targetId).trim();
+    const deployedUrl = (typeof ScriptApp !== "undefined" && ScriptApp.getService) ? String(ScriptApp.getService().getUrl() || "") : "";
+    const baseUrl = deployedUrl || (typeof COIN_MANUAL_WEB_APP_URL !== "undefined" ? COIN_MANUAL_WEB_APP_URL : "");
+    const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
+    sheet.appendRow([targetId, username, 0, baseUrl ? baseUrl + "?user_id=" + encodeURIComponent(targetId) : ""]);
+    SpreadsheetApp.flush();
+
+    // 방금 추가한 행을 같은 요청에서 TextFinder로 다시 찾아 성공 여부를 판정하지 않습니다.
+    // appendRow/flush가 성공했으면 0코인 계정 생성은 완료된 것이며 Firebase 상태는 클라이언트가 즉시 준비합니다.
+    return shopJson_({ ok: true, created: true, user_id: targetId, coin: 0 });
   } finally { lock.releaseLock(); }
 }
 

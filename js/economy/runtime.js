@@ -61,15 +61,26 @@ MiniTalk.Economy.Runtime=(()=>{
     if(!response.ok){const e=new Error(`서버 오류 ${response.status}`);e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
     const data=await response.json();
     if(!data?.ok){const e=new Error(data?.message||data?.error||"코인 계정을 준비하지 못했습니다.");e.code=data?.error||"ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
-    return Number(data.coin)||0;
+    return{coin:Number(data.coin)||0,userId:String(data.user_id||id),created:Boolean(data.created)};
   }
   async function ensureAdminTargetState(id){
     let state=await ensureUserState(id);
     if(state&&state.active&&int(state.balance))return state;
-    await ensureAdminRewardAccount(id);
-    state=await ensureUserState(id);
-    if(state&&state.active&&int(state.balance))return state;
-    const e=new Error("코인 계정을 준비하지 못했습니다.");e.code="NO_REWARD_USER";throw e;
+
+    // Apps Script에서 기존 코인 계정 존재/등록 사용자 여부를 확인한 결과를 받은 뒤에는
+    // coin_status를 다시 조회하지 않습니다. 같은 요청 안에서 Firebase 상태를 직접 준비해
+    // 시트 반영 직후 캐시/전파 지연 때문에 NO_REWARD_USER로 되돌아가는 경로를 제거합니다.
+    const prepared=await ensureAdminRewardAccount(id),seedCoin=Number(prepared.coin)||0;
+    state=await MiniTalk.Realtime.cloudTransaction(userPath(id),value=>{
+      const current=obj(value);
+      if(current.active&&int(current.balance))return current;
+      return{...current,userId:String(id),active:true,balance:seedCoin,revision:Math.max(1,Number(current.revision)||1),updatedAt:now(),recentOps:obj(current.recentOps),pending:obj(current.pending)};
+    });
+    if(state&&state.active&&int(state.balance)){
+      await Promise.all([MiniTalk.Realtime.cloudSet(activePath(id),true),mirrorBalance(id,state)]);
+      return state;
+    }
+    const e=new Error("코인 계정을 준비하지 못했습니다.");e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e;
   }
   async function mirrorBalance(id,state){if(!id||!state||!int(state.balance))return;await MiniTalk.Realtime.cloudTransaction(balancePath(id),current=>{const c=obj(current),cr=Number(c.revision)||0,nr=Number(state.revision)||0;if(cr>nr)return c;return{userId:String(id),balance:Number(state.balance),revision:nr,updatedAt:Number(state.updatedAt)||now()}})}
   async function balance(id){if(!id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;const row=await MiniTalk.Realtime.cloudGet(balancePath(id),null);if(row&&int(row.balance))return Number(row.balance);const u=await ensureUserState(id);if(!u||!u.active||!int(u.balance))return null;await mirrorBalance(id,u).catch(()=>{});return Number(u.balance)}
@@ -92,7 +103,11 @@ MiniTalk.Economy.Runtime=(()=>{
   async function seedProduct(p,force=false){if(!p?.id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;const sv=stockValue(p),cat=Number(p.updatedAt)||0;return MiniTalk.Realtime.cloudTransaction(stockPath(p.id),cur=>{const s=obj(cur);if(!force&&Object.keys(s).length)return s;return{...s,productId:String(p.id),qty:sv.qty,unlimited:sv.unlimited,catalogUpdatedAt:cat,revision:(Number(s.revision)||0)+1,updatedAt:now()}})}
   async function seedCatalog(){return true}
   const setProductStock=p=>seedProduct(p,true);async function deleteProductStock(id){if(MiniTalk.Realtime?.getMode?.()==="firebase")await MiniTalk.Realtime.cloudRemove(stockPath(id))}
-  async function reserveStock(product,purchaseKey){if(product.quantity==null)return{changed:false,remaining:null,revision:0};const rk=opKey(`purchase:${purchaseKey}`);let reason="",out=null;await MiniTalk.Realtime.cloudTransaction(stockPath(product.id),cur=>{const s=obj(cur);if(!Object.keys(s).length){reason="missing";return undefined}if(s.unlimited){out=s;return s}const reservations=obj(s.reservations);if(reservations[rk]){out=s;return s}const qty=Math.floor(Number(s.qty)||0);if(qty<=0){reason="soldout";return undefined}out={...s,qty:qty-1,revision:(Number(s.revision)||0)+1,updatedAt:now(),reservations:{...reservations,[rk]:{ts:now()}}};return out});if(reason==="missing"){const e=new Error("상품 재고가 아직 실시간 서버에 준비되지 않았습니다.");e.code="PRODUCT_NOT_AVAILABLE";throw e}if(reason==="soldout"){const e=new Error("품절된 상품입니다.");e.code="PRODUCT_SOLD_OUT";throw e}return{changed:true,remaining:Number(out.qty),revision:Number(out.revision)||0,reservationKey:rk}}
+  async function reserveStock(product,purchaseKey){if(product.quantity==null)return{changed:false,remaining:null,revision:0};const rk=opKey(`purchase:${purchaseKey}`);let reason="",out=null;await MiniTalk.Realtime.cloudTransaction(stockPath(product.id),cur=>{let s=obj(cur);
+    // 기존 상품의 Firebase 재고 노드가 setup에서 빠졌더라도 구매를 막지 않습니다.
+    // 현재 카탈로그 재고를 transaction 내부의 최초값으로 사용하므로 동시 첫 구매도 직렬화됩니다.
+    if(!Object.keys(s).length){const initialQty=Math.max(0,Math.floor(Number(product.quantity)||0));s={productId:String(product.id),qty:initialQty,unlimited:false,catalogUpdatedAt:Number(product.updatedAt)||0,revision:0,updatedAt:now(),reservations:{}}}
+    if(s.unlimited){out=s;return s}const reservations=obj(s.reservations);if(reservations[rk]){out=s;return s}const qty=Math.floor(Number(s.qty)||0);if(qty<=0){reason="soldout";return undefined}out={...s,productId:String(product.id),qty:qty-1,unlimited:false,catalogUpdatedAt:Math.max(Number(s.catalogUpdatedAt)||0,Number(product.updatedAt)||0),revision:(Number(s.revision)||0)+1,updatedAt:now(),reservations:{...reservations,[rk]:{ts:now()}}};return out});if(reason==="soldout"){const e=new Error("품절된 상품입니다.");e.code="PRODUCT_SOLD_OUT";throw e}if(!out){const e=new Error("상품 재고 처리에 실패했습니다.");e.code="STOCK_TRANSACTION_FAILED";throw e}return{changed:true,remaining:Number(out.qty),revision:Number(out.revision)||0,reservationKey:rk}}
   async function finishReservation(productId,rk,rollback=false){if(!rk)return;await MiniTalk.Realtime.cloudTransaction(stockPath(productId),cur=>{const s=obj(cur),r=obj(s.reservations);if(!r[rk])return s;delete r[rk];return{...s,qty:rollback&&!s.unlimited?Math.max(0,Number(s.qty)||0)+1:s.qty,reservations:r,revision:(Number(s.revision)||0)+(rollback?1:0),updatedAt:now()}}).catch(()=>{})}
   const inventoryIdForPurchase=k=>`fb-${keyOf(String(k))}`;
   async function existingPurchase(uid,key){const row=await MiniTalk.Realtime.cloudGet(`${userPath(uid)}/recentOps/${opKey(`purchase:${key}`)}`,null);return row?.type==="purchase"?row:null}

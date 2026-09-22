@@ -563,10 +563,13 @@ function handleEconomySheetSync(e) {
   try { event = JSON.parse(String(p.event_json || "{}")) || {}; } catch (error) { return shopJson_({ ok: false, error: "INVALID_EVENT_JSON" }); }
   let reward = findRewardUserForShop_(userId);
   if (!reward) {
-    const ensured = ensureMoaruRewardAccountForRegisteredUser_(userId);
+    const isAdminCoin = String(event.type || "") === "coin" && String(event.eventType || "") === "ADMIN_COIN";
+    const ensured = isAdminCoin
+      ? ensureMoaruRewardAccountForAdminTarget_(userId)
+      : ensureMoaruRewardAccountForRegisteredUser_(userId);
     if (!ensured || !ensured.ok) {
-      // 명시적으로 삭제된 사용자이거나 로그인 등록도 없는 경우에만 Firebase 상태를 정리합니다.
-      try { purgeMoaruEconomyUser_(userId); } catch (error) {}
+      // 일반 자동 처리에서는 삭제 사용자를 되살리지 않는다. 관리자 명시 증감만 재활성화를 허용한다.
+      if (!isAdminCoin) try { purgeMoaruEconomyUser_(userId); } catch (error) {}
       return shopJson_({ ok: false, error: ensured && ensured.error || "NO_REWARD_USER" });
     }
     reward = findRewardUserForShop_(userId);

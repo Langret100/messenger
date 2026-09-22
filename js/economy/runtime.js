@@ -127,13 +127,14 @@ MiniTalk.Economy.Runtime=(()=>{
       const token=MiniTalk.AdminSession?.requireToken?.("ADMIN");
       const legacyRows=await MiniTalk.AuthApi.adminUserBalances(issuer,token);
       const legacyMap=new Map((legacyRows||[]).map(row=>[String(row.user_id||row.userId||""),Number(row.coin??row.balance)]));
-      missingIds.forEach(id=>{const value=legacyMap.get(String(id));if(Number.isSafeInteger(value))seedById.set(String(id),value)});
-      // 정말 보상 시트에도 없는 신규/복구 대상만 보조 API를 사용합니다.
-      for(const id of missingIds){
-        if(seedById.has(String(id)))continue;
-        const prepared=await ensureAdminRewardAccount(id);
-        seedById.set(String(id),Number(prepared.coin)||0);
-      }
+      missingIds.forEach(id=>{
+        const value=legacyMap.get(String(id));
+        if(Number.isSafeInteger(value))seedById.set(String(id),value);
+      });
+      // 관리자 대상은 admin_user_balances가 등록 사용자 전체를 반환하므로
+      // 별도 계정 준비 API를 호출하지 않는다. 여기에도 없으면 실제 미등록 사용자다.
+      const unresolved=missingIds.filter(id=>!seedById.has(String(id)));
+      if(unresolved.length){const e=new Error(`등록 사용자 원장에서 ${unresolved.length}명의 코인 기준값을 찾지 못했습니다.`);e.code="ADMIN_TARGET_NOT_REGISTERED";e.targets=unresolved;throw e}
     }
     const adjustOne=async id=>{
       let seedCoin=null;

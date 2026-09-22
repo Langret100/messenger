@@ -1130,11 +1130,14 @@ function handleAdminDispatch(e) {
 function handleAdminUserBalances(e) {
   const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
   if (!auth.ok) return shopJson_(auth);
-  // 관리자 화면은 user_directory를 이미 별도로 보유합니다. 여기서 로그인 시트를 다시
-  // 전체 조회하면 관리자 진입 직후 같은 명단을 중복으로 읽게 되어 느려집니다.
-  // 코인 원장만 한 번 읽고 user_id -> coin만 반환하고, 닉네임/누락 계정 병합은 클라이언트가 합니다.
-  const coins = moaruRewardCoinMap_(), rows = Object.keys(coins).map(function (userId) {
-    return { user_id: userId, coin: coins[userId] };
+  // 관리자 대상 목록과 코인 seed 기준을 하나로 맞춘다.
+  // 등록 사용자는 모두 반환하고, 아직 보상 시트 행이 없는 계정은 0으로 표시한다.
+  // 실제 관리자 증감 후 economy_sheet_sync가 해당 행을 생성해 백업한다.
+  const users = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); });
+  const coins = moaruRewardCoinMap_();
+  const rows = Object.keys(users).map(function (userId) {
+    const hasCoinAccount = Object.prototype.hasOwnProperty.call(coins, userId);
+    return { user_id: userId, coin: hasCoinAccount ? coins[userId] : 0, coin_account: hasCoinAccount };
   });
   return shopJson_({ ok: true, users: rows });
 }

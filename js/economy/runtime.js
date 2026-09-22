@@ -54,44 +54,6 @@ MiniTalk.Economy.Runtime=(()=>{
     try{return await task}finally{if(bootstrapPromises.get(id)===task)bootstrapPromises.delete(id)}
   }
   async function bootstrap(id){if(!id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;return ensureUserState(id)}
-  async function ensureAdminRewardAccount(id){
-    const current=MiniTalk.Store.get("user")||{};
-    const token=MiniTalk.AdminSession?.requireToken?.("ADMIN");
-    if(!current.user_id||!token){const e=new Error("관리자 인증이 필요합니다.");e.code="ADMIN_AUTH_REQUIRED";throw e}
-    const body=new URLSearchParams({mode:"economy_admin_ensure_user",user_id:String(current.user_id),admin_token:String(token),target_user_id:String(id)});
-    const response=await fetch(MiniTalkConfig.sheetUrl,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},body});
-    if(!response.ok){const e=new Error(`서버 오류 ${response.status}`);e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
-    const data=await response.json();
-    if(!data?.ok){const e=new Error(data?.message||data?.error||"코인 계정을 준비하지 못했습니다.");e.code=data?.error||"ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
-    return{coin:Number(data.coin)||0,userId:String(data.user_id||id),created:Boolean(data.created)};
-  }
-  async function ensureRegisteredRewardAccount(id){
-    const body=new URLSearchParams({mode:"economy_ensure_user",user_id:String(id)});
-    const response=await fetch(MiniTalkConfig.sheetUrl,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},body});
-    if(!response.ok){const e=new Error(`서버 오류 ${response.status}`);e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
-    const data=await response.json();
-    if(!data?.ok){const e=new Error(data?.message||data?.error||"코인 계정을 준비하지 못했습니다.");e.code=data?.error||"ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
-    return{coin:Number(data.coin)||0,userId:String(data.user_id||id),created:Boolean(data.created)};
-  }
-  async function ensureAdminTargetState(id){
-    let state=await ensureUserState(id);
-    if(state&&state.active&&int(state.balance))return state;
-
-    // Apps Script에서 기존 코인 계정 존재/등록 사용자 여부를 확인한 결과를 받은 뒤에는
-    // coin_status를 다시 조회하지 않습니다. 같은 요청 안에서 Firebase 상태를 직접 준비해
-    // 시트 반영 직후 캐시/전파 지연 때문에 NO_REWARD_USER로 되돌아가는 경로를 제거합니다.
-    const prepared=await ensureAdminRewardAccount(id),seedCoin=Number(prepared.coin)||0;
-    state=await MiniTalk.Realtime.cloudTransaction(userPath(id),value=>{
-      const current=obj(value);
-      if(current.active&&int(current.balance))return current;
-      return{...current,userId:String(id),active:true,balance:seedCoin,revision:Math.max(1,Number(current.revision)||1),updatedAt:now(),recentOps:obj(current.recentOps),pending:obj(current.pending)};
-    });
-    if(state&&state.active&&int(state.balance)){
-      await Promise.all([MiniTalk.Realtime.cloudSet(activePath(id),true),mirrorBalance(id,state)]);
-      return state;
-    }
-    const e=new Error("코인 계정을 준비하지 못했습니다.");e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e;
-  }
   async function mirrorBalance(id,state){if(!id||!state||!int(state.balance))return;await MiniTalk.Realtime.cloudTransaction(balancePath(id),current=>{const c=obj(current),cr=Number(c.revision)||0,nr=Number(state.revision)||0;if(cr>nr)return c;return{userId:String(id),balance:Number(state.balance),revision:nr,updatedAt:Number(state.updatedAt)||now()}})}
   async function balance(id){if(!id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;const row=await MiniTalk.Realtime.cloudGet(balancePath(id),null);if(row&&int(row.balance))return Number(row.balance);const u=await ensureUserState(id);if(!u||!u.active||!int(u.balance))return null;await mirrorBalance(id,u).catch(()=>{});return Number(u.balance)}
   async function allBalances(){assertFirebase();const src=obj(await MiniTalk.Realtime.cloudGet(`${ROOT}/balances`,{})),out={};Object.values(src).forEach(r=>{if(r?.userId&&int(r.balance))out[String(r.userId)]=Number(r.balance)});return out}
@@ -115,39 +77,41 @@ MiniTalk.Economy.Runtime=(()=>{
     const ids=[...new Set((targets||[]).map(String).filter(Boolean))],delta=Math.floor(Number(amount)),issuer=String(MiniTalk.Store.get("user")?.user_id||"");
     if(!ids.length)throw new Error("NO_TARGETS");
     if(!Number.isSafeInteger(delta)||delta===0)throw new Error("INVALID_COIN_AMOUNT");
+    // 관리자 권한은 대상 계정에 부여되는 것이 아니라, Apps Script 인증을 통과한 관리자 페이지 세션에 있다.
+    // 따라서 대상별 '코인 계정 준비 권한' API를 호출하지 않는다. 페이지에 표시된 등록 사용자의 현재 잔액만 seed로 사용한다.
+    MiniTalk.AdminSession?.requireToken?.("ADMIN");
 
-    // 기존 관리자 기능에서 이미 검증된 admin_user_balances를 초기 seed 원장으로 사용합니다.
-    // 정상 사용자를 위해 새 economy_admin_ensure_user API를 매번 거치지 않습니다.
-    // Firebase 상태가 없는 대상만 한 번 seed하고, 실제 증감은 아래 Firebase transaction에서 처리합니다.
     const existingById=new Map();
     await Promise.all(ids.map(async id=>{existingById.set(id,await readUser(id))}));
     const missingIds=ids.filter(id=>{const row=existingById.get(id)||{};return !(row.active&&int(row.balance))});
     const seedById=new Map();
+
+    // 이미 Firebase 상태가 있는 사용자도 transaction 첫 콜백이 null일 수 있으므로
+    // 기존 잔액 자체를 반드시 seed로 보관한다. 이것이 없으면 정상 사용자도 BOOTSTRAP_FAILED로 오판된다.
+    ids.forEach(id=>{const row=existingById.get(id)||{};if(row.active&&int(row.balance))seedById.set(String(id),Number(row.balance))});
+
     if(missingIds.length){
-      const token=MiniTalk.AdminSession?.requireToken?.("ADMIN");
+      const token=MiniTalk.AdminSession.requireToken("ADMIN");
       const legacyRows=await MiniTalk.AuthApi.adminUserBalances(issuer,token);
       const legacyMap=new Map((legacyRows||[]).map(row=>[String(row.user_id||row.userId||""),Number(row.coin??row.balance)]));
       missingIds.forEach(id=>{
         const value=legacyMap.get(String(id));
         if(Number.isSafeInteger(value))seedById.set(String(id),value);
       });
-      // 관리자 대상은 admin_user_balances가 등록 사용자 전체를 반환하므로
-      // 별도 계정 준비 API를 호출하지 않는다. 여기에도 없으면 실제 미등록 사용자다.
       const unresolved=missingIds.filter(id=>!seedById.has(String(id)));
-      if(unresolved.length){const e=new Error(`등록 사용자 원장에서 ${unresolved.length}명의 코인 기준값을 찾지 못했습니다.`);e.code="ADMIN_TARGET_NOT_REGISTERED";e.targets=unresolved;throw e}
+      if(unresolved.length){const e=new Error(`관리자 페이지 사용자 목록에서 ${unresolved.length}명의 잔액 기준값을 찾지 못했습니다.`);e.code="ADMIN_TARGET_NOT_REGISTERED";e.targets=unresolved;throw e}
     }
+
     const adjustOne=async id=>{
-      let seedCoin=null;
-      const existing=existingById.get(id)||{};
-      if(!(existing.active&&int(existing.balance)))seedCoin=seedById.get(String(id));
+      const seedCoin=seedById.get(String(id));
+      if(!Number.isSafeInteger(seedCoin)){const e=new Error("관리자 대상 잔액을 확인하지 못했습니다.");e.code="ADMIN_TARGET_BALANCE_MISSING";throw e}
       const operation=`admin:${requestId}:${id}`,encoded=opKey(operation);
       let status="applied",after=null;
       const value=await MiniTalk.Realtime.cloudTransaction(userPath(id),current=>{
+        // Firebase transaction은 첫 호출에서 null/빈 로컬 캐시를 줄 수 있다.
+        // 관리자 페이지에서 이미 확보한 seed 잔액으로 상태를 구성한 뒤 서버값과 재시도하게 한다.
         let s=obj(current);
-        if(!s.active||!int(s.balance)){
-          if(seedCoin===null){status="missing";return undefined}
-          s={...s,userId:String(id),active:true,balance:seedCoin,revision:Math.max(1,Number(s.revision)||1),updatedAt:now(),recentOps:obj(s.recentOps),pending:obj(s.pending)};
-        }
+        if(!s.active||!int(s.balance))s={...s,userId:String(id),active:true,balance:seedCoin,revision:Math.max(1,Number(s.revision)||1),updatedAt:now(),recentOps:obj(s.recentOps),pending:obj(s.pending)};
         const ops=pruneOps(s.recentOps);
         if(ops[encoded]){status="duplicate";after=s;return s}
         const before=Number(s.balance),next=before+delta,revision=(Number(s.revision)||0)+1,ts=now();
@@ -155,11 +119,10 @@ MiniTalk.Economy.Runtime=(()=>{
         const n={...s,userId:String(id),active:true,balance:next,revision,updatedAt:ts,lastTxnId:operation,recentOps:ops};
         n.pending=appendPending(n,{type:"coin",txnId:operation,eventType:"ADMIN_COIN",amount:delta,reason:String(reason||"").slice(0,80),balance:next,revision,issuedBy:issuer,requestId:String(requestId||"")});
         after=n;return n;
-      });
-      if(status==="missing"){const e=new Error("관리자 코인 대상 계정을 준비하지 못했습니다.");e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
+      },{requireCommit:true});
       const state=after||obj(value);
       if(!state.active||!int(state.balance)){const e=new Error("관리자 코인 변경 결과를 확인하지 못했습니다.");e.code="ECONOMY_TRANSACTION_FAILED";throw e}
-      await Promise.all([MiniTalk.Realtime.cloudSet(activePath(id),true),mirrorBalance(id,state)]);
+      await Promise.all([MiniTalk.Realtime.cloudSet(activePath(id),true).catch(()=>{}),mirrorBalance(id,state)]);
       if(status==="applied")flushPending(id).catch(()=>{});
       return{user_id:id,newCoin:Number(state.balance),applied:status==="applied"};
     };

@@ -456,10 +456,17 @@ function ensureMoaruRewardAccountForRegisteredUser_(userId) {
   const id = String(userId || "").trim();
   if (!id) return { ok: false, error: "NO_USER_ID" };
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty(moaruEconomyRemovedKey_(id)) === "1") return { ok: false, error: "ECONOMY_USER_REMOVED" };
 
+  // 실제 보상 시트 행이 존재하면 그것이 현재 계정의 기준이다.
+  // 과거 잘못된 sync가 남긴 stale tombstone 때문에 정상 계정을 막지 않는다.
   let reward = getRewardUserData_(id);
-  if (reward) return { ok: true, created: false, user_id: id, coin: Number(reward.coin) || 0 };
+  if (reward) {
+    props.deleteProperty(moaruEconomyRemovedKey_(id));
+    return { ok: true, created: false, user_id: id, coin: Number(reward.coin) || 0 };
+  }
+
+  // 보상 시트 행이 실제로 없고 삭제 표식이 남아 있는 경우에만 일반 자동 복구를 막는다.
+  if (props.getProperty(moaruEconomyRemovedKey_(id)) === "1") return { ok: false, error: "ECONOMY_USER_REMOVED" };
 
   const registered = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); });
   if (!registered[id]) return { ok: false, error: "LOGIN_REQUIRED", message: "등록된 사용자가 아닙니다." };
@@ -468,7 +475,10 @@ function ensureMoaruRewardAccountForRegisteredUser_(userId) {
   if (!lock.tryLock(5000)) return { ok: false, error: "COIN_BUSY" };
   try {
     reward = getRewardUserData_(id);
-    if (reward) return { ok: true, created: false, user_id: id, coin: Number(reward.coin) || 0 };
+    if (reward) {
+      props.deleteProperty(moaruEconomyRemovedKey_(id));
+      return { ok: true, created: false, user_id: id, coin: Number(reward.coin) || 0 };
+    }
     if (props.getProperty(moaruEconomyRemovedKey_(id)) === "1") return { ok: false, error: "ECONOMY_USER_REMOVED" };
 
     let username = String(registered[id] || "").trim();
@@ -490,6 +500,45 @@ function ensureMoaruRewardAccountForRegisteredUser_(userId) {
   } finally { lock.releaseLock(); }
 }
 
+/** 관리자 명시 코인 변경은 등록 사용자를 재활성화할 수 있다.
+ * 보상탭에서 과거 삭제된 표식이 남아 있어도, 관리자가 직접 대상을 선택해 지급/차감하는 행위는
+ * 새 경제 계정 생성 의사로 취급한다. 실제 로그인 등록 사용자가 아닌 ID는 생성하지 않는다. */
+function ensureMoaruRewardAccountForAdminTarget_(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return { ok: false, error: "NO_USER_ID" };
+  const props = PropertiesService.getScriptProperties();
+
+  let reward = getRewardUserData_(id);
+  if (reward) {
+    props.deleteProperty(moaruEconomyRemovedKey_(id));
+    return { ok: true, created: false, reactivated: false, user_id: id, coin: Number(reward.coin) || 0 };
+  }
+
+  const registered = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); });
+  if (!registered[id]) return { ok: false, error: "LOGIN_REQUIRED", message: "등록된 사용자가 아닙니다." };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return { ok: false, error: "COIN_BUSY" };
+  try {
+    reward = getRewardUserData_(id);
+    if (reward) {
+      props.deleteProperty(moaruEconomyRemovedKey_(id));
+      return { ok: true, created: false, reactivated: false, user_id: id, coin: Number(reward.coin) || 0 };
+    }
+
+    // 관리자 명시 작업에서만 stale/과거 삭제 표식을 해제한다.
+    const wasRemoved = props.getProperty(moaruEconomyRemovedKey_(id)) === "1";
+    let username = String(registered[id] || "").trim() || id;
+    const deployedUrl = (typeof ScriptApp !== "undefined" && ScriptApp.getService) ? String(ScriptApp.getService().getUrl() || "") : "";
+    const baseUrl = deployedUrl || (typeof COIN_MANUAL_WEB_APP_URL !== "undefined" ? COIN_MANUAL_WEB_APP_URL : "");
+    const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
+    sheet.appendRow([id, username, 0, baseUrl ? baseUrl + "?user_id=" + encodeURIComponent(id) : ""]);
+    SpreadsheetApp.flush();
+    props.deleteProperty(moaruEconomyRemovedKey_(id));
+    return { ok: true, created: true, reactivated: wasRemoved, user_id: id, coin: 0 };
+  } finally { lock.releaseLock(); }
+}
+
 /** 현재 로그인 사용자가 Firebase 경제 상태를 처음 만들 때 사용합니다. 코인 증감은 하지 않습니다. */
 function handleEconomyEnsureUser(e) {
   const p = (e && e.parameter) || {}, userId = String(p.user_id || "").trim();
@@ -503,7 +552,7 @@ function handleEconomyAdminEnsureUser(e) {
   if (!auth.ok) return shopJson_(auth);
   const targetId = String(p.target_user_id || "").trim();
   if (!targetId) return shopJson_({ ok: false, error: "NO_TARGETS" });
-  return shopJson_(ensureMoaruRewardAccountForRegisteredUser_(targetId));
+  return shopJson_(ensureMoaruRewardAccountForAdminTarget_(targetId));
 }
 
 /** Firebase 클라이언트 처리 완료 후 Sheets 장기 원장에 비동기 반영 */

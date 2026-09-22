@@ -220,11 +220,11 @@ MiniTalk.AuthApi = (() => {
       const data = await post({ mode: "admin_task_list", user_id: userId, admin_token: adminToken }, 10000);
       return Array.isArray(data.tasks) ? data.tasks : [];
     },
-    async adminTaskReview({ userId, adminToken, taskId, action, feedback }) {
-      return post({ mode: "admin_task_review", user_id: userId, admin_token: adminToken, task_id: taskId, action, feedback }, 30000);
+    async adminTaskReview({ userId, adminToken, taskId, action, feedback, firebaseMode = false, firebaseReward = null }) {
+      return post({ mode: "admin_task_review", user_id: userId, admin_token: adminToken, task_id: taskId, action, feedback, firebase_mode: firebaseMode ? "1" : "0", firebase_reward_json: JSON.stringify(firebaseReward || {}) }, 30000);
     },
-    async adminTaskBulkReview({ userId, adminToken, taskIds, action = "complete", feedback = "" }) {
-      return post({ mode: "admin_task_bulk_review", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []), action, feedback }, 30000);
+    async adminTaskBulkReview({ userId, adminToken, taskIds, action = "complete", feedback = "", firebaseMode = false, firebaseRewards = null }) {
+      return post({ mode: "admin_task_bulk_review", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []), action, feedback, firebase_mode: firebaseMode ? "1" : "0", firebase_rewards_json: JSON.stringify(firebaseRewards || {}) }, 30000);
     },
     async adminTaskBulkDelete({ userId, adminToken, taskIds }) {
       return post({ mode: "admin_task_bulk_delete", user_id: userId, admin_token: adminToken, task_ids_json: JSON.stringify(taskIds || []) }, 30000);

@@ -1411,7 +1411,7 @@ function parseMoaruTaskIds_(raw) {
 }
 
 /** 단건/일괄 검토가 함께 사용하는 잠금 내부 처리입니다. */
-function reviewMoaruTaskUnlocked_(taskId, action, feedback, actor) {
+function reviewMoaruTaskUnlocked_(taskId, action, feedback, actor, firebaseReward, firebaseMode) {
   const task = readMoaruTask_(taskId);
   if (!task) return { ok: false, task_id: taskId, error: "TASK_NOT_FOUND" };
   if (task.status !== "submitted" && !(action === "complete" && task.status === "completed")) return { ok: false, task_id: taskId, user_id: task.userId, error: "TASK_NOT_SUBMITTED" };
@@ -1423,16 +1423,22 @@ function reviewMoaruTaskUnlocked_(taskId, action, feedback, actor) {
     enqueueMoaruCommand_(task.userId, "TASK_RETRY", { taskId: task.id, title: task.title, feedback: feedback }, actor);
     return { ok: true, task_id: task.id, user_id: task.userId, task: publicMoaruTask_(task) };
   }
-  if (!task.rewardPending) {
-    const before = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), beforeCoin = parseInt(before && before.coin, 10) || 0;
-    task.rewardPending = { beforeCoin: beforeCoin, expectedCoin: beforeCoin + task.rewardCoin, amount: task.rewardCoin, createdAt: now };writeMoaruTask_(task);
-  }
-  const currentReward = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), currentCoin = parseInt(currentReward && currentReward.coin, 10) || 0, pending = task.rewardPending;
   let result;
-  if (currentCoin === Number(pending.expectedCoin)) result = { success: true, newCoin: currentCoin, recovered: true };
-  else if (currentCoin === Number(pending.beforeCoin)) result = moaruCoinChangeGuarded_(task.userId, "add", task.rewardCoin);
-  else return { ok: false, task_id: task.id, user_id: task.userId, error: "COIN_REWARD_STATE_CONFLICT" };
-  if (!result || !result.success) return { ok: false, task_id: task.id, user_id: task.userId, error: "COIN_REWARD_FAILED" };
+  if (firebaseMode) {
+    const fb = firebaseReward && typeof firebaseReward === "object" ? firebaseReward : null;
+    if (!fb || Number(fb.amount) !== Number(task.rewardCoin) || !Number.isFinite(Number(fb.newCoin))) return { ok: false, task_id: task.id, user_id: task.userId, error: "FIREBASE_REWARD_REQUIRED" };
+    result = { success: true, newCoin: Number(fb.newCoin), recovered: fb.applied === false };
+  } else {
+    if (!task.rewardPending) {
+      const before = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), beforeCoin = parseInt(before && before.coin, 10) || 0;
+      task.rewardPending = { beforeCoin: beforeCoin, expectedCoin: beforeCoin + task.rewardCoin, amount: task.rewardCoin, createdAt: now };writeMoaruTask_(task);
+    }
+    const currentReward = moaruSpreadsheetRetry_(function () { return getRewardUserData_(task.userId); }), currentCoin = parseInt(currentReward && currentReward.coin, 10) || 0, pending = task.rewardPending;
+    if (currentCoin === Number(pending.expectedCoin)) result = { success: true, newCoin: currentCoin, recovered: true };
+    else if (currentCoin === Number(pending.beforeCoin)) result = moaruCoinChangeGuarded_(task.userId, "add", task.rewardCoin);
+    else return { ok: false, task_id: task.id, user_id: task.userId, error: "COIN_REWARD_STATE_CONFLICT" };
+    if (!result || !result.success) return { ok: false, task_id: task.id, user_id: task.userId, error: "COIN_REWARD_FAILED" };
+  }
   task.status = "completed";task.completedAt = now;task.rewardedAt = now;task.newCoin = Number(result.newCoin) || 0;delete task.rewardPending;writeMoaruTask_(task);backupMoaruTaskEvent_("COMPLETED", task, actor);
   enqueueMoaruCommand_(task.userId, "TASK_COMPLETED", { taskId: task.id, title: task.title, amount: task.rewardCoin, newCoin: task.newCoin, feedback: feedback }, actor);
   return { ok: true, task_id: task.id, user_id: task.userId, task: publicMoaruTask_(task) };
@@ -1440,19 +1446,21 @@ function reviewMoaruTaskUnlocked_(taskId, action, feedback, actor) {
 
 /** POST mode=admin_task_review */
 function handleAdminTaskReview(e) {
-  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token), taskId = String(p.task_id || "").trim(), action = String(p.action || "").trim(), feedback = String(p.feedback || "").trim();
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token), taskId = String(p.task_id || "").trim(), action = String(p.action || "").trim(), feedback = String(p.feedback || "").trim(), firebaseMode = String(p.firebase_mode || "") === "1";
+  let firebaseReward = null;try { firebaseReward = JSON.parse(String(p.firebase_reward_json || "{}")) || null; } catch (error) { firebaseReward = null; }
   if (!auth.ok) return shopJson_(auth);
   if (["complete", "retry"].indexOf(action) < 0) return shopJson_({ ok: false, error: "INVALID_TASK_REVIEW" });
   if (feedback.length > 100) return shopJson_({ ok: false, error: "TASK_FEEDBACK_TOO_LONG" });
   if (action === "retry" && !feedback) return shopJson_({ ok: false, error: "TASK_FEEDBACK_REQUIRED" });
   const lock = LockService.getScriptLock();if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
-  try { cleanupCompletedMoaruTasks_();return shopJson_(reviewMoaruTaskUnlocked_(taskId, action, feedback, p.user_id)); }
+  try { cleanupCompletedMoaruTasks_();return shopJson_(reviewMoaruTaskUnlocked_(taskId, action, feedback, p.user_id, firebaseReward, firebaseMode)); }
   finally { lock.releaseLock(); }
 }
 
 /** POST mode=admin_task_bulk_review - 선택 과제를 같은 액션/피드백으로 일괄 검토합니다. */
 function handleAdminTaskBulkReview(e) {
-  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token), action = String(p.action || "complete").trim(), feedback = String(p.feedback || "").trim(), taskIds = parseMoaruTaskIds_(p.task_ids_json);
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token), action = String(p.action || "complete").trim(), feedback = String(p.feedback || "").trim(), taskIds = parseMoaruTaskIds_(p.task_ids_json), firebaseMode = String(p.firebase_mode || "") === "1";
+  let firebaseRewards = {};try { firebaseRewards = JSON.parse(String(p.firebase_rewards_json || "{}")) || {}; } catch (error) { firebaseRewards = {}; }
   if (!auth.ok) return shopJson_(auth);
   if (!taskIds) return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" });
   if (!taskIds.length) return shopJson_({ ok: false, error: "NO_TASKS_SELECTED" });
@@ -1462,7 +1470,7 @@ function handleAdminTaskBulkReview(e) {
   const lock = LockService.getScriptLock();if (!lock.tryLock(5000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
     cleanupCompletedMoaruTasks_();
-    const results = taskIds.map(function (taskId) { return reviewMoaruTaskUnlocked_(taskId, action, feedback, p.user_id); }), succeeded = results.filter(function (row) { return row.ok; }).length;
+    const results = taskIds.map(function (taskId) { return reviewMoaruTaskUnlocked_(taskId, action, feedback, p.user_id, firebaseRewards[taskId] || null, firebaseMode); }), succeeded = results.filter(function (row) { return row.ok; }).length;
     return shopJson_({ ok: true, count: succeeded, failed: results.length - succeeded, results: results });
   } finally { lock.releaseLock(); }
 }

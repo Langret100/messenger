@@ -498,7 +498,14 @@ function awardGameWeeklyTop3_(gameName, userId, rank) {
       }
     }
 
-    const result = processCoinChangeUnlocked_(userId, "add", 1);
+    // 주간 랭킹 보상도 Firebase를 권위 원장으로 먼저 확정하고 Sheets는 즉시 백업합니다.
+    const opId = "reward:" + type + ":" + key + ":" + userId;
+    const result = (typeof moaruEconomyServerApplyDelta_ === "function")
+      ? moaruEconomyServerApplyDelta_(userId, 1, opId, type, gameName + " 주간 TOP3")
+      : processCoinChangeUnlocked_(userId, "add", 1);
+    const rewardRow = findRewardUserRow_(getSheet_(COIN_REWARD_SHEET_NAME), userId);
+    if (!rewardRow) return { ok: false, applied: false, error: "NO_REWARD_USER", rank: rank };
+    getSheet_(COIN_REWARD_SHEET_NAME).getRange(rewardRow.rowIndex, COIN_COL_REWARD_COIN).setValue(Number(result.newCoin) || 0);
     logSheet.getRange(logSheet.getLastRow() + 1, 1, 1, 5).setValues([[userId, type, key, 1, new Date()]]);
     return {
       ok: true,
@@ -675,6 +682,8 @@ function syncUsersToRewards() {
   while (newData.length < rewardsData.length) newData.push(["", "", "", ""]);
   rewardsSheet.getRange(1, 1, newData.length, 4).setValues(newData);
   SpreadsheetApp.flush();
+  // 스크립트 setValues는 설치형 onEdit를 발생시키지 않으므로 Firebase 활성 사용자/잔액도 명시적으로 동기화합니다.
+  if (typeof syncMoaruEconomyUsersToFirebase === "function") syncMoaruEconomyUsersToFirebase();
   } finally { syncLock.releaseLock(); }
   SpreadsheetApp.getUi().alert("동기화 완료!");
 }

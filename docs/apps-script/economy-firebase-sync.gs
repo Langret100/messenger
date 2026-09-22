@@ -24,18 +24,50 @@ function moaruEconomyFirebaseKey_(value) {
 function moaruEconomyFirebasePath_(path) {
   return MOARU_ECONOMY_FIREBASE_DB_URL.replace(/\/$/, "") + "/" + String(path || "").replace(/^\/+|\/+$/g, "") + ".json";
 }
+function moaruEconomyFirebaseAccessToken_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("MOARU_ECONOMY_FIREBASE_ACCESS_TOKEN");
+  if (cached) return cached;
+
+  if (typeof _getFcmAccessToken_ !== "function") {
+    throw new Error("FIREBASE_AUTH_HELPER_MISSING");
+  }
+
+  const token = String(_getFcmAccessToken_() || "").trim();
+  if (!token) throw new Error("FIREBASE_AUTH_TOKEN_EMPTY");
+
+  // OAuth 토큰은 통상 1시간 유효. 만료 직전 재사용을 피하려 50분만 캐시합니다.
+  cache.put("MOARU_ECONOMY_FIREBASE_ACCESS_TOKEN", token, 3000);
+  return token;
+}
+
 function moaruEconomyFirebaseRequest_(path, method, payload) {
-  const options = { method: String(method || "get").toLowerCase(), muteHttpExceptions: true };
+  const options = {
+    method: String(method || "get").toLowerCase(),
+    muteHttpExceptions: true,
+    headers: {
+      "Authorization": "Bearer " + moaruEconomyFirebaseAccessToken_()
+    }
+  };
   if (payload !== undefined) {
     options.contentType = "application/json";
     options.payload = JSON.stringify(payload);
   }
-  const response = UrlFetchApp.fetch(moaruEconomyFirebasePath_(path), options);
+
+  const url = moaruEconomyFirebasePath_(path);
+  const response = UrlFetchApp.fetch(url, options);
   const code = response.getResponseCode();
-  if (code < 200 || code >= 300) throw new Error("FIREBASE_HTTP_" + code);
-  const text = response.getContentText();
-  if (!text) return null;
-  try { return JSON.parse(text); } catch (error) { return null; }
+  const responseText = response.getContentText();
+
+  if (code < 200 || code >= 300) {
+    throw new Error(
+      "FIREBASE_HTTP_" + code +
+      " [" + String(responseText || "").slice(0, 300) + "]"
+    );
+  }
+
+  if (!responseText) return null;
+  try { return JSON.parse(responseText); } catch (error) { return null; }
 }
 function moaruEconomyFirebaseGet_(path) { return moaruEconomyFirebaseRequest_(path, "get"); }
 function moaruEconomyFirebasePut_(path, value) { return moaruEconomyFirebaseRequest_(path, "put", value); }
@@ -49,6 +81,78 @@ function moaruEconomyStockPath_(productId) { return MOARU_ECONOMY_FIREBASE_ROOT 
 function moaruEconomyInventoryPath_(userId) { return MOARU_ECONOMY_FIREBASE_ROOT + "/inventory/" + moaruEconomyFirebaseKey_(userId); }
 function moaruEconomyRevisionKey_(userId) { return MOARU_ECONOMY_REV_PREFIX + moaruSafeKey_(userId); }
 function moaruEconomyStockRevisionKey_(productId) { return MOARU_ECONOMY_STOCK_REV_PREFIX + moaruSafeKey_(productId); }
+
+
+function moaruEconomyFirebaseFetchAll_(requests) {
+  const rows = (requests || []).filter(Boolean);
+  if (!rows.length) return [];
+  const token = moaruEconomyFirebaseAccessToken_();
+  const prepared = rows.map(function (row) {
+    const req = {
+      url: moaruEconomyFirebasePath_(row.path),
+      method: String(row.method || "patch").toLowerCase(),
+      muteHttpExceptions: true,
+      headers: { "Authorization": "Bearer " + token }
+    };
+    if (row.payload !== undefined) {
+      req.contentType = "application/json";
+      req.payload = JSON.stringify(row.payload);
+    }
+    return req;
+  });
+  const responses = UrlFetchApp.fetchAll(prepared);
+  responses.forEach(function (response, index) {
+    const code = response.getResponseCode();
+    if (code < 200 || code >= 300) {
+      throw new Error("FIREBASE_HTTP_" + code + " [" + String(response.getContentText() || "").slice(0, 300) + "] path=" + rows[index].path);
+    }
+  });
+  return responses;
+}
+
+function moaruEconomyPatchGroups_(groups, extraRequests) {
+  const requests = [];
+  Object.keys(groups || {}).forEach(function (group) {
+    const payload = groups[group] || {};
+    if (Object.keys(payload).length) requests.push({ path: MOARU_ECONOMY_FIREBASE_ROOT + "/" + group, method: "patch", payload: payload });
+  });
+  (extraRequests || []).forEach(function (row) { requests.push(row); });
+  moaruEconomyFirebaseFetchAll_(requests);
+  return requests.length;
+}
+
+function moaruEconomyRootSnapshot_() {
+  return moaruEconomyFirebaseGet_(MOARU_ECONOMY_FIREBASE_ROOT) || {};
+}
+
+
+/** Apps Script 예약 작업에서 Firebase를 권위 원장으로 사용하는 작은 원자적 코인 증감 helper. */
+function moaruEconomyServerApplyDelta_(userId, amount, operationId, type, reason) {
+  const id = String(userId || "").trim(), delta = Math.floor(Number(amount)), opId = String(operationId || "").trim();
+  if (!id || !Number.isSafeInteger(delta) || delta === 0 || !opId) throw new Error("INVALID_ECONOMY_DELTA");
+  const path = moaruEconomyUserPath_(id), url = moaruEconomyFirebasePath_(path), token = moaruEconomyFirebaseAccessToken_(), opKey = moaruEconomyFirebaseKey_(opId);
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const getResponse = UrlFetchApp.fetch(url, { method: "get", muteHttpExceptions: true, headers: { "Authorization": "Bearer " + token, "X-Firebase-ETag": "true" } });
+    const getCode = getResponse.getResponseCode();
+    if (getCode < 200 || getCode >= 300) throw new Error("FIREBASE_HTTP_" + getCode + " [" + String(getResponse.getContentText() || "").slice(0, 200) + "]");
+    const headers = getResponse.getHeaders ? getResponse.getHeaders() : {}, etag = headers.ETag || headers.Etag || headers.etag;
+    let state = null;try { state = JSON.parse(getResponse.getContentText() || "null"); } catch (error) { state = null; }
+    if (!state || state.active === false || state.balance === undefined || state.balance === null) throw new Error("NO_REWARD_USER");
+    const recentOps = state.recentOps && typeof state.recentOps === "object" ? state.recentOps : {};
+    if (recentOps[opKey]) return { applied: false, duplicate: true, newCoin: Number(state.balance) || 0, revision: Number(state.revision) || 0 };
+    const before = Number(state.balance) || 0, next = before + delta, revision = (Number(state.revision) || 0) + 1, updatedAt = Date.now();
+    recentOps[opKey] = { type: String(type || "SERVER_REWARD"), amount: delta, ts: updatedAt, balanceAfter: next, reason: String(reason || "").slice(0, 80), persistent: true };
+    const nextState = Object.assign({}, state, { userId: id, active: true, balance: next, revision: revision, updatedAt: updatedAt, lastTxnId: opId, recentOps: recentOps });
+    const putResponse = UrlFetchApp.fetch(url, { method: "put", muteHttpExceptions: true, contentType: "application/json", payload: JSON.stringify(nextState), headers: { "Authorization": "Bearer " + token, "If-Match": etag } });
+    const putCode = putResponse.getResponseCode();
+    if (putCode === 412) continue;
+    if (putCode < 200 || putCode >= 300) throw new Error("FIREBASE_HTTP_" + putCode + " [" + String(putResponse.getContentText() || "").slice(0, 200) + "]");
+    moaruEconomyFirebasePut_(moaruEconomyBalancePath_(id), { userId: id, balance: next, revision: revision, updatedAt: updatedAt });
+    PropertiesService.getScriptProperties().setProperty(moaruEconomyRevisionKey_(id), String(revision));
+    return { applied: true, duplicate: false, newCoin: next, revision: revision };
+  }
+  throw new Error("FIREBASE_TRANSACTION_CONFLICT");
+}
 
 function moaruEconomyRewardRows_() {
   const sheet = getSheet_(SHOP_REWARD_SHEET_NAME), lastRow = sheet.getLastRow();
@@ -97,16 +201,54 @@ function purgeMoaruEconomyUser_(userId) {
  * 최초 실행 시 기존 보상 사용자 전체를 생성하고, 이후 행 삭제는 Firebase 경제 데이터를 purge합니다.
  */
 function syncMoaruEconomyUsersToFirebase() {
-  const rows = moaruEconomyRewardRows_(), currentIds = rows.map(function (row) { return row.userId; }), currentSet = {};
+  console.log("ECONOMY_USER_SYNC_START");
+  const rows = moaruEconomyRewardRows_();
+  const currentIds = rows.map(function (row) { return row.userId; });
+  const currentSet = {};
   currentIds.forEach(function (id) { currentSet[id] = true; });
+
   const props = PropertiesService.getScriptProperties();
   let previous = [];
-  try { previous = JSON.parse(props.getProperty(MOARU_ECONOMY_ACTIVE_SNAPSHOT_PROP) || "[]"); } catch (error) { previous = []; }
+  try { previous = JSON.parse(props.getProperty(MOARU_ECONOMY_ACTIVE_SNAPSHOT_PROP) || "[]"); }
+  catch (error) { previous = []; }
+
+  const root = moaruEconomyRootSnapshot_();
+  const users = root.users || {};
+  const groups = { users: {}, balances: {}, active: {}, inventory: {} };
+  const propertyUpdates = {};
   const removed = previous.filter(function (id) { return !currentSet[id]; });
-  removed.forEach(function (id) { try { purgeMoaruEconomyUser_(id); } catch (error) { console.error("ECONOMY_PURGE_FAILED", id, error); } });
-  rows.forEach(function (row) { try { moaruEconomyCreateFirebaseUser_(row); } catch (error) { console.error("ECONOMY_USER_SYNC_FAILED", row.userId, error); } });
-  props.setProperty(MOARU_ECONOMY_ACTIVE_SNAPSHOT_PROP, JSON.stringify(currentIds));
-  return { ok: true, active: currentIds.length, removed: removed.length };
+
+  removed.forEach(function (id) {
+    const key = moaruEconomyFirebaseKey_(id);
+    groups.active[key] = null;
+    groups.balances[key] = null;
+    groups.inventory[key] = null;
+    groups.users[key] = null;
+    props.deleteProperty(moaruEconomyRevisionKey_(id));
+  });
+
+  rows.forEach(function (row) {
+    const id = String(row.userId || "").trim();
+    const key = moaruEconomyFirebaseKey_(id);
+    const existing = users[key];
+    let value;
+    if (existing && existing.active !== false && existing.balance !== undefined) {
+      value = existing;
+    } else {
+      const revision = 1;
+      value = { userId: id, active: true, balance: Number(row.coin) || 0, revision: revision, updatedAt: Date.now(), recentOps: {}, pending: {} };
+      groups.users[key] = value;
+    }
+    groups.active[key] = true;
+    groups.balances[key] = { userId: id, balance: Number(value.balance) || 0, revision: Number(value.revision) || 1, updatedAt: Number(value.updatedAt) || Date.now() };
+    propertyUpdates[moaruEconomyRevisionKey_(id)] = String(Number(value.revision) || 1);
+  });
+
+  const requests = moaruEconomyPatchGroups_(groups);
+  propertyUpdates[MOARU_ECONOMY_ACTIVE_SNAPSHOT_PROP] = JSON.stringify(currentIds);
+  props.setProperties(propertyUpdates, false);
+  console.log("ECONOMY_USER_SYNC_DONE", "active=" + currentIds.length, "removed=" + removed.length, "requests=" + requests);
+  return { ok: true, active: currentIds.length, removed: removed.length, requests: requests };
 }
 
 /** 보상탭 코인 셀 직접 수정 → Firebase 즉시 반영 */
@@ -134,13 +276,14 @@ function moaruEconomyOnEdit(e) {
 function moaruEconomyOnChange(e) {
   try {
     const type = String(e && e.changeType || "");
-    if (!type || ["REMOVE_ROW","INSERT_ROW","INSERT_GRID","REMOVE_GRID","OTHER"].indexOf(type) < 0) return;
+    if (!type || ["REMOVE_ROW","INSERT_ROW","INSERT_GRID","REMOVE_GRID"].indexOf(type) < 0) return;
     syncMoaruEconomyUsersToFirebase();
   } catch (error) { console.error("ECONOMY_ON_CHANGE_FAILED", error); }
 }
 
 /** 최초 1회 직접 실행: 현재 사용자 동기화 + 설치형 편집/변경 트리거 구성 */
 function setupMoaruEconomyFirebaseSync() {
+  console.log("ECONOMY_SETUP_START");
   const handlers = { moaruEconomyOnEdit: true, moaruEconomyOnChange: true };
   ScriptApp.getProjectTriggers().forEach(function (trigger) {
     const name = trigger.getHandlerFunction && trigger.getHandlerFunction();
@@ -149,33 +292,85 @@ function setupMoaruEconomyFirebaseSync() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   ScriptApp.newTrigger("moaruEconomyOnEdit").forSpreadsheet(ss).onEdit().create();
   ScriptApp.newTrigger("moaruEconomyOnChange").forSpreadsheet(ss).onChange().create();
-  const userSync = syncMoaruEconomyUsersToFirebase();
+  console.log("ECONOMY_SETUP_TRIGGERS_DONE");
 
-  // 최초 이전: 기존 Firebase 운영값이 없는 항목만 Sheets의 현재 재고/보관함으로 채웁니다.
-  // setup을 다시 실행해도 이미 Firebase에서 바뀐 재고나 선물/배송 상태를 과거 Sheets 값으로 덮지 않습니다.
+  // Firebase 경제 루트는 최초 1회만 읽습니다.
+  const rootBefore = moaruEconomyRootSnapshot_();
+  const usersBefore = rootBefore.users || {};
+  const stockBefore = rootBefore.stock || {};
+  const inventoryBefore = rootBefore.inventory || {};
+  const rows = moaruEconomyRewardRows_();
+  const currentIds = rows.map(function (row) { return row.userId; });
+  const currentSet = {};
+  currentIds.forEach(function (id) { currentSet[id] = true; });
+
+  const props = PropertiesService.getScriptProperties();
+  let previous = [];
+  try { previous = JSON.parse(props.getProperty(MOARU_ECONOMY_ACTIVE_SNAPSHOT_PROP) || "[]"); }
+  catch (error) { previous = []; }
+
+  const groups = { users: {}, balances: {}, active: {}, inventory: {}, stock: {} };
+  const propertyUpdates = {};
+  const removed = previous.filter(function (id) { return !currentSet[id]; });
+  removed.forEach(function (id) {
+    const key = moaruEconomyFirebaseKey_(id);
+    groups.active[key] = null;
+    groups.balances[key] = null;
+    groups.inventory[key] = null;
+    groups.users[key] = null;
+    props.deleteProperty(moaruEconomyRevisionKey_(id));
+  });
+
+  rows.forEach(function (row) {
+    const id = String(row.userId || "").trim();
+    const key = moaruEconomyFirebaseKey_(id);
+    const existing = usersBefore[key];
+    const value = existing && existing.active !== false && existing.balance !== undefined
+      ? existing
+      : { userId: id, active: true, balance: Number(row.coin) || 0, revision: 1, updatedAt: Date.now(), recentOps: {}, pending: {} };
+    if (!existing || existing.active === false || existing.balance === undefined) groups.users[key] = value;
+    groups.active[key] = true;
+    groups.balances[key] = { userId: id, balance: Number(value.balance) || 0, revision: Number(value.revision) || 1, updatedAt: Number(value.updatedAt) || Date.now() };
+    propertyUpdates[moaruEconomyRevisionKey_(id)] = String(Number(value.revision) || 1);
+  });
+  propertyUpdates[MOARU_ECONOMY_ACTIVE_SNAPSHOT_PROP] = JSON.stringify(currentIds);
+  console.log("ECONOMY_SETUP_USERS_PREPARED", currentIds.length);
+
   try {
     const catalog = readShopCatalog_();
     Object.keys(catalog).forEach(function (productId) {
-      const path = moaruEconomyStockPath_(productId);
-      if (moaruEconomyFirebaseGet_(path)) return;
+      const key = moaruEconomyFirebaseKey_(productId);
+      if (stockBefore[key] !== undefined && stockBefore[key] !== null) return;
       const product = normalizeShopProduct_(catalog[productId]);
       if (!product || !product.id) return;
       const unlimited = product.quantity === null || product.quantity === undefined;
-      moaruEconomyFirebasePut_(path, { productId: String(product.id), qty: unlimited ? null : Math.max(0, Number(product.quantity) || 0), unlimited: unlimited, catalogUpdatedAt: Number(product.updatedAt) || 0, revision: 1, updatedAt: Date.now(), reservations: {} });
+      groups.stock[key] = { productId: String(product.id), qty: unlimited ? null : Math.max(0, Number(product.quantity) || 0), unlimited: unlimited, catalogUpdatedAt: Number(product.updatedAt) || 0, revision: 1, updatedAt: Date.now(), reservations: {} };
     });
+    console.log("ECONOMY_SETUP_STOCK_PREPARED");
   } catch (stockError) { console.error("ECONOMY_STOCK_MIGRATION_FAILED", stockError); }
 
+  // 보관함은 사용자별 path에 PATCH하여 기존 Firebase 항목을 절대 통째로 덮지 않습니다.
+  const inventoryPatches = {};
   try {
-    readShopInventorySheetItems_().forEach(function (item) {
+    const items = readShopInventorySheetItems_();
+    items.forEach(function (item) {
       const ownerId = String(item.ownerId || "").trim();
-      if (!ownerId || !moaruEconomyFirebaseGet_(moaruEconomyActivePath_(ownerId))) return;
-      const itemPath = moaruEconomyInventoryPath_(ownerId) + "/" + moaruEconomyFirebaseKey_(item.id);
-      if (moaruEconomyFirebaseGet_(itemPath)) return;
-      moaruEconomyFirebasePut_(itemPath, item);
+      if (!ownerId || !currentSet[ownerId]) return;
+      const ownerKey = moaruEconomyFirebaseKey_(ownerId), itemKey = moaruEconomyFirebaseKey_(item.id);
+      const existingOwner = inventoryBefore[ownerKey] || {};
+      if (existingOwner[itemKey] !== undefined && existingOwner[itemKey] !== null) return;
+      (inventoryPatches[ownerKey] = inventoryPatches[ownerKey] || {})[itemKey] = item;
     });
+    console.log("ECONOMY_SETUP_INVENTORY_PREPARED", Object.keys(inventoryPatches).length);
   } catch (inventoryError) { console.error("ECONOMY_INVENTORY_MIGRATION_FAILED", inventoryError); }
 
-  return userSync;
+  const extra = Object.keys(inventoryPatches).map(function (ownerKey) {
+    return { path: MOARU_ECONOMY_FIREBASE_ROOT + "/inventory/" + ownerKey, method: "patch", payload: inventoryPatches[ownerKey] };
+  });
+  const requestCount = moaruEconomyPatchGroups_(groups, extra);
+  props.setProperties(propertyUpdates, false);
+  console.log("ECONOMY_SETUP_DONE", "requests=" + requestCount, "active=" + currentIds.length, "removed=" + removed.length);
+  return { ok: true, active: currentIds.length, removed: removed.length, requests: requestCount };
 }
 
 function getOrCreateMoaruEconomyLogSheet_() {
@@ -189,8 +384,9 @@ function appendMoaruEconomyLog_(entry) {
   if (!txnId) return false;
   const sheet = getOrCreateMoaruEconomyLogSheet_(), last = sheet.getLastRow();
   if (last >= 2) {
-    const match = sheet.getRange(2, 1, last - 1, 1).createTextFinder(txnId).matchEntireCell(true).findNext();
-    if (match) return false;
+    const rows = sheet.getRange(2, 1, last - 1, 2).getValues();
+    const userId = String(value.userId || "");
+    for (let i = 0; i < rows.length; i++) if (String(rows[i][0]) === txnId && String(rows[i][1]) === userId) return false;
   }
   sheet.appendRow([txnId, String(value.userId || ""), String(value.type || ""), value.amount === "" ? "" : Number(value.amount) || 0, Number(value.balance) || 0, String(value.reason || ""), new Date(Number(value.createdAt) || Date.now())]);
   return true;

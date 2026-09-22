@@ -223,12 +223,12 @@
           ".write": true,
           "users": {
             "$userKey": {
-              ".validate": "!newData.exists() || ((!newData.child('balance').exists() || (newData.child('balance').isNumber() && newData.child('balance').val() >= 0)) && (!newData.child('revision').exists() || (newData.child('revision').isNumber() && newData.child('revision').val() >= 0)) && (!newData.child('active').exists() || newData.child('active').isBoolean()))"
+              ".validate": "!newData.exists() || ((!newData.child('balance').exists() || newData.child('balance').isNumber()) && (!newData.child('revision').exists() || (newData.child('revision').isNumber() && newData.child('revision').val() >= 0)) && (!newData.child('active').exists() || newData.child('active').isBoolean()))"
             }
           },
           "balances": {
             "$userKey": {
-              ".validate": "!newData.exists() || (newData.child('userId').isString() && newData.child('balance').isNumber() && newData.child('balance').val() >= 0 && newData.child('revision').isNumber())"
+              ".validate": "!newData.exists() || (newData.child('userId').isString() && newData.child('balance').isNumber() && newData.child('revision').isNumber())"
             }
           },
           "active": {

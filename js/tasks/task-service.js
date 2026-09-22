@@ -3,6 +3,7 @@ MiniTalk.Tasks = MiniTalk.Tasks || {};
 MiniTalk.Tasks.TaskService = (() => {
   const COMPLETED_VISIBLE_MS = 2 * 24 * 60 * 60 * 1000;
   let activeUserId = "", pollTimer = 0, inFlight = null, adminInFlight = null, refreshVersion = 0, adminRefreshVersion = 0;
+  const adminTaskCache = new Map();
   const pendingAssignments = new Map();
 
   const user = () => MiniTalk.Store.get("user") || {};
@@ -87,16 +88,23 @@ MiniTalk.Tasks.TaskService = (() => {
     const current = user();
     if (adminInFlight && !force) return adminInFlight;
     const version = ++adminRefreshVersion;
-    const request = MiniTalk.AuthApi.adminTaskList(current.user_id, MiniTalk.AdminSession.requireToken("ADMIN")).then(rows => ({ version, rows: rows.map(normalize).filter(task => visible(task)) }));
+    const request = MiniTalk.AuthApi.adminTaskList(current.user_id, MiniTalk.AdminSession.requireToken("ADMIN")).then(rows => {const normalized=rows.map(normalize).filter(task => visible(task));adminTaskCache.clear();normalized.forEach(task=>adminTaskCache.set(task.id,task));return { version, rows: normalized }});
     adminInFlight = request.finally(() => { if (version === adminRefreshVersion) adminInFlight = null; });
     const result = await adminInFlight;
     return result.rows;
   }
 
   async function review(taskId, action, feedback = "") {
-    const current = user();
-    const result = await MiniTalk.AuthApi.adminTaskReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("ADMIN"), taskId, action, feedback });
+    const current = user(),cached=adminTaskCache.get(String(taskId));
+    let firebaseReward=null;
+    if(action==="complete"&&MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime){
+      if(!cached?.userId)throw new Error("과제 정보를 다시 불러온 뒤 완료해주세요.");
+      const reward=await MiniTalk.Economy.Runtime.reward({userId:cached.userId,rewardType:"ADMIN_TASK",rewardKey:String(taskId),amount:cached.rewardCoin,reason:`${cached.title||"과제"} 완료`});
+      firebaseReward={newCoin:reward.newCoin,applied:reward.applied,amount:cached.rewardCoin};
+    }
+    const result = await MiniTalk.AuthApi.adminTaskReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("ADMIN"), taskId, action, feedback, firebaseMode:MiniTalk.Realtime?.getMode?.()==="firebase", firebaseReward });
     const task = normalize(result.task || {});
+    if(task.id)adminTaskCache.set(task.id,task);
     if (task.userId) MiniTalk.Realtime.notifyCommandTargets?.([task.userId]);
     return task;
   }
@@ -104,8 +112,18 @@ MiniTalk.Tasks.TaskService = (() => {
   async function bulkReview(taskIds, action = "complete", feedback = "") {
     const current = user(), ids = [...new Set((taskIds || []).map(String).filter(Boolean))];
     if (!ids.length) throw new Error("과제를 선택하세요.");
-    const result = await MiniTalk.AuthApi.adminTaskBulkReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("ADMIN"), taskIds: ids, action, feedback });
+    const firebaseMode=MiniTalk.Realtime?.getMode?.()==="firebase"&&Boolean(MiniTalk.Economy.Runtime),firebaseRewards={};
+    if(action==="complete"&&firebaseMode){
+      const tasks=ids.map(id=>adminTaskCache.get(id)).filter(Boolean);
+      if(tasks.length!==ids.length)throw new Error("과제 정보를 다시 불러온 뒤 완료해주세요.");
+      for(let i=0;i<tasks.length;i+=12){
+        const rows=await Promise.all(tasks.slice(i,i+12).map(async task=>{const reward=await MiniTalk.Economy.Runtime.reward({userId:task.userId,rewardType:"ADMIN_TASK",rewardKey:task.id,amount:task.rewardCoin,reason:`${task.title||"과제"} 완료`});return [task.id,{newCoin:reward.newCoin,applied:reward.applied,amount:task.rewardCoin}]}));
+        rows.forEach(([id,row])=>firebaseRewards[id]=row);
+      }
+    }
+    const result = await MiniTalk.AuthApi.adminTaskBulkReview({ userId: current.user_id, adminToken: MiniTalk.AdminSession.requireToken("ADMIN"), taskIds: ids, action, feedback, firebaseMode, firebaseRewards });
     const targets = (result.results || []).filter(row => row?.ok && row.user_id).map(row => row.user_id);
+    (result.results||[]).forEach(row=>{if(row?.task?.id)adminTaskCache.set(row.task.id,normalize(row.task))});
     if (targets.length) MiniTalk.Realtime.notifyCommandTargets?.([...new Set(targets)]);
     return result;
   }

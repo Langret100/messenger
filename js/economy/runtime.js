@@ -52,6 +52,25 @@ MiniTalk.Economy.Runtime=(()=>{
     try{return await task}finally{if(bootstrapPromises.get(id)===task)bootstrapPromises.delete(id)}
   }
   async function bootstrap(id){if(!id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;return ensureUserState(id)}
+  async function ensureAdminRewardAccount(id){
+    const current=MiniTalk.Store.get("user")||{};
+    const token=MiniTalk.AdminSession?.requireToken?.("ADMIN");
+    if(!current.user_id||!token){const e=new Error("관리자 인증이 필요합니다.");e.code="ADMIN_AUTH_REQUIRED";throw e}
+    const body=new URLSearchParams({mode:"economy_admin_ensure_user",user_id:String(current.user_id),admin_token:String(token),target_user_id:String(id)});
+    const response=await fetch(MiniTalkConfig.sheetUrl,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},body});
+    if(!response.ok){const e=new Error(`서버 오류 ${response.status}`);e.code="ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
+    const data=await response.json();
+    if(!data?.ok){const e=new Error(data?.message||data?.error||"코인 계정을 준비하지 못했습니다.");e.code=data?.error||"ECONOMY_ACCOUNT_BOOTSTRAP_FAILED";throw e}
+    return Number(data.coin)||0;
+  }
+  async function ensureAdminTargetState(id){
+    let state=await ensureUserState(id);
+    if(state&&state.active&&int(state.balance))return state;
+    await ensureAdminRewardAccount(id);
+    state=await ensureUserState(id);
+    if(state&&state.active&&int(state.balance))return state;
+    const e=new Error("코인 계정을 준비하지 못했습니다.");e.code="NO_REWARD_USER";throw e;
+  }
   async function mirrorBalance(id,state){if(!id||!state||!int(state.balance))return;await MiniTalk.Realtime.cloudTransaction(balancePath(id),current=>{const c=obj(current),cr=Number(c.revision)||0,nr=Number(state.revision)||0;if(cr>nr)return c;return{userId:String(id),balance:Number(state.balance),revision:nr,updatedAt:Number(state.updatedAt)||now()}})}
   async function balance(id){if(!id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;const row=await MiniTalk.Realtime.cloudGet(balancePath(id),null);if(row&&int(row.balance))return Number(row.balance);const u=await ensureUserState(id);if(!u||!u.active||!int(u.balance))return null;await mirrorBalance(id,u).catch(()=>{});return Number(u.balance)}
   async function allBalances(){assertFirebase();const src=obj(await MiniTalk.Realtime.cloudGet(`${ROOT}/balances`,{})),out={};Object.values(src).forEach(r=>{if(r?.userId&&int(r.balance))out[String(r.userId)]=Number(r.balance)});return out}
@@ -64,7 +83,11 @@ MiniTalk.Economy.Runtime=(()=>{
     if(status==="inactive"){const e=new Error("NO_REWARD_USER");e.code="NO_REWARD_USER";throw e}if(status==="insufficient"){const e=new Error("코인이 부족합니다.");e.code="INSUFFICIENT_COIN";throw e}const state=after||obj(value);if(!int(state.balance))throw new Error("ECONOMY_TRANSACTION_FAILED");await mirrorBalance(userId,state);if(status==="applied")flushPending(userId).catch(()=>{});return{applied:status==="applied",duplicate:status==="duplicate",newCoin:Number(state.balance),revision:Number(state.revision)||0}
   }
   const reward=args=>applyDelta({userId:args.userId,amount:args.amount,operationId:`reward:${args.rewardType}:${args.rewardKey}:${args.userId}`,type:String(args.rewardType||"REWARD"),reason:args.reason,meta:{rewardKey:String(args.rewardKey||"").slice(0,120)}});
-  async function adminAdjust({targets,amount,requestId,reason="관리자 코인 변경"}){assertFirebase();const ids=[...new Set((targets||[]).map(String).filter(Boolean))],delta=Math.floor(Number(amount)),issuer=String(MiniTalk.Store.get("user")?.user_id||"");if(!ids.length)throw new Error("NO_TARGETS");if(!Number.isSafeInteger(delta)||delta===0)throw new Error("INVALID_COIN_AMOUNT");const rows=[];for(let i=0;i<ids.length;i+=16)rows.push(...await Promise.all(ids.slice(i,i+16).map(async id=>{const r=await applyDelta({userId:id,amount:delta,operationId:`admin:${requestId}:${id}`,type:"ADMIN_COIN",reason,meta:{issuedBy:issuer,requestId:String(requestId||"")},allowNegative:true});return{user_id:id,newCoin:r.newCoin,applied:r.applied}})));return{ok:true,count:rows.length,rewarded:rows}}
+  async function adminAdjust({targets,amount,requestId,reason="관리자 코인 변경"}){assertFirebase();const ids=[...new Set((targets||[]).map(String).filter(Boolean))],delta=Math.floor(Number(amount)),issuer=String(MiniTalk.Store.get("user")?.user_id||"");if(!ids.length)throw new Error("NO_TARGETS");if(!Number.isSafeInteger(delta)||delta===0)throw new Error("INVALID_COIN_AMOUNT");
+    // 관리자 지급은 명시적인 재활성화 의사로 취급합니다. 등록 사용자가 보상 시트에서 빠져 있으면
+    // 계정을 준비한 뒤 실제 코인 증감은 계속 Firebase transaction에서 처리합니다.
+    for(let i=0;i<ids.length;i+=16)await Promise.all(ids.slice(i,i+16).map(ensureAdminTargetState));
+    const rows=[];for(let i=0;i<ids.length;i+=16)rows.push(...await Promise.all(ids.slice(i,i+16).map(async id=>{const r=await applyDelta({userId:id,amount:delta,operationId:`admin:${requestId}:${id}`,type:"ADMIN_COIN",reason,meta:{issuedBy:issuer,requestId:String(requestId||"")},allowNegative:true});return{user_id:id,newCoin:r.newCoin,applied:r.applied}})));return{ok:true,count:rows.length,rewarded:rows}}
   function stockValue(p){return p.quantity==null?{unlimited:true,qty:null}:{unlimited:false,qty:Math.max(0,Math.floor(Number(p.quantity)||0))}}
   async function seedProduct(p,force=false){if(!p?.id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;const sv=stockValue(p),cat=Number(p.updatedAt)||0;return MiniTalk.Realtime.cloudTransaction(stockPath(p.id),cur=>{const s=obj(cur);if(!force&&Object.keys(s).length)return s;return{...s,productId:String(p.id),qty:sv.qty,unlimited:sv.unlimited,catalogUpdatedAt:cat,revision:(Number(s.revision)||0)+1,updatedAt:now()}})}
   async function seedCatalog(){return true}

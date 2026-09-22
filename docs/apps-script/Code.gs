@@ -297,6 +297,10 @@ function moaruDoPost_(e) {
       case "economy_sheet_sync":
         return handleEconomySheetSync(e);
 
+      // 관리자 코인 지급 대상의 누락 코인 계정 준비
+      case "economy_admin_ensure_user":
+        return handleEconomyAdminEnsureUser(e);
+
       // 🔹 로그인 사용자 관리자 고유 코드 인증
       case "admin_unlock":
         return handleAdminUnlock(e);

@@ -443,6 +443,50 @@ function syncPurchaseEventToSheets_(userId, event) {
   }
 }
 
+/** 관리자 코인 지급 대상이 보상 시트에서 빠진 경우에만 명시적으로 계정을 준비합니다.
+ * 일반 구매/미션/자동 보상에서는 호출하지 않으므로 삭제 사용자가 일반 동작으로 되살아나지 않습니다. */
+function handleEconomyAdminEnsureUser(e) {
+  const p = (e && e.parameter) || {}, auth = requireAdminToken_(p.user_id, p.admin_token);
+  if (!auth.ok) return shopJson_(auth);
+  const targetId = String(p.target_user_id || "").trim();
+  if (!targetId) return shopJson_({ ok: false, error: "NO_TARGETS" });
+
+  const registered = moaruSpreadsheetRetry_(function () { return moaruRegisteredUserMap_(); });
+  if (!registered[targetId]) return shopJson_({ ok: false, error: "LOGIN_REQUIRED", message: "등록된 사용자가 아닙니다." });
+
+  let reward = getRewardUserData_(targetId);
+  if (reward) {
+    try { moaruEconomyCreateFirebaseUser_({ userId: targetId, username: reward.username, coin: reward.coin }); } catch (error) { console.error("ECONOMY_ADMIN_ENSURE_FIREBASE_FAILED", targetId, error); }
+    return shopJson_({ ok: true, created: false, user_id: targetId, coin: Number(reward.coin) || 0 });
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return shopJson_({ ok: false, error: "COIN_BUSY" });
+  try {
+    reward = getRewardUserData_(targetId);
+    if (!reward) {
+      const loginSheet = getSheet_(LOGIN_SHEET), lastRow = loginSheet.getLastRow();
+      let username = "";
+      if (lastRow >= 2) {
+        const rows = loginSheet.getRange(2, 1, lastRow - 1, 2).getValues();
+        for (let i = 0; i < rows.length; i++) {
+          if (String(rows[i][0] || "").trim() === targetId) { username = String(rows[i][1] || "").trim(); break; }
+        }
+      }
+      if (!username) username = String(registered[targetId] || targetId).trim();
+      const deployedUrl = (typeof ScriptApp !== "undefined" && ScriptApp.getService) ? String(ScriptApp.getService().getUrl() || "") : "";
+      const baseUrl = deployedUrl || (typeof COIN_MANUAL_WEB_APP_URL !== "undefined" ? COIN_MANUAL_WEB_APP_URL : "");
+      const sheet = getSheet_(COIN_REWARD_SHEET_NAME);
+      sheet.appendRow([targetId, username, 0, baseUrl ? baseUrl + "?user_id=" + encodeURIComponent(targetId) : ""]);
+      SpreadsheetApp.flush();
+      reward = getRewardUserData_(targetId);
+    }
+    if (!reward) return shopJson_({ ok: false, error: "NO_REWARD_USER" });
+    moaruEconomyCreateFirebaseUser_({ userId: targetId, username: reward.username, coin: reward.coin });
+    return shopJson_({ ok: true, created: true, user_id: targetId, coin: Number(reward.coin) || 0 });
+  } finally { lock.releaseLock(); }
+}
+
 /** Firebase 클라이언트 처리 완료 후 Sheets 장기 원장에 비동기 반영 */
 function handleEconomySheetSync(e) {
   const p = (e && e.parameter) || {}, userId = String(p.user_id || "").trim();

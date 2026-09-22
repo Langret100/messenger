@@ -12,18 +12,48 @@ MiniTalk.Economy.Runtime=(()=>{
   function assertFirebase(){if(MiniTalk.Realtime?.getMode?.()!=="firebase"){const e=new Error("실시간 서버 연결 후 이용할 수 있습니다.");e.code="ECONOMY_FIREBASE_UNAVAILABLE";throw e}}
   async function active(id){return (await MiniTalk.Realtime.cloudGet(activePath(id),false))===true}
   async function readUser(id){assertFirebase();return obj(await MiniTalk.Realtime.cloudGet(userPath(id),null))}
+  const bootstrapPromises=new Map();
   async function ensureUserState(id){
-    assertFirebase();id=String(id||"");if(!id)return null;
-    const current=await readUser(id);
-    if(current.active&&int(current.balance))return current;
-    const [isActive,mirror]=await Promise.all([MiniTalk.Realtime.cloudGet(activePath(id),false),MiniTalk.Realtime.cloudGet(balancePath(id),null)]);
-    if(isActive!==true||!mirror||!int(mirror.balance))return null;
-    const created=await MiniTalk.Realtime.cloudTransaction(userPath(id),value=>{const state=obj(value);if(state.active&&int(state.balance))return state;return{userId:id,active:true,balance:Number(mirror.balance),revision:Math.max(1,Number(mirror.revision)||1),updatedAt:Number(mirror.updatedAt)||now(),recentOps:obj(state.recentOps),pending:obj(state.pending)}});
-    return created&&created.active&&int(created.balance)?created:null;
+    assertFirebase();id=String(id||"").trim();if(!id)return null;
+    if(bootstrapPromises.has(id))return bootstrapPromises.get(id);
+    const task=(async()=>{
+      const current=await readUser(id);
+      if(current.active&&int(current.balance))return current;
+
+      // 기존 메신저의 코인 계정이 기준이다. Firebase 초기 이전 누락만으로
+      // 정상 사용자를 NO_REWARD_USER 처리하지 않는다. 먼저 미러 잔액을 보고,
+      // 미러도 없다면 기존 coin_status를 딱 한 번 조회해 지연 생성한다.
+      let mirror=await MiniTalk.Realtime.cloudGet(balancePath(id),null);
+      if(!mirror||!int(mirror.balance)){
+        try{
+          const legacy=await MiniTalk.AuthApi.coinStatus(id);
+          if(!int(legacy))return null;
+          mirror={userId:id,balance:Number(legacy),revision:1,updatedAt:now()};
+        }catch(error){
+          // 기존 보상 시트에도 실제 계정이 없는 경우만 예전과 동일하게 실패한다.
+          if(error?.code==="NO_REWARD_USER")return null;
+          throw error;
+        }
+      }
+      const created=await MiniTalk.Realtime.cloudTransaction(userPath(id),value=>{
+        const state=obj(value);if(state.active&&int(state.balance))return state;
+        return{userId:id,active:true,balance:Number(mirror.balance),revision:Math.max(1,Number(mirror.revision)||1),updatedAt:Number(mirror.updatedAt)||now(),recentOps:obj(state.recentOps),pending:obj(state.pending)}
+      });
+      if(created&&created.active&&int(created.balance)){
+        await Promise.all([
+          MiniTalk.Realtime.cloudSet(activePath(id),true).catch(()=>{}),
+          mirrorBalance(id,created).catch(()=>{})
+        ]);
+        return created;
+      }
+      return null;
+    })();
+    bootstrapPromises.set(id,task);
+    try{return await task}finally{if(bootstrapPromises.get(id)===task)bootstrapPromises.delete(id)}
   }
   async function bootstrap(id){if(!id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;return ensureUserState(id)}
   async function mirrorBalance(id,state){if(!id||!state||!int(state.balance))return;await MiniTalk.Realtime.cloudTransaction(balancePath(id),current=>{const c=obj(current),cr=Number(c.revision)||0,nr=Number(state.revision)||0;if(cr>nr)return c;return{userId:String(id),balance:Number(state.balance),revision:nr,updatedAt:Number(state.updatedAt)||now()}})}
-  async function balance(id){if(!id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;const row=await MiniTalk.Realtime.cloudGet(balancePath(id),null);if(row&&int(row.balance))return Number(row.balance);const u=await readUser(id);if(!u.active||!int(u.balance))return null;await mirrorBalance(id,u).catch(()=>{});return Number(u.balance)}
+  async function balance(id){if(!id||MiniTalk.Realtime?.getMode?.()!=="firebase")return null;const row=await MiniTalk.Realtime.cloudGet(balancePath(id),null);if(row&&int(row.balance))return Number(row.balance);const u=await ensureUserState(id);if(!u||!u.active||!int(u.balance))return null;await mirrorBalance(id,u).catch(()=>{});return Number(u.balance)}
   async function allBalances(){assertFirebase();const src=obj(await MiniTalk.Realtime.cloudGet(`${ROOT}/balances`,{})),out={};Object.values(src).forEach(r=>{if(r?.userId&&int(r.balance))out[String(r.userId)]=Number(r.balance)});return out}
   function pruneOps(source){const cutoff=now()-RETRY_TTL;const out={};Object.entries(obj(source)).forEach(([k,v])=>{if(v?.persistent||Number(v?.ts||0)>=cutoff)out[k]=v});return out}
   function appendPending(state,event){const pending={...obj(state.pending)},txn=String(event.txnId||crypto.randomUUID()).slice(0,240);pending[opKey(txn)]={...event,txnId:txn,createdAt:Number(event.createdAt)||now()};return pending}

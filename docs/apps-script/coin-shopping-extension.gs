@@ -82,7 +82,17 @@ function ensureMoaruCoinAccount_(account) {
   const managerBaseUrl = typeof COIN_MANUAL_WEB_APP_URL !== "undefined" && COIN_MANUAL_WEB_APP_URL ? COIN_MANUAL_WEB_APP_URL : (typeof MANUAL_WEB_APP_URL !== "undefined" ? MANUAL_WEB_APP_URL : "");
   const url = managerBaseUrl ? managerBaseUrl + "?user_id=" + encodeURIComponent(userId) : "";
   sheet.appendRow([userId, username, 0, url]);const insertedRow = sheet.getLastRow(), created = getRewardUserData_(userId);
-  if (created) return { ok: true, created: true, coin: 0 };
+  if (created) {
+    try {
+      if (typeof moaruEconomyCreateFirebaseUser_ === "function") {
+        moaruEconomyCreateFirebaseUser_({ userId: userId, username: username, coin: 0 });
+      }
+    } catch (syncError) {
+      // 회원가입 성공 자체는 Firebase 미러 실패로 롤백하지 않습니다. 다음 코인 접근 시 지연 생성됩니다.
+      console.error("ECONOMY_ACCOUNT_MIRROR_FAILED", userId, syncError);
+    }
+    return { ok: true, created: true, coin: 0 };
+  }
   try { if (String(sheet.getRange(insertedRow, SHOP_COL_REWARD_USER_ID).getValue() || "").trim() === userId) sheet.deleteRow(insertedRow); } catch (rollbackError) { console.error("REWARD_ACCOUNT_ROLLBACK_FAILED", userId, rollbackError); }
   return { ok: false, error: "REWARD_ACCOUNT_INIT_FAILED" };
 }

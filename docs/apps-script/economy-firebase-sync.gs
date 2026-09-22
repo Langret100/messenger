@@ -137,7 +137,14 @@ function moaruEconomyServerApplyDelta_(userId, amount, operationId, type, reason
     if (getCode < 200 || getCode >= 300) throw new Error("FIREBASE_HTTP_" + getCode + " [" + String(getResponse.getContentText() || "").slice(0, 200) + "]");
     const headers = getResponse.getHeaders ? getResponse.getHeaders() : {}, etag = headers.ETag || headers.Etag || headers.etag;
     let state = null;try { state = JSON.parse(getResponse.getContentText() || "null"); } catch (error) { state = null; }
-    if (!state || state.active === false || state.balance === undefined || state.balance === null) throw new Error("NO_REWARD_USER");
+    if (!state || state.active === false || state.balance === undefined || state.balance === null) {
+      // Firebase 초기 이전 누락은 기존 정상 코인 계정을 차단하는 이유가 아니다.
+      // 기존 보상 시트에 실제 계정이 있으면 한 번만 Firebase 상태를 복원하고 재시도한다.
+      const legacy = (typeof getRewardUserData_ === "function") ? getRewardUserData_(id) : null;
+      if (!legacy) throw new Error("NO_REWARD_USER");
+      moaruEconomyCreateFirebaseUser_({ userId: id, username: String(legacy.username || ""), coin: requireCoinAmount_(legacy.coin) });
+      continue;
+    }
     const recentOps = state.recentOps && typeof state.recentOps === "object" ? state.recentOps : {};
     if (recentOps[opKey]) return { applied: false, duplicate: true, newCoin: Number(state.balance) || 0, revision: Number(state.revision) || 0 };
     const before = Number(state.balance) || 0, next = before + delta, revision = (Number(state.revision) || 0) + 1, updatedAt = Date.now();

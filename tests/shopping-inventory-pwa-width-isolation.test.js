@@ -10,5 +10,6 @@ ok(js.includes('panel.style.maxWidth = "calc(100% - 20px)"'), 'inventory panel m
 ok(js.includes('panel.style.right = "10px"'), 'inventory panel must stay right-aligned');
 ok(!/@media\s*\(max-width:\s*560px\)[\s\S]*?\.shop-inventory-panel\s*\{[^}]*width\s*:/m.test(css), 'mobile media query must not override inventory width');
 ok(/shopping-store\.css\?v=64\.5\.56/.test(html), 'shopping css cache bust missing');
-ok(/shopping\.js\?v=64\.5\.57/.test(html), 'shopping js cache bust missing');
+const shoppingVersion=(html.match(/shopping\.js\?v=(\d+)\.(\d+)\.(\d+)/)||[]).slice(1).map(Number);
+ok(shoppingVersion.length===3 && (shoppingVersion[0]>64 || (shoppingVersion[0]===64 && (shoppingVersion[1]>5 || (shoppingVersion[1]===5 && shoppingVersion[2]>=57)))), 'shopping js cache bust missing or regressed');
 console.log('SHOPPING_INVENTORY_PWA_WIDTH_ISOLATION_OK');

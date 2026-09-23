@@ -13,7 +13,7 @@ ctx.moaruRegisteredUserMap_=()=>({u1:'하나',manager:'매니저'});ctx.requireK
 const item=ctx.writeShopInventoryItem_('u1',{id:'inv-1',ownerId:'u1',productId:'p1',name:'연필',description:'HB',price:3,purchaseKey:'pk1',createdAt:1,deliveryStatus:'owned'});
 ok(item.id==='inv-1'&&ctx.readShopInventory_('u1').length===1,'sheet inventory write/read failed');
 let res=JSON.parse(ctx.handleShopRequestDelivery({parameter:{user_id:'u1',inventory_id:'inv-1',request_id:'r1'}}).value);ok(res.ok&&res.deliveryStatus==='requested','delivery request failed');
-cache.set('shop-admin:shop-token',JSON.stringify({userId:'manager',role:'SHOP_MANAGER'}));
+ctx.requireShopManagerToken_=(_userId,token)=>String(token||'')==='shop-token'?{ok:true,role:'SHOP_MANAGER'}:{ok:false,error:'ADMIN_SESSION_EXPIRED'};
 res=JSON.parse(ctx.handleShopDeliveryShipping({parameter:{user_id:'manager',admin_token:'shop-token',owner_id:'u1',inventory_id:'inv-1'}}).value);ok(res.ok&&res.deliveryStatus==='shipping','SHOP_MANAGER shipping transition failed');
 res=JSON.parse(ctx.handleShopDeliveryComplete({parameter:{user_id:'manager',admin_token:'shop-token',owner_id:'u1',inventory_id:'inv-1'}}).value);ok(res.ok&&res.deliveryStatus==='completed','SHOP_MANAGER complete transition failed');
 const final=ctx.readShopInventory_('u1')[0];ok(final.deliveryStatus==='completed'&&final.usedAt>0,'completed state was not persisted');

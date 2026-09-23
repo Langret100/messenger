@@ -181,7 +181,7 @@ MiniTalk.Economy.Runtime=(()=>{
     const ts=now(),gifted={...marked,ownerId:String(targetId),giftedBy:String(userId),giftedByNickname:String(nickname||""),giftedAt:ts,createdAt:ts,giftRequestId:String(requestId)};delete gifted.transferRequestId;delete gifted.transferTargetId;await MiniTalk.Realtime.cloudSet(targetPath,gifted);await settlePurchaseItem(userId,marked);await MiniTalk.Realtime.cloudRemove(sourcePath);await queueInventoryBackup(userId,{txnId:`gift:${requestId}`,action:"gift",item:gifted,sourceUserId:String(userId),targetUserId:String(targetId)});return{ok:true,item:gifted,targetId:String(targetId)}
   }
   async function deliveryList(){assertFirebase();const all=obj(await MiniTalk.Realtime.cloudGet(`${ROOT}/inventory`,{})),rows=[];Object.values(all).forEach(group=>Object.values(obj(group)).forEach(item=>{if(item?.id&&["requested","shipping"].includes(item.deliveryStatus))rows.push(item)}));return rows}
-  async function adminDelivery({targets,status,requestId}){
+  async function adminDelivery({targets,status,requestId,handledBy=""}){
     assertFirebase();
     status=String(status||"").toLowerCase();
     if(!["shipping","completed","cancelled"].includes(status)){const e=new Error("올바르지 않은 배송 상태입니다.");e.code="INVALID_DELIVERY_STATUS";throw e}
@@ -189,26 +189,20 @@ MiniTalk.Economy.Runtime=(()=>{
     for(const t of targets||[]){
       const uid=String(t.ownerId||t.owner_id||""),iid=String(t.inventoryId||t.inventory_id||t.id||"");
       if(!uid||!iid)continue;
-      const path=`${inventoryPath(uid)}/${itemKey(iid)}`,seed=obj(await MiniTalk.Realtime.cloudGet(path,null));
-      if(!seed.id){const e=new Error("배송 요청 상품을 찾을 수 없습니다. 새로고침 후 다시 확인해주세요.");e.code="INVENTORY_ITEM_NOT_FOUND";throw e}
-      let invalidState="";
-      const saved=await MiniTalk.Realtime.cloudTransaction(path,cur=>{
-        // Firebase transaction은 로컬 캐시가 차가우면 첫 콜백에 null을 줄 수 있습니다.
-        // 이때 바로 undefined를 반환하면 서버값을 읽기도 전에 거래가 취소되므로, 직전에 읽은 서버값을 seed로 사용합니다.
-        const item=obj(cur).id?obj(cur):seed,currentStatus=String(item.deliveryStatus||"owned").toLowerCase();
-        invalidState="";
-        if(!item.id)return undefined;
-        if(currentStatus===status)return item;
-        if(!["requested","shipping"].includes(currentStatus)){invalidState=currentStatus||"owned";return undefined}
-        const ts=now();
-        if(status==="shipping")return{...item,deliveryStatus:"shipping",deliveryShippingAt:ts};
-        if(status==="completed")return{...item,deliveryStatus:"completed",deliveryCompletedAt:ts};
-        return{...item,deliveryStatus:"cancelled",deliveryCancelledAt:ts,deliveryShippingAt:null};
-      },{requireCommit:true});
-      if(invalidState){const e=new Error("이미 처리된 상품이라 배송 상태를 다시 변경할 수 없습니다.");e.code="DELIVERY_STATE_CONFLICT";throw e}
-      if(!saved?.id||String(saved.deliveryStatus||"").toLowerCase()!==status){const e=new Error("Firebase 배송 상태 저장을 확인하지 못했습니다. 새로고침 후 다시 시도해주세요.");e.code="DELIVERY_PERSISTENCE_FAILED";throw e}
+      const path=`${inventoryPath(uid)}/${itemKey(iid)}`,current=obj(await MiniTalk.Realtime.cloudGet(path,null));
+      if(!current.id){const e=new Error("배송 요청 상품을 찾을 수 없습니다. 새로고침 후 다시 확인해주세요.");e.code="INVENTORY_ITEM_NOT_FOUND";throw e}
+      const currentStatus=String(current.deliveryStatus||"owned").toLowerCase();
+      if(currentStatus!==status&&! ["requested","shipping"].includes(currentStatus)){const e=new Error("이미 처리된 상품이라 배송 상태를 다시 변경할 수 없습니다.");e.code="DELIVERY_STATE_CONFLICT";throw e}
+      const ts=now(),patch={deliveryStatus:status,deliveryHandledBy:String(handledBy||"")};
+      if(status==="shipping"){patch.deliveryShippingAt=ts;patch.deliveryCancelledAt=null}
+      else if(status==="completed"){patch.deliveryCompletedAt=ts;patch.usedAt=ts;patch.deliveryCancelledAt=null}
+      else{patch.deliveryCancelledAt=ts;patch.deliveryShippingAt=null;patch.deliveryCompletedAt=null;patch.usedAt=null}
+      await MiniTalk.Realtime.cloudUpdate(path,patch);
+      const saved=obj(await MiniTalk.Realtime.cloudGet(path,null));
+      if(!saved.id||String(saved.deliveryStatus||"").toLowerCase()!==status){const e=new Error("Firebase 배송 상태 저장을 확인하지 못했습니다. 새로고침 후 다시 시도해주세요.");e.code="DELIVERY_PERSISTENCE_FAILED";throw e}
       items.push(saved);
-      await queueInventoryBackup(uid,{txnId:`admin-delivery:${requestId||crypto.randomUUID()}:${iid}`,action:"upsert",item:saved});
+      // Sheets는 장기 백업일 뿐 권위 저장소가 아닙니다. 관리자 버튼 응답을 Apps Script 동기화가 막지 않게 백그라운드 처리합니다.
+      queueInventoryBackup(uid,{txnId:`admin-delivery:${requestId||crypto.randomUUID()}:${iid}`,action:"upsert",item:saved}).catch(error=>console.warn("배송 상태 시트 백업 지연",error));
     }
     return{ok:true,count:items.length,items,deliveryStatus:items.length===1?String(items[0].deliveryStatus||""):""}
   }

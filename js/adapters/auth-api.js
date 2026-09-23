@@ -104,8 +104,8 @@ MiniTalk.AuthApi = (() => {
     async economySheetSync({ userId, event }) {
       return post({ mode: "economy_sheet_sync", user_id: userId, event_json: JSON.stringify(event || {}) }, 15000);
     },
-    async adminUnlock(userId, adminCode) {
-      return post({ mode: "admin_unlock", user_id: userId, admin_code: adminCode }, 30000);
+    async adminUnlock(adminCode) {
+      return post({ mode: "admin_unlock", admin_code: adminCode }, 8000);
     },
     async shopCatalog() {
       const data = await post({ mode: "shop_catalog" }, 30000);

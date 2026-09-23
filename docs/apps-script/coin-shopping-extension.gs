@@ -186,55 +186,42 @@ function secureTextEquals_(left, right) {
   return mismatch === 0 ? { ok: true } : { ok: false, error: "ADMIN_AUTH_FAILED" };
 }
 
-function shopAdminSessionPropertyKey_(token) {
-  // 토큰은 UUID 두 개를 이어 만든 서버 발급 난수이며 Script Properties 안에서만 키로 사용합니다.
-  return SHOP_ADMIN_SESSION_PROPERTY_PREFIX + moaruSafeKey_(String(token || ""));
+// 관리자/쇼핑몰 관리자 권한은 특정 사용자 계정이 아니라 관리 페이지 인증 자체에 부여됩니다.
+// 따라서 관리자 세션을 로그인 사용자 ID나 시트 행에 묶지 않고, 서버에서 서명한 만료 토큰으로만 검증합니다.
+function shopAdminTokenSecret_() {
+  const props = PropertiesService.getScriptProperties();
+  const adminCode = props.getProperty(SHOP_ADMIN_CODE_PROPERTY) || "";
+  const shopCode = props.getProperty(SHOP_MANAGER_CODE_PROPERTY) || "";
+  return "MINITALK_ADMIN_TOKEN_V3\n" + adminCode + "\n" + shopCode;
 }
-function normalizeShopAdminSession_(raw, expectedUserId) {
-  const id = String(expectedUserId || "").trim();
-  if (!raw || !id) return null;
-  // v5.18 이전 CacheService 세션(값이 userId 문자열뿐인 형식)은 ADMIN으로만 호환합니다.
-  if (raw === id) return { userId: id, role: "ADMIN", expiresAt: Date.now() + 60000 };
+function shopAdminTokenSign_(payloadText) {
+  const bytes = Utilities.computeHmacSha256Signature(String(payloadText || ""), shopAdminTokenSecret_());
+  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, "");
+}
+function shopAdminTokenEncode_(role) {
+  const normalizedRole = String(role || "").toUpperCase();
+  if (normalizedRole !== "ADMIN" && normalizedRole !== "SHOP_MANAGER") return "";
+  const payload = JSON.stringify({ v: 3, role: normalizedRole, exp: Date.now() + SHOP_ADMIN_TOKEN_SECONDS * 1000 });
+  const body = Utilities.base64EncodeWebSafe(payload, Utilities.Charset.UTF_8).replace(/=+$/g, "");
+  return body + "." + shopAdminTokenSign_(body);
+}
+function shopAdminTokenDecode_(token) {
+  const value = String(token || "").trim(), parts = value.split(".");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  if (!secureTextEquals_(shopAdminTokenSign_(parts[0]), parts[1]).ok) return null;
   try {
-    const session = typeof raw === "string" ? JSON.parse(raw) : raw;
-    if (!session || String(session.userId || "") !== id) return null;
-    const role = String(session.role || "ADMIN").toUpperCase(), expiresAt = Number(session.expiresAt) || 0;
-    if (role !== "ADMIN" && role !== "SHOP_MANAGER") return null;
-    if (expiresAt && expiresAt <= Date.now()) return null;
-    return { userId: id, role: role, expiresAt: expiresAt || Date.now() + SHOP_ADMIN_TOKEN_SECONDS * 1000 };
+    const payload = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString("UTF-8"));
+    const role = String(payload && payload.role || "").toUpperCase(), exp = Number(payload && payload.exp) || 0;
+    if (Number(payload && payload.v) !== 3 || (role !== "ADMIN" && role !== "SHOP_MANAGER") || exp <= Date.now()) return null;
+    return { role: role, expiresAt: exp };
   } catch (error) { return null; }
 }
-function writeShopAdminSession_(userId, role, token) {
-  const id = String(userId || "").trim(), value = String(token || "").trim(), normalizedRole = String(role || "").toUpperCase();
-  if (!id || !value || (normalizedRole !== "ADMIN" && normalizedRole !== "SHOP_MANAGER")) return false;
-  const session = { userId: id, role: normalizedRole, expiresAt: Date.now() + SHOP_ADMIN_TOKEN_SECONDS * 1000 }, raw = JSON.stringify(session);
-  // CacheService는 속도용일 뿐 보장 저장소가 아니므로 Script Properties에도 함께 저장합니다.
-  PropertiesService.getScriptProperties().setProperty(shopAdminSessionPropertyKey_(value), raw);
-  try { CacheService.getScriptCache().put(SHOP_ADMIN_SESSION_PREFIX + value, raw, SHOP_ADMIN_TOKEN_SECONDS); } catch (error) {}
-  return true;
-}
-function cleanupExpiredShopAdminSessions_() {
-  const props = PropertiesService.getScriptProperties(), all = props.getProperties(), now = Date.now();
-  Object.keys(all).filter(function (key) { return key.indexOf(SHOP_ADMIN_SESSION_PROPERTY_PREFIX) === 0; }).forEach(function (key) {
-    let session = null;try { session = JSON.parse(all[key] || "null"); } catch (error) {}
-    if (!session || Number(session.expiresAt) <= now) props.deleteProperty(key);
-  });
-}
 function readShopAdminSession_(userId, token) {
-  const id = String(userId || "").trim(), value = String(token || "").trim();
-  if (!id || !value) return { ok: false, error: "ADMIN_AUTH_REQUIRED" };
-  const cache = CacheService.getScriptCache(), cacheKey = SHOP_ADMIN_SESSION_PREFIX + value;
-  let session = null;
-  try { session = normalizeShopAdminSession_(cache.get(cacheKey), id); } catch (error) {}
-  if (!session) {
-    const props = PropertiesService.getScriptProperties(), propKey = shopAdminSessionPropertyKey_(value), raw = props.getProperty(propKey);
-    session = normalizeShopAdminSession_(raw, id);
-    if (!session) { if (raw) props.deleteProperty(propKey);return { ok: false, error: "ADMIN_SESSION_EXPIRED" }; }
-    const seconds = Math.max(1, Math.min(SHOP_ADMIN_TOKEN_SECONDS, Math.ceil((session.expiresAt - Date.now()) / 1000)));
-    try { cache.put(cacheKey, JSON.stringify(session), seconds); } catch (error) {}
-  }
-  return { ok: true, role: session.role };
+  // userId는 구버전 호출부 호환용 인수일 뿐 관리자 권한 판정에는 사용하지 않습니다.
+  const session = shopAdminTokenDecode_(token);
+  return session ? { ok: true, role: session.role } : { ok: false, error: "ADMIN_SESSION_EXPIRED" };
 }
+function cleanupExpiredShopAdminSessions_() { return 0; }
 function knownMoaruUserCacheKey_(userId) { return MOARU_KNOWN_USER_CACHE_PREFIX + moaruSafeKey_(userId); }
 function rememberKnownMoaruUser_(userId) {
   const id = String(userId || "").trim();if (!id) return false;
@@ -244,7 +231,6 @@ function rememberKnownMoaruUser_(userId) {
 function requireKnownMoaruUserFast_(userId) {
   const id = String(userId || "").trim();if (!id) return "";
   try { if (CacheService.getScriptCache().get(knownMoaruUserCacheKey_(id)) === "1") return id; } catch (error) {}
-  // 관리자 인증은 한 사용자만 확인하면 되므로 전체 로그인 시트를 배열로 읽지 않습니다.
   const sheet = getSheet_(LOGIN_SHEET), lastRow = sheet.getLastRow();if (lastRow < 2) return "";
   const match = sheet.getRange(2, 1, lastRow - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();if (!match) return "";
   const row = sheet.getRange(match.getRow(), 1, 1, 4).getValues()[0], foundId = String(row[0] || "").trim(), username = String(row[1] || "").trim(), nickname = String(row[3] || row[1] || "").trim();
@@ -254,7 +240,6 @@ function requireKnownMoaruUserFast_(userId) {
 function requireKnownMoaruUserCached_(userId) {
   const id = String(userId || "").trim();if (!id) return "";
   try { if (CacheService.getScriptCache().get(knownMoaruUserCacheKey_(id)) === "1") return id; } catch (error) {}
-  // 정상 클라이언트는 login_에서 이 캐시가 이미 만들어집니다. 캐시가 비정상적으로 사라진 경우에만 기존 검증으로 복구합니다.
   const found = requireKnownMoaruUser_(id);if (found) rememberKnownMoaruUser_(found);return found;
 }
 function requireAdminToken_(userId, token) {
@@ -265,24 +250,19 @@ function requireShopManagerToken_(userId, token) {
   const auth = readShopAdminSession_(userId, token);
   return auth.ok && (auth.role === "ADMIN" || auth.role === "SHOP_MANAGER") ? auth : { ok: false, error: auth.ok ? "SHOP_MANAGER_PERMISSION_REQUIRED" : auth.error };
 }
-// 기존 내부 호출 호환: 이름상 admin 토큰은 ADMIN 전용으로 유지합니다.
 function requireShopAdminToken_(userId, token) { return requireAdminToken_(userId, token); }
 
 /** POST mode=admin_unlock: ADMIN 또는 SHOP_MANAGER 코드를 검증해 6시간 역할 토큰을 발급합니다. */
 function handleAdminUnlock(e) {
-  const p = (e && e.parameter) || {}, userId = String(p.user_id || "").trim(), code = String(p.admin_code || ""), props = PropertiesService.getScriptProperties();
+  const p = (e && e.parameter) || {}, code = String(p.admin_code || ""), props = PropertiesService.getScriptProperties();
   const adminCode = props.getProperty(SHOP_ADMIN_CODE_PROPERTY) || "", shopCode = props.getProperty(SHOP_MANAGER_CODE_PROPERTY) || "";
   if (!adminCode && !shopCode) return shopJson_({ ok: false, error: "ADMIN_CODE_NOT_CONFIGURED" });
-  // 비밀번호가 틀린 요청에서는 로그인 시트까지 읽지 않습니다.
   let role = "";
   if (adminCode && secureTextEquals_(adminCode, code).ok) role = "ADMIN";
   else if (shopCode && secureTextEquals_(shopCode, code).ok) role = "SHOP_MANAGER";
   if (!role) return shopJson_({ ok: false, error: "ADMIN_AUTH_FAILED" });
-  if (!requireKnownMoaruUserFast_(userId)) return shopJson_({ ok: false, error: "LOGIN_REQUIRED" });
-  const token = Utilities.getUuid() + Utilities.getUuid();
-  writeShopAdminSession_(userId, role, token);
-  // 전체 Script Properties 스캔은 인증 요청의 critical path에서 하지 않습니다.
-  // 만료 세션은 읽을 때 개별 정리되고, 전체 정리는 일일 cleanup 트리거에서 처리합니다.
+  const token = shopAdminTokenEncode_(role);
+  if (!token) return shopJson_({ ok: false, error: "ADMIN_AUTH_FAILED" });
   return shopJson_({ ok: true, admin: role === "ADMIN", shop_manager: role === "SHOP_MANAGER", role: role, admin_token: token, expires_in: SHOP_ADMIN_TOKEN_SECONDS });
 }
 

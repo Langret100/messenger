@@ -627,7 +627,7 @@ MiniTalk.Features.Shopping = (() => {
       let result;
       MiniTalk.AdminSession.requireToken("SHOP");
       if(MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime){
-        result=await MiniTalk.Economy.Runtime.adminDelivery({targets:[payload],status:kind,requestId:`${Date.now()}:${crypto.randomUUID()}`});
+        result=await MiniTalk.Economy.Runtime.adminDelivery({targets:[payload],status:kind,requestId:`${Date.now()}:${crypto.randomUUID()}`,handledBy:current.user_id});
         if(Number(result?.count)!==1)throw new Error("Firebase 배송 상태가 저장되지 않았습니다. 새로고침 후 다시 시도해주세요.");
       }else if (kind === "shipping") result = await MiniTalk.AuthApi.shopDeliveryShipping(payload);
       else if (kind === "completed") result = await MiniTalk.AuthApi.shopDeliveryComplete(payload);
@@ -655,7 +655,7 @@ MiniTalk.Features.Shopping = (() => {
           const queue=[...groupRows],targets=queue.map(row=>({ownerId:row.ownerId||row.owner_id,inventoryId:row.id||row.inventoryId||row.inventory_id}));
           progress.textContent=`${first.nickname||first.ownerNickname||first.owner_id||first.ownerId||"학생"} 배송완료 처리 중… ${queue.length}건`;
           try{
-            MiniTalk.AdminSession.requireToken("SHOP");const result=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime?await MiniTalk.Economy.Runtime.adminDelivery({targets,status:"completed",requestId:`${Date.now()}:${crypto.randomUUID()}`}):await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
+            MiniTalk.AdminSession.requireToken("SHOP");const result=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime?await MiniTalk.Economy.Runtime.adminDelivery({targets,status:"completed",requestId:`${Date.now()}:${crypto.randomUUID()}`,handledBy:current.user_id}):await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
             const savedCount=Number(result?.count);if(!Number.isSafeInteger(savedCount)||savedCount!==queue.length)throw new Error(`Firebase에는 ${savedCount||0}/${queue.length}건만 저장되었습니다. 목록을 다시 확인해주세요.`);
             const ownerIds=[...new Set(queue.map(row=>String(row.ownerId||row.owner_id||"")).filter(Boolean))];MiniTalk.Realtime.notifyCommandTargets?.(ownerIds);
             const completedKeys=new Set(targets.map(target=>`${String(target.ownerId||"")}::${String(target.inventoryId||"")}`));
@@ -705,7 +705,7 @@ MiniTalk.Features.Shopping = (() => {
       const queue=[...rows],targets=queue.map(row=>({ownerId:row.ownerId||row.owner_id,inventoryId:row.id||row.inventoryId||row.inventory_id}));
       progress.textContent = `일괄 배송완료 처리 중… ${queue.length}건`;
       try {
-        MiniTalk.AdminSession.requireToken("SHOP");const result=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime?await MiniTalk.Economy.Runtime.adminDelivery({targets,status:"completed",requestId:`${Date.now()}:${crypto.randomUUID()}`}):await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
+        MiniTalk.AdminSession.requireToken("SHOP");const result=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime?await MiniTalk.Economy.Runtime.adminDelivery({targets,status:"completed",requestId:`${Date.now()}:${crypto.randomUUID()}`,handledBy:current.user_id}):await MiniTalk.AuthApi.shopDeliveryCompleteBulk({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("SHOP"),targets});
         const savedCount=Number(result?.count);if(!Number.isSafeInteger(savedCount)||savedCount!==queue.length)throw new Error(`Firebase에는 ${savedCount||0}/${queue.length}건만 저장되었습니다. 목록을 다시 확인해주세요.`);
         const owners=[...new Set(queue.map(row=>String(row.ownerId||row.owner_id||"")).filter(Boolean))];MiniTalk.Realtime.notifyCommandTargets?.(owners);
         rows=[];draw();Shell.toast(`${savedCount}건을 한 번에 배송완료 처리했습니다.`);

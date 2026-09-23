@@ -37,7 +37,7 @@ MiniTalk.AdminSession = (() => {
     if (!user.user_id || user.isGuest) throw new Error("로그인 후 관리자 인증을 이용할 수 있어요.");
     const clean = String(code || "");
     if (!clean) throw new Error("관리자 또는 쇼핑몰 관리자 코드를 입력하세요.");
-    const result = await MiniTalk.AuthApi.adminUnlock(user.user_id, clean);
+    const result = await MiniTalk.AuthApi.adminUnlock(clean);
     const nextRole = String(result?.role || (result?.admin ? "ADMIN" : result?.shop_manager ? "SHOP_MANAGER" : "")).toUpperCase();
     if (!result?.admin_token || !["ADMIN", "SHOP_MANAGER"].includes(nextRole)) throw new Error("관리자 인증에 실패했습니다.");
     token = String(result.admin_token);

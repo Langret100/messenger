@@ -181,7 +181,37 @@ MiniTalk.Economy.Runtime=(()=>{
     const ts=now(),gifted={...marked,ownerId:String(targetId),giftedBy:String(userId),giftedByNickname:String(nickname||""),giftedAt:ts,createdAt:ts,giftRequestId:String(requestId)};delete gifted.transferRequestId;delete gifted.transferTargetId;await MiniTalk.Realtime.cloudSet(targetPath,gifted);await settlePurchaseItem(userId,marked);await MiniTalk.Realtime.cloudRemove(sourcePath);await queueInventoryBackup(userId,{txnId:`gift:${requestId}`,action:"gift",item:gifted,sourceUserId:String(userId),targetUserId:String(targetId)});return{ok:true,item:gifted,targetId:String(targetId)}
   }
   async function deliveryList(){assertFirebase();const all=obj(await MiniTalk.Realtime.cloudGet(`${ROOT}/inventory`,{})),rows=[];Object.values(all).forEach(group=>Object.values(obj(group)).forEach(item=>{if(item?.id&&["requested","shipping"].includes(item.deliveryStatus))rows.push(item)}));return rows}
-  async function adminDelivery({targets,status,requestId}){assertFirebase();const items=[];for(const t of targets||[]){const uid=String(t.ownerId||t.owner_id||""),iid=String(t.inventoryId||t.inventory_id||t.id||"");if(!uid||!iid)continue;let out=null;await MiniTalk.Realtime.cloudTransaction(`${inventoryPath(uid)}/${itemKey(iid)}`,cur=>{const item=obj(cur);if(!item.id)return undefined;const ts=now(),patch=status==="shipping"?{deliveryStatus:"shipping",deliveryShippingAt:ts}:status==="completed"?{deliveryStatus:"completed",deliveryCompletedAt:ts}:{deliveryStatus:"owned",deliveryRequestedAt:null,deliveryShippingAt:null};out={...item,...patch};return out});if(out){items.push(out);await queueInventoryBackup(uid,{txnId:`admin-delivery:${requestId||crypto.randomUUID()}:${iid}`,action:"upsert",item:out})}}return{ok:true,count:items.length,items}}
+  async function adminDelivery({targets,status,requestId}){
+    assertFirebase();
+    status=String(status||"").toLowerCase();
+    if(!["shipping","completed","cancelled"].includes(status)){const e=new Error("올바르지 않은 배송 상태입니다.");e.code="INVALID_DELIVERY_STATUS";throw e}
+    const items=[];
+    for(const t of targets||[]){
+      const uid=String(t.ownerId||t.owner_id||""),iid=String(t.inventoryId||t.inventory_id||t.id||"");
+      if(!uid||!iid)continue;
+      const path=`${inventoryPath(uid)}/${itemKey(iid)}`,seed=obj(await MiniTalk.Realtime.cloudGet(path,null));
+      if(!seed.id){const e=new Error("배송 요청 상품을 찾을 수 없습니다. 새로고침 후 다시 확인해주세요.");e.code="INVENTORY_ITEM_NOT_FOUND";throw e}
+      let invalidState="";
+      const saved=await MiniTalk.Realtime.cloudTransaction(path,cur=>{
+        // Firebase transaction은 로컬 캐시가 차가우면 첫 콜백에 null을 줄 수 있습니다.
+        // 이때 바로 undefined를 반환하면 서버값을 읽기도 전에 거래가 취소되므로, 직전에 읽은 서버값을 seed로 사용합니다.
+        const item=obj(cur).id?obj(cur):seed,currentStatus=String(item.deliveryStatus||"owned").toLowerCase();
+        invalidState="";
+        if(!item.id)return undefined;
+        if(currentStatus===status)return item;
+        if(!["requested","shipping"].includes(currentStatus)){invalidState=currentStatus||"owned";return undefined}
+        const ts=now();
+        if(status==="shipping")return{...item,deliveryStatus:"shipping",deliveryShippingAt:ts};
+        if(status==="completed")return{...item,deliveryStatus:"completed",deliveryCompletedAt:ts};
+        return{...item,deliveryStatus:"cancelled",deliveryCancelledAt:ts,deliveryShippingAt:null};
+      },{requireCommit:true});
+      if(invalidState){const e=new Error("이미 처리된 상품이라 배송 상태를 다시 변경할 수 없습니다.");e.code="DELIVERY_STATE_CONFLICT";throw e}
+      if(!saved?.id||String(saved.deliveryStatus||"").toLowerCase()!==status){const e=new Error("Firebase 배송 상태 저장을 확인하지 못했습니다. 새로고침 후 다시 시도해주세요.");e.code="DELIVERY_PERSISTENCE_FAILED";throw e}
+      items.push(saved);
+      await queueInventoryBackup(uid,{txnId:`admin-delivery:${requestId||crypto.randomUUID()}:${iid}`,action:"upsert",item:saved});
+    }
+    return{ok:true,count:items.length,items,deliveryStatus:items.length===1?String(items[0].deliveryStatus||""):""}
+  }
   async function flushPending(uid){if(!uid||MiniTalk.Realtime?.getMode?.()!=="firebase")return;uid=String(uid);if(flushPromises.has(uid))return flushPromises.get(uid);const p=(async()=>{const pending=obj(await MiniTalk.Realtime.cloudGet(`${userPath(uid)}/pending`,{}));for(const [k,event] of Object.entries(pending)){try{await MiniTalk.AuthApi.economySheetSync({userId:uid,event});await MiniTalk.Realtime.cloudRemove(`${userPath(uid)}/pending/${k}`)}catch(e){console.warn("경제 시트 pending 유지",event?.type,e);break}}})();flushPromises.set(uid,p);try{await p}finally{if(flushPromises.get(uid)===p)flushPromises.delete(uid)}}
   function start(user=MiniTalk.Store.get("user")){stop();if(!user?.user_id||user.isGuest)return;ownerId=String(user.user_id);const attach=()=>{if(MiniTalk.Realtime?.getMode?.()!=="firebase"||!ownerId)return;balanceOff=MiniTalk.Realtime.cloudSubscribe(balancePath(ownerId),r=>{if(r&&int(r.balance)&&String(MiniTalk.Store.get("user")?.user_id||"")===ownerId)MiniTalk.Economy.CoinWallet?.setLocal?.(Number(r.balance),"firebase-live",ownerId)});inventoryOff=MiniTalk.Realtime.cloudSubscribe(inventoryPath(ownerId),v=>{if(String(MiniTalk.Store.get("user")?.user_id||"")===ownerId)MiniTalk.Events.emit("economy:inventory",obj(v))});flushPending(ownerId).catch(()=>{})};if(MiniTalk.Realtime?.getMode?.()==="firebase")attach();else{const off=MiniTalk.Events.on("state:transport",()=>{if(MiniTalk.Realtime?.getMode?.()==="firebase"){off?.();attach()}})}}
   function stop(){try{balanceOff?.()}catch{}try{inventoryOff?.()}catch{}balanceOff=inventoryOff=null;ownerId=""}

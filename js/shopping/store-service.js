@@ -224,7 +224,7 @@ MiniTalk.Shopping.StoreService = (() => {
     try {
       
       const result=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime
-        ?await MiniTalk.Economy.Runtime.requestDelivery({userId:current.user_id,inventoryId:id,requestId})
+        ?await MiniTalk.Economy.Runtime.requestDelivery({userId:current.user_id,inventoryId:id,requestId,ownerNickname:current.nickname||current.username||""})
         :await MiniTalk.AuthApi.shopRequestDelivery({userId:current.user_id,inventoryId:id,item,requestId});
       const requestedAt=Number(result.deliveryRequestedAt||result.item?.deliveryRequestedAt)||Date.now();
       putLocalInventory(current,{...(result.item||item),deliveryStatus:result.deliveryStatus||result.item?.deliveryStatus||"requested",deliveryRequestedAt:requestedAt,deliveryPending:false});
@@ -251,7 +251,7 @@ MiniTalk.Shopping.StoreService = (() => {
     try {
       
       const result=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime
-        ?await MiniTalk.Economy.Runtime.requestDeliveryBulk({userId:current.user_id,inventoryIds:wanted,requestId})
+        ?await MiniTalk.Economy.Runtime.requestDeliveryBulk({userId:current.user_id,inventoryIds:wanted,requestId,ownerNickname:current.nickname||current.username||""})
         :await MiniTalk.AuthApi.shopRequestDeliveryBulk({userId:current.user_id,inventoryIds:wanted,requestId});
       const returned=Array.isArray(result.items)?result.items:[];
       returned.forEach(item=>{putLocalInventory(current,{...item,deliveryStatus:item.deliveryStatus||"requested",deliveryPending:false})});

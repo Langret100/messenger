@@ -7,7 +7,7 @@ ctx.window=ctx;vm.createContext(ctx);
 for(const file of ['js/config.js','js/core/namespace.js','js/core/events.js','js/core/store.js']){
   vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),ctx,{filename:file});
 }
-ctx.MiniTalk.AuthApi={adminUnlock:async(userId,code)=>{unlockCalls++;if(code!=='valid-code')throw new Error('ADMIN_AUTH_FAILED');return{ok:true,admin:true,admin_token:'server-token',expires_in:3600}}};
+ctx.MiniTalk.AuthApi={adminUnlock:async(code)=>{unlockCalls++;if(code!=='valid-code')throw new Error('ADMIN_AUTH_FAILED');return{ok:true,admin:true,role:'ADMIN',admin_token:'server-token',expires_in:3600}}};
 vm.runInContext(fs.readFileSync(path.join(root,'js/admin/session.js'),'utf8'),ctx,{filename:'js/admin/session.js'});
 
 (async()=>{

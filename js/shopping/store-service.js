@@ -5,7 +5,7 @@ MiniTalk.Shopping.StoreService = (() => {
   const CATALOG_CACHE_KEY = "shop.catalog.cache.v2";
   const objectValue = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-  let catalogPromise = null, catalogLoadedAt = 0, inventoryPromise = null, activeUserId = "", inventoryVersion = 0, shopActive = false, inventoryDirty = true;
+  let catalogPromise = null, catalogLoadedAt = 0, inventoryPromise = null, activeUserId = "", inventoryVersion = 0, inventoryLiveEpoch = 0, shopActive = false, inventoryDirty = true;
   const pendingPurchaseKeys = new Map();
   const pendingGiftKeys = new Map();
   const pendingDeliveryKeys = new Map();
@@ -24,6 +24,17 @@ MiniTalk.Shopping.StoreService = (() => {
   hydrateCatalogCache();
 
   MiniTalk.Events.on("rt:command",command=>{if(!["SHOP_GIFT","SHOP_DELIVERY_SHIPPING","SHOP_DELIVERY_COMPLETED","SHOP_DELIVERY_CANCELLED"].includes(command?.type))return;inventoryDirty=true;refreshInventory(true).catch(error=>console.warn("쇼핑 보관함 갱신 실패",error))});
+
+  // 경제 런타임은 현재 로그인 사용자의 Firebase 보관함을 실시간 구독해 economy:inventory로 전달합니다.
+  // 이 이벤트를 놓치면 관리자 배송완료가 Firebase에는 즉시 저장돼도 화면은 예전 배송중 캐시를 유지하고,
+  // 쇼핑 재진입/강제 조회 때에만 완료 상태가 보이게 됩니다. 전체 스냅샷을 권위 상태로 즉시 반영합니다.
+  MiniTalk.Events.on("economy:inventory",value=>{
+    const current=user();
+    if(!current.user_id||current.isGuest)return;
+    inventoryLiveEpoch++;
+    inventoryDirty=false;
+    publishInventory(Object.values(objectValue(value)),current);
+  });
 
   // Firebase 호환 보관함과 Apps Script 보관함을 합쳐 기존 구매품을 잃지 않습니다.
   MiniTalk.Events.on("rt:shop-inventory", value=>{
@@ -70,13 +81,15 @@ MiniTalk.Shopping.StoreService = (() => {
     const currentUserId=String(current.user_id);
     if(activeUserId!==currentUserId){const hadActiveUser=!!activeUserId;inventoryVersion++;inventoryPromise=null;activeUserId=currentUserId;if(hadActiveUser)MiniTalk.Store.set("shopInventory",objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{})))}
     if(!force&&inventoryPromise)return inventoryPromise;
-    const version=inventoryVersion;
+    const version=inventoryVersion,liveEpoch=inventoryLiveEpoch;
     const request=(async()=>{
       const useFirebase=MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime;
       const rows=(useFirebase
         ?await MiniTalk.Economy.Runtime.inventory(currentUserId)
         :await MiniTalk.AuthApi.shopInventory(currentUserId)).map(normalizeInventory).filter(item=>item.id);
       if(version!==inventoryVersion||activeUserId!==currentUserId)return[];
+      // 이 조회가 시작된 뒤 더 최신 Firebase 실시간 스냅샷을 받았다면 오래된 조회 결과로 되돌리지 않습니다.
+      if(liveEpoch!==inventoryLiveEpoch)return inventory();
       inventoryDirty=false;
       return publishInventory(rows,current);
     })();
@@ -89,7 +102,7 @@ MiniTalk.Shopping.StoreService = (() => {
      * Sheets 보관함은 장기 백업이며 쇼핑 진입 때 Firebase와 합치거나 주기 조회하지 않습니다. */
     hydrateCatalogCache();shopActive=false;inventoryDirty=true;
     const nextUserId=!current.user_id||current.isGuest?"":String(current.user_id);
-    if(activeUserId!==nextUserId){inventoryVersion++;inventoryPromise=null;activeUserId=nextUserId;const cached=activeUserId?objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{})):{};MiniTalk.Store.set("shopInventory",cached)}
+    if(activeUserId!==nextUserId){inventoryVersion++;inventoryLiveEpoch++;inventoryPromise=null;activeUserId=nextUserId;const cached=activeUserId?objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{})):{};MiniTalk.Store.set("shopInventory",cached)}
     if(!activeUserId)return;
     // 로그인 직후에는 저장된 보관함 캐시만 즉시 사용합니다.
     // 실제 서버 보관함은 쇼핑 탭 진입 또는 SHOP_* 실시간 신호에서 갱신해 로그인 요청 경합을 만들지 않습니다.

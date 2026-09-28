@@ -4,8 +4,12 @@ MiniTalk.Tasks.TaskWindow = (() => {
   const ANSWER_MAX = 1000, FEEDBACK_MAX = 100, IMAGE_MAX_CHARS = 6500;
   const sourceWindow = sourceDoc => sourceDoc?.defaultView || window;
   const desktop = (sourceDoc = MiniTalk.UI.Dom.doc()) => {
-    const view = sourceWindow(sourceDoc);
-    return sourceDoc?.body?.classList?.contains("admin-window-body") || MiniTalk.WindowMode?.isPopup?.() === true || (!MiniTalk.MobileImmersive?.isMobile?.() && Number(view.innerWidth || 0) >= 700 && Number(view.screen?.availWidth || view.innerWidth) >= 720);
+    const view = sourceWindow(sourceDoc), ua = String(view?.navigator?.userAgent || navigator.userAgent || "");
+    /* 메신저 본창은 PC에서도 약 290px이므로 viewport 폭으로 PC/모바일을 가르면 안 됩니다.
+       CrOS/Whale은 터치형 기기여도 PC·웨일북으로 취급하고, 실제 모바일 UA만 앱 내부 모달을 사용합니다. */
+    if (/CrOS|Whale/i.test(ua)) return true;
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return false;
+    return sourceDoc?.body?.classList?.contains("admin-window-body") || MiniTalk.WindowMode?.isPopup?.() === true || !MiniTalk.MobileImmersive?.isMobile?.();
   };
   const el = (doc, tag, attrs = {}, children = []) => { const node = doc.createElement(tag);Object.entries(attrs).forEach(([key, value]) => { if (key === "class") node.className = value;else if (key === "text") node.textContent = value;else if (key === "value") node.value = value;else if (value != null) node.setAttribute(key, value); });[].concat(children).filter(Boolean).forEach(child => node.append(child));return node; };
 

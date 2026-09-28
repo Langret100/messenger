@@ -7,6 +7,9 @@
 MiniTalk.DataCache=(()=>{
   const DB_NAME="moaru-device-cache",DB_VERSION=1,STORE="entries";
   const MAX_AGE=30*24*60*60*1000,CLEAN_INTERVAL=24*60*60*1000,CHAT_MAX=100;
+  /* 소식은 서버 최신 30개와 별개로 "이 기기에서 이미 본 기록"을 계속 보존합니다.
+     일반 30일 미사용 캐시 청소 대상에 넣으면 장기 미접속 뒤 소식이 초기화되어 보입니다. */
+  const PERSISTENT_TYPES=new Set(["feed-post","feed-media","feed-thumb"]);
   let dbPromise=null,disabled=false,memory=new Map();
   const id=(type,key)=>`${type}:${String(key)}`;
   const now=()=>Date.now();
@@ -112,9 +115,9 @@ MiniTalk.DataCache=(()=>{
     const cutoff=now()-MAX_AGE,db=await open();
     if(db){
       const rows=await new Promise(resolve=>{const tx=db.transaction(STORE,"readonly"),req=tx.objectStore(STORE).getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>resolve([])});
-      const stale=rows.filter(row=>row.type!=="meta"&&Number(row.lastAccessedAt||row.savedAt||0)<cutoff);
+      const stale=rows.filter(row=>row.type!=="meta"&&!PERSISTENT_TYPES.has(String(row.type))&&Number(row.lastAccessedAt||row.savedAt||0)<cutoff);
       if(stale.length)await transact("readwrite",store=>stale.forEach(row=>store?.delete(row.id)));
-    }else for(const [key,row] of memory)if(row.type!=="meta"&&Number(row.lastAccessedAt||row.savedAt||0)<cutoff)memory.delete(key);
+    }else for(const [key,row] of memory)if(row.type!=="meta"&&!PERSISTENT_TYPES.has(String(row.type))&&Number(row.lastAccessedAt||row.savedAt||0)<cutoff)memory.delete(key);
     await setMeta("maintenance.last",now());return true
   }
 

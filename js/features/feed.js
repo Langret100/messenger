@@ -98,7 +98,7 @@ MiniTalk.Features.Feed=(()=>{
       /* 서버의 child_removed는 30개 제한 정리에서도 발생합니다. 그것을 실제 사용자 삭제와 구분할
          tombstone이 없으므로, 여기서 기기 캐시/화면 기록을 지우면 "기존 기기는 본 소식을 계속 보관"
          규칙이 깨집니다. 서버 개수만 갱신하고 이미 본 게시물은 기기에 그대로 둡니다. */
-      const remove=id=>{serverPostCount=Math.max(0,serverPostCount-1);hasMorePosts=postRows().length<Math.max(serverPostCount,cachedPostRows.length)};
+      const remove=id=>{serverPostCount=Math.max(0,serverPostCount-1);hasMorePosts=postRows().length<Math.max(serverPostCount,cachedPostRows.length);patchPost(id)};
       postsUnsub=MiniTalk.Realtime.cloudSubscribeDelta(POSTS_PATH,{added:apply,changed,removed:remove},{orderByChild:"createdAt",startAt:latestCreated?latestCreated+1:1});
     }finally{if(generation===feedGeneration)syncStarting=false}
   }

@@ -154,9 +154,20 @@ MiniTalk.Tools.Notifications = (() => {
   }
 
   MiniTalk.Events.on("rt:command", command => {
-    if (command?.type !== "COIN_REWARD") return;
-    const payload = command.payload || {};
-    notifyCoinReward(payload.amount, payload.reason || "관리자 코인 보상", payload.newCoin);
+    if (command?.type === "COIN_REWARD") {
+      const payload = command.payload || {};
+      notifyCoinReward(payload.amount, payload.reason || "관리자 코인 보상", payload.newCoin);
+      return;
+    }
+    if (command?.type === "TASK_COMPLETED") {
+      const payload = command.payload || {};
+      notifyCoinReward(payload.amount, payload.title ? `${payload.title} 완료 보상` : "과제 완료 보상", payload.newCoin);
+    }
+  });
+
+  MiniTalk.Events.on("coins:task-reward", detail => {
+    if (!detail || Number(detail.amount) <= 0) return;
+    notifyCoinReward(detail.amount, detail.reason || "과제 완료 보상", detail.newCoin);
   });
 
   function openSettings() {

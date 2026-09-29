@@ -2,7 +2,7 @@
 MiniTalk.Economy=MiniTalk.Economy||{};
 MiniTalk.Economy.Runtime=(()=>{
   const ROOT=MiniTalkConfig.paths.economyRuntime||"moaru/v3/economyRuntime", RETRY_TTL=7*86400000;
-  let ownerId="",balanceOff=null,inventoryOff=null;const flushPromises=new Map();
+  let ownerId="",balanceOff=null,inventoryOff=null,balanceLiveReady=false;const flushPromises=new Map();
   const obj=v=>v&&typeof v==="object"&&!Array.isArray(v)?v:{};
   const int=v=>(typeof v==="number"||typeof v==="string")&&String(v).trim()!==""&&Number.isSafeInteger(Number(v));
   const now=()=>Date.now();
@@ -213,7 +213,20 @@ MiniTalk.Economy.Runtime=(()=>{
     return{ok:true,count:items.length,items,deliveryStatus:items.length===1?String(items[0].deliveryStatus||""):""}
   }
   async function flushPending(uid){if(!uid||MiniTalk.Realtime?.getMode?.()!=="firebase")return;uid=String(uid);if(flushPromises.has(uid))return flushPromises.get(uid);const p=(async()=>{const pending=obj(await MiniTalk.Realtime.cloudGet(`${userPath(uid)}/pending`,{}));for(const [k,event] of Object.entries(pending)){try{await MiniTalk.AuthApi.economySheetSync({userId:uid,event});await MiniTalk.Realtime.cloudRemove(`${userPath(uid)}/pending/${k}`)}catch(e){console.warn("경제 시트 pending 유지",event?.type,e);break}}})();flushPromises.set(uid,p);try{await p}finally{if(flushPromises.get(uid)===p)flushPromises.delete(uid)}}
-  function start(user=MiniTalk.Store.get("user")){stop();if(!user?.user_id||user.isGuest)return;ownerId=String(user.user_id);const attach=()=>{if(MiniTalk.Realtime?.getMode?.()!=="firebase"||!ownerId)return;balanceOff=MiniTalk.Realtime.cloudSubscribe(balancePath(ownerId),r=>{if(r&&int(r.balance)&&String(MiniTalk.Store.get("user")?.user_id||"")===ownerId)MiniTalk.Economy.CoinWallet?.setLocal?.(Number(r.balance),"firebase-live",ownerId)});inventoryOff=MiniTalk.Realtime.cloudSubscribe(inventoryPath(ownerId),v=>{if(String(MiniTalk.Store.get("user")?.user_id||"")===ownerId)MiniTalk.Events.emit("economy:inventory",obj(v))});flushPending(ownerId).catch(()=>{})};if(MiniTalk.Realtime?.getMode?.()==="firebase")attach();else{const off=MiniTalk.Events.on("state:transport",()=>{if(MiniTalk.Realtime?.getMode?.()==="firebase"){off?.();attach()}})}}
-  function stop(){try{balanceOff?.()}catch{}try{inventoryOff?.()}catch{}balanceOff=inventoryOff=null;ownerId=""}
+  function start(user=MiniTalk.Store.get("user")){stop();if(!user?.user_id||user.isGuest)return;ownerId=String(user.user_id);balanceLiveReady=false;const attach=()=>{if(MiniTalk.Realtime?.getMode?.()!=="firebase"||!ownerId)return;balanceOff=MiniTalk.Realtime.cloudSubscribe(balancePath(ownerId),async r=>{
+      if(!r||!int(r.balance)||String(MiniTalk.Store.get("user")?.user_id||"")!==ownerId)return;
+      const before=MiniTalk.Economy.CoinWallet?.value?.()??Number(r.balance),next=Number(r.balance),shouldInspect=balanceLiveReady&&next>before;
+      MiniTalk.Economy.CoinWallet?.setLocal?.(next,"firebase-live",ownerId);
+      if(shouldInspect){
+        try{
+          const state=await readUser(ownerId),lastId=String(state?.lastTxnId||""),op=obj(state?.recentOps)[opKey(lastId)];
+          if(op&&String(op.type||"")==="ADMIN_TASK"&&Number(op.balanceAfter)===next){
+            MiniTalk.Events.emit("coins:task-reward",{amount:Math.max(1,Number(op.amount)||next-before),reason:String(op.reason||"과제 완료 보상"),newCoin:next,operationId:lastId});
+          }
+        }catch(error){console.warn("과제 보상 연출 정보 확인 지연",error)}
+      }
+      balanceLiveReady=true;
+    });inventoryOff=MiniTalk.Realtime.cloudSubscribe(inventoryPath(ownerId),v=>{if(String(MiniTalk.Store.get("user")?.user_id||"")===ownerId)MiniTalk.Events.emit("economy:inventory",obj(v))});flushPending(ownerId).catch(()=>{})};if(MiniTalk.Realtime?.getMode?.()==="firebase")attach();else{const off=MiniTalk.Events.on("state:transport",()=>{if(MiniTalk.Realtime?.getMode?.()==="firebase"){off?.();attach()}})}}
+  function stop(){try{balanceOff?.()}catch{}try{inventoryOff?.()}catch{}balanceOff=inventoryOff=null;ownerId="";balanceLiveReady=false}
   return{ROOT,keyOf,bootstrap,balance,allBalances,reward,adminAdjust,seedCatalog,setProductStock,deleteProductStock,purchase,randomPurchase,inventory,patchInventory,removeInventory,syncInventoryFromSheet,useItem,requestDelivery,requestDeliveryBulk,gift,deliveryList,adminDelivery,flushPending,start,stop,_ensureUserState:ensureUserState};
 })();

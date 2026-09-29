@@ -418,8 +418,14 @@ MiniTalk.Realtime=(()=>{
           const current={...(MiniTalk.Store.get("tasks")||{}),[task.id]:task};localSet(`server.tasks.${user.user_id}`,current);emit("tasks",current);
         }else emit("command",command);
       }
-      if(commandState?.coin!==null&&commandState?.coin!==undefined&&String(commandState.coin).trim()!==""&&Number.isSafeInteger(Number(commandState.coin)))MiniTalk.Economy.CoinWallet?.setServerSnapshot?.(Number(commandState.coin),coinRevision,"command-sync");
-      else if(commands.some(command=>command?.type==="COIN_REWARD"||command?.type==="TASK_COMPLETED"))MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(()=>{});
+      const hasCoinCommand=commands.some(command=>command?.type==="COIN_REWARD"||command?.type==="TASK_COMPLETED");
+      if(MiniTalk.Realtime?.getMode?.()==="firebase"&&MiniTalk.Economy.Runtime){
+        // Firebase 경제 런타임이 현재값의 권위 저장소입니다. user_commands의 coin은
+        // Sheets 백업이 끝나기 전의 과거 총량일 수 있으므로 화면 잔액을 절대 덮지 않습니다.
+        if(hasCoinCommand)MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(()=>{});
+      }else if(commandState?.coin!==null&&commandState?.coin!==undefined&&String(commandState.coin).trim()!==""&&Number.isSafeInteger(Number(commandState.coin))){
+        MiniTalk.Economy.CoinWallet?.setServerSnapshot?.(Number(commandState.coin),coinRevision,"command-sync");
+      }else if(hasCoinCommand)MiniTalk.Economy.CoinWallet?.refresh?.(true).catch(()=>{});
       if(ack.length)await MiniTalk.AuthApi.userCommands(commandUserId,ack);
     }catch(error){console.warn("서버 명령 확인 실패",error)}finally{if(commandGeneration===initGeneration){serverCommandPolling=false;if(serverCommandRepoll){serverCommandRepoll=false;queueMicrotask(pollServerCommands)}}}
   }

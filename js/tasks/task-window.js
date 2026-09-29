@@ -5,15 +5,14 @@ MiniTalk.Tasks.TaskWindow = (() => {
   const sourceWindow = sourceDoc => sourceDoc?.defaultView || window;
   const desktop = (sourceDoc = MiniTalk.UI.Dom.doc()) => {
     const view = sourceWindow(sourceDoc), ua = String(view?.navigator?.userAgent || navigator.userAgent || "");
-    /* 메신저 본창은 PC에서도 약 290px이므로 viewport 폭으로 PC/모바일을 가르면 안 됩니다.
-       CrOS/Whale은 터치형 기기여도 PC·웨일북으로 취급하고, 실제 모바일 UA만 앱 내부 모달을 사용합니다. */
+    // 메신저 본창은 PC에서도 약 290px이므로 viewport 폭으로 PC/모바일을 판정하지 않습니다.
     if (/CrOS|Whale/i.test(ua)) return true;
     if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return false;
     return sourceDoc?.body?.classList?.contains("admin-window-body") || MiniTalk.WindowMode?.isPopup?.() === true || !MiniTalk.MobileImmersive?.isMobile?.();
   };
   const el = (doc, tag, attrs = {}, children = []) => { const node = doc.createElement(tag);Object.entries(attrs).forEach(([key, value]) => { if (key === "class") node.className = value;else if (key === "text") node.textContent = value;else if (key === "value") node.value = value;else if (value != null) node.setAttribute(key, value); });[].concat(children).filter(Boolean).forEach(child => node.append(child));return node; };
 
-  function popupBounds(sourceView, desiredW=920, desiredH=780) {
+  function popupBounds(sourceView, desiredW=1040, desiredH=820) {
     const scr=sourceView.screen||{},availLeft=Number(scr.availLeft)||0,availTop=Number(scr.availTop)||0,availW=Math.max(640,Number(scr.availWidth)||1280),availH=Math.max(520,Number(scr.availHeight)||800),gap=42;
     const srcLeft=Number(sourceView.screenX??sourceView.screenLeft)||availLeft,srcTop=Number(sourceView.screenY??sourceView.screenTop)||availTop,srcW=Math.max(320,Number(sourceView.outerWidth)||Math.min(520,availW*.42)),srcH=Math.max(420,Number(sourceView.outerHeight)||availH*.8);
     const rightStart=Math.min(availLeft+availW,srcLeft+srcW+gap),rightSpace=Math.max(0,availLeft+availW-rightStart),leftSpace=Math.max(0,srcLeft-gap-availLeft);let width=Math.min(desiredW,Math.max(rightSpace,leftSpace)),left=rightSpace>=leftSpace?rightStart:srcLeft-gap-width;
@@ -27,8 +26,24 @@ MiniTalk.Tasks.TaskWindow = (() => {
     const sourceView = sourceWindow(sourceDoc);
     const bounds=popupBounds(sourceView),popup = sourceView.open("", `MoaruTask_${Date.now()}`, `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=yes,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`);
     if (!popup) return null;enforcePopupBounds(popup,bounds);
-    const doc = popup.document;doc.open();doc.write("<!doctype html><html lang='ko' data-theme='light'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><base href='" + sourceDoc.baseURI.replace(/'/g, "%27") + "'></head><body class='task-window-body'></body></html>");doc.close();doc.title = title;enforcePopupBounds(popup,bounds);
-    for (const sheet of sourceDoc.styleSheets) { if (!sheet.href) continue;const link = doc.createElement("link");link.rel = "stylesheet";link.href = sheet.href;doc.head.append(link); }
+    const doc = popup.document, sourceBase = sourceDoc?.baseURI && sourceDoc.baseURI !== "about:blank" ? sourceDoc.baseURI : sourceView.location.href;
+    doc.open();doc.write("<!doctype html><html lang='ko' data-theme='light'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><base href='" + String(sourceBase).replace(/'/g, "%27") + "'></head><body class='task-window-body'></body></html>");doc.close();doc.title = title;enforcePopupBounds(popup,bounds);
+
+    // about:blank 팝업에서는 상대경로 stylesheet가 누락될 수 있어 절대경로 링크와
+    // 현재 문서에서 읽을 수 있는 CSS 규칙을 함께 복제합니다. 링크 로딩 전에도 디자인이 유지됩니다.
+    const copiedHrefs = new Set();
+    for (const node of sourceDoc.querySelectorAll('link[rel~="stylesheet"]')) {
+      const raw = node.getAttribute("href");if (!raw) continue;
+      let href = raw;try { href = new URL(raw, sourceBase).href; } catch {}
+      if (copiedHrefs.has(href)) continue;copiedHrefs.add(href);
+      const link = doc.createElement("link");link.rel = "stylesheet";link.href = href;doc.head.append(link);
+    }
+    for (const styleNode of sourceDoc.querySelectorAll("style")) { const clone = doc.createElement("style");clone.textContent = styleNode.textContent || "";doc.head.append(clone); }
+    let inlineCss = "";
+    for (const sheet of sourceDoc.styleSheets) {
+      try { if (!sheet.cssRules) continue;for (const rule of sheet.cssRules) inlineCss += rule.cssText + "\n"; } catch {}
+    }
+    if (inlineCss) { const style = doc.createElement("style");style.setAttribute("data-task-popup-styles", "copied");style.textContent = inlineCss;doc.head.append(style); }
     return { doc, close: () => popup.close(), popup };
   }
 

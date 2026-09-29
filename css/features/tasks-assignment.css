@@ -60,3 +60,13 @@
   .coin-reward-burst.debit img{animation:coin-drain .45s ease-out both!important}
   .coin-reward-burst.debit .coin-reward-rays{animation:coin-minus-pulse .35s ease 2 alternate!important}
 }
+
+/* PC/웨일북 별도 과제 창: 넓은 작성 영역과 안정적인 문서 레이아웃 */
+.task-window-body .task-workbench-window{width:min(100%,1180px);padding:28px 30px}
+.task-window-body .task-editor-panel{width:100%;min-width:0}
+.task-window-body .task-answer-editor{width:100%;min-height:430px;max-height:none;font-size:16px;line-height:1.7;padding:18px}
+.task-window-body .task-workbench-head h1{font-size:clamp(24px,3vw,34px)}
+.task-window-body .task-workbench-head p{font-size:13px}
+.task-window-body .task-editor-label{font-size:13px}
+.task-window-body .task-submit-button{min-height:50px;font-size:14px}
+@media(max-width:760px){.task-window-body .task-workbench-window{padding:18px}.task-window-body .task-answer-editor{min-height:42dvh;font-size:15px}}

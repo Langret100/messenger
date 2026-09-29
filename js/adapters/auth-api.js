@@ -104,8 +104,11 @@ MiniTalk.AuthApi = (() => {
     async economySheetSync({ userId, event }) {
       return post({ mode: "economy_sheet_sync", user_id: userId, event_json: JSON.stringify(event || {}) }, 15000);
     },
-    async taskSheetSync({ userId, event }) {
-      return post({ mode: "task_sheet_sync", user_id: userId, event_json: JSON.stringify(event || {}) }, 15000);
+    async economyEnsureUser(userId) {
+      const data = await post({ mode: "economy_ensure_user", user_id: userId }, 15000);
+      const coin = balanceValue(data.coin ?? data.balance);
+      if (coin === null) { const error = new Error("코인 계정 기준값을 확인하지 못했습니다."); error.code = "INVALID_COIN_STATUS"; throw error; }
+      return { userId: String(data.user_id || userId || ""), coin: Math.floor(coin), created: data.created === true };
     },
     async adminUnlock(adminCode) {
       return post({ mode: "admin_unlock", admin_code: adminCode }, 8000);

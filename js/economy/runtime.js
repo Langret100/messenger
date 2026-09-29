@@ -13,6 +13,12 @@ MiniTalk.Economy.Runtime=(()=>{
   async function active(id){return (await MiniTalk.Realtime.cloudGet(activePath(id),false))===true}
   async function readUser(id){assertFirebase();return obj(await MiniTalk.Realtime.cloudGet(userPath(id),null))}
   const bootstrapPromises=new Map();
+  async function ensureRegisteredRewardAccount(id){
+    if(!MiniTalk.AuthApi?.economyEnsureUser){const e=new Error("ECONOMY_ENSURE_API_MISSING");e.code="ECONOMY_ENSURE_API_MISSING";throw e}
+    const prepared=await MiniTalk.AuthApi.economyEnsureUser(id);
+    if(!prepared||!int(prepared.coin)){const e=new Error("NO_REWARD_USER");e.code="NO_REWARD_USER";throw e}
+    return prepared;
+  }
   async function ensureUserState(id){
     assertFirebase();id=String(id||"").trim();if(!id)return null;
     if(bootstrapPromises.has(id))return bootstrapPromises.get(id);

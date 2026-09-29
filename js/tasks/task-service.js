@@ -112,7 +112,10 @@ MiniTalk.Tasks.TaskService = (() => {
       const now=Date.now(),task={...fresh,status:"retry",feedback:String(feedback||"").trim().slice(0,100),answer:"",imageData:"",submittedAt:0,updatedAt:now},event=backupEvent("RETRY",task,current.user_id);await MiniTalk.Realtime.cloudUpdate(FIREBASE_ROOT,{[relativeTaskPath(task.userId,task.id)]:task,[backupRelative(event)]:event});adminTaskCache.set(task.id,normalize(task));flushBackups().catch(()=>{});return normalize(task);
     }
     if(action!=="complete")throw new Error("올바르지 않은 과제 처리입니다.");
-    const reward=await MiniTalk.Economy.Runtime.reward({userId:fresh.userId,rewardType:"ADMIN_TASK",rewardKey:String(fresh.id),amount:fresh.rewardCoin,reason:`${fresh.title||"과제"} 완료`});const now=Date.now(),done={...fresh,status:"completed",feedback:String(feedback||"").trim().slice(0,100),completedAt:now,updatedAt:now,newCoin:reward.newCoin},event=backupEvent("COMPLETED",done,current.user_id),completedRecord={...done,imageData:done.imageData?"Y":""};
+    if(!Number.isSafeInteger(Number(fresh.rewardCoin))||Number(fresh.rewardCoin)<=0)throw new Error("과제 보상 코인 값이 올바르지 않습니다.");
+    const reward=await MiniTalk.Economy.Runtime.reward({userId:fresh.userId,rewardType:"ADMIN_TASK",rewardKey:String(fresh.id),amount:fresh.rewardCoin,reason:`${fresh.title||"과제"} 완료`});
+    if(!reward||!Number.isSafeInteger(Number(reward.newCoin))||(!reward.applied&&!reward.duplicate))throw new Error("과제 코인 보상 완료를 확인하지 못했습니다.");
+    const now=Date.now(),done={...fresh,status:"completed",feedback:String(feedback||"").trim().slice(0,100),completedAt:now,updatedAt:now,newCoin:reward.newCoin,rewardApplied:reward.applied===true,rewardDuplicate:reward.duplicate===true},event=backupEvent("COMPLETED",done,current.user_id),completedRecord={...done,imageData:done.imageData?"Y":""};
     // 학생의 활성 과제 경로에서는 즉시 제거하고, 관리자 완료 탭용 경량 기록만 completed에 보관합니다.
     // 시트 백업은 pending 큐에서 뒤로 처리되므로 완료 버튼은 Apps Script 응답을 기다리지 않습니다.
     await MiniTalk.Realtime.cloudUpdate(FIREBASE_ROOT,{[relativeTaskPath(done.userId,done.id)]:null,[relativeCompletedPath(done.id)]:completedRecord,[backupRelative(event)]:event});adminTaskCache.set(done.id,normalize(completedRecord));flushBackups().catch(()=>{});return normalize(completedRecord);

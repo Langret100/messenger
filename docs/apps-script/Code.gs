@@ -297,6 +297,10 @@ function moaruDoPost_(e) {
       case "economy_sheet_sync":
         return handleEconomySheetSync(e);
 
+      // Firebase 과제 런타임 처리 결과를 Sheets 장기 백업에 비동기 반영
+      case "task_sheet_sync":
+        return handleTaskSheetSync(e);
+
       // 로그인 등록 사용자의 기존 코인 계정을 Firebase 최초 접근 시 자동 준비
       case "economy_ensure_user":
         return handleEconomyEnsureUser(e);

@@ -104,6 +104,9 @@ MiniTalk.AuthApi = (() => {
     async economySheetSync({ userId, event }) {
       return post({ mode: "economy_sheet_sync", user_id: userId, event_json: JSON.stringify(event || {}) }, 15000);
     },
+    async taskSheetSync({ userId, event }) {
+      return post({ mode: "task_sheet_sync", user_id: userId, event_json: JSON.stringify(event || {}) }, 15000);
+    },
     async adminUnlock(adminCode) {
       return post({ mode: "admin_unlock", admin_code: adminCode }, 8000);
     },

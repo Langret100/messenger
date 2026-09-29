@@ -33,6 +33,7 @@ const MOARU_SHOP_COMPLETED_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 배송완료 상
 const MOARU_SHOP_RECEIPT_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 선물/배송 중복방지 영수증은 48시간 보존
 const MOARU_TASK_PROPERTY_PREFIX = "MOARU_TASK_";
 const MOARU_TASK_ASSIGN_REQUEST_PREFIX = "MOARU_TASK_ASSIGN_REQUEST_";
+const MOARU_TASK_BACKUP_RECEIPT_PREFIX = "MOARU_TASK_BACKUP_RECEIPT_";
 const MOARU_ADMIN_COIN_REQUEST_PREFIX = "MOARU_ADMIN_COIN_REQUEST_";
 const MOARU_SHOP_GIFT_REQUEST_PREFIX = "MOARU_SHOP_GIFT_REQUEST_";
 const MOARU_SHOP_DELIVERY_REQUEST_PREFIX = "MOARU_SHOP_DELIVERY_REQUEST_";
@@ -1282,16 +1283,42 @@ function getOrCreateMoaruTaskBackupSheet_() {
   if (!sheet) { sheet = ss.insertSheet(MOARU_TASK_BACKUP_SHEET);sheet.getRange(1, 1, 1, MOARU_TASK_BACKUP_HEADERS.length).setValues([MOARU_TASK_BACKUP_HEADERS]);sheet.setFrozenRows(1); }
   return sheet;
 }
+function backupMoaruTaskEventStrict_(eventName, task, actor) {
+  getOrCreateMoaruTaskBackupSheet_().appendRow([eventName, task.id, task.userId, task.nickname, task.title, task.rewardCoin, task.status, String(task.answer || "").slice(0, 1000), task.imageData ? "Y" : "N", String(task.feedback || "").slice(0, 100), task.updatedAt || Date.now(), String(actor || ""), new Date()]);
+  return true;
+}
 function backupMoaruTaskEvent_(eventName, task, actor) {
-  try { getOrCreateMoaruTaskBackupSheet_().appendRow([eventName, task.id, task.userId, task.nickname, task.title, task.rewardCoin, task.status, String(task.answer || "").slice(0, 1000), task.imageData ? "Y" : "N", String(task.feedback || "").slice(0, 100), task.updatedAt || Date.now(), String(actor || ""), new Date()]); }
-  catch (error) { console.error("MOARU_TASK_BACKUP_FAILED", eventName, task && task.id, error); }
+  try { return backupMoaruTaskEventStrict_(eventName, task, actor); }
+  catch (error) { console.error("MOARU_TASK_BACKUP_FAILED", eventName, task && task.id, error);return false; }
+}
+
+/** POST mode=task_sheet_sync - Firebase 과제 런타임의 결과를 시트에 장기 백업만 합니다. */
+function handleTaskSheetSync(e) {
+  const p = (e && e.parameter) || {}, caller = requireKnownMoaruUserCached_(p.user_id);
+  if (!caller) return shopJson_({ ok: false, error: "USER_NOT_FOUND" });
+  let event = null;try { event = JSON.parse(p.event_json || "null"); } catch (error) { return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" }); }
+  const eventName = String(event && event.eventName || "").toUpperCase(), allowed = ["ASSIGNED","SUBMITTED","RETRY","COMPLETED","DELETED"], task = event && event.task;
+  if (allowed.indexOf(eventName) < 0 || !task || !String(task.id || "").trim() || !String(task.userId || task.user_id || "").trim()) return shopJson_({ ok: false, error: "INVALID_COMMAND_DATA" });
+  const clean = {
+    id: String(task.id || "").slice(0, 160), userId: String(task.userId || task.user_id || "").slice(0, 100), nickname: String(task.nickname || "").slice(0, 30), title: String(task.title || "과제").slice(0, 80), rewardCoin: Math.max(0, Math.floor(Number(task.rewardCoin || task.reward_coin) || 0)), status: String(task.status || "").slice(0, 20), answer: String(task.answer || "").slice(0, 1000), imageData: task.imageData ? "Y" : "", feedback: String(task.feedback || "").slice(0, 100), updatedAt: Number(task.updatedAt || task.updated_at) || Date.now()
+  };
+  const txnId = String(event.txnId || ("task:" + eventName + ":" + clean.id + ":" + clean.updatedAt)).replace(/[^0-9A-Za-z:_-]/g, "").slice(0, 220), receiptKey = MOARU_TASK_BACKUP_RECEIPT_PREFIX + moaruSafeKey_(txnId), receipts = PropertiesService.getScriptProperties();
+  if (receipts.getProperty(receiptKey)) return shopJson_({ ok: true, duplicate: true });
+  const lock = LockService.getScriptLock();if (!lock.tryLock(3000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
+  try {
+    if (receipts.getProperty(receiptKey)) return shopJson_({ ok: true, duplicate: true });
+    backupMoaruTaskEventStrict_(eventName, clean, String(event.actor || caller).slice(0, 100));
+    receipts.setProperty(receiptKey, JSON.stringify({ createdAt: Date.now() }));
+    return shopJson_({ ok: true });
+  } catch (error) { console.error("TASK_SHEET_SYNC_FAILED", txnId, error);return shopJson_({ ok: false, error: "TASK_BACKUP_FAILED" }); }
+  finally { lock.releaseLock(); }
 }
 function cleanupCompletedMoaruTasks_() {
   const cutoff = Date.now() - MOARU_TASK_COMPLETED_TTL_MS, expired = readMoaruTasks_().filter(function (task) { return task.status === "completed" && task.completedAt > 0 && task.completedAt <= cutoff; });
   expired.forEach(function (task) { moaruTaskStore_().deleteProperty(moaruTaskPropertyKey_(task.id)); });return expired.length;
 }
 function cleanupMoaruTaskAssignReceipts_() {
-  const cutoff = Date.now() - MOARU_TASK_COMPLETED_TTL_MS, receipts = PropertiesService.getScriptProperties(), values = receipts.getProperties(), prefixes = [MOARU_TASK_ASSIGN_REQUEST_PREFIX, MOARU_ADMIN_COIN_REQUEST_PREFIX, MOARU_SHOP_GIFT_REQUEST_PREFIX];let removed = 0;
+  const cutoff = Date.now() - MOARU_TASK_COMPLETED_TTL_MS, receipts = PropertiesService.getScriptProperties(), values = receipts.getProperties(), prefixes = [MOARU_TASK_ASSIGN_REQUEST_PREFIX, MOARU_TASK_BACKUP_RECEIPT_PREFIX, MOARU_ADMIN_COIN_REQUEST_PREFIX, MOARU_SHOP_GIFT_REQUEST_PREFIX];let removed = 0;
   Object.keys(values).filter(function (key) { return prefixes.some(function (prefix) { return key.indexOf(prefix) === 0; }); }).forEach(function (key) { try { const value = JSON.parse(values[key] || "{}");if (Number(value.createdAt) > 0 && Number(value.createdAt) > cutoff) return; } catch (error) {}receipts.deleteProperty(key);removed++; });return removed;
 }
 

@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,".."),read=p=>fs.readFileSync(path.join(root,p
 const realtime=read("js/adapters/realtime.js"),tasks=read("js/tasks/task-service.js"),taskFeature=read("js/features/tasks.js"),admin=read("js/features/admin.js"),shop=read("js/shopping/store-service.js"),feed=read("js/features/feed.js"),chats=read("js/features/chats.js"),index=read("index.html"),sw=read("sw.js"),app=read("js/app.js");
 if(!realtime.includes('signals/${commandSignalRoom(user.user_id)}/wakeup')||!realtime.includes('pollServerCommands()}'))throw new Error("Firebase wakeup listener is missing");
 if(!realtime.includes('setInterval(pollServerCommands,30000)'))throw new Error("Apps Script command safety polling was not restored");
-if(!tasks.includes('pollTimer')||!tasks.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'))throw new Error("Apps Script task safety polling was not restored");
+if(!tasks.includes('cloudSubscribe(userPath(activeUserId)')||tasks.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'))throw new Error("Firebase task subscription must replace legacy Apps Script task polling");
 if(!tasks.includes('async function enter()')||!taskFeature.includes('TaskService?.enter?.()')||!taskFeature.includes('leave(){entered=false;}'))throw new Error("task route-entry recovery refresh is missing");
 if(!admin.includes('const fallback=setInterval')||!admin.includes('30000')||!admin.includes('tasks:admin-refresh'))throw new Error("admin task review must keep signal plus Apps Script safety refresh");
 if(!shop.includes('async function enter()')||shop.includes('setInterval(()=>refreshInventory(true).catch(()=>{}),15000)')||!shop.includes('SHOP_DELIVERY_COMPLETED'))throw new Error("shopping signal-driven refresh is incomplete");

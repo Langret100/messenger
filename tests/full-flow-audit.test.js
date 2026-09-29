@@ -4,7 +4,7 @@ const ok=(value,message)=>{if(!value)throw new Error(message)};
 
 const taskService=read('js/tasks/task-service.js'),admin=read('js/features/admin.js'),realtime=read('js/adapters/realtime.js');
 const wallet=read('js/economy/coin-wallet.js'),server=read('docs/apps-script/coin-shopping-extension.gs'),code=read('docs/apps-script/Code.gs'),html=read('index.html');
-ok(taskService.includes('refreshVersion')&&taskService.includes('version === refreshVersion ? publish(rows)'), 'older task responses can overwrite a newer submission');
+ok(taskService.includes('refreshVersion')&&/version\s*===\s*refreshVersion\s*\?\s*publish\(rows\)/.test(taskService), 'older task responses can overwrite a newer submission');
 ok(taskService.includes('pendingAssignments')&&taskService.includes('requestId')&&server.includes('MOARU_TASK_ASSIGN_REQUEST_PREFIX'), 'task assignment retries can create duplicate tasks');
 ok(admin.includes('reloadQueued=true')&&admin.includes('mode="submitted"')&&admin.includes('value===mode?"active"'), 'automatic task refresh can be lost or reset the selected review tab');
 ok(!admin.includes('if(type.value==="TASK")setTimeout(()=>render(host),200)'), 'assigning a task still redraws the entire administrator window');
@@ -17,7 +17,7 @@ for(const ref of ['js/core/user-directory.js?v=','js/adapters/auth-api.js?v=','j
 
 class CE extends Event{constructor(type,options={}){super(type);this.detail=options.detail}}
 const events=new EventTarget(),state={user:{user_id:'student',nickname:'학생'},tasks:{}},deferred=[];
-const context={console,EventTarget,Event,CustomEvent:CE,setInterval:()=>1,clearInterval(){},setTimeout,clearTimeout,queueMicrotask,window:null};context.window=context;
+const context={console,EventTarget,Event,CustomEvent:CE,setInterval:()=>1,clearInterval(){},setTimeout,clearTimeout,queueMicrotask,window:null,MiniTalkConfig:{paths:{economyRuntime:'moaru/v3/economyRuntime'}}};context.window=context;
 context.MiniTalk={Tasks:{},Store:{get:key=>state[key],set:(key,value)=>{state[key]=value;events.dispatchEvent(new CE(`state:${key}`,{detail:value}))}},Events:{on:(type,listener)=>{const handler=event=>listener(event.detail);events.addEventListener(type,handler)},emit:(type,detail)=>events.dispatchEvent(new CE(type,{detail}))},AuthApi:{userTaskList:()=>new Promise(resolve=>deferred.push(resolve))},AdminSession:{requireToken:()=>''},Realtime:{},Tools:{Notifications:{}}};
 vm.createContext(context);vm.runInContext(taskService,context,{filename:'task-service.js'});
 (async()=>{

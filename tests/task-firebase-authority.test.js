@@ -1,0 +1,13 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const service=fs.readFileSync(path.join(root,'js/tasks/task-service.js'),'utf8');
+const ok=(v,m)=>{if(!v)throw new Error(m)};
+ok(service.includes('cloudSubscribe(userPath(activeUserId)'),'student tasks are not Firebase subscription-driven');
+ok(!service.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'),'legacy 30s task polling returned');
+ok(service.includes('MiniTalk.Realtime.cloudUpdate(FIREBASE_ROOT'),'Firebase task writes are missing');
+ok(service.includes('MiniTalk.Economy.Runtime.reward({userId:fresh.userId,rewardType:"ADMIN_TASK"'),'admin task completion is not using the canonical economy runtime');
+ok(service.includes('[relativeTaskPath(done.userId,done.id)]:null'),'completed task is not removed from the active Firebase path');
+ok(service.includes('[relativeCompletedPath(done.id)]:completedRecord'),'completed admin-tab record is not written');
+ok(service.includes('if(fresh.status==="completed")updates[relativeCompletedPath(id)]=null'),'deleting a completed task does not remove the Firebase completion record');
+ok(service.includes('flushBackups().catch(()=>{})'),'sheet backup is not asynchronous');
+console.log('TASK_FIREBASE_AUTHORITY_OK');

@@ -12,7 +12,7 @@ const start=shop.slice(shop.indexOf('function start('),shop.indexOf('async funct
 ok(!start.includes('refreshInventory(true)'),'shopping server inventory still competes with login');
 ok(rt.includes('setInterval(pollServerCommands,30000)'),'server command fallback poll must be 30s');
 ok(!rt.includes('setInterval(pollServerCommands,10000)'),'10s command polling regression');
-ok(tasks.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'),'task fallback poll must be 30s');
+ok(tasks.includes('cloudSubscribe(userPath(activeUserId)')&&!tasks.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'),'task list must be Firebase subscription-driven without legacy polling');
 ok(!/writeShopAdminSession_\(userId, role, token\);\s*try \{ cleanupExpiredShopAdminSessions_\(\)/.test(gs),'admin unlock still scans all sessions on critical path');
 ok(gs.includes('pendingShopPurchaseUserMarkerKey_')&&gs.includes('getProperty(pendingShopPurchaseUserMarkerKey_(userId)) === "1"'),'inventory pending recovery not marker-gated');
 ok(!/function handleUserTaskList[\s\S]{0,500}cleanupCompletedMoaruTasks_\(\)/.test(gs),'user task list still runs global cleanup');

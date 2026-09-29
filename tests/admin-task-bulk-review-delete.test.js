@@ -25,7 +25,7 @@ const remaining=call('handleAdminTaskList',{user_id:'admin-user',admin_token:'to
 const commandsU1=parse(ctx.handleUserCommands({parameter:{user_id:'u1',ack_ids:''}})).commands,commandsU2=parse(ctx.handleUserCommands({parameter:{user_id:'u2',ack_ids:''}})).commands;if(!commandsU1.some(c=>c.type==='TASK_DELETED')||!commandsU2.some(c=>c.type==='TASK_DELETED'))throw new Error('bulk delete did not notify student task refresh');
 const backup=sheets.get('모아루_과제백업');if(!backup||backup.rows.filter(row=>row[0]==='DELETED').length<2)throw new Error('bulk delete was not backed up');
 for(const needle of ['mode: "admin_task_bulk_review"','mode: "admin_task_bulk_delete"'])if(!auth.includes(needle))throw new Error(`AuthApi missing ${needle}`);
-for(const needle of ['bulkReview','bulkDelete','TASK_(?:ASSIGNED|SUBMITTED|RETRY|COMPLETED|DELETED)'])if(!service.includes(needle))throw new Error(`TaskService missing ${needle}`);
+for(const needle of ['bulkReview','bulkDelete','backupEvent("ASSIGNED"','backupEvent("SUBMITTED"','backupEvent("RETRY"','backupEvent("COMPLETED"','backupEvent("DELETED"'])if(!service.includes(needle))throw new Error(`TaskService missing ${needle}`);
 for(const needle of ['선택 일괄 확인','선택 일괄 삭제','일괄 확인 시 함께 전달할 내용','TaskService.bulkReview','TaskService.bulkDelete'])if(!admin.includes(needle))throw new Error(`admin UI missing ${needle}`);
 for(const needle of ['case "admin_task_bulk_review"','case "admin_task_bulk_delete"'])if(!code.includes(needle))throw new Error(`Code.gs missing ${needle}`);
 if(!server.includes('function reviewMoaruTaskUnlocked_')||!server.includes('function handleAdminTaskBulkReview')||!server.includes('function handleAdminTaskBulkDelete'))throw new Error('bulk server handlers are incomplete');

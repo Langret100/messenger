@@ -21,7 +21,7 @@ ok(shop.includes('requireToken("SHOP")'),'shopping manager client path does not 
 for(const fn of ['handleUserTaskList','handleUserTaskSubmit']){
   const at=server.indexOf('function '+fn+'(e)');const body=server.slice(at,server.indexOf('\n}',at)+2);ok(body.includes('requireKnownMoaruUserCached_('),fn+' still re-reads login sheet');
 }
-ok(tasks.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'),'task fallback polling was not reduced');
+ok(tasks.includes('cloudSubscribe(userPath(activeUserId)')&&!tasks.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'),'Firebase task subscription must replace legacy task polling');
 ok(admin.includes('},30000);load();return section'),'admin task review fallback polling was not reduced');
 // 변경 에셋 캐시 버전 동기화
 for(const ref of ['js/adapters/realtime.js?v=','js/shopping/store-service.js?v=','js/tasks/task-service.js?v=','js/features/admin.js?v='])ok(index.includes(ref),'cache ref missing '+ref);

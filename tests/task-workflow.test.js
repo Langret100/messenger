@@ -36,5 +36,6 @@ if(!taskUi.includes('maxlength: String(ANSWER_MAX)')||!taskUi.includes('maxlengt
 if(!feature.includes('완료 후 2일 동안 표시')||!feature.includes('다시!')||!admin.includes('과제 확인'))throw new Error('task status/review UI is incomplete');
 if(!taskUi.includes('sourceView.open(')||!taskUi.includes('sourceDoc.styleSheets')||!admin.includes('},D.doc())'))throw new Error('admin task review is not opened from the admin window document');
 if(admin.includes('["open","진행 중"]')||!admin.includes('tasks:admin-refresh')||!admin.includes('setInterval(()=>{if(!section.isConnected)'))throw new Error('admin task review must keep signal/manual refresh plus Apps Script safety polling');
+const taskService=fs.readFileSync(path.join(root,'js/tasks/task-service.js'),'utf8');if(!taskService.includes('cloudSubscribe(userPath(activeUserId)')||taskService.includes('setInterval(() => refresh(true).catch(() => {}), 30000)'))throw new Error('student task list must use Firebase subscription without legacy polling');
 if(!server.includes('normalizeMoaruTaskState_')||!server.includes('"TASK_SUBMITTED"'))throw new Error('submitted task state recovery or admin wake-up is missing');
 console.log('TASK_WORKFLOW_OK');

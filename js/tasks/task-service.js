@@ -126,27 +126,49 @@ MiniTalk.Tasks.TaskService = (() => {
     const request=(firebaseMode()?firebaseAdminRows():MiniTalk.AuthApi.adminTaskList(current.user_id,MiniTalk.AdminSession.requireToken("ADMIN"))).then(rows=>{const normalized=rows.map(normalize).filter(t=>t.id);adminTaskCache.clear();normalized.forEach(t=>adminTaskCache.set(t.id,t));return{version,rows:normalized}});adminInFlight=request.finally(()=>{if(version===adminRefreshVersion)adminInFlight=null});const result=await adminInFlight;if(firebaseMode())flushBackups().catch(()=>{});return result.rows;
   }
 
-  async function review(taskId,action,feedback=""){
-    const current=user(),cached=adminTaskCache.get(String(taskId));MiniTalk.AdminSession.requireToken("ADMIN");
-    if(!firebaseMode()){const result=await MiniTalk.AuthApi.adminTaskReview({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("ADMIN"),taskId,action,feedback,firebaseMode:false});return normalize(result.task||{})}
-    if(!cached?.userId)throw new Error("과제 정보를 다시 불러온 뒤 처리해주세요.");const fresh=normalize(await MiniTalk.Realtime.cloudGet(taskPath(cached.userId,taskId),null)||{});if(!fresh.id)throw new Error("이미 처리되었거나 삭제된 과제입니다.");
-    if(action==="retry"){
-      const now=Date.now(),task={...fresh,status:"retry",feedback:String(feedback||"").trim().slice(0,100),answer:"",imageData:"",submittedAt:0,updatedAt:now},event=backupEvent("RETRY",task,current.user_id);await MiniTalk.Realtime.cloudUpdate(FIREBASE_ROOT,{[relativeTaskPath(task.userId,task.id)]:task,[backupRelative(event)]:event});adminTaskCache.set(task.id,normalize(task));flushBackups().catch(()=>{});return normalize(task);
-    }
-    if(action!=="complete")throw new Error("올바르지 않은 과제 처리입니다.");
+  async function loadReviewTask(taskId){
+    const cached=adminTaskCache.get(String(taskId));
+    if(!cached?.userId)throw new Error("과제 정보를 다시 불러온 뒤 처리해주세요.");
+    const fresh=normalize(await MiniTalk.Realtime.cloudGet(taskPath(cached.userId,taskId),null)||{});
+    if(!fresh.id)throw new Error("이미 처리되었거나 삭제된 과제입니다.");
+    return fresh;
+  }
+
+  async function retryReview(taskId,feedback=""){
+    const current=user(),message=String(feedback||"").trim().slice(0,100);MiniTalk.AdminSession.requireToken("ADMIN");
+    if(!message)throw new Error("다시 보낼 피드백을 입력해주세요.");
+    if(!firebaseMode()){const result=await MiniTalk.AuthApi.adminTaskReview({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("ADMIN"),taskId,action:"retry",feedback:message,firebaseMode:false});return normalize(result.task||{})}
+    const fresh=await loadReviewTask(taskId);
+    if(fresh.status!=="submitted")throw new Error("제출 대기 상태의 과제만 다시 요청할 수 있습니다.");
+    // 재요청은 보상/완료 처리와 완전히 분리합니다. 기존 제출 내용과 이미지를 남겨 학생이 바로 수정할 수 있게 합니다.
+    const now=Date.now(),task={...fresh,status:"retry",feedback:message,submittedAt:0,completedAt:0,updatedAt:now},event=backupEvent("RETRY",task,current.user_id);
+    await MiniTalk.Realtime.cloudUpdate(FIREBASE_ROOT,{[relativeTaskPath(task.userId,task.id)]:task,[backupRelative(event)]:event});
+    adminTaskCache.set(task.id,normalize(task));flushBackups().catch(()=>{});return normalize(task);
+  }
+
+  async function completeReview(taskId,feedback=""){
+    const current=user(),message=String(feedback||"").trim().slice(0,100);MiniTalk.AdminSession.requireToken("ADMIN");
+    if(!firebaseMode()){const result=await MiniTalk.AuthApi.adminTaskReview({userId:current.user_id,adminToken:MiniTalk.AdminSession.requireToken("ADMIN"),taskId,action:"complete",feedback:message,firebaseMode:false});return normalize(result.task||{})}
+    const fresh=await loadReviewTask(taskId);
+    if(fresh.status!=="submitted")throw new Error("제출 대기 상태의 과제만 완료 처리할 수 있습니다.");
     if(!Number.isSafeInteger(Number(fresh.rewardCoin))||Number(fresh.rewardCoin)<=0)throw new Error("과제 보상 코인 값이 올바르지 않습니다.");
     const reward=await MiniTalk.Economy.Runtime.reward({userId:fresh.userId,rewardType:"ADMIN_TASK",rewardKey:String(fresh.id),amount:fresh.rewardCoin,reason:`${fresh.title||"과제"} 완료`});
     if(!reward||!Number.isSafeInteger(Number(reward.newCoin))||(!reward.applied&&!reward.duplicate))throw new Error("과제 코인 보상 완료를 확인하지 못했습니다.");
-    const now=Date.now(),done={...fresh,status:"completed",feedback:String(feedback||"").trim().slice(0,100),completedAt:now,updatedAt:now,newCoin:reward.newCoin,rewardApplied:reward.applied===true,rewardDuplicate:reward.duplicate===true},event=backupEvent("COMPLETED",done,current.user_id),completedRecord={...done,imageData:done.imageData?"Y":""};
-    // 학생의 활성 과제 경로에서는 즉시 제거하고, 관리자 완료 탭용 경량 기록만 completed에 보관합니다.
-    // 시트 백업은 pending 큐에서 뒤로 처리되므로 완료 버튼은 Apps Script 응답을 기다리지 않습니다.
-    await MiniTalk.Realtime.cloudUpdate(FIREBASE_ROOT,{[relativeTaskPath(done.userId,done.id)]:null,[relativeCompletedPath(done.id)]:completedRecord,[backupRelative(event)]:event});adminTaskCache.set(done.id,normalize(completedRecord));flushBackups().catch(()=>{});return normalize(completedRecord);
+    const now=Date.now(),done={...fresh,status:"completed",feedback:message,completedAt:now,updatedAt:now,newCoin:reward.newCoin,rewardApplied:reward.applied===true,rewardDuplicate:reward.duplicate===true},event=backupEvent("COMPLETED",done,current.user_id),completedRecord={...done,imageData:done.imageData?"Y":""};
+    await MiniTalk.Realtime.cloudUpdate(FIREBASE_ROOT,{[relativeTaskPath(done.userId,done.id)]:null,[relativeCompletedPath(done.id)]:completedRecord,[backupRelative(event)]:event});
+    adminTaskCache.set(done.id,normalize(completedRecord));flushBackups().catch(()=>{});return normalize(completedRecord);
+  }
+
+  async function review(taskId,action,feedback=""){
+    if(action==="retry")return retryReview(taskId,feedback);
+    if(action==="complete")return completeReview(taskId,feedback);
+    throw new Error("올바르지 않은 과제 처리입니다.");
   }
 
   async function bulkReview(taskIds,action="complete",feedback=""){
     const ids=[...new Set((taskIds||[]).map(String).filter(Boolean))];if(!ids.length)throw new Error("과제를 선택하세요.");const results=[];
     // 코인 트랜잭션과 과제 상태 변경을 과도하게 한꺼번에 몰지 않으면서도 Apps Script 시절처럼 직렬 대기하지 않도록 8개씩 병렬 처리합니다.
-    for(let i=0;i<ids.length;i+=8){const batch=await Promise.all(ids.slice(i,i+8).map(async id=>{try{const task=await review(id,action,feedback);return{ok:true,task_id:id,user_id:task.userId,task}}catch(error){return{ok:false,task_id:id,error:error.code||error.message}}}));results.push(...batch)}
+    for(let i=0;i<ids.length;i+=8){const batch=await Promise.all(ids.slice(i,i+8).map(async id=>{try{const task=action==="retry"?await retryReview(id,feedback):action==="complete"?await completeReview(id,feedback):(()=>{throw new Error("올바르지 않은 과제 처리입니다.")})();return{ok:true,task_id:id,user_id:task.userId,task}}catch(error){return{ok:false,task_id:id,error:error.code||error.message}}}));results.push(...batch)}
     return{ok:true,count:results.filter(r=>r.ok).length,failed:results.filter(r=>!r.ok).length,results};
   }
   async function bulkDelete(taskIds){
@@ -159,5 +181,5 @@ MiniTalk.Tasks.TaskService = (() => {
       updates[backupRelative(event)]=event;results.push({ok:true,task_id:id,user_id:fresh.userId});adminTaskCache.delete(id)}if(Object.keys(updates).length)await MiniTalk.Realtime.cloudUpdate(FIREBASE_ROOT,updates);flushBackups().catch(()=>{});return{ok:true,count:results.filter(r=>r.ok).length,failed:results.filter(r=>!r.ok).length,results};
   }
 
-  return{start,enter,refresh,submit,assign,adminList,review,bulkReview,bulkDelete,flushBackups,normalize,visible,COMPLETED_VISIBLE_MS:LEGACY_COMPLETED_VISIBLE_MS,FIREBASE_ROOT,COMPLETED_ROOT};
+  return{start,enter,refresh,submit,assign,adminList,review,retryReview,completeReview,bulkReview,bulkDelete,flushBackups,normalize,visible,COMPLETED_VISIBLE_MS:LEGACY_COMPLETED_VISIBLE_MS,FIREBASE_ROOT,COMPLETED_ROOT};
 })();

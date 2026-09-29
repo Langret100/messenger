@@ -4,7 +4,7 @@ MiniTalk.Tasks.TaskService = (() => {
   const LEGACY_COMPLETED_VISIBLE_MS = 2 * 24 * 60 * 60 * 1000;
   const FIREBASE_ROOT = `${MiniTalkConfig.paths.economyRuntime || "moaru/v3/economyRuntime"}/taskRuntime`;
   const COMPLETED_ROOT = `${FIREBASE_ROOT}/completed`;
-  let activeUserId = "", userUnsub = null, transportOff = null, inFlight = null, adminInFlight = null, refreshVersion = 0, adminRefreshVersion = 0, backupFlush = null;
+  let activeUserId = "", userUnsub = null, transportOff = null, inFlight = null, adminInFlight = null, refreshVersion = 0, adminRefreshVersion = 0, backupFlush = null, taskNoticeState = null;
   const adminTaskCache = new Map(), pendingAssignments = new Map();
   const user = () => MiniTalk.Store.get("user") || {};
   const obj = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -52,14 +52,36 @@ MiniTalk.Tasks.TaskService = (() => {
     }
     if(inFlight&&!force)return inFlight;const version=++refreshVersion;const request=MiniTalk.AuthApi.userTaskList(current.user_id).then(rows=>version===refreshVersion?publish(rows):(rows||[]).map(normalize).filter(visible));inFlight=request.finally(()=>{if(version===refreshVersion)inFlight=null});return inFlight;
   }
-  function stopUserSubscription(){try{userUnsub?.()}catch{}try{transportOff?.()}catch{}userUnsub=null;transportOff=null}
+  function taskNoticeKey(userId){return `tasks.firebaseNoticeState.${String(userId||"")}`}
+  function loadTaskNoticeState(userId){
+    const saved=MiniTalk.Persistence.get(taskNoticeKey(userId),null);
+    if(!saved||saved.initialized!==true||!saved.tasks||typeof saved.tasks!=="object"||Array.isArray(saved.tasks))return{initialized:false,tasks:{}};
+    return{initialized:true,tasks:saved.tasks};
+  }
+  function saveTaskNoticeState(userId,rows){
+    const compact={};
+    [...(rows||[])].sort((a,b)=>Number(b.updatedAt||b.createdAt)-Number(a.updatedAt||a.createdAt)).slice(0,300).forEach(task=>{if(task?.id)compact[String(task.id)]={status:String(task.status||"open"),updatedAt:Number(task.updatedAt||task.createdAt)||0}});
+    taskNoticeState={initialized:true,tasks:compact};MiniTalk.Persistence.set(taskNoticeKey(userId),taskNoticeState);
+  }
+  function publishFirebaseSnapshot(value,userId){
+    const rows=Object.values(obj(value)).map(normalize).filter(t=>t.id&&t.status!=="completed"),previous=taskNoticeState||loadTaskNoticeState(userId),newAssignments=[],retries=[];
+    if(previous.initialized){
+      rows.forEach(task=>{const before=previous.tasks?.[String(task.id)];if(!before&&task.status==="open")newAssignments.push(task);else if(before&&before.status!=="retry"&&task.status==="retry")retries.push(task)});
+    }
+    publish(rows);saveTaskNoticeState(userId,rows);
+    if(newAssignments.length===1){const t=newAssignments[0];MiniTalk.Tools.Notifications?.notifyTask?.("새 과제가 도착했어요",`${t.title||"과제"} · 🪙 +${Number(t.rewardCoin)||0}`)}
+    else if(newAssignments.length>1){const total=newAssignments.reduce((sum,t)=>sum+(Number(t.rewardCoin)||0),0);MiniTalk.Tools.Notifications?.notifyTask?.(`${newAssignments.length}개의 새 과제가 도착했어요`,total>0?`과제 탭에서 확인하세요 · 완료 보상 합계 🪙 +${total}`:"과제 탭에서 확인하세요")}
+    if(retries.length===1){const t=retries[0];MiniTalk.Tools.Notifications?.notifyTask?.("과제를 다시 확인해주세요",t.feedback||"관리자 피드백을 확인하고 다시 제출해주세요.")}
+    else if(retries.length>1)MiniTalk.Tools.Notifications?.notifyTask?.(`${retries.length}개의 과제를 다시 확인해주세요`,"관리자 피드백을 확인하고 다시 제출해주세요.");
+  }
+  function stopUserSubscription(){try{userUnsub?.()}catch{}try{transportOff?.()}catch{}userUnsub=null;transportOff=null;taskNoticeState=null}
   function start(current=user()){
     stopUserSubscription();activeUserId="";if(!current.user_id||current.isGuest){publish([]);return}
-    activeUserId=String(current.user_id);
+    activeUserId=String(current.user_id);taskNoticeState=loadTaskNoticeState(activeUserId);
     const attach=()=>{
       if(String(user()?.user_id||"")!==activeUserId)return;
       if(firebaseMode()){
-        if(!userUnsub)userUnsub=MiniTalk.Realtime.cloudSubscribe(userPath(activeUserId),value=>{if(String(user()?.user_id||"")!==activeUserId)return;publish(Object.values(obj(value)));});
+        if(!userUnsub)userUnsub=MiniTalk.Realtime.cloudSubscribe(userPath(activeUserId),value=>{if(String(user()?.user_id||"")!==activeUserId)return;publishFirebaseSnapshot(value,activeUserId);});
         refresh(true).catch(error=>console.warn("과제 목록 Firebase 조회 실패",error));flushBackups().catch(()=>{});return;
       }
       if(MiniTalk.Realtime?.getMode?.()==="local")refresh(true).catch(error=>console.warn("과제 목록을 불러오지 못했습니다.",error));

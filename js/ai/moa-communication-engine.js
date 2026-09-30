@@ -14,7 +14,7 @@
    ============================================================ */
 MiniTalk.AI = MiniTalk.AI || {};
 MiniTalk.AI.MoaCommunicationEngine = (() => {
-  const VERSION = 99;
+  const VERSION = 101;
   const MAX_CONTEXT = 28;
   const MAX_EPISODES = 36;
   const MAX_TIMELINE = 24;
@@ -51,7 +51,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   const policyByUser = new Map(), expressionByUser = new Map(), profileByUser = new Map(), memoriesByUser = new Map();
   const personalLearningByUser = new Map();
   const recentChoices = new Map(), syncAt = new Map(), syncVersion = new Map();
-  const commitQueues = new Map(), commitTimers = new Map(), commitRetryByUser = new Map(), rpsByUser = new Map(), wordChainByUser = new Map(), learnedCacheReady = new Map();
+  const commitQueues = new Map(), commitTimers = new Map(), commitRetryByUser = new Map(), rpsByUser = new Map(), wordChainByUser = new Map(), learnedCacheReady = new Map(), replyLearningSyncAttempted = new Set();
 
   const clean = v => String(v || "").replace(/\s+/g," ").trim();
   // Messenger input is noisy by nature: spacing, shortened forms and small typos are
@@ -436,12 +436,16 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const plan=/(할거야|하려고|하기로했어|할예정|갈거야|먹을거야|볼거야|해볼래|하기로|가기로)/.test(c)||(!explicitQuestion&&futureCue&&/(할거|갈거|볼거|먹을거|만날거|시작할|끝낼)/.test(c));
     const preference=/(좋아해|싫어해|재밌어|맛있어|좋더라|별로야|취향)/.test(c);
     const reasonQuestion=explicitQuestion&&/(왜|이유|어째서)/.test(c);
+    // "고래는 왜 그래?"처럼 무엇의 어떤 행동/상태를 묻는지 빠진 왜-질문은
+    // 일반 지식검색으로 보내지 않는다. 직전 문맥에서 구체 행동을 복원할 수 있을 때만 검색한다.
+    const vagueReasonQuestion=reasonQuestion&&/^(?:그거|그게|걔|그사람|[가-힣A-Za-z0-9]{1,20})(?:은|는|이|가)?(?:왜그래|왜그런거야|왜이래|왜저래|왜그러는거야)$/.test(c);
     const opinionQuestion=explicitQuestion&&/(어때|어떻게생각|생각은|괜찮아|좋아보여)/.test(c);
-    const factQuestion=explicitQuestion&&!reasonQuestion&&!opinionQuestion&&/(누구|뭐야|뭔지|뭐인지|무엇|무엇인지|어디|언제|몇|얼마|뜻|알려줘|설명|정의|유래|역사|차이)/.test(c);
+    const curiosityFact=/(?:궁금해|궁금한데|궁금함|알고싶어|알고싶은데)$/.test(c)&&!/(?:너|네가|니가|모아)(?:가|는|이)?(?:궁금해|궁금한데|궁금함|알고싶어|알고싶은데)$/.test(c);
+    const factQuestion=(explicitQuestion||curiosityFact)&&!reasonQuestion&&!opinionQuestion&&(/(누구|뭐야|뭔지|뭐인지|무엇|무엇인지|어디|언제|몇|얼마|뜻|알려줘|설명|정의|유래|역사|차이)/.test(c)||curiosityFact);
     const knowledgeCue=searchCue||factQuestion||reasonQuestion||/(무슨뜻|뜻이뭐|어떤사람|어떤곳|어떤거|차이가뭐|장단점|원리|유래|역사|왜그런|어떻게작동|추천해줘|비교해줘|정리해줘)/.test(c);
     const speechAct=reaction?`social:${reaction}`:desire?"inform:desire":unfulfilled?"inform:unfulfilled":plan?"inform:plan":preference?"inform:preference":event?"inform:event":reasonQuestion?"ask:reason":opinionQuestion?"ask:opinion":factQuestion?"ask:fact":act==="followup"?"followup":act==="question"?"ask:question":"inform:statement";
     const punctuation=punctuationOnly(text),profanity=PROFANITY.test(text),directedAbuse=DIRECTED_ABUSE.test(text);
-    return {text,c,concepts:cs,topic:topicFrom(text,cs),affect,act,speechAct,reaction,event,desire,unfulfilled,plan,scheduledCue,preference,question:explicitQuestion||act==="followup",searchCue,knowledgeCue,referenceCue,decisionCue,repairCue,punctuation,profanity,directedAbuse};
+    return {text,c,concepts:cs,topic:topicFrom(text,cs),affect,act,speechAct,reaction,event,desire,unfulfilled,plan,scheduledCue,preference,question:explicitQuestion||curiosityFact||act==="followup",searchCue,knowledgeCue,reasonQuestion,vagueReasonQuestion,referenceCue,decisionCue,repairCue,punctuation,profanity,directedAbuse};
   }
 
   function resolveReference(frame){
@@ -605,11 +609,20 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
   function math(raw){
     const spoken=spokenMath(raw);if(spoken)return spoken;
-    let s=clean(raw).toLowerCase().replace(/[?？]/g,"").replace(/계산해줘|계산해|얼마야|얼마|답은|결과는/g,"").replace(/더하기|플러스/g,"+").replace(/빼기|마이너스/g,"-").replace(/곱하기|×|x/g,"*").replace(/나누기|÷/g,"/").replace(/,/g,"").replace(/\s+/g,"");
-    // 구어체 계산 질문: "1+1은?", "3*4는?", "10/2가?"처럼 식 뒤에 붙은 조사만 제거한다.
+    let s=clean(raw).toLowerCase().replace(/[?？]/g,"");
+    // "52 더하기 16 곱하기 2 빼기 4가 뭐야"처럼 자연스럽게 말한 계산도 식만 남긴다.
+    s=s.replace(/(?:계산해\s*줘|계산해|답(?:은|이)?|결과(?:는|가)?|값(?:은|이)?)/g,"")
+      .replace(/(?:이|가)?\s*(?:얼마(?:야|지|니|냐)?|뭐야|뭐지|뭔데)$/g,"")
+      .replace(/더하기|플러스/g,"+").replace(/빼기|마이너스/g,"-")
+      .replace(/곱하기|×|x/g,"*").replace(/나누기|÷/g,"/")
+      .replace(/,/g,"").replace(/\s+/g,"");
     s=s.replace(/(?<=[0-9)%])(?:은|는|이|가)$/u,"");
     if(!/[+\-*/()%]/.test(s)||!/^[0-9+\-*/().%]+$/.test(s))return "";
-    try{const v=Function(`"use strict";return (${s})`)();return Number.isFinite(v)?`${Math.round(v*1e6)/1e6}이야.`:"";}catch{return "계산식이 조금 헷갈려. 12+7처럼 적어줘.";}
+    try{
+      const v=Function(`"use strict";return (${s})`)();
+      if(!Number.isFinite(v))return "";
+      return `${Math.round(v*1e6)/1e6}이야.`;
+    }catch{return "계산식이 조금 헷갈려. 12+7처럼 적어줘.";}
   }
   function schoolMealInfoReply(frame){
     if(!frame)return "";const c=frame.c;
@@ -759,6 +772,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   // 실제 현재 코드에 있는 기능/보상만 설명하고, 존재하지 않는 기능을 지어내지 않는다.
   function moaruFeatureHelpReply(frame){
     if(!frame)return "";const c=frame.c,text=clean(frame.text),semanticSignal=semanticHelpSignal(frame);
+    if(/^(?:게임|겜).*(?:할까|하자|하고싶|땡겨)$/.test(c)&&!/(?:모아루|도구|기능|어디|랭킹|보상|미니게임)/.test(c))return "";
     const asks=/(?:어떻게|어디|뭐|무엇|알려|설명|사용|방법|법|할수|가능|기능|하는법|모으|벌|얻|받|수급|획득|보상|확인|보는법|쓰는법|찾는법|들어가|열어|줘|궁금|질문|문의|어케)/.test(c)||frame.question||semanticSignal.score>=4;
     if(!asks)return knownHelpTopicFallback(frame);
     const isMoaru=/(?:모아루|이앱|이거|여기|메신저|모아)/.test(c);
@@ -1053,6 +1067,89 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
   function recentUserMentions(rx,limit=4){return previousUserTexts(limit).some(v=>rx.test(compact(v)));}
 
+  // Everyday multi-turn coherence repair. This runs before the broad bridge/fallback layers
+  // and only handles very common short follow-ups whose meaning is recoverable from the
+  // immediately preceding user turns. It deliberately avoids search/knowledge/tool queries.
+  function dailyThreadCoherenceReply(frame){
+    if(!frame||frame.searchCue||frame.knowledgeCue||frame.directedAbuse)return "";
+    const c=frame.c,text=clean(frame.text),prior=previousUserTexts(6),pc=prior.map(compact),joined=pc.join(" "),last=pc[pc.length-1]||"";
+
+    // Natural conversation openers do not need previous context.
+    if(/^친구야$/.test(c))return chooseFreshReply("thread.friend.call",["응 ㅋㅋ 왜?","응, 듣고 있어 ㅋㅋ","응응, 나 여기 있어. 왜 불렀어?"],5);
+    if(/^(?:오늘)?시험(?:을)?봤어$/.test(c))return chooseFreshReply("thread.open.exam",["오늘 시험 봤구나. 어땠어?","아 오늘 시험 있는 날이었네. 잘 봤어?","오 시험 보고 왔구나."]);
+    if(/^(?:오늘)?비(?:가)?왔어$/.test(c))return chooseFreshReply("thread.open.rain",["오늘 비 왔구나. 우산은 있었어?","아 오늘 비 왔지. 밖에 있을 때 많이 왔어?","비 왔구나. 이동할 때 좀 불편했겠다."]);
+    if(/^(?:나)?내일영화보러가$/.test(c)||/(?:내일|주말).*(?:영화).*(?:보러가|볼거)/.test(c))return chooseFreshReply("thread.open.movie",["오 영화 보러 가는구나 ㅋㅋ 누구랑 가?","좋네 ㅋㅋ 내일 영화 보러 가는구나.","오 약속 있네. 영화는 정했어?"]);
+    if(/(?:엄마|아빠|부모님).*(?:혼났|혼남)/.test(c))return chooseFreshReply("thread.open.scold",["아 혼났구나. 무슨 일 때문이었어?","으 집에서 한소리 들었구나. 왜 혼났어?","아 그랬구나. 이유가 뭐였어?"]);
+    if(/^(?:배고파|배고프다|배고픔)$/.test(c))return chooseFreshReply("thread.open.hungry",["배고프구나 ㅋㅋ 지금 바로 뭐 먹을 수 있어?","아 배고픈 시간이네. 뭐 먹을지 같이 골라볼까?","배고프면 메뉴 생각밖에 안 나지 ㅋㅋ"]);
+    if(/(?:집|학교|학원).*(?:가는중|가는길|가는중이야)|(?:집|학교|학원)가고있어/.test(c))return chooseFreshReply("thread.open.transit",["오 지금 이동 중이구나. 길은 괜찮아?","아 지금 가는 길이네. 많이 안 막혀?","오 가는 중이구나. 조심해서 가."]);
+
+    if(!prior.length)return "";
+
+    // Food / school lunch.
+    if(/급식.*(?:맛없|별로|노맛|최악)/.test(c))return chooseFreshReply("thread.lunch.bad",["아 급식이 별로였구나. 기대하고 먹었으면 더 아쉽지.","으 오늘 급식은 실패였네 ㅋㅋ 뭐가 제일 별로였어?","아 맛없었구나. 그런 날은 점심시간까지 괜히 아쉽지."]);
+    if(/(?:라면|김밥|떡볶이|돈까스|제육|국수|냉면|피자|치킨|햄버거).*(?:질렸|또먹기싫|별로)/.test(c))return chooseFreshReply("thread.food.reject",["그건 좀 질렸구나. 그럼 이번엔 다른 메뉴로 가는 게 낫겠다 ㅋㅋ","아 그건 당기지 않는구나. 다른 걸로 좁혀보자.","오케이, 그 메뉴는 빼자 ㅋㅋ 다른 쪽이 낫겠네."]);
+    if(/(?:비싸|가격부담|돈아까)/.test(c)&&/(치킨|피자|햄버거|배달|메뉴|먹)/.test(joined+" "+c))return chooseFreshReply("thread.food.price",["맞아, 그건 가격이 좀 부담되지. 그럼 더 가벼운 메뉴로 가자.","아 가격 때문에 걸리는 거구나. 그럼 김밥이나 분식처럼 덜 부담되는 쪽이 낫겠다.","그럼 그건 빼자 ㅋㅋ 지금은 가격 덜 센 걸로 고르는 게 맞겠다."]);
+    {const m=c.match(/^(?:그냥)?(김밥|라면|떡볶이|돈까스|제육|국수|냉면|피자|치킨|햄버거).*(?:먹을까|먹자)$/);if(m&&/(뭐먹|메뉴|질렸|비싸|배고파|먹지)/.test(joined))return chooseFreshReply(`thread.food.pick.${m[1]}`,[`${m[1]} 괜찮지 ㅋㅋ 그걸로 가자.`,`응, 지금 얘기한 것 중엔 ${m[1]}이 제일 무난하겠다.`,`좋네. ${m[1]}이면 가격이나 부담도 덜하고 괜찮겠다.`]);}
+
+    // School / exam details.
+    if(/^(?:수학|국어|영어|과학|사회)$/.test(c)&&/(시험|퀴즈|문제|과제|수행평가)/.test(joined))return chooseFreshReply("thread.exam.subject",[`아 ${text} 시험이었구나.`,`오 ${text}였네. 그 과목이 좀 어려웠어?`,`아, ${text} 쪽이었구나.`]);
+    if(/(?:시간이?부족|시간모자|시간없었)/.test(c)&&/(시험|퀴즈|문제)/.test(joined))return chooseFreshReply("thread.exam.time",["아 시간 부족했던 거구나. 아는 문제도 급하면 놓치기 쉽지.","으 시험에서 시간 모자라면 진짜 아깝지.","아 그럼 실력보다 시간 때문에 더 아쉬웠겠다."]);
+    if(/^(?:망했어|망함|망했다|조졌어|망친듯)$/.test(c)&&/(시험|퀴즈|수행평가)/.test(joined))return chooseFreshReply("thread.exam.bad",["아 시험 망친 느낌이구나. 특히 뭐가 제일 어려웠어?","으 시험 잘 안 풀렸구나. 끝나고 나면 더 생각나지.","아 오늘 시험은 아쉬웠네. 그래도 어디서 막혔는지는 잡아두면 다음엔 도움 될 거야."]);
+    if(/(?:내일도|또|연달아).*(?:시험|퀴즈)/.test(c)&&/(시험|퀴즈)/.test(joined))return chooseFreshReply("thread.exam.next",["아 내일도 시험이구나. 연달아 있으면 더 지치겠다.","으 오늘 끝났는데 내일 또 있네. 오늘은 핵심만 보고 너무 늦게까지 하진 말자.","아 시험이 이어지는구나. 오늘 아쉬웠던 부분만 짧게 보고 쉬는 게 낫겠다."]);
+    if(/(?:마지막|끝에).*(?:문제)?.*(?:못풀|놓쳤)/.test(c)&&/(시험|퀴즈|문제)/.test(joined))return chooseFreshReply("thread.exam.missed",["아 마지막 문제들을 못 풀었구나. 그럼 더 아쉽겠다.","으 끝에 몇 문제 남기면 시험 끝나고 계속 생각나지.","아 시간만 조금 더 있었으면 싶었겠네."]);
+
+    // Transit / going home.
+    if(/사람.*(?:많|붐벼)/.test(c)&&/(버스|지하철|택시|집가는|집가|가는중|오는중)/.test(joined))return chooseFreshReply("thread.transit.crowd",["아 버스에 사람 많구나. 집 가는 길부터 피곤하겠다.","으 이동 중인데 붐비면 더 지치지.","사람 많으면 가만히 서 있어도 체력 빠지지 ㅋㅋ"]);
+    if(/자리.*(?:없|안나)/.test(c)&&/(버스|지하철|사람많|붐벼)/.test(joined))return chooseFreshReply("thread.transit.seat",["아 자리도 없구나. 그럼 집 갈 때까지 계속 서 있어야겠네.","으 사람도 많은데 자리까지 없네. 좀 힘들겠다.","아 그건 피곤하겠다. 빨리 자리 하나 났으면 좋겠네."]);
+    if(/^(?:아)?힘들다$|^(?:개)?피곤(?:해|하다)$/.test(c)&&/(버스|지하철|학원|시험|학교|운동|집가는|가는중)/.test(joined))return chooseFreshReply("thread.tired",["아 지금 진짜 지쳤구나. 끝나고 좀 쉬어야겠다.","으 계속 이어지니까 힘들 만하네.","아 오늘 체력 많이 썼네. 집 가면 좀 쉬자."]);
+    if(/집가면.*(?:누울|쉴|잘)|집와서.*(?:누울|쉴|잘)/.test(c))return chooseFreshReply("thread.home.rest",["그럴 만하다 ㅋㅋ 집 가면 일단 좀 누워 있어.","응 오늘은 집 가면 바로 쉬어도 되겠다.","ㅋㅋ 그게 제일 낫겠다. 집 가면 잠깐이라도 푹 쉬어."]);
+
+    // Friend / social story.
+    if(/^친구야$/.test(c)||(/^친구$/.test(c)&&/^(?:친구야|친구)$/.test(last)))return chooseFreshReply("thread.friend.call",["응 ㅋㅋ 왜?","응, 듣고 있어 ㅋㅋ","응응, 나 여기 있어. 왜 불렀어?"],5);
+    if(/(?:걔|친구|쟤).*(?:웃겨|웃겼|개웃|웃김)|(?:개웃|웃겨).*(?:걔|친구|쟤)/.test(c))return chooseFreshReply("thread.friend.funny",["ㅋㅋ 뭔 짓 했길래 그렇게 웃겨.","아 ㅋㅋ 진짜 웃긴 애인가 보네.","ㅋㅋ 그 친구 오늘 제대로 한 건 했네."]);
+    if(/^(?:아니)?진짜(?:개)?웃겨|^개웃겨|^존나웃겨/.test(c)&&/(친구|걔|웃겨|웃김)/.test(joined))return chooseFreshReply("thread.friend.funny.follow",["ㅋㅋㅋㅋ 그렇게 웃겼어? 뭔 일이었는데.","아 ㅋㅋ 진짜 터졌나 보네.","ㅋㅋ 그 정도면 장면이 궁금한데."]);
+    if(/나도.*(?:화냈|짜증냈)/.test(c)&&/(친구.*싸|걔.*화냈|친구.*화냈)/.test(joined))return chooseFreshReply("thread.friend.myanger",["아 너도 같이 화가 났구나. 그럼 둘 다 감정 올라온 상태였네.","그랬구나. 걔가 먼저 화냈고 너도 받아치면서 더 커진 거네.","아 너도 화냈구나. 그러면 내일 얘기할 땐 그 부분은 짧게 인정하고 시작하는 게 낫겠다."]);
+    if(/어색할듯|어색할것같/.test(c)&&/(내일.*얘기|사과|화해|친구.*싸)/.test(joined))return chooseFreshReply("thread.friend.awkward",["그건 좀 어색하겠지. 그래도 처음 한마디만 꺼내면 생각보다 금방 풀릴 수도 있어.","응 처음엔 어색할 수 있어. 길게 말하려 하지 말고 짧게 시작하면 돼.","아 그 부분이 제일 부담되겠네. 그래도 계속 피하는 것보단 한 번 말 꺼내는 게 낫겠다."]);
+
+    // Plans / movie / snacks.
+    if(/친구랑$/.test(c)&&/(영화|놀러|만나|보기로|보러)/.test(joined))return chooseFreshReply("thread.plan.withfriend",["오 친구랑 가는 거구나 ㅋㅋ 재밌겠다.","친구랑 보는 거네. 그럼 고르는 것도 같이 하면 되겠다.","오 친구랑 약속 잡았구나 ㅋㅋ"]);
+    if(/뭐볼지.*(?:몰라|안정했)|아직.*(?:안정했|몰라)/.test(c)&&/(영화|드라마|애니|보러)/.test(joined))return chooseFreshReply("thread.movie.undecided",["아 아직 작품은 안 정했구나. 가기 전에 같이 예고편 몇 개만 보고 고르면 되겠다.","오 영화는 보러 가는데 뭘 볼지는 미정이네 ㅋㅋ","아직 안 골랐구나. 장르부터 정하면 금방 좁혀질 거야."]);
+    if(/팝콘.*먹을/.test(c)&&/(영화|보러)/.test(joined))return chooseFreshReply("thread.movie.popcorn",["ㅋㅋ 영화 볼 때 팝콘은 먹어야지.","오 팝콘은 확정이네 ㅋㅋ","ㅋㅋ 작품보다 팝콘은 먼저 정했네."]);
+    if(/^(?:카라멜|치즈|반반|오리지널)(?:로)?$/.test(c)&&/팝콘/.test(joined))return chooseFreshReply("thread.movie.popcorn.flavor",[`${text.replace(/로$/,'')} 맛으로 가는구나 ㅋㅋ 그건 무난하게 맛있지.`,`오 ${text.replace(/로$/,'')} 팝콘이네 ㅋㅋ`,`좋지 ㅋㅋ ${text.replace(/로$/,'')}로 가자.`]);
+
+    // Weather story.
+    if(/우산.*없/.test(c)&&/(비왔|비와|비옴)/.test(joined))return chooseFreshReply("thread.rain.noumbrella",["아 비 오는데 우산이 없었구나. 그럼 좀 맞았겠다.","으 하필 우산이 없었네. 비 많이 왔어?","아 그건 난감했겠다. 갑자기 온 거야?"]);
+    if(/좀맞았|비맞/.test(c)&&/(우산없|비왔|비와)/.test(joined))return chooseFreshReply("thread.rain.hit",["아 좀 맞았구나. 옷 젖으면 진짜 찝찝하지.","으 결국 비 좀 맞았네. 감기 안 걸리게 말리는 게 좋겠다.","아 그랬구나. 많이 젖진 않았어?"]);
+    if(/옷.*젖/.test(c)&&/(비맞|우산없|비왔)/.test(joined))return chooseFreshReply("thread.rain.wet",["아 옷까지 다 젖었구나. 그건 진짜 불편했겠다.","으 많이 맞았네. 집 가자마자 갈아입고 싶었겠다.","아 그 정도면 꽤 맞았네. 몸 안 차가워졌어?"]);
+    if(/갈아입었/.test(c)&&/(옷.*젖|비맞|우산없)/.test(joined))return chooseFreshReply("thread.rain.changed",["잘했네. 젖은 옷 계속 입고 있으면 더 불편하지.","오 바로 갈아입었구나. 이제 좀 살 것 같겠다.","응 그게 낫지. 따뜻하게 좀 있어."]);
+
+    // Family / chores.
+    if(/방.*안치웠|청소.*안했/.test(c)&&/(엄마|아빠|부모|혼났)/.test(joined))return chooseFreshReply("thread.family.chore.reason",["아 방 안 치워서 혼난 거구나. 이유는 이해돼도 듣는 순간엔 기분 별로였겠다.","아 청소 때문에 혼났구나. 귀찮긴 해도 조금만 해두면 잔소리는 줄겠네.","그 이유였구나. 한꺼번에 말고 눈에 띄는 것부터 치우면 금방 끝날 수도 있어."]);
+    if(/맞는말|맞긴해|맞는말이긴/.test(c)&&/(혼났|방안치웠|청소)/.test(joined))return chooseFreshReply("thread.family.admit",["ㅋㅋ 인정은 하는구나. 그래도 혼날 때는 기분 좋을 리 없지.","응 맞는 말인 건 아는데 듣기 싫은 그런 거지 ㅋㅋ","그건 그렇지 ㅋㅋ 이해되는 말이랑 듣기 좋은 말은 또 다르니까."]);
+    if(/귀찮/.test(c)&&/(방안치웠|청소|정리|혼났)/.test(joined))return chooseFreshReply("thread.chore.lazy",["ㅋㅋ 그게 제일 문제지. 일단 5분만 치우고 멈추는 식으로 시작해봐.","아 귀찮은 건 맞지 ㅋㅋ 바닥이나 책상 한 군데만 먼저 하자.","그럴 땐 전체 다 보지 말고 눈앞에 있는 것 몇 개만 치우는 게 낫더라."]);
+    if(/조금있다.*할|이따.*할/.test(c)&&/(청소|정리|방안치웠|귀찮)/.test(joined))return chooseFreshReply("thread.chore.later",["오케이 ㅋㅋ 너무 미루지만 말고 조금 있다가 딱 5분만 시작해.","응 이따 하기로 했으면 알람 하나 잡아두면 덜 미뤄.","좋아. 조금 있다가 한 구역만이라도 시작하면 금방 붙을 수도 있어."]);
+
+    // School/academy obligation.
+    if(/학원.*가야/.test(c))return chooseFreshReply("thread.academy.go",["아 피곤한데 학원까지 가야 하는구나. 더 가기 싫겠다.","으 오늘 일정 아직 안 끝났네. 학원까지 남았구나.","아 학원 가야 하는 날이네. 피곤하면 더 귀찮지."]);
+    if(/가기싫/.test(c)&&/(학원|학교|가야)/.test(joined))return chooseFreshReply("thread.academy.hate",["그럴 만하지. 피곤한데 또 나가려면 진짜 귀찮아.","아 지금은 그냥 쉬고 싶은데 가야 하니까 싫은 거구나.","으 가기 전이 제일 싫지. 일단 가서 끝내고 오는 쪽으로 생각하자."]);
+    if(/그래도.*가야겠|가야겠지/.test(c)&&/(학원|학교|가기싫)/.test(joined))return chooseFreshReply("thread.academy.must",["응, 오늘은 가야 하는 거면 다녀오고 끝난 뒤에 제대로 쉬자.","아쉽지만 가야 하는 날이면 빨리 다녀오는 게 마음은 편하겠다.","응 가는 건 가되 오늘은 끝나고 다른 건 좀 줄여도 되겠다."]);
+    if(/끝나면.*(?:[0-9]+시|늦)/.test(c)&&/(학원|수업|가야)/.test(joined))return chooseFreshReply("thread.academy.late",["와 그럼 꽤 늦게 끝나네. 집 오면 진짜 쉴 시간 얼마 없겠다.","아 9시쯤 끝나는 거면 하루가 길다. 끝나고는 푹 쉬어.","으 그 시간까지면 피곤할 만하지. 오늘은 끝나고 바로 쉬는 게 낫겠다."]);
+
+    // Sports result details.
+    if(/^\d+대\d+$/.test(c)&&/(축구|농구|경기|졌|이겼)/.test(joined))return chooseFreshReply("thread.sport.score",[`아 ${text}이었구나. 진짜 한 골 차이였네.`,`오 ${text}이면 꽤 팽팽했네.`,`아 점수 차가 크진 않았구나.`]);
+    if(/내가.*(?:골|점수|득점).*(?:넣|냈)|내가한골/.test(c)&&/(축구|농구|경기)/.test(joined))return chooseFreshReply("thread.sport.mygoal",["오 그래도 네가 한 골 넣었네 ㅋㅋ 그건 잘했다.","와 네 골도 있었구나. 졌어도 그건 좀 뿌듯했겠다.","오 직접 득점했네 ㅋㅋ 그 장면은 기억나겠다."]);
+    if(/마지막.*(?:먹힘|먹혔|실점)|막판.*(?:먹힘|실점)/.test(c)&&/(축구|농구|경기|골)/.test(joined))return chooseFreshReply("thread.sport.lategoal",["아 막판에 실점한 거구나. 그건 진짜 아깝겠다.","으 마지막에 먹히면 더 허무하지. 거의 다 왔는데.","아 그 한 골 때문에 진 거면 더 아쉽겠다."]);
+
+    // Common story openers should acknowledge the actual event instead of a generic "flow" line.
+    if(/그래도친구랑.*(?:얘기|말).*(?:나았|괜찮아졌)/.test(c))return chooseFreshReply("thread.friend.relief",["그래도 친구랑 얘기하면서 좀 풀렸구나. 그건 다행이다.","오 그래도 친구랑 말해서 기분은 좀 나아졌네.","아 친구랑 얘기한 게 도움이 됐구나. 다행이네."]);
+    if(/요즘.*(?:할게없|할거없|심심)/.test(c))return chooseFreshReply("thread.bored.none",["요즘 좀 심심한가 보네. 짧게 할 거 하나 같이 골라보자.","아 요즘 할 만한 게 딱 안 잡히는구나. 게임 말고도 다른 거 찾아볼까?","그럴 때 있지 ㅋㅋ 뭘 해도 애매하게 안 당기는 때."]);
+    if(/^(?:아무말이나해봐|아무얘기나해봐|뭐라도말해봐)$/.test(c))return chooseFreshReply("thread.random.chat",["그럼 하나 던질게 ㅋㅋ 요즘 하루 중에 제일 빨리 지나가는 시간은 언제야?","갑자기 궁금한 거 하나. 요즘 자주 먹는 간식 있어?","아무 얘기 모드면 ㅋㅋ 최근에 웃겼던 일 하나만 떠올려봐."]);
+
+    // Generic but context-safe acknowledgement for tiny fragments that name the just-mentioned subject.
+    if(c.length<=6&&/^(?:수학|국어|영어|과학|사회|친구|버스|지하철|팝콘|영화|학원)$/.test(c)&&joined.includes(c))return chooseFreshReply(`thread.tiny.${c}`,[`응, ${text} 얘기구나. 이어서 말해봐.`,`응, ${text} 쪽 얘기 듣고 있어.`,`아, ${text}. 무슨 말인지 이어서 보고 있어.`]);
+    return "";
+  }
+
   // A small continuity layer for the part that canned one-turn replies miss:
   // the user adds one more fact to the SAME everyday story.  Keep this deliberately
   // conservative so utilities/search/memory/games and explicit social reactions are
@@ -1279,6 +1376,15 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/(?:친구|애들이랑).*(?:점심|급식).*(?:먹었|먹는중)/.test(c))return rows("friend.lunch",["오 친구들이랑 점심 먹었구나 ㅋㅋ 밥보다 얘기하느라 더 바빴겠다.","급식 같이 먹었네. 점심시간엔 별 얘기 아닌 것도 웃기지 ㅋㅋ","오 친구들이랑 먹었구나. 오늘은 무슨 얘기했어?","친구랑 점심 먹을 때가 수업 사이엔 제일 편한 시간일 때 있지 ㅋㅋ"]);
     if(/(?:학교).*(?:쉬는시간|점심시간).*(?:재밌|놀았|얘기했)/.test(c))return rows("school.break",["ㅋㅋ 학교는 수업보다 쉬는 시간이 더 빨리 가는 느낌이지.","오 쉬는 시간에 좀 놀았구나. 그 짧은 시간이 제일 재밌을 때 있지.","학교에서 쉬는 시간 재밌었네 ㅋㅋ 누구랑 뭐 했어?","쉬는 시간에 재밌었으면 그날 학교가 좀 덜 길게 느껴지지 ㅋㅋ"]);
     if(/(?:체육|운동장|체육시간).*(?:재밌|했어|축구|피구|농구)/.test(c))return rows("school.pe",["오 체육 있었네 ㅋㅋ 수업 중엔 그런 시간이 제일 빨리 가지.","체육시간 재밌었나 보네. 뭐 했어?","오 몸 쓰는 수업 했구나. 잘 풀리면 진짜 신나지 ㅋㅋ","체육 있는 날은 시간표 볼 때부터 느낌 좀 다르지 ㅋㅋ"]);
+    if(/(?:엄마|아빠|부모님|형|누나|언니|오빠|동생).*(?:잔소리|혼냈|뭐라해|화냈|싸웠)/.test(c))return rows("family.conflict",["아 가족한테 그런 말 들으면 집에서도 괜히 기분 가라앉지.","으 집에서 한소리 들었구나. 지금은 좀 풀렸어?","가족이랑 꼬이면 피할 데도 없어서 더 답답하지. 무슨 일 때문이었어?","아 그건 좀 찝찝하겠다. 바로 다시 부딪치기보다 조금 식히는 것도 괜찮아."]);
+    if(/(?:엄마|아빠|부모님|형|누나|언니|오빠|동생).*(?:웃겼|재밌|같이먹|같이봤|같이놀)/.test(c))return rows("family.good",["ㅋㅋ 가족이랑 그런 시간 있었구나. 별거 아닌데 은근 기억에 남지.","오 집 분위기 괜찮았네 ㅋㅋ 같이 있으면 사소한 것도 웃길 때 있지.","좋네 ㅋㅋ 가족이랑 편하게 보낸 시간이었구나."]);
+    if(/(?:폰|핸드폰|휴대폰).*(?:깨졌|떨어뜨렸|액정|고장|먹통)/.test(c))return rows("phone.broken",["아 폰 문제 생기면 바로 불편하지. 화면이랑 터치는 아직 돼?","으 떨어뜨렸구나. 겉만 깨진 건지 작동도 이상한지 먼저 봐야겠다.","폰 먹통이면 진짜 답답하지. 일단 충전이랑 재부팅부터 확인해보자."]);
+    if(/(?:사진|셀카).*(?:찍었|잘나왔|망했|이상해)/.test(c))return rows("photo",["ㅋㅋ 사진 찍었구나. 건진 거 있어?","오 사진 남겼네. 마음에 드는 컷 하나만 있어도 성공이지 ㅋㅋ","사진은 여러 장 찍고 한 장 건지면 이긴 거지 ㅋㅋ"]);
+    if(/(?:옷|신발).*(?:젖었|더러워|찢어졌|안맞|작아|커)/.test(c))return rows("clothes.issue",["아 그건 좀 불편하겠다. 오늘 계속 입고 있어야 해?","으 옷이나 신발 문제 생기면 하루 종일 신경 쓰이지.","하필 입고 나온 게 말썽이네 ㅋㅋ 집 가면 바로 갈아입고 싶겠다."]);
+    if(/(?:아침|점심|저녁).*(?:못먹|안먹|거름|건너뜀)/.test(c))return rows("meal.skip",["아 끼니를 넘겼구나. 너무 오래 비우진 말고 뭐라도 조금 챙겨 먹자.","밥 못 먹었으면 슬슬 힘 빠질 텐데. 간단한 거라도 먹는 게 낫겠다.","으 식사 건너뛰었네. 지금 먹을 수 있으면 부담 없는 걸로라도 챙기자."]);
+    if(/(?:친구|애들).*(?:비밀|소문|뒷담|험담)/.test(c))return rows("friend.gossip",["아 친구들 사이 얘기 꼬였구나. 그런 건 전달될수록 더 복잡해지더라.","으 소문 얘기는 애매하게 끼면 괜히 피곤하지. 확인 안 된 건 더 옮기지 않는 게 낫겠다.","친구들 사이 말이 돌았구나. 네가 직접 들은 거랑 전해 들은 건 구분해두는 게 좋아."]);
+    if(/(?:수업|선생님말|설명).*(?:이해안|모르겠|헷갈)/.test(c))return rows("class.confused",["아 수업 내용이 안 잡혔구나. 어디부터 헷갈리는지만 짚으면 같이 풀어볼 수 있어.","설명 들었는데도 애매했나 보네. 문제나 문장을 그대로 보여주면 차근차근 볼게.","헷갈리는 부분이 있구나. 전체 말고 막힌 한 부분부터 잡아보자."]);
+    if(/(?:게임|앱|프로그램).*(?:렉|버벅|튕겨|멈춰|먹통)/.test(c))return rows("game.tech",["아 하다가 멈추면 맥 확 끊기지. 다시 들어가도 똑같아?","으 렉 걸리면 게임보다 그게 더 스트레스지 ㅋㅋ","튕겼구나. 한 번이면 우연일 수 있는데 계속 그러면 원인을 봐야겠다."]);
     return "";
   }
 
@@ -1666,23 +1772,150 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     "지구":"지구는 우리가 살고 있는 태양계의 세 번째 행성이야. 표면에 액체 상태의 물이 넓게 존재하고 현재까지 생명체가 사는 것으로 확인된 행성이야.",
     "태양":"태양은 태양계 중심에 있는 별이야. 지구를 포함한 행성들이 태양 주위를 돌고, 태양의 빛과 열은 지구 생명과 기후에 아주 큰 영향을 줘.",
     "달":"달은 지구 주위를 도는 자연위성이야. 스스로 빛을 내는 게 아니라 태양빛을 반사해서 밝게 보여.",
+    "별":"별은 스스로 빛과 에너지를 내는 거대한 천체야. 태양도 별 중 하나야.",
+    "우주":"우주는 지구와 태양계, 별과 은하를 포함해 우리가 관측할 수 있는 모든 공간과 물질을 아우르는 말이야.",
     "공룡":"공룡은 아주 오래전 중생대에 살았던 파충류 무리야. 종류가 매우 다양했고, 새는 공룡의 한 갈래에서 이어진 것으로 봐.",
     "고양이":"고양이는 사람과 함께 사는 대표적인 반려동물 중 하나야. 청각과 균형감각이 뛰어나고 독립적인 행동을 많이 보여.",
     "강아지":"강아지는 개의 어린 개체를 뜻하고, 일상에서는 반려견을 귀엽게 부르는 말로도 자주 써. 개는 사람과 오랫동안 함께 살아온 동물이야.",
+    "토끼":"토끼는 긴 귀와 강한 뒷다리가 특징인 초식동물이야. 풀이나 채소 같은 식물을 주로 먹어.",
+    "햄스터":"햄스터는 볼주머니에 먹이를 저장하는 습성이 있는 작은 설치류야. 반려동물로도 많이 키워.",
+    "물고기":"물고기는 주로 물속에서 살며 아가미로 호흡하는 척추동물이야. 종류에 따라 사는 환경과 생김새가 아주 다양해.",
+    "새":"새는 깃털과 부리를 가진 척추동물이야. 많은 종류가 날 수 있지만 펭귄처럼 날지 못하는 새도 있어.",
+    "나무":"나무는 줄기가 목질로 단단해지는 여러해살이 식물이야. 잎에서 광합성을 하고 다양한 생물에게 서식처를 제공해.",
+    "꽃":"꽃은 식물이 번식하는 데 중요한 기관이야. 종류에 따라 색과 모양, 향기가 아주 다양해.",
     "대한민국":"대한민국은 동아시아 한반도 남부에 있는 나라야. 수도는 서울이고 한국어를 주로 사용해.",
     "한글":"한글은 한국어를 적는 문자 체계야. 훈민정음을 바탕으로 발전했고 자음과 모음을 조합해서 글자를 만드는 방식이야.",
     "무지개":"무지개는 공기 중의 물방울에서 햇빛이 굴절되고 반사되면서 여러 색으로 나뉘어 보이는 현상이야.",
     "번개":"번개는 구름 안이나 구름과 지면 사이에서 큰 전기 방전이 일어날 때 생기는 강한 빛이야. 천둥은 그때 공기가 급격히 팽창하면서 생기는 소리야.",
     "화산":"화산은 지하의 마그마와 가스가 지표로 올라오는 통로와 그 주변에 만들어진 지형이야.",
-    "블랙홀":"블랙홀은 중력이 아주 강해서 일정 경계 안에서는 빛조차 빠져나오기 어려운 천체야."
+    "블랙홀":"블랙홀은 중력이 아주 강해서 일정 경계 안에서는 빛조차 빠져나오기 어려운 천체야.",
+    "인공지능":"인공지능은 컴퓨터가 학습·추론·분류·생성처럼 사람이 지능을 써서 하던 일을 수행하도록 만든 기술을 통틀어 말해.",
+    "AI":"AI는 인공지능(Artificial Intelligence)의 영어 약자야. 컴퓨터가 학습하거나 판단하고, 글·그림·소리 같은 결과를 만들도록 하는 기술을 포함해.",
+    "인터넷":"인터넷은 전 세계의 컴퓨터와 기기들이 서로 정보를 주고받을 수 있게 연결된 거대한 통신망이야. 웹사이트, 메시지, 영상 스트리밍 같은 서비스가 그 위에서 작동해.",
+    "와이파이":"와이파이는 기기를 무선으로 공유기나 네트워크에 연결하는 기술이야. 와이파이에 연결됐다고 항상 인터넷 자체가 정상인 건 아니야.",
+    "컴퓨터":"컴퓨터는 입력된 정보와 명령을 처리하고 저장하거나 결과를 보여주는 전자기기야.",
+    "스마트폰":"스마트폰은 전화 기능에 인터넷, 앱, 카메라, 메시지 같은 컴퓨터 기능을 결합한 휴대용 기기야.",
+    "로봇":"로봇은 센서와 프로그램을 이용해 움직이거나 정해진 일을 수행하도록 만든 기계야.",
+    "카메라":"카메라는 렌즈로 들어온 빛을 기록해서 사진이나 영상을 만드는 장치야.",
+    "사진":"사진은 빛을 이용해 순간의 모습을 기록한 이미지야. 디지털카메라와 스마트폰에서는 이미지 센서로 빛을 전기 신호로 바꿔 저장해.",
+    "공책":"공책은 글이나 그림을 적을 수 있도록 여러 장의 종이를 묶어 만든 학용품이야. 줄공책, 무선공책, 모눈공책처럼 종류가 다양해.",
+    "노트":"노트는 보통 글이나 그림을 기록하는 공책을 뜻해. 컴퓨터나 스마트폰에서는 메모를 뜻하는 말로도 써.",
+    "연필":"연필은 흑연 심으로 종이에 글이나 그림을 쓰는 도구야. 지우개로 비교적 쉽게 지울 수 있어.",
+    "지우개":"지우개는 연필이나 일부 필기구의 자국을 문질러 지우는 학용품이야.",
+    "볼펜":"볼펜은 끝의 작은 공이 굴러가면서 잉크를 종이에 묻혀 글씨를 쓰는 필기구야.",
+    "책":"책은 글이나 그림 등의 정보를 여러 쪽에 담아 묶은 매체야. 종이책과 전자책이 있어.",
+    "교과서":"교과서는 학교 수업에서 과목별 학습 내용을 배우기 위해 사용하는 책이야.",
+    "칠판":"칠판은 교실이나 회의실에서 글이나 그림을 써서 여러 사람이 함께 볼 수 있게 하는 판이야.",
+    "책상":"책상은 공부하거나 글을 쓰고 컴퓨터를 사용할 때 물건을 올려두는 가구야.",
+    "의자":"의자는 사람이 앉을 수 있도록 만든 가구야. 등받이와 다리가 있는 형태가 흔해.",
+    "가방":"가방은 책이나 소지품을 넣어 들고 다니는 물건이야. 백팩, 크로스백, 손가방처럼 형태가 다양해.",
+    "학교":"학교는 학생이 여러 과목과 생활을 배우고 친구들과 함께 활동하는 교육 기관이야.",
+    "학생":"학생은 학교나 교육기관 등에서 배우는 사람을 뜻해.",
+    "선생님":"선생님은 학생을 가르치거나 학습을 돕는 사람을 높여 부르는 말이야.",
+    "친구":"친구는 서로 알고 지내며 친밀하게 관계를 맺는 사람을 뜻해.",
+    "가족":"가족은 혼인·혈연·입양 등으로 이어져 함께 생활하거나 가까운 관계를 이루는 사람들을 말해.",
+    "숙제":"숙제는 수업 뒤에 스스로 해오도록 주어진 학습 과제야.",
+    "시험":"시험은 배운 내용이나 능력을 문제나 과제를 통해 확인하는 활동이야.",
+    "도서관":"도서관은 책과 여러 자료를 모아 사람들이 읽거나 빌리고 정보를 찾을 수 있게 하는 곳이야.",
+    "병원":"병원은 의사와 의료진이 사람의 건강 상태를 살피고 질병이나 부상을 진료하는 곳이야.",
+    "약국":"약국은 의약품을 조제하거나 판매하고 약 복용에 관한 안내를 받을 수 있는 곳이야.",
+    "편의점":"편의점은 음식, 음료, 생활용품 등을 비교적 긴 시간 동안 간편하게 살 수 있는 소매점이야.",
+    "마트":"마트는 식품과 생활용품 등 여러 상품을 한곳에서 판매하는 비교적 큰 소매점이야.",
+    "카페":"카페는 커피나 차, 음료와 간단한 음식을 먹으며 쉬거나 이야기할 수 있는 곳이야.",
+    "버스":"버스는 여러 사람이 정해진 노선이나 구간을 함께 이동하는 대중교통 수단이야.",
+    "지하철":"지하철은 도시에서 주로 지하나 전용 선로를 따라 운행하는 철도 대중교통이야.",
+    "자동차":"자동차는 엔진이나 전기모터의 힘으로 도로를 달리는 이동수단이야.",
+    "자전거":"자전거는 보통 두 바퀴를 페달로 굴려 움직이는 이동수단이야.",
+    "축구":"축구는 두 팀이 주로 발을 사용해 공을 상대 골문에 넣어 득점하는 스포츠야.",
+    "농구":"농구는 두 팀이 공을 상대편 골대에 넣어 점수를 얻는 스포츠야.",
+    "야구":"야구는 공격팀이 공을 치고 베이스를 돌아 득점하고 수비팀이 이를 막는 스포츠야.",
+    "배드민턴":"배드민턴은 라켓으로 셔틀콕을 네트 너머로 주고받는 스포츠야.",
+    "게임":"게임은 정해진 규칙이나 목표에 따라 즐기는 놀이를 뜻해. 컴퓨터·모바일·보드게임처럼 형태가 다양해.",
+    "음악":"음악은 소리의 높낮이, 리듬, 음색 등을 조합해 표현하는 예술이야.",
+    "영화":"영화는 연속된 영상과 소리를 통해 이야기를 보여주는 시청각 작품이야.",
+    "비":"비는 구름 속 물방울이 커져서 공중에 머물지 못하고 지면으로 떨어지는 강수 현상이야.",
+    "눈":"눈은 대기 중 수증기가 얼어 결정이 된 뒤 지상으로 떨어지는 강수 현상이야.",
+    "구름":"구름은 공기 중의 수증기가 작은 물방울이나 얼음 알갱이로 변해 모여 보이는 것이야.",
+    "바람":"바람은 기압 차이 때문에 공기가 한쪽에서 다른 쪽으로 이동하는 현상이야.",
+    "봄":"봄은 겨울과 여름 사이의 계절로, 기온이 올라가고 식물이 새로 자라기 시작하는 시기야.",
+    "여름":"여름은 보통 한 해 중 기온이 가장 높은 계절이야.",
+    "가을":"가을은 여름과 겨울 사이의 계절로, 기온이 내려가고 많은 식물의 잎 색이 변하는 시기야.",
+    "겨울":"겨울은 보통 한 해 중 기온이 가장 낮은 계절이야."
   };
+  const COMMON_KNOWLEDGE_ALIAS={
+    "ai":"AI","에이아이":"AI","인공지능기술":"인공지능","인터넷망":"인터넷","wifi":"와이파이","wi-fi":"와이파이",
+    "노트북":"컴퓨터","핸드폰":"스마트폰","휴대폰":"스마트폰","멍멍이":"강아지","냥이":"고양이"
+  };
+  function normalizeKnowledgeSubject(q){
+    let v=clean(q).replace(/[?？.!]+$/g,"").trim();
+    v=v.replace(/\s*(?:이|가)?\s*(?:뭐야|뭐냐|뭐임|누구야|누구냐|누구임|무엇이야|뭔데|설명해줘|알려줘|궁금해|궁금한데|궁금함|알고싶어|알고싶은데)$/g,"").trim();
+    v=v.replace(/(\S{2,})(?:은|는|이|가)$/,"$1").trim();
+    return COMMON_KNOWLEDGE_ALIAS[v.toLowerCase()]||COMMON_KNOWLEDGE_ALIAS[v]||v;
+  }
   function localKnowledgeReply(raw){
     const text=clean(raw),c=compact(text);
     if(/(생김새|어떻게생겼|사진|이미지|모습보여|얼굴보여)/.test(c))return "";
-    if(!/(뭐야|뭐냐|뭐임|누구야|누구냐|누구임|무엇이야|뭔데|설명해줘|알려줘)$/.test(c))return "";
-    let q=text.replace(/[?？.!]+$/g,"").replace(/\s*(?:뭐야|뭐냐|뭐임|누구야|누구냐|누구임|무엇이야|뭔데|설명해줘|알려줘)$/g,"").trim();
-    q=q.replace(/(\S{2,})(?:은|는|이|가)$/,"$1").trim();
+    if(!/(뭐야|뭐냐|뭐임|누구야|누구냐|누구임|무엇이야|뭔데|설명해줘|알려줘|궁금해|궁금한데|궁금함|알고싶어|알고싶은데)$/.test(c))return "";
+    const q=normalizeKnowledgeSubject(text);
     return COMMON_KNOWLEDGE[q]||"";
+  }
+
+  const DAILY_NOUN_GROUPS={
+    pet:new Set(["고양이","강아지","토끼","햄스터","물고기","새"]),
+    school:new Set(["공책","노트","연필","지우개","볼펜","책","교과서","칠판","책상","의자","가방","학교","숙제","시험"]),
+    tech:new Set(["컴퓨터","스마트폰","핸드폰","휴대폰","인터넷","와이파이","인공지능","AI","로봇","카메라","사진","게임"]),
+    sport:new Set(["축구","농구","야구","배드민턴","자전거"]),
+    place:new Set(["도서관","병원","약국","편의점","마트","카페","버스","지하철"]),
+    nature:new Set(["비","눈","구름","바람","봄","여름","가을","겨울","나무","꽃","무지개","달","별"])
+  };
+  function commonNounConversationReply(frame){
+    if(!frame||frame.question||frame.searchCue||frame.knowledgeCue||frame.event||frame.desire||frame.plan||frame.preference)return "";
+    const raw=clean(frame.text),c=compact(raw);
+    if(!/^[가-힣A-Za-z-]{1,8}$/.test(c))return "";
+    let noun=COMMON_KNOWLEDGE_ALIAS[c.toLowerCase()]||COMMON_KNOWLEDGE_ALIAS[c]||c;
+    let group="";
+    for(const [k,set] of Object.entries(DAILY_NOUN_GROUPS)){if(set.has(noun)||set.has(c)){group=k;break;}}
+    if(!group)return "";
+    const rows={
+      pet:[`${noun} ㅋㅋ ${noun} 좋아해?`,`${noun}? 귀엽지 ㅋㅋ 갑자기 ${noun} 생각났어?`,`${noun} 얘기네 ㅋㅋ 직접 키우는 쪽이야, 그냥 좋아하는 쪽이야?`],
+      school:[`${noun}? 학교에서 자주 보는 거네 ㅋㅋ ${noun} 때문에 뭐 생각났어?`,`${noun} ㅋㅋ 갑자기 학교 느낌 난다. ${noun} 얘기하려던 거 있어?`,`${noun}? 응, 알아. 뭐가 궁금한지 이어서 말해도 돼.`],
+      tech:[`${noun}? 응, 알아. ${noun} 쪽에서 뭐가 궁금해?`,`${noun} 얘기구나. 기능이나 원리 같은 거 물어봐도 돼.`,`${noun}? 좋아. 궁금한 부분 있으면 바로 설명해줄게.`],
+      sport:[`${noun} ㅋㅋ 좋아해? 직접 하는 쪽이야 보는 쪽이야?`,`${noun}? 오 스포츠 얘기네 ㅋㅋ 뭐가 궁금해?`,`${noun} 좋지 ㅋㅋ 경기 얘기든 하는 법이든 이어서 말해봐.`],
+      place:[`${noun}? 응, 알아. ${noun} 관련해서 뭐 찾는 거야?`,`${noun} 얘기구나. 위치나 이용 방법 같은 거 궁금한 거 있어?`,`${noun}? 오케이. 이어서 말해봐, 맥락 맞춰서 받을게.`],
+      nature:[`${noun}? 오늘 ${noun} 때문에 생각난 거야?`,`${noun} 얘기네. 날씨나 원리가 궁금한 거면 바로 물어봐.`,`${noun}? 응 ㅋㅋ 이어서 말해봐.`]
+    };
+    return chooseFreshReply(`daily.noun.${group}.${noun}`,rows[group],3);
+  }
+
+
+  // 일상 명사는 "뜻"보다 실제 생활 사건 속에서 훨씬 자주 나온다.
+  // 고양이/강아지/공책 같은 단어를 단독 사전항목으로만 다루지 않고,
+  // 행동·상태와 함께 나오면 그 상황 자체에 반응한다.
+  function dailyObjectSituationReply(frame){
+    if(!frame||frame.question||frame.searchCue||frame.knowledgeCue||frame.directedAbuse)return "";
+    const c=frame.c;
+    const rows=(key,list)=>chooseFreshReply(`daily.object.${key}`,list,6);
+    if(/고양이/.test(c)){
+      if(/(?:방|침대|책상|무릎|옆|집).*(?:와|왔|올라|누워|앉아)|(?:자꾸|계속).*(?:따라와|따라다녀|와|쳐다봐)/.test(c))return rows('cat.visit',["ㅋㅋ 고양이가 거길 자기 자리로 정했나 보네.","오 자꾸 오는구나 ㅋㅋ 네 근처가 편한가 보다.","ㅋㅋ 완전 자기 집처럼 다니네. 귀엽긴 하겠다.","고양이가 계속 붙어 있네 ㅋㅋ 오늘 유난히 사람 타나 보다."]);
+      if(/(?:야옹|울어|울고|운다|골골|그르릉)/.test(c))return rows('cat.sound',["오 계속 소리 내는구나. 뭔가 원하는 게 있나 보다 ㅋㅋ","ㅋㅋ 말 걸듯이 울 때 있지. 밥이나 관심 달라는 걸 수도 있고.","고양이가 계속 표현 중이네 ㅋㅋ 평소랑 소리가 좀 달라?"]);
+      if(/(?:긁|할퀴|깨물|물었|물어)/.test(c))return rows('cat.scratch',["아이고 ㅋㅋ 갑자기 손 나갔네. 장난치다 흥분했나 보다.","으 고양이 발톱은 진짜 순식간이지 ㅋㅋ 다친 데는 괜찮아?","ㅋㅋ 귀엽다가도 갑자기 야생 모드 켜질 때 있지."]);
+      if(/(?:숨었|안나와|도망|피해)/.test(c))return rows('cat.hide',["어디 조용한 데 숨어 있나 보네. 고양이는 혼자 있고 싶을 때 진짜 잘 숨더라.","ㅋㅋ 또 자기만 아는 장소로 들어갔나 보다.","안 나오면 괜히 찾게 되지 ㅋㅋ 보통 편한 데서 멀쩡히 누워 있더라."]);
+      if(/(?:귀여|예뻐|귀엽)/.test(c))return rows('cat.cute',["ㅋㅋ 고양이는 가만히 있어도 귀여울 때가 문제지.","인정 ㅋㅋ 행동 하나하나가 괜히 보게 돼.","ㅋㅋ 그래서 사진이 자꾸 늘어나는 거지."]);
+    }
+    if(/(?:강아지|반려견)/.test(c)){
+      if(/(?:산책|걸었|나갔|공원)/.test(c))return rows('dog.walk',["오 산책했구나 ㅋㅋ 강아지는 밖에 나가면 텐션 확 올라가지.","산책 다녀왔네. 여기저기 냄새 맡느라 바빴겠다 ㅋㅋ","오 같이 좀 걸었구나. 다녀오면 강아지는 만족하고 사람은 피곤하고 ㅋㅋ"]);
+      if(/(?:짖|멍멍|울어|낑낑)/.test(c))return rows('dog.bark',["오 계속 소리 내는구나. 뭔가 신경 쓰이는 게 있나 보다.","ㅋㅋ 강아지가 열심히 말하는 중이네. 밖에 뭐 지나갔나?","계속 짖으면 이유가 있긴 할 텐데, 평소보다 심한 편이야?"]);
+      if(/(?:따라와|따라다녀|붙어있|옆에있|기다려)/.test(c))return rows('dog.follow',["ㅋㅋ 완전 네 껌딱지네.","오 계속 따라다니는구나. 같이 있고 싶은가 보다 ㅋㅋ","강아지가 오늘 유난히 붙어 있네 ㅋㅋ 귀엽겠다."]);
+      if(/(?:핥|깨물|물었|장난)/.test(c))return rows('dog.play',["ㅋㅋ 신나서 장난치는 모드인가 보네.","오 오늘 텐션 높나 보다 ㅋㅋ","강아지는 놀기 시작하면 끝이 없지 ㅋㅋ 너도 같이 놀아줬어?"]);
+    }
+    if(/(?:공책|노트|연필|지우개|볼펜|교과서|책|필통|가방)/.test(c)){
+      const obj=(c.match(/공책|노트|연필|지우개|볼펜|교과서|책|필통|가방/)||[])[0]||'물건';
+      if(/(?:잃어버|잃어버렸|안보여|없어졌|못찾)/.test(c))return rows(`school.lost.${obj}`,[`${obj} 안 보이면 은근 신경 쓰이지. 마지막으로 쓴 자리부터 보는 게 제일 빠르겠다.`,`아 ${obj} 잃어버린 것 같구나. 가방 안쪽이랑 책상 주변부터 다시 보자.`,`으 ${obj} 어디 갔지 싶으면 괜히 같은 데를 세 번 보게 되지 ㅋㅋ 마지막 사용한 곳부터 가보자.`]);
+      if(/(?:두고왔|놓고왔|학교에두고|집에두고)/.test(c))return rows(`school.left.${obj}`,[`아 ${obj} 두고 왔구나 ㅋㅋ 필요할 때 생각나면 더 아쉽지.`,`으 하필 ${obj}를 놓고 왔네. 오늘 꼭 필요한 거야?`,`아 ${obj}가 거기 남았구나. 내일 바로 챙겨야겠다.`]);
+      if(/(?:찢어|부러|망가|깨졌|고장)/.test(c))return rows(`school.broken.${obj}`,[`아 ${obj} 망가졌구나. 자주 쓰는 거면 은근 불편하겠다.`,`으 ${obj}가 하필 지금 말썽이네. 쓸 수는 있어?`,`아이고 ${obj} 상태가 안 좋아졌네 ㅋㅋ 새로 챙겨야 하나.`]);
+      if(/(?:새로샀|샀어|받았어|예뻐|맘에들|마음에들)/.test(c))return rows(`school.new.${obj}`,[`오 새 ${obj} 생겼네 ㅋㅋ 마음에 들면 괜히 자꾸 쓰고 싶지.`,`오 ${obj} 괜찮은 거 생겼구나. 새 거 쓰는 맛 있지 ㅋㅋ`,`ㅋㅋ ${obj} 마음에 들면 공부할 때도 아주 조금은 기분 좋아지지.`]);
+    }
+    return "";
   }
 
   function practicalDecisionReply(raw){
@@ -1860,14 +2093,58 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     // "응, 인터넷 얘기였구나" loop. Let the normal social/short route close it.
     return "";
   }
+  function applyWeatherLocationFollowup(frame){
+    if(!frame||frame.searchCue||frame.question)return frame;
+    const users=context().filter(v=>v.role==="user");
+    const prev=clean(users[users.length-2]?.text||"");
+    const c=frame.c;
+    if(!prev||!/(날씨|기온|몇도|온도|습도|미세먼지|공기질|비와|비올|눈와|눈올)/.test(compact(prev)))return frame;
+    // 바로 앞에서 날씨를 물은 뒤 지역명만 보내는 자연스러운 후속 입력을 이어받는다.
+    // 예: "오늘 날씨" -> "군산". 일반 짧은 단어에는 적용하지 않는다.
+    const conversational=/(?:지금|오늘|내일|어제|아까|방금|그냥|나는|너는|우린)|(?:중|어|아|야|해|했어|한다|함|임|음|네|지|고|래|돼|됨|없어|있어|좋아|싫어|같아)$/;
+    if(/^[가-힣]{2,12}(?:시|군|구|도|읍|면|동)?$/.test(c)&&!conversational.test(c)){
+      frame.searchCue=true;
+      frame.act="search";
+      frame.weatherLocationFollowup=true;
+    }
+    return frame;
+  }
+
+  function priorReasonContext(frame){
+    if(!frame||!frame.vagueReasonQuestion)return "";
+    const rows=context().filter(v=>v.role==="user").slice(0,-1).reverse();
+    const subject=clean(frame.text).replace(/[?？]/g,"").replace(/(?:은|는|이|가)?\s*(?:왜\s*그래|왜\s*그런\s*거야|왜\s*이래|왜\s*저래|왜\s*그러는\s*거야)\s*$/g,"").trim();
+    for(const row of rows.slice(0,3)){
+      const t=clean(row.text);if(!t)continue;
+      const cc=compact(t);
+      // 직전 발화에 실제 행동/상태가 있고, 현재 대상과 연결될 때만 원인질문의 근거로 사용한다.
+      const hasPredicate=/(?:하|해|했|가|와|오|올라|내려|먹|자|울|짖|움직|멈추|따라|숨|떨|아프|뜨거|차가|느려|빠르|많|적|커|작|변하|생기|사라지|끊기|꺼지|켜지|젖|마르|떨어지|붙|돌|날|헤엄|숨쉬|피|웃|화내|싫어|좋아|무서워|졸려|피곤|아파)/.test(cc);
+      if(!hasPredicate)continue;
+      if(!subject||subject==="그거"||subject==="그게"||subject==="걔"||subject==="그사람"||cc.includes(compact(subject)))return t;
+    }
+    return "";
+  }
+
+  function vagueReasonClarifyReply(frame){
+    if(!frame?.vagueReasonQuestion||priorReasonContext(frame))return "";
+    const subject=clean(frame.text).replace(/[?？]/g,"").replace(/(?:은|는|이|가)?\s*(?:왜\s*그래|왜\s*그런\s*거야|왜\s*이래|왜\s*저래|왜\s*그러는\s*거야)\s*$/g,"").trim();
+    const label=subject&&!/^(그거|그게|걔|그사람)$/.test(compact(subject))?`'${subject}'의 어떤 행동이나 상태를 말하는지`:'어떤 행동이나 상태를 말하는지';
+    return `${label} 한마디만 더 알려줘. 그 이유를 바로 찾아볼게.`;
+  }
+
   function searchPolicy(frame,ref){
     const c=frame.c;
     if(frame.reaction||frame.act==="social")return "forbidden";
+    // 모아 자신에 대한 질문(이름/정체/할 수 있는 것 등)은 웹검색 대상이 아니다.
+    if(selfReply(frame.text)||idiomReply(frame))return "forbidden";
     // Casual complaint-like "why is it so ..." turns are usually reactions to the
     // ongoing story, not web-search requests. Keep explicit lookup/weather/fact
     // requests unchanged below.
     if(previousUserTexts(2).length&&frame.question&&/(?:왜이렇게|왜이리|왜이래).*(?:피곤|힘들|힘드|졸리|많|늦|귀찮|짜증|별로|답답)/.test(c))return "forbidden";
     if(frame.act==="followup"&&frame.referenceCue&&ref.ambiguous)return "forbidden";
+    if(frame.vagueReasonQuestion){
+      return priorReasonContext(frame)?"required":"forbidden";
+    }
     if(frame.searchCue)return "required";
     // A factual pronoun follow-up immediately after a web/search answer belongs to the
     // same lookup.  Without this, "그 사람 업적은?" is swallowed by local ack logic.
@@ -1888,6 +2165,9 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return "";
   }
   function searchQuery(frame,ref){
+    if(frame.weatherLocationFollowup)return `${clean(frame.text)} 오늘 날씨`;
+    const reasonContext=priorReasonContext(frame);
+    if(frame.vagueReasonQuestion&&reasonContext)return `${reasonContext} 이유`;
     const priorSearch=previousSearchAnchor(),prevA=immediatePreviousAssistant();
     // Preserve the entity across a chain such as
     // "세종대왕 찾아줘" -> "더 자세히" -> "그 사람 업적은?".
@@ -1896,7 +2176,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(frame.referenceCue&&priorSearch&&prevA&&String(prevA.source||"").includes("search"))
       baseText=clean(frame.text).replace(/그\s*사람|그분|걔|그거|그것|그곳/g,priorSearch);
     let q=clean(baseText).replace(/[?？]/g,"");
-    q=q.replace(/(?:좀\s*)?(?:검색해줘|검색해|찾아줘|찾아봐|더\s*찾아줘|더\s*찾아봐|알아봐줘|알아봐|확인해줘|설명해줘|알려줘|정리해줘|비교해줘|추천해줘|더\s*자세히(?:\s*알려줘)?|자세히\s*알려줘|뭔지\s*알아|뭐인지\s*알아|무엇인지\s*알아)$/g,"").trim();
+    q=q.replace(/(?:좀\s*)?(?:검색해줘|검색해|찾아줘|찾아봐|더\s*찾아줘|더\s*찾아봐|알아봐줘|알아봐|확인해줘|설명해줘|알려줘|정리해줘|비교해줘|추천해줘|더\s*자세히(?:\s*알려줘)?|자세히\s*알려줘|뭔지\s*알아|뭐인지\s*알아|무엇인지\s*알아|궁금해|궁금한데|궁금함|알고싶어|알고싶은데)$/g,"").trim();
     q=q.replace(/\s*(?:누구야|누구냐|누구임|뭐야|뭐냐|뭐임|무엇이야|뭔데|어디야|어디냐|언제야|언제냐|뜻이야|무슨뜻이야)$/g,"").trim();
     q=q.replace(/(\S{2,})(?:은|는|이|가)$/,"$1").trim();
     const generic=/^(이거|그거|그게|그건|그걸|그사람|걔|거기|좀|더|더자세히|자세히|찾아줘|찾아봐|검색해|검색해줘|알아봐|알려줘)?$/;
@@ -2079,7 +2359,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       (BASE[frame.reaction]||[]).forEach((t,i)=>out.push(candidate(t,`social:${frame.reaction}:${i}`,"social",95-i)));
       return out;
     }
-    const add=(family,rows,base=strategy)=>rows.forEach((t,i)=>out.push(candidate(t,`${family}:${i}`,base,76-i)));
+    const add=(family,rows,base=strategy,scoreBase=76)=>rows.forEach((t,i)=>out.push(candidate(t,`${family}:${i}`,base,scoreBase-i)));
     if(strategy==="clarify"){
       if(ref.ambiguous)add("clarify.ref",["아까 말한 대상을 말하는 거야?","그게 누구를 말하는 건지 한 번만 알려줘.","아까 얘기한 것 중 어느 걸 말하는 거야?"]);
       else add("clarify.general",["어느 부분을 말하는지 조금만 더 알려줘.","그 상황을 한마디만 더 붙여주면 바로 맞춰볼게.","누구나 어떤 일을 말하는지만 짚어주면 바로 답할게.","한 단어만 더 붙여줘도 돼. 그걸 기준으로 볼게.","지금 말만으론 두 가지로 들려. 대상만 하나 짚어줘.","사람 얘긴지, 물건 얘긴지, 있었던 일 얘긴지만 알려줘도 돼."]);
@@ -2121,11 +2401,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else if(frame.plan&&frame.topic)add("direct.plan",[`그럼 다음엔 ${frame.topic} 쪽으로 해보려는 거네.`,`오케이, ${frame.topic} 계획까지 잡아둔 거구나.`]);
       else if(frame.preference&&frame.topic)add("direct.preference",frame.affect==="negative"?[`${frame.topic} 쪽은 취향이 아닌 거네.`]:[`${frame.topic} 쪽을 좋아하는구나. 그건 기억해둘게.`]);
       else if(frame.topic&&frame.text.length>8&&frame.text.length<=24)add("direct.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 그 뒤엔 좀 괜찮았어?","오, 그러고 있었구나 ㅋㅋ","아, 오늘은 그런 일이 있었네."]);
-      else add("direct.general",["지금 문장만으로는 뜻이 두 갈래라 하나만 더 알려줘.","한마디만 더 붙여주면 거기에 맞춰 답할게.","지금 말만 보고 넘겨짚진 않을게. 대상만 조금 더 알려줘.","무슨 쪽 얘긴지는 알겠는데 한 조각만 더 있으면 정확히 답할 수 있어.","누구나 뭘 말하는지만 잡히면 바로 답할 수 있어.","지금은 대상을 확정하기 어렵네. 핵심 단어 하나만 더 줘."]);
+      else add("direct.general",["지금 문장만으로는 뜻이 두 갈래라 하나만 더 알려줘.","한마디만 더 붙여주면 거기에 맞춰 답할게.","지금 말만 보고 넘겨짚진 않을게. 대상만 조금 더 알려줘.","무슨 쪽 얘긴지는 알겠는데 한 조각만 더 있으면 정확히 답할 수 있어.","누구나 뭘 말하는지만 잡히면 바로 답할 수 있어.","지금은 대상을 확정하기 어렵네. 핵심 단어 하나만 더 줘."],"direct",44);
     }
     if(!out.length){
-      if(frame.topic&&frame.text.length>8)add("fallback.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 조금 더 얘기해봐.","오, 그러고 있었구나 ㅋㅋ","아, 그런 흐름이었구나."],"direct");
-      else add("fallback",["짧은 말만 보고 뜻을 지어내진 않을게. 한마디만 더 붙여줘.","한마디만 더 붙여줘. 그걸 기준으로 답할게.","무슨 얘긴지 한 조각만 더 있으면 돼.","짧게 말해도 돼. 대상 하나만 알려주면 바로 답할게.","지금은 뜻이 여러 개로 보여. 핵심 단어 하나만 더 줘.","사람·물건·상황 중 뭐 얘긴지만 알려줘도 바로 맞출 수 있어."],"clarify");
+      if(frame.topic&&frame.text.length>8)add("fallback.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 조금 더 얘기해봐.","오, 그러고 있었구나 ㅋㅋ","아, 그런 흐름이었구나."],"direct",38);
+      else add("fallback",["짧은 말만 보고 뜻을 지어내진 않을게. 한마디만 더 붙여줘.","한마디만 더 붙여줘. 그걸 기준으로 답할게.","무슨 얘긴지 한 조각만 더 있으면 돼.","짧게 말해도 돼. 대상 하나만 알려주면 바로 답할게.","지금은 뜻이 여러 개로 보여. 핵심 단어 하나만 더 줘.","사람·물건·상황 중 뭐 얘긴지만 알려줘도 바로 맞출 수 있어."],"clarify",30);
     }
     return out;
   }
@@ -2246,16 +2526,17 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       // would normally disable that strategy (for example "버스 왜 안 와" learned as empathy).
       if(eligible[strategy]===false){if(ptn.humanChat&&exact)strategy=policy.strategy;else continue;}
       let score=0;
-      if(exact)score=94;else if(input.includes(trig)||trig.includes(input))score=50;
+      if(exact)score=112;else if(input.includes(trig)||trig.includes(input))score=56;
       const pw=concepts(ptn.trigger),overlap=frame.concepts.filter(v=>pw.includes(v)).length;score+=overlap*11;
       const pSem=ptn.semantic||{},pTokens=Array.isArray(pSem.tokens)?pSem.tokens:semanticTokens(ptn.trigger),semOverlap=fTokens.filter(v=>pTokens.includes(v)).length,pCats=Array.isArray(pSem.categories)?pSem.categories:semanticCategories(pTokens,ptn.trigger),catOverlap=fCats.filter(v=>pCats.includes(v)).length,pIntent=String(pSem.intent||"");
       const ctxSem=learnedContextSemantic(frame),ctxTokenOverlap=ctxSem.tokens.filter(v=>pTokens.includes(v)).length,ctxCatOverlap=ctxSem.categories.filter(v=>pCats.includes(v)).length;
-      score+=semOverlap*13+catOverlap*10+ctxTokenOverlap*5+ctxCatOverlap*4;if(pIntent&&pIntent===fIntent)score+=20;if(ptn.humanChat&&pIntent===fIntent&&(catOverlap>0||ctxCatOverlap>0))score+=18;
+      const intentMatch=!!(pIntent&&pIntent===fIntent),relevanceUnits=(exact?5:0)+Math.min(3,semOverlap)+Math.min(2,catOverlap)+Math.min(2,ctxTokenOverlap)+Math.min(1,ctxCatOverlap)+(intentMatch?1:0);
+      score+=semOverlap*13+catOverlap*10+ctxTokenOverlap*5+ctxCatOverlap*4;if(intentMatch)score+=20;if(ptn.humanChat&&intentMatch&&(catOverlap>0||ctxCatOverlap>0))score+=18;
       score+=(Number(ptn.confidence||0)-.5)*26;
       const tier=String(ptn.tier||"confirmed");if(tier==="solo")score-=4;else if(tier==="growing")score+=1;else if(tier==="confirmed")score+=4;
       if(ptn.act&&ptn.act!==frame.act&&(!pIntent||pIntent!==semanticIntent(frame)))score-=24;if(ptn.affect&&ptn.affect!=="neutral"&&ptn.affect!==frame.affect)score-=18;
       if(input!==trig&&overlap===0&&semOverlap===0&&catOverlap===0&&ctxTokenOverlap===0&&ctxCatOverlap===0)score-=16;
-      if(score>=62){score+=personalTopicBoostForPattern(ptn)+personalStyleBoostForPattern(ptn)+personalFeedbackBoostForPattern(ptn)+personalMemoryBoostForPattern(ptn);const learnedText=exact?String(ptn.reply||""):adaptLearnedReply(ptn,frame);out.push(candidate(learnedText,ptn.id||"learned",strategy,score,{source:ptn.humanChat?"learned-human":"learned",learningTier:tier,exactLearned:exact}));}
+      if(exact||score>=56){score+=personalTopicBoostForPattern(ptn)+personalStyleBoostForPattern(ptn)+personalFeedbackBoostForPattern(ptn)+personalMemoryBoostForPattern(ptn);const learnedText=exact?String(ptn.reply||""):adaptLearnedReply(ptn,frame);out.push(candidate(learnedText,ptn.id||"learned",strategy,score,{source:ptn.humanChat?"learned-human":"learned",learningTier:tier,exactLearned:exact,relevanceUnits,evidenceCount:Number(ptn.evidenceCount||0)}));}
     }
     return out.sort((a,b)=>b.score-a.score).slice(0,4);
   }
@@ -2265,14 +2546,16 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   // 이렇게 해야 새 레퍼토리와 기존 학습이 서로 따로 놀지 않으면서도 안내 정확도가 유지된다.
   const LEARNED_BLEND_SOURCES=new Set([
     "local-everyday","local-everyday-specific","local-companion","local-decision",
-    "local-contextual","local-continuation","local-followthrough","local-short","local-repair",
+    "local-contextual","local-thread","local-continuation","local-followthrough","local-short","local-repair",
     "local-proactive-followup"
   ]);
   const LEARNED_BLEND_LOCAL_SCORE=Object.freeze({
-    "local-companion":93,"local-everyday-specific":92,"local-everyday":90,
-    "local-decision":94,"local-followthrough":91,"local-proactive-followup":90,
-    "local-continuation":88,"local-contextual":86,"local-repair":84,"local-short":74,
-    "local":92
+    // Specific safety/fact-like local responses still stay strong, but ordinary repertoire
+    // must not drown out public learned dialogue. Generic/short replies are deliberately low.
+    "local-companion":90,"local-everyday-specific":84,"local-everyday":80,
+    "local-decision":88,"local-followthrough":82,"local-proactive-followup":84,
+    "local-continuation":76,"local-contextual":72,"local-thread":72,"local-repair":70,"local-short":46,
+    "local":74
   });
   function learnedConversationChoice(frame,ref,answer,source,strategy,socialText){
     if(!answer||frame.knowledgeCue||frame.searchCue)return null;
@@ -2282,14 +2565,18 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const localScore=Number(LEARNED_BLEND_LOCAL_SCORE[source]??92);
     const local=candidate(answer,`soft-local:${source}:${strategy}`,strategy,localScore,{source});
     const strongest=learned[0];
-    // 정확히 같은 말에 대한 사람대화 학습은 가장 강한 증거다.
-    if(strongest?.source==="learned-human"&&strongest.exactLearned&&strongest.score>=localScore+2)return strongest;
-    // 의미상 매우 가까운 사람대화 학습도 충분히 강할 때는 새 기본 레퍼토리보다 우선할 수 있다.
-    if(strongest?.source==="learned-human"&&strongest.score>=localScore+8)return strongest;
-    // 공통 학습은 과도한 일반화를 막기 위해 정확 일치일 때만 직접 덮어쓸 수 있다.
-    if(strongest?.source==="learned"&&strongest.exactLearned&&strongest.score>=localScore+6)return strongest;
-    const chosen=weightedPick([local,...learned],v=>v.score,Math.random);
-    return chosen&&(chosen.source==="learned-human"||(chosen.source==="learned"&&chosen.exactLearned))?chosen:null;
+    // Exact learned dialogue is the strongest reusable evidence and must beat generic local
+    // repertoire. This is the key fix for learned phrases being loaded but effectively unused.
+    if(strongest?.exactLearned&&strongest.score>=localScore-4)return strongest;
+    // Strong human-chat semantic/context matches can beat generic repertoire, but require
+    // multiple relevance signals so unrelated sheet rows never hijack the conversation.
+    if(strongest?.source==="learned-human"&&Number(strongest.relevanceUnits||0)>=2&&strongest.score>=localScore+2)return strongest;
+    // For ordinary conversation, let near-tied learned-human candidates genuinely compete.
+    // Weak matches remain excluded; common non-human learning only competes on exact match.
+    const viableLearned=learned.filter(v=>v.exactLearned||(v.source==="learned-human"&&Number(v.relevanceUnits||0)>=2&&v.score>=localScore-4));
+    if(!viableLearned.length)return null;
+    const chosen=weightedPick([local,...viableLearned],v=>v.score,Math.random);
+    return chosen&&chosen!==local?chosen:null;
   }
 
   function recentAssistantTurns(limit=4){return context().filter(v=>v.role==="assistant").slice(-limit);}
@@ -2350,12 +2637,12 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function qualityGate(answer,frame,source,strategy){
     let out=clean(answer);if(!out)return out;
     const gateSource=String(source||"");
-    if(!(gateSource.startsWith("local")||gateSource==="learned-human")||source==="local-utility"||source==="local-feature-help"||source==="local-style"||source==="local-hanging")return out;
+    if(!(gateSource.startsWith("local")||gateSource==="learned-human")||source==="local-utility"||source==="local-feature-help"||source==="local-common-noun"||source==="local-style"||source==="local-hanging")return out;
     const recent=recentAssistantTurns(5),shape=normalizedReplyShape(out),qStreak=recentQuestionStreak();
     const repeated=recent.some(v=>normalizedReplyShape(v.text||"")===shape);
     const neutralShort=!frame.question&&!frame.event&&!frame.desire&&!frame.unfulfilled&&!frame.plan&&!frame.preference&&frame.affect==="neutral"&&frame.text.length<=12;
     const intrusive=/어떤 느낌|어떻게 느꼈|기분이 어땠|왜 그렇게 생각했|제일 힘들었/.test(out);
-    if(!frame.question&&/[?？]$/.test(out)&&(neutralShort||qStreak>=2||intrusive)){
+    if(gateSource!=="local-thread"&&!frame.question&&/[?？]$/.test(out)&&(neutralShort||qStreak>=2||intrusive)){
       const pool=frame.reaction?[]:frame.event?["오, 그런 일이 있었구나.","아, 그랬구나.","오 그렇구나 ㅋㅋ"]:frame.plan?["오, 그렇게 해보려는 거구나.","좋네. 계획은 잡혀 있네."]:frame.preference?["오, 그쪽 취향이구나.","아, 그건 취향이 확실하네."]:["응, 알겠어.","오 그렇구나.","응응, 무슨 말인지는 알겠어."];
       if(pool.length)out=chooseText("quality.no-question",pool);
     }
@@ -2789,24 +3076,56 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       if(responseVersion){const effective=Math.max(responseVersion,Number(pget("moa.v93.publicPatternVersion",0)||0));syncVersion.set(key,effective);pset(`moa.v92.syncVersion.${key}`,effective);}
     }catch(e){console.warn("모아 학습 동기화 실패",e);syncAt.set(key,Date.now()-SYNC_TTL+30000);}
   }
+  async function ensureLearningReadyForReply(){
+    if(isGuest()||!MiniTalk.AuthApi.moaSync)return;
+    const key=userKey(),patterns=(learnedByUser.get(key)||{patterns:[]}).patterns||[];
+    // Fresh device / cleared cache: one real sync before the first reply, otherwise the
+    // first conversation can look as if learning is disabled even though warmup is running.
+    if(!patterns.length){
+      // Only block once per page session. If the server truly has no public corpus,
+      // repeated turns must not hammer moa_sync or multiply persistence writes.
+      if(!replyLearningSyncAttempted.has(key)){replyLearningSyncAttempted.add(key);await sync(true);}
+      return;
+    }
+    // Existing cache answers immediately; stale data refreshes in the background.
+    if(Date.now()-(syncAt.get(key)||0)>=SYNC_TTL)sync(false).catch?.(()=>{});
+  }
   function warmup(){sync(false);}
 
   async function reply(raw){
     const text=clean(raw);if(!text)return {reply:"응?",source:"local"};
     await ensureCachedLearningReady();
+    await ensureLearningReadyForReply();
     const frame=analyze(text);observePreviousTurn(frame);localStyleObservation(text);updateDialogueState(frame);remember("user",text,{intent:frame.act,affect:frame.affect,topic:frame.topic});
+    applyWeatherLocationFollowup(frame);
     const ref=resolveReference(frame);const searchMode=searchPolicy(frame,ref);
-    let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="";
+    let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="",searchAttempted=false;
+
+    // 정보/정의/원리 질문은 로컬 사전보다 실제 검색을 먼저 사용한다.
+    // 검색이 실패했을 때만 아래의 로컬 지식이 안전망으로 동작한다.
+    if(searchMode==="required"&&!ref.ambiguous&&!math(text)&&!dateTime(text)){
+      const q=searchQuery(frame,ref);
+      if(q){
+        searchAttempted=true;
+        try{
+          const d=await MiniTalk.AuthApi.moaSearch({userId:userKey(),text,query:q,context:context().slice(-8)});
+          if(d?.reply){
+            answer=d.reply;source=d.source||"search";candidateId=`search:${d.kind||"general"}`;strategy="search";
+            imageUrl=String(d.image_url||"");imageSearchUrl=String(d.image_search_url||"");sourceUrl=String(d.source_url||"");
+          }
+        }catch(e){console.warn("모아 검색 실패",e);}
+      }
+    }
 
     const manner=mannerQuestion(text)?mannerAdviceText():null;
     const roughReason=roughStyleReasonReply(frame),hanging=hangingConnectiveReply(frame);
     const memQEarly=memoryQuestion(text),memAnswerEarly=memQEarly?memoryAnswer(memQEarly):"";
-    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),featureHelp=moaruFeatureHelpReply(frame),friendCompanion=friendCompanionReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=frame.reaction==="insult"?"":repairConversation(text),decision=practicalDecisionReply(text),expandedDaily=expandedDailyLifeReply(frame),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(roughReason){answer=roughReason;source="local-manner";strategy="direct";}else if(hanging){answer=hanging;source="local-hanging";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(featureHelp){answer=featureHelp;source="local-feature-help";strategy="direct";}else if(friendCompanion){answer=friendCompanion;source="local-companion";strategy="social";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social&&(frame.reaction==="insult"||(frame.reaction==="correction"&&!/^(?:아니|ㄴㄴ|아님|아니야|아닌데|그건아니야)$/.test(frame.c)))){answer=social;source="local";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(expandedDaily){answer=expandedDaily;source="local-everyday-specific";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday-specific";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday-specific";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday-specific";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),threadCoherence=dailyThreadCoherenceReply(frame),featureHelp=moaruFeatureHelpReply(frame),friendCompanion=friendCompanionReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),vagueReason=vagueReasonClarifyReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),commonNoun=commonNounConversationReply(frame),dailyObject=dailyObjectSituationReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=frame.reaction==="insult"?"":repairConversation(text),decision=practicalDecisionReply(text),expandedDaily=expandedDailyLifeReply(frame),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
+    if(answer){/* 검색 선응답 유지 */}else if(manner){answer=manner;source="local-manner";strategy="direct";}else if(roughReason){answer=roughReason;source="local-manner";strategy="direct";}else if(hanging){answer=hanging;source="local-hanging";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(threadCoherence){answer=threadCoherence;source="local-thread";strategy="direct";}else if(featureHelp){answer=featureHelp;source="local-feature-help";strategy="direct";}else if(friendCompanion){answer=friendCompanion;source="local-companion";strategy="social";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(vagueReason){answer=vagueReason;source="local-clarify";strategy="clarify";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social&&(frame.reaction==="insult"||(frame.reaction==="correction"&&!/^(?:아니|ㄴㄴ|아님|아니야|아닌데|그건아니야)$/.test(frame.c)))){answer=social;source="local";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(dailyObject){answer=dailyObject;source="local-everyday-specific";strategy="direct";}else if(expandedDaily){answer=expandedDaily;source="local-everyday-specific";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday-specific";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday-specific";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday-specific";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(commonNoun){answer=commonNoun;source="local-common-noun";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
 
-    if(!answer&&searchMode!=="forbidden"){
+    if(!answer&&!searchAttempted&&searchMode!=="forbidden"){
       if(ref.ambiguous){answer="아까 말한 대상 중에서 어느 걸 말하는 거야?";source="local";strategy="clarify";}
       else {
         const q=searchQuery(frame,ref);
@@ -2817,11 +3136,16 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(!answer&&frame.searchCue&&/(날씨|기온|몇도|온도|습도|비와|비올|눈와|눈올)/.test(frame.c)){
       answer="날씨 정보를 바로 못 가져왔어. 지역을 붙여서 '서울 오늘 날씨'처럼 말해주면 다시 확인할게.";source="local-repair";strategy="direct";
     }
+    if(!answer&&searchMode==="required"&&(frame.knowledgeCue||frame.searchCue)){
+      const failedQuery=searchQuery(frame,ref)||normalizeKnowledgeSubject(text)||frame.topic||"그 내용";
+      answer=`${failedQuery}에 대한 정보를 지금 바로 가져오지 못했어. 검색 연결이 늦거나 결과가 없었던 것 같아. 잠시 뒤 다시 물어보면 다시 확인할게.`;
+      source="local-repair";strategy="direct";candidateId="search:failed";
+    }
 
     if(answer){
       // 기능 안내/유틸리티처럼 사실 정확성이 중요한 응답은 일상 대화 다양화나
       // 학습 예문이 덮어쓰지 못하게 고정한다. 같은 질문을 연속으로 해도 안내 내용이 유지되어야 한다.
-      const factualLocal=/^local-(?:feature-help|utility)$/.test(source);
+      const factualLocal=/^local-(?:feature-help|utility|knowledge)$/.test(source);
       if(!factualLocal){
         answer=diversifyEverydayAnswer(answer,frame,source);
         const learnedChoice=learnedConversationChoice(frame,ref,answer,source,strategy,social);

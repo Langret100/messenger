@@ -269,7 +269,9 @@ MiniTalk.AuthApi = (() => {
       });
     },
     async moaSearch({ userId, text, query = "", context = [] }) {
-      return post({ mode: "moa_search", user_id: userId, text, query, context_json: JSON.stringify(context || []) });
+      // 모아 지식 검색은 대화 흐름을 막지 않도록 짧은 제한시간을 사용한다.
+      // 서버가 늦으면 엔진의 검색 실패 전용 응답으로 즉시 복귀한다.
+      return post({ mode: "moa_search", user_id: userId, text, query, context_json: JSON.stringify(context || []) }, 6500);
     }
     /* MOA_CHAT_INTEGRATION_END */
   };

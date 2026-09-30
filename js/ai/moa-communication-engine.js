@@ -1029,6 +1029,57 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return "";
   }
 
+  // Repair conversational meta-loops without replying with another vague "I'll look again" line.
+  // This layer only activates for explicit agreement/repair utterances and therefore
+  // cannot steal ordinary topic turns from the main dialogue pipeline.
+  function conversationalRepairReply(frame){
+    if(!frame)return "";
+    const c=frame.c;
+    const prior=context().slice(0,-1);
+    const lastAssistant=[...prior].reverse().find(v=>v.role==="assistant");
+    const assistantText=clean(lastAssistant?.text||"");
+    const assistantC=compact(assistantText);
+
+    // "그러니까/그니까" is normally agreement or emphasis, not a request for a new
+    // inference. Keep it social and short so the engine does not invent a new premise.
+    if(/^(?:그러니까|그니까|그러게|내말이)$/.test(c)){
+      return chooseFreshReply(`repair.agree.${c}`,["그치 ㅋㅋ","맞아, 딱 그 말이야.","응 ㅋㅋ 그러니까.","그치. 괜히 말 돌릴 필요 없지 ㅋㅋ"],6);
+    }
+
+    // When the user challenges a phrase the assistant literally just used, explain
+    // that phrase instead of falling into generic clarification text.
+    if(/^(?:뭘|뭐를|뭘또|뭐랑|무엇을)?같이(?:보는데|봐|본다는거야|보라는거야|본다고)$/.test(c) || /뭘같이보/.test(c)){
+      if(/같이(?:보면|보자|볼|봐)/.test(assistantC)){
+        return chooseFreshReply("repair.challenge.together",[
+          "맞아. 내가 방금 '같이 보면'이라고 괜히 말했네. 지금 따로 같이 볼 게 있는 상황은 아니었어.",
+          "그 말이 이상했네. 내가 '같이 보자'는 맥락을 멋대로 붙였어. 네가 말한 내용에 그냥 바로 답했어야 해.",
+          "맞네. 같이 볼 게 따로 있는 것도 아닌데 내가 없는 맥락을 만들었어. 그 표현은 취소할게."
+        ],7);
+      }
+    }
+
+    // A bare correction after an assistant repair must repair the actual failed turn,
+    // not produce another promise to "re-check the flow".
+    if(/^(?:아니|아니야|아닌데|ㄴㄴ|그게아니라|그건아니고)$/.test(c)){
+      const rows=prior;
+      const lastAiIndex=rows.lastIndexOf(lastAssistant);
+      const prevUser=lastAiIndex>0?[...rows.slice(0,lastAiIndex)].reverse().find(v=>v.role==="user"):null;
+      const prevUserText=clean(prevUser?.text||"");
+      const prevUserC=compact(prevUserText);
+      const assistantWasMeta=/(?:잘못알아들|포인트를잘못|앞말기준|앞에서한말|흐름.*다시|다시볼게|다시맞춰|같이보)/.test(assistantC);
+      if(/뭘같이보|뭐를같이보/.test(prevUserC)){
+        return "응, 내가 또 엉뚱하게 받았네. 네가 지적한 건 내가 갑자기 '같이 본다'는 말을 꺼낸 것 자체가 이상하다는 거였어.";
+      }
+      if(assistantWasMeta&&prevUserText){
+        return chooseFreshReply(`repair.no.aftermeta.${prevUserC.slice(0,18)}`,[
+          `응, 내가 또 엉뚱하게 받았네. 네가 방금 '${prevUserText}'라고 한 뜻부터 다시 잡아야 했어.`,
+          `맞아, 또 사과만 하고 내용을 안 고쳤네. '${prevUserText}'라는 말 자체에 답했어야 해.`
+        ],6);
+      }
+    }
+    return "";
+  }
+
   function shortUtteranceReply(raw){
     const text=clean(raw),c=compact(text);
     // 한두 단어짜리 감탄/되묻기는 주제로 승격하지 않는다.
@@ -3137,8 +3188,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const manner=mannerQuestion(text)?mannerAdviceText():null;
     const roughReason=roughStyleReasonReply(frame),hanging=hangingConnectiveReply(frame);
     const memQEarly=memoryQuestion(text),memAnswerEarly=memQEarly?memoryAnswer(memQEarly):"";
-    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),threadCoherence=dailyThreadCoherenceReply(frame),featureHelp=moaruFeatureHelpReply(frame),friendCompanion=friendCompanionReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),vagueReason=vagueReasonClarifyReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),commonNoun=commonNounConversationReply(frame),dailyObject=dailyObjectSituationReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=frame.reaction==="insult"?"":repairConversation(text),decision=practicalDecisionReply(text),expandedDaily=expandedDailyLifeReply(frame),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(answer){/* 검색 선응답 유지 */}else if(manner){answer=manner;source="local-manner";strategy="direct";}else if(roughReason){answer=roughReason;source="local-manner";strategy="direct";}else if(hanging){answer=hanging;source="local-hanging";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(threadCoherence){answer=threadCoherence;source="local-thread";strategy="direct";}else if(featureHelp){answer=featureHelp;source="local-feature-help";strategy="direct";}else if(friendCompanion){answer=friendCompanion;source="local-companion";strategy="social";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(vagueReason){answer=vagueReason;source="local-clarify";strategy="clarify";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social&&(frame.reaction==="insult"||(frame.reaction==="correction"&&!/^(?:아니|ㄴㄴ|아님|아니야|아닌데|그건아니야)$/.test(frame.c)))){answer=social;source="local";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(dailyObject){answer=dailyObject;source="local-everyday-specific";strategy="direct";}else if(expandedDaily){answer=expandedDaily;source="local-everyday-specific";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday-specific";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday-specific";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday-specific";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(commonNoun){answer=commonNoun;source="local-common-noun";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),repairLoop=conversationalRepairReply(frame),threadCoherence=dailyThreadCoherenceReply(frame),featureHelp=moaruFeatureHelpReply(frame),friendCompanion=friendCompanionReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),vagueReason=vagueReasonClarifyReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),commonNoun=commonNounConversationReply(frame),dailyObject=dailyObjectSituationReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=frame.reaction==="insult"?"":repairConversation(text),decision=practicalDecisionReply(text),expandedDaily=expandedDailyLifeReply(frame),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
+    if(answer){/* 검색 선응답 유지 */}else if(manner){answer=manner;source="local-manner";strategy="direct";}else if(roughReason){answer=roughReason;source="local-manner";strategy="direct";}else if(hanging){answer=hanging;source="local-hanging";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(repairLoop){answer=repairLoop;source="local-repair";strategy="direct";}else if(threadCoherence){answer=threadCoherence;source="local-thread";strategy="direct";}else if(featureHelp){answer=featureHelp;source="local-feature-help";strategy="direct";}else if(friendCompanion){answer=friendCompanion;source="local-companion";strategy="social";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(vagueReason){answer=vagueReason;source="local-clarify";strategy="clarify";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social&&(frame.reaction==="insult"||(frame.reaction==="correction"&&!/^(?:아니|ㄴㄴ|아님|아니야|아닌데|그건아니야)$/.test(frame.c)))){answer=social;source="local";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(dailyObject){answer=dailyObject;source="local-everyday-specific";strategy="direct";}else if(expandedDaily){answer=expandedDaily;source="local-everyday-specific";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday-specific";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday-specific";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday-specific";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(commonNoun){answer=commonNoun;source="local-common-noun";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
 

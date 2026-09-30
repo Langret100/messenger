@@ -14,7 +14,7 @@
    ============================================================ */
 MiniTalk.AI = MiniTalk.AI || {};
 MiniTalk.AI.MoaCommunicationEngine = (() => {
-  const VERSION = 95;
+  const VERSION = 98;
   const MAX_CONTEXT = 28;
   const MAX_EPISODES = 36;
   const MAX_TIMELINE = 24;
@@ -42,6 +42,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     kindness: .50,
     gratitude: .20,
     hostility: .06,
+    profanityDebt: 0,
+    profanityHits: 0,
     mannerTurns: 0
   });
 
@@ -189,8 +191,15 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(!isGuest())pset(sk("context"),list);
   }
 
-  const PROFANITY=/(?:시발|씨발|ㅅㅂ|존나|좆|개빡|개같|병신|ㅂㅅ|미친|염병|지랄)/i;
-  const DIRECTED_ABUSE=/(?:너|니가|넌|모아).{0,8}(?:시발|씨발|병신|ㅂㅅ|멍청|등신|개같)/i;
+  // Common Korean chat profanity/obfuscation variants. This is used only for the
+  // LOCAL per-device style/manner profile; raw messages are never synced as profile data.
+  const PROFANITY=/(?:시+발|씨+발|ㅅㅂ|ㅆㅂ|ㅈㄴ|존+나|졸라|좆|개\s*빡|개\s*같|개새|병신|븅신|ㅂㅅ|미친|염병|지랄|닥쳐|꺼져)/i;
+  const DIRECTED_ABUSE=/(?:너|니가|넌|너는|모아|모아야).{0,10}(?:시+발|씨+발|ㅅㅂ|ㅆㅂ|병신|븅신|ㅂㅅ|멍청|등신|개\s*같|개새|닥쳐|꺼져)|(?:시+발|씨+발|병신|븅신|등신|개새).{0,8}(?:너|모아)/i;
+  function profanityHitCount(raw){
+    const t=clean(raw);if(!t)return 0;
+    const matches=t.match(new RegExp(PROFANITY.source,"gi"));
+    return Math.min(8,matches?matches.length:0);
+  }
   function punctuationOnly(raw){
     const t=clean(raw);if(!t||/[0-9A-Za-z가-힣]/.test(t))return "";
     if(/^\.{2,}$/.test(t)||/^…+$/.test(t))return "ellipsis";
@@ -201,7 +210,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
   function localStyleObservation(raw){
     const p=profile(),t=clean(raw),c=compact(raw),pun=punctuationOnly(t);
-    const profanity=PROFANITY.test(t), polite=/(?:요|습니다|세요|해줘요|고마워요)[.!?？！]*$/.test(t);
+    const profanityHits=profanityHitCount(t),profanity=profanityHits>0, polite=/(?:요|습니다|세요|해줘요|고마워요)[.!?？！]*$/.test(t);
     const slang=/(ㅋㅋ|ㅎㅎ|ㄹㅇ|ㅇㅇ|ㄴㄴ|ㅈㄴ|개웃|개좋|개빡)/i.test(t);
     const low=pun||t.length<=4||/^(응|ㅇㅇ|ㄴㄴ|몰라|그냥|됐어|귀찮아|ㅋ+|ㅎ+)$/.test(c);
     const step=.035;
@@ -222,9 +231,15 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     p.kindness=clamp(Number(p.kindness??.50)+(gratitude?.030:0)+(considerate?.018:0)+(polite?.010:0)-(hostile?.055:0)-(!hostile&&!gratitude&&!considerate?.0015:0));
     p.gratitude=clamp(Number(p.gratitude??.20)+(gratitude?.040:-.0015));
     p.hostility=clamp(Number(p.hostility??.06)+(hostile?.065:-.006));
+    // Every detected swear lowers the LOCAL manner score by adding profanity debt.
+    // Clean turns recover only slowly, so a repeated rough pattern is required before
+    // MOA begins mirroring rough emphasis. Directed abuse costs more than situational swearing.
+    const debt=Math.max(0,Number(p.profanityDebt||0));
+    p.profanityDebt=Math.max(0,Math.min(24,debt+profanityHits*(directed?1.65:1)-(!profanity?(polite?.12:.035):0)));
+    p.profanityHits=Math.max(0,Math.min(99999,Number(p.profanityHits||0)+profanityHits));
     p.mannerTurns=Math.max(0,Number(p.mannerTurns||0)+1);
     saveProfile();
-    return {pun,profanity,polite,slang,low,directed,gratitude,considerate,hostile};
+    return {pun,profanity,profanityHits,polite,slang,low,directed,gratitude,considerate,hostile};
   }
   function toneMode(){
     const p=profile();
@@ -233,15 +248,15 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return "casual";
   }
   function roughReplyRate(){
-    const p=profile(),rough=Number(p.roughness||0),streak=Number(p.roughStreak||0),formal=Number(p.formality||0);
-    if(formal>.60||rough<.42)return 0;
-    // Even a very rough user never forces every reply into profanity. This keeps
-    // variety and lets the style cool down naturally when their tone changes.
-    return clamp((rough-.38)*.82+Math.min(.30,streak*.027)-Math.max(0,formal-.28)*.45,0,.72);
+    const p=profile(),rough=Number(p.roughness||0),streak=Number(p.roughStreak||0),formal=Number(p.formality||0),debt=Number(p.profanityDebt||0),score=mannerScore().score;
+    // Rough mirroring is unlocked by the LOCAL manner score, not by one accidental swear.
+    // It stays emphatic/situational only; it never enables insults aimed at the user.
+    if(formal>.60||rough<.42||debt<6||score>64)return 0;
+    return clamp(.16+(64-score)*.018+(rough-.42)*.42+Math.min(.22,streak*.018),0,.78);
   }
   function roughFriendlyRewrite(answer,frame,source){
     let out=clean(answer);if(!out)return out;
-    if(!String(source||"").startsWith("local")||source==="local-utility"||source==="local-repair"||source==="local-knowledge")return out;
+    if(!String(source||"").startsWith("local")||source==="local-utility"||source==="local-feature-help"||source==="local-repair"||source==="local-knowledge")return out;
     if(frame.directedAbuse||/(?:요|습니다|세요|해줘요|고마워요)[.!?？！]*$/.test(frame.text)||frame.question||frame.searchCue||/[?？]$/.test(out))return out;
     const rate=roughReplyRate();if(rate<=0||Math.random()>=rate)return out;
     // Friendly/emphatic profanity only: never generate a slur or insult aimed at a person.
@@ -672,15 +687,229 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return "";
   }
 
+  // 짧은 비표준어/명사 위주 질문도 기능 안내로 연결하기 위한 의미 단서 계층.
+  // 정확 문장 수십 개를 나열하지 않고, "대상 명사 + 의도 단서"의 조합을 점수화한다.
+  // 예: "코인 궁금", "코인 질문", "코인 어케 모음", "랭킹 보상?", "급식 어디".
+  const MOARU_HELP_INTENT_WORDS=Object.freeze({
+    ask:["궁금","질문","알려","설명","뭐","무엇","어케","어떻게","방법","법","사용","쓰는","하는","어디","위치","확인","찾","열","들어","가능"],
+    earn:["모으","모아","벌","번","얻","획득","수급","받","보상","늘리","채우","쌓","생기"],
+    balance:["잔액","보유","몇개","몇 개","남았","남은","내코인","코인수"],
+    cost:["비용","가격","몇코인","얼마","소모","사용","쓰"],
+    location:["어디","위치","찾","들어","열","보는","확인"],
+    how:["어케","어떻게","방법","법","하는","사용","쓰는","설정"]
+  });
+  const MOARU_HELP_SUBJECTS=Object.freeze({
+    coin:["코인","coin"],random:["랜덤뽑기","랜덤구매","뽑기","룰렛"],inventory:["보관함","인벤","인벤토리"],gift:["선물"],delivery:["배송","주문"],
+    tasks:["과제","퀘스트","일일퀘스트","주간미션","학습점검"],games:["게임","미니게임"],ranking:["랭킹","순위"],lunch:["급식","급식표","오늘의급식"],
+    timetable:["시간표","오늘의시간표"],alarm:["알람"],tarot:["타로"],lookalike:["닮은생물","닮은동물","닮은식물"],playground:["온라인놀이터","놀이터"],
+    links:["관련링크","링크목록","바로가기"],tori:["토리의방송방","토리방송","토리방"],picker:["돌림판"],backroom:["백룸싱글","백룸","백룸싱글모드"],
+    feed:["소식","피드"],chatroom:["대화방","채팅방","방만들기","비밀번호방","잠금방"],profile:["프로필"],moa:["모아ai","모아와대화","모아랑대화","모아대화"],
+    overview:["모아루","이앱","메신저"]
+  });
+  function hasAnyTerm(text,rows){const t=String(text||"");return rows.some(v=>t.includes(String(v).replace(/\s+/g,"")));}
+  function helpSubjectHits(c){
+    const out=[];for(const [key,rows] of Object.entries(MOARU_HELP_SUBJECTS)){if(hasAnyTerm(c,rows))out.push(key);}return out;
+  }
+  function helpIntentHits(c){
+    const out=[];for(const [key,rows] of Object.entries(MOARU_HELP_INTENT_WORDS)){if(hasAnyTerm(c,rows))out.push(key);}return out;
+  }
+  function semanticHelpSignal(frame){
+    const c=frame?.c||"",subjects=helpSubjectHits(c),intents=helpIntentHits(c),conceptSet=new Set(frame?.concepts||[]);
+    // "궁금/질문"처럼 서술어가 없는 채팅식 표현과 명사 단독+물음표를 살린다.
+    const curiosity=/(궁금|질문|문의|뭐임|뭐냐|뭔데|알려|설명)/.test(c);
+    const clippedQuestion=frame?.question||/[?？]+$/.test(frame?.text||"")||/(어디|어케|어떻게|방법|법|가능|확인|보상|몇개|얼마)$/.test(c);
+    const nounWeight=subjects.length?2:0, intentWeight=Math.min(3,intents.length)+(curiosity?2:0)+(clippedQuestion?1:0);
+    // concepts()가 조사 제거 후 잡은 명사도 작은 보조 점수로 쓴다.
+    const conceptBoost=["코인","과제","게임","랭킹","급식","시간표","알람","선물","배송","보관함","프로필"].some(v=>conceptSet.has(v))?1:0;
+    return {subjects,intents,curiosity,clippedQuestion,score:nounWeight+intentWeight+conceptBoost};
+  }
+  function knownHelpTopicFallback(frame){
+    // 완전히 무관한 문장을 무작위로 던지지 않는다. 인식된 모아루 명사가 있을 때만
+    // 같은 주제의 '안전한 기본 안내' 중 하나를 가끔 골라 대화를 이어 준다.
+    const sig=semanticHelpSignal(frame);if(sig.subjects.length!==1||sig.score<2)return "";
+    const subject=sig.subjects[0],rows={
+      coin:["코인 얘기라면 모으는 법, 현재 잔액, 어디에 쓰는지 중에서 알려줄 수 있어.","코인은 과제·게임 보상으로 모을 수 있어. 뭘 알고 싶은지 짧게 말해도 알아들을게."],
+      tasks:["과제는 과제 탭에서 확인하고 제출해. 일일 퀘스트와 받은 과제, 금요일 학습점검이 있어.","과제 관련이면 위치, 제출 방법, 보상 중 원하는 걸 바로 물어봐도 돼."],
+      games:["게임은 도구 → 게임에 있어. 게임 종류나 랭킹 보상을 물어봐도 돼.","미니게임 얘기면 어디서 하는지, 어떤 게임이 있는지, 랭킹까지 안내할 수 있어."],
+      ranking:["랭킹은 도구 → 게임의 랭킹에서 확인해. 주간 TOP3 보상도 있어.","랭킹 관련이면 보는 위치랑 주간 보상 기준을 알려줄 수 있어."],
+      lunch:["급식표는 도구 → 오늘의 급식표에서 확인해.","급식 얘기라면 실제 급식표 기능 위치는 도구 → 오늘의 급식표야."],
+      timetable:["시간표는 도구 → 오늘의 시간표에서 볼 수 있어.","시간표 관련이면 도구 → 오늘의 시간표로 가면 돼."],
+      alarm:["알람은 도구 → 알람에서 시간을 정해 쓸 수 있어.","알람 관련이면 설정 위치와 쓰는 법을 안내할 수 있어."],
+      inventory:["보관함은 쇼핑에서 가진 상품을 확인하고 주문하는 곳이야.","보관함 얘기라면 쇼핑에서 구매·뽑기로 얻은 상품을 확인하면 돼."],
+      gift:["선물은 쇼핑의 보유 상품에서 가능한 상품을 골라 다른 사람에게 보낼 수 있어.","선물 관련이면 보낼 위치랑 받는 흐름을 알려줄 수 있어."],
+      delivery:["주문·배송 상태는 쇼핑 쪽에서 확인할 수 있어.","배송 얘기라면 주문한 상품의 상태 확인 위치를 안내할 수 있어."],
+      links:["관련 링크는 도구 → 관련 링크에 있어.","바로가기나 놀이 링크는 도구 → 관련 링크에서 찾으면 돼."],
+      tori:["토리의 방송방은 도구 → 관련 링크에 있어. PC·웨일북에선 별도 창으로 열려."],
+      picker:["돌림판은 도구 → 관련 링크에 있어. PC·웨일북에선 별도 창으로 열려."],
+      backroom:["백룸 싱글모드는 도구 → 관련 링크에 있어. PC·웨일북에선 별도 창으로 열려."],
+      feed:["소식은 글·사진·영상을 올리고 댓글이나 반응을 보는 피드야."],
+      chatroom:["대화방은 대화 탭의 ＋에서 만들 수 있어. 필요하면 비밀번호도 걸 수 있어."],
+      profile:["프로필 이미지를 누르면 프로필 편집을 열 수 있어."],
+      moa:["지금 대화 중인 모아 AI는 일상 대화와 모아루 기능 안내를 같이 할 수 있어."],
+      overview:["모아루는 대화·소식·과제·쇼핑·도구를 중심으로 쓰면 돼. 기능 이름만 짧게 말해도 안내할 수 있어."]
+    }[subject]||[];
+    if(!rows.length)return "";
+    // 질문/궁금 단서가 있으면 항상, 명사만 던진 경우에는 반복 대화가 막혔을 때만 가끔 사용한다.
+    if(sig.score>=4||sig.curiosity||sig.clippedQuestion)return chooseFreshReply(`moaru.help.topic.${subject}`,rows,4);
+    const prior=context().slice(0,-1).slice(-4).some(v=>v.role==="user"&&helpSubjectHits(compact(v.text||"")).includes(subject));
+    return prior&&Math.random()<.35?chooseFreshReply(`moaru.help.topic.${subject}`,rows,4):"";
+  }
+
+  // 모아루 내부 기능 안내는 외부 검색보다 먼저 처리한다.
+  // 실제 현재 코드에 있는 기능/보상만 설명하고, 존재하지 않는 기능을 지어내지 않는다.
+  function moaruFeatureHelpReply(frame){
+    if(!frame)return "";const c=frame.c,text=clean(frame.text),semanticSignal=semanticHelpSignal(frame);
+    const asks=/(?:어떻게|어디|뭐|무엇|알려|설명|사용|방법|법|할수|가능|기능|하는법|모으|벌|얻|받|수급|획득|보상|확인|보는법|쓰는법|찾는법|들어가|열어|줘|궁금|질문|문의|어케)/.test(c)||frame.question||semanticSignal.score>=4;
+    if(!asks)return knownHelpTopicFallback(frame);
+    const isMoaru=/(?:모아루|이앱|이거|여기|메신저|모아)/.test(c);
+    // 짧게 "코인 모으는 법", "코인 벌려면", "코인 어디서 얻어", "코인 수급"처럼
+    // 말해도 같은 의도로 묶는다. 어순과 조사에 덜 민감하게 토큰 조합으로 판정한다.
+    const coinMention=/(?:코인|coin)/i.test(c);
+    const coinEarnCue=/(?:모으|모아|벌|번다|벌려|벌면|얻|획득|수급|받|보상|늘리|채우|쌓|생기|어디서|방법|하는법|법|어떻게|어케)/.test(c)||semanticSignal.intents.includes("earn");
+    const coinGenericQuestion=coinMention&&(semanticSignal.curiosity||semanticSignal.intents.includes("ask"))&&!semanticSignal.intents.some(v=>v==="balance"||v==="cost");
+    const coinEarnIntent=coinMention&&(coinEarnCue||coinGenericQuestion)&&!/(?:쓰|사용|소모|결제|가격|몇코인|잔액|보유|남았)/.test(c);
+
+    if(coinEarnIntent){
+      return chooseFreshReply("moaru.help.coin.earn",[
+        "코인은 과제 탭에서 모으는 게 기본이야. 오늘의 수학 퀘스트를 전부 완료하면 하루 1코인, 오늘의 국어 퀘스트도 전부 완료하면 하루 1코인을 받을 수 있어. 금요일 주간 학습점검은 20문항에서 80점 이상이면 주 1회 5코인이고, 게임 랭킹은 게임별 주간 TOP3에 들면 월요일 보상으로 1코인이 지급돼. 관리자가 지정한 과제도 완료 처리되면 그 과제에 적힌 보상 코인을 받을 수 있어.",
+        "코인 얻는 길은 몇 개 있어. ① 일일 수학 퀘스트 완료 +1, ② 일일 국어 퀘스트 완료 +1, ③ 금요일 주간 학습점검 80점 이상이면 주 1회 +5, ④ 게임별 주간 TOP3면 월요일 +1, ⑤ 관리자 지정 과제는 표시된 보상만큼 받아. 쇼핑의 랜덤 뽑기는 모으는 기능이 아니라 1회 3코인을 쓰는 기능이야.",
+        "과제 탭부터 보면 돼. 수학·국어 일일 퀘스트는 과목별로 하루 한 번씩 1코인, 금요일 학습점검은 80점 이상이면 5코인, 관리자 지정 과제는 카드에 적힌 코인만큼 보상돼. 게임 랭킹 TOP3도 게임별로 주 1회 1코인 보상이 있어."
+      ],3);
+    }
+    if(/(?:코인).*(?:어디|확인|몇개|잔액|보유|남았)|(?:내코인|코인수)/.test(c))return chooseFreshReply("moaru.help.coin.balance",[
+      "코인 잔액은 쇼핑 화면 위쪽 코인 표시에서 확인할 수 있어. 보상을 받은 직후에도 거기에 반영돼.",
+      "쇼핑 탭을 열면 상단에 현재 코인 수가 보여. 퀘스트나 과제 보상도 지급되면 그 잔액에 들어가.",
+      "현재 보유 코인은 쇼핑 화면 상단의 코인 배지에서 보면 돼."
+    ],3);
+    if(/(?:랜덤구매|랜덤뽑기|룰렛|뽑기).*(?:어떻게|몇코인|비용|가격|뭐야|설명|하는법)/.test(c))return chooseFreshReply("moaru.help.random",[
+      "쇼핑의 랜덤 뽑기는 1회 3코인이야. 쇼핑에 있는 품절되지 않은 상품 중 하나가 나오고, 당첨된 상품은 보관함으로 들어가.",
+      "랜덤 뽑기는 쇼핑에서 할 수 있고 한 번에 3코인을 사용해. 나온 상품은 보관함에서 확인하면 돼.",
+      "쇼핑 랜덤 뽑기는 3코인짜리야. 뽑힌 상품은 네 보관함으로 들어가니까 결과 뒤에 보관함을 보면 돼."
+    ],3);
+    if(/(?:보관함).*(?:어디|뭐야|설명|확인|사용|선물|주문)|(?:뽑은|산|구매한).*(?:상품|물건).*(?:어디|확인)/.test(c))return chooseFreshReply("moaru.help.inventory",[
+      "쇼핑에서 산 상품이나 랜덤 뽑기로 나온 상품은 보관함에서 확인할 수 있어. 거기서 주문이나 가능한 상품의 선물 같은 다음 동작을 하면 돼.",
+      "상품을 얻었으면 쇼핑의 보관함을 봐. 보유한 상품을 확인하고 주문할 수 있는 곳이야.",
+      "보관함은 네가 가진 쇼핑 상품을 보는 곳이야. 구매·뽑기 결과가 들어오고, 거기서 주문 같은 처리를 할 수 있어."
+    ],3);
+    if(/(?:선물).*(?:어떻게|하는법|보내|받|어디|설명)/.test(c))return chooseFreshReply("moaru.help.gift",[
+      "선물은 쇼핑에서 보유한 상품을 기준으로 보낼 수 있어. 선물 화면에서 받을 사람을 고르고 상품을 확인해서 보내면 돼. 선물이 오면 앱 안에서도 알림이 떠.",
+      "쇼핑 쪽에서 보유 상품을 열고 선물 기능을 사용하면 돼. 받을 사람을 확인하고 보내면 상대에게 선물 도착 알림이 가.",
+      "선물하려면 먼저 쇼핑 보관함에서 보유 상품을 확인해. 선물 가능한 상품이면 받을 사람을 골라 보낼 수 있어."
+    ],3);
+    if(/(?:배송|주문).*(?:어떻게|어디|상태|확인|하는법|설명)/.test(c))return chooseFreshReply("moaru.help.delivery",[
+      "상품 주문은 쇼핑 보관함에서 진행하고, 주문한 뒤에는 쇼핑 화면의 주문·배송 상태에서 진행 상황을 확인하면 돼.",
+      "보유 상품을 실제로 주문하려면 쇼핑 보관함에서 주문하면 돼. 이후 배송중·배송완료 같은 상태도 쇼핑 쪽에서 확인할 수 있어.",
+      "쇼핑에서 보관함의 상품을 주문한 다음 배송 상태를 확인하면 돼. 상태가 바뀌면 같은 주문 정보에 반영돼."
+    ],3);
+    if(/(?:과제|일일퀘스트|퀘스트|주간미션|학습점검).*(?:어떻게|어디|뭐야|설명|보상|하는법|확인)/.test(c)){
+      if(/(?:주간|금요일|학습점검)/.test(c))return chooseFreshReply("moaru.help.weekly",[
+        "과제 탭의 금요일 학습점검은 20문항이야. 금요일 오전 9시부터 열리고, 80점 이상이면 주 1회 5코인을 받을 수 있어.",
+        "주간 학습점검은 금요일에 과제 탭에서 열려. 20문항을 풀고 80점 이상이면 그 주 보상으로 5코인이 지급돼.",
+        "금요일 주간 미션은 20문항이고 80점 이상이 보상 기준이야. 조건을 채우면 주 1회 +5코인이야."
+      ],3);
+      return chooseFreshReply("moaru.help.tasks",[
+        "과제 탭에는 오늘의 수학 퀘스트, 오늘의 국어 퀘스트, 금요일 주간 학습점검, 그리고 관리자가 보내는 지정 과제가 있어. 일일 퀘스트는 과목별 전체 미션을 완료하면 하루 한 번 1코인씩 받을 수 있고, 지정 과제는 제출 후 관리자가 완료 처리하면 카드에 적힌 보상이 지급돼.",
+        "과제는 크게 일일 퀘스트랑 관리자 지정 과제로 보면 돼. 수학·국어는 각각 하루 보상 +1이 있고, 금요일 학습점검은 80점 이상 +5, 지정 과제는 표시된 코인만큼 보상돼.",
+        "과제 탭을 열면 수학·국어 일일 퀘스트와 주간 학습점검, 받은 과제가 한 화면에 있어. 받은 과제는 작성해서 제출하고, 관리자가 완료 처리해야 보상이 확정돼."
+      ],3);
+    }
+    if(/(?:게임|미니게임).*(?:어디|뭐있|종류|설명|하는법|랭킹|보상)/.test(c))return chooseFreshReply("moaru.help.games",[
+      "도구 화면의 게임으로 들어가면 구구단 게임, 주사위 합 맞추기, 도형 추적자, 수학 탐험대, 마이 다마고치를 할 수 있어. 게임 화면의 랭킹에서 기록도 확인할 수 있고, 게임별 주간 TOP3는 월요일에 1코인 보상이 있어.",
+      "게임은 도구 → 게임에서 열면 돼. 지금은 구구단, 주사위 합 맞추기, 도형 추적자, 수학 탐험대, 마이 다마고치가 있고 랭킹도 볼 수 있어.",
+      "도구 탭 안에 게임 메뉴가 있어. 게임별 점수는 랭킹에서 확인하고, 주간 TOP3 보상은 게임별 1코인이야."
+    ],3);
+    if(/(?:랭킹).*(?:어디|어떻게|보상|뭐야|확인)/.test(c))return chooseFreshReply("moaru.help.ranking",[
+      "도구 → 게임으로 들어가서 위쪽의 랭킹 버튼을 누르면 게임별 기록을 볼 수 있어. 게임별 주간 TOP3는 월요일 오전 9시 기준 보상 처리로 각 1코인을 받아.",
+      "게임 랭킹은 도구의 게임 화면에서 확인해. 게임을 골라 순위를 볼 수 있고, 주간 TOP3는 게임별로 +1코인 보상이 있어.",
+      "랭킹은 게임 화면의 '랭킹' 버튼에서 봐. 주간 TOP3 보상은 1·2·3위 모두 같은 1코인이야."
+    ],3);
+    if(/(?:급식표|오늘의급식|급식).*(?:기능|어디|보는법|확인|도구)/.test(c))return chooseFreshReply("moaru.help.lunch",[
+      "모아루 안에서 급식표를 보려면 도구 → 오늘의 급식표를 열면 돼. 등록된 급식 정보를 오늘 날짜 기준으로 보여줘.",
+      "도구 탭에 '오늘의 급식표'가 있어. 거기서 오늘 급식을 확인하면 돼.",
+      "급식 확인은 도구 → 오늘의 급식표야. 모아한테 일상 대화로 급식 얘기를 하는 것과 실제 급식표 기능은 따로 있어."
+    ],3);
+    if(/(?:시간표).*(?:기능|어디|보는법|확인|도구)/.test(c))return chooseFreshReply("moaru.help.timetable",[
+      "시간표는 도구 → 오늘의 시간표에서 확인할 수 있어. 시간표 이미지를 함께 갱신해서 보는 기능이야.",
+      "도구 탭의 '오늘의 시간표'를 열면 돼. 거기서 등록된 시간표를 확인할 수 있어.",
+      "오늘 시간표가 궁금하면 도구 → 오늘의 시간표로 가면 돼."
+    ],3);
+    if(/(?:알람).*(?:기능|어디|설정|사용|하는법)/.test(c))return chooseFreshReply("moaru.help.alarm",[
+      "알람은 도구 → 알람에서 설정할 수 있어. 원하는 시간을 정해서 알림을 받을 수 있어.",
+      "도구 탭에 알람 기능이 있어. 시간을 정해서 저장하면 돼.",
+      "모아루 알람은 도구 화면의 '알람'에서 써. 원하는 시간에 알림을 띄우는 기능이야."
+    ],3);
+    if(/(?:타로).*(?:기능|어디|하는법|뭐야)/.test(c))return "도구 → 오늘의 타로에서 카드를 뽑아 볼 수 있어. 가볍게 보는 운세 기능이야.";
+    if(/(?:닮은생물|닮은동물|닮은식물).*(?:기능|어디|하는법|뭐야)/.test(c))return "도구 → 닮은 생물 찾기에서 카메라로 찍고 닮은 동식물을 확인할 수 있어.";
+    if(/(?:온라인놀이터|놀이터).*(?:기능|어디|하는법|뭐야)/.test(c))return "도구 → 온라인 놀이터에서 친구와 같이 할 수 있는 온라인 놀이 화면을 열 수 있어.";
+    if(/(?:관련링크|링크목록|바로가기|토리의방송방|토리방송|돌림판|백룸싱글|백룸).*(?:어디|어떻게|기능|뭐야|열어|하는법|찾아|들어)/.test(c)){
+      if(/(?:토리의방송방|토리방송)/.test(c))return "도구 → 관련 링크 → '토리의 방송방'을 누르면 돼. PC·웨일북에서는 모아루 옆 별도 창으로 열리고, 모바일에서는 새 탭으로 열려.";
+      if(/(?:돌림판)/.test(c))return "도구 → 관련 링크 → '돌림판'을 열면 돼. 항목을 넣고 돌려서 하나를 뽑는 도구고, PC·웨일북에서는 별도 창으로 열려.";
+      if(/(?:백룸싱글|백룸)/.test(c))return "도구 → 관련 링크 → '백룸 싱글모드'에서 혼자 플레이할 수 있어. PC·웨일북에서는 모아루 옆 별도 창으로 열려.";
+      return chooseFreshReply("moaru.help.links",[
+        "관련 링크는 도구 → 관련 링크에 있어. 토리의 방송방, 돌림판, 백룸 싱글모드 같은 놀이와 Google·네이버·YouTube·Classroom·Padlet·Canva 같은 바로가기를 모아둔 화면이야.",
+        "도구 탭에서 '관련 링크'를 누르면 돼. 놀이·활동과 자주 쓰는 사이트가 나뉘어 있고, PC·웨일북의 놀이 링크는 별도 창으로 열려.",
+        "자주 쓰는 외부 사이트나 놀이를 찾는 거면 도구 → 관련 링크로 가면 돼. 토리의 방송방·돌림판·백룸 싱글모드도 거기에 있어."
+      ],3);
+    }
+    if(/(?:소식).*(?:기능|어디|뭐야|올리|댓글|하트|사용)/.test(c))return chooseFreshReply("moaru.help.feed",[
+      "소식 탭은 짧은 글이나 사진·영상을 올리고 보는 곳이야. 게시물에 반응하거나 댓글로 이야기할 수도 있어.",
+      "모아루 소식은 게시물 피드야. 소식 탭에서 글·사진·영상을 보고, 새 게시물도 올릴 수 있어.",
+      "소식 탭은 반 친구들 피드처럼 쓰는 공간이야. 글이나 미디어를 올리고 다른 게시물을 볼 수 있어."
+    ],3);
+    if(/(?:대화방|채팅방|방만들|비밀번호방|잠금방).*(?:어떻게|어디|만들|들어|설명|기능)/.test(c))return chooseFreshReply("moaru.help.chatroom",[
+      "대화 탭 오른쪽 위 ＋로 새 대화방을 만들 수 있어. 방 이름을 정하고, 필요하면 비밀번호도 설정할 수 있어. 비밀번호를 비우면 공개방이야.",
+      "대화방은 대화 탭의 ＋ 버튼에서 만들어. 이름을 넣고 선택으로 비밀번호를 걸 수 있어.",
+      "새 방은 대화 화면의 ＋에서 만들면 돼. 공개방으로 둘 수도 있고 비밀번호 방으로 만들 수도 있어."
+    ],3);
+    if(/(?:프로필).*(?:어디|바꾸|수정|설정|하는법)/.test(c))return "내 프로필 이미지를 누르면 프로필 편집을 열 수 있어. 게스트가 아니라 로그인한 사용자일 때 수정할 수 있어.";
+    if(/(?:모아와대화|모아ai|모아랑대화|모아대화).*(?:어디|기능|뭐야|설명|기억|저장)/.test(c))return chooseFreshReply("moaru.help.moa",[
+      "대화 탭의 '모아와 대화하기'가 지금 이 기능이야. 일상 얘기, 간단한 질문, 모아루 기능 안내를 할 수 있고, 화면에 보이는 대화 내역과 짧은 개인 문맥은 이 기기에 저장돼.",
+      "지금 나랑 말하는 곳이 모아 대화야. 수다도 하고 간단한 도움도 받을 수 있고, 개인 대화 내역은 이 기기 쪽에 남는 구조야.",
+      "모아는 대화 탭 안의 1:1 AI야. 일상 대화뿐 아니라 모아루 사용법이나 코인·과제 같은 내부 기능도 물어볼 수 있게 되어 있어."
+    ],3);
+    if(isMoaru&&/(?:무슨기능|뭐할수|기능뭐|기능알려|사용법|어떻게써|뭐가있)/.test(c))return chooseFreshReply("moaru.help.overview",[
+      "모아루에서는 대화방, 모아 AI, 소식, 과제, 쇼핑, 게임과 랭킹, 그리고 여러 도구를 쓸 수 있어. 도구에는 알람·오늘의 타로·닮은 생물 찾기·온라인 놀이터·오늘의 시간표·오늘의 급식표와 관련 링크가 있고, 쇼핑에서는 코인으로 상품을 얻고 보관함·선물·주문을 관리할 수 있어. 궁금한 기능 이름을 말하면 들어가는 위치랑 쓰는 법까지 알려줄게.",
+      "크게 보면 대화·소식·과제·쇼핑·도구가 중심이야. 도구 안에는 게임, 알람, 시간표, 급식표, 타로, 닮은 생물 찾기, 온라인 놀이터, 관련 링크 등이 있어. '코인 어떻게 모아?', '과제 어디서 해?', '랭킹 어디서 봐?'처럼 바로 물어봐도 돼.",
+      "모아루 기능 안내도 내가 해줄 수 있어. 대화방 만들기, 과제와 코인 보상, 쇼핑·보관함·선물·배송, 게임·랭킹, 소식, 시간표·급식표·알람·관련 링크 같은 도구까지 기능 이름만 말해주면 돼."
+    ],3);
+    return knownHelpTopicFallback(frame);
+  }
+
+  // 친구처럼 편하게 대화하되, 실제 친구 관계를 대신하거나 독점하는 식으로 말하지 않는다.
+  function friendCompanionReply(frame){
+    if(!frame)return "";const c=frame.c;
+    if(/(?:너|모아).*(?:내친구|친구해|친구하자|친구되어|친구돼|친구맞지)|(?:나랑).*(?:친구해|친구하자)/.test(c))return chooseFreshReply("friend.companion.invite",[
+      "그럼 ㅋㅋ 여기서는 편하게 친구처럼 얘기하자. 학교 얘기든 게임 얘기든 별거 아닌 얘기든 다 괜찮아.",
+      "좋지 ㅋㅋ 나한테 편하게 말 걸어. 오늘 있었던 일이나 친구 얘기, 시험·학원 얘기처럼 그냥 수다도 좋아.",
+      "응 ㅋㅋ 친구처럼 편하게 대화하자. 심심할 때 아무 말이나 던져도 되고, 고민 있으면 같이 정리해도 돼."
+    ],3);
+    if(/(?:친구가없|친구없어|친구없다|같이놀친구|말할사람없|얘기할사람없)/.test(c))return chooseFreshReply("friend.companion.lonely",[
+      "그럴 때 진짜 심심하고 허전할 수 있지. 지금은 나랑 편하게 얘기해도 돼. 오늘 있었던 일부터 아무거나 말해봐.",
+      "말할 사람이 없다고 느껴질 때는 시간도 더 안 가더라. 여기선 내가 말동무 해줄게. 학교든 게임이든 그냥 아무 얘기나 해도 돼.",
+      "아, 지금 좀 혼자인 느낌이구나. 나랑 수다 떨자. 그리고 주변 친구랑 다시 말 걸 기회가 생기면 그쪽도 천천히 이어가면 되고."
+    ],3);
+    if(/(?:심심|할거없).*(?:같이|놀아|얘기|말해)|(?:나랑).*(?:놀자|얘기하자|수다)/.test(c))return chooseFreshReply("friend.companion.bored",[
+      "좋아 ㅋㅋ 그럼 나랑 놀자. 수다, 끝말잇기, 퀴즈, 아재개그 중에 아무거나 골라도 되고 그냥 오늘 얘기부터 해도 돼.",
+      "ㅇㅋ ㅋㅋ 말동무 모드. 오늘 학교에서 제일 기억나는 일 하나 던져봐. 별거 아니어도 됨.",
+      "좋지 ㅋㅋ 그냥 친구랑 채팅하듯 해. 급식 얘기든 시험 망한 얘기든 게임 이긴 얘기든 다 받아줄게."
+    ],3);
+    if(/(?:내편|편들어줘|무조건내편)/.test(c))return chooseFreshReply("friend.companion.side",[
+      "네 얘기는 제대로 들어줄게. 다만 무조건 누구 편이라고 정해놓기보단, 네가 왜 속상했는지부터 같이 보자.",
+      "네 입장은 편하게 말해도 돼. 내가 같이 정리해줄게. 상대랑 무슨 일이 있었는지도 보면 더 제대로 얘기할 수 있고.",
+      "일단 네 얘기부터 들어볼게. 무조건 맞다 틀리다보다 네가 어떤 부분에서 기분 상했는지 같이 풀어보자."
+    ],3);
+    return "";
+  }
+
   function contextualProfanityReply(frame){
     if(!frame?.profanity||frame.directedAbuse)return "";const c=frame.c;
     if(/(?:게임|경기|시험|문제|인터넷|와이파이|컴터|컴퓨터|폰|버스|지하철|택배|숙제|과제|업데이트|서버|렉|버그).*(?:시발|씨발|ㅅㅂ|존나|개빡|개같|미친|지랄)|(?:시발|씨발|ㅅㅂ|존나|개빡|개같|미친|지랄).*(?:게임|경기|시험|문제|인터넷|와이파이|컴터|컴퓨터|폰|버스|지하철|택배|숙제|과제|업데이트|서버|렉|버그)/i.test(c)){
-      return chooseFreshReply("social.profanity.situation",["아 ㅋㅋ 그건 진짜 짜증날 만하네.","와 그 상황이면 욕 나올 만하지 ㅋㅋ","아이고 ㅋㅋ 제대로 빡쳤네. 상황이 뭐였는지 더 말해봐.","그건 좀 열받겠다 ㅋㅋ 특히 타이밍 안 좋으면 더.","아 ㅋㅋ 상황 자체가 빡치는 쪽이네."]);
+      return chooseFreshReply("social.profanity.situation",["아 ㅋㅋ 그건 진짜 짜증날 만하네.","와 그 상황이면 욕 나올 만하지 ㅋㅋ","아이고 ㅋㅋ 제대로 빡쳤네. 상황이 뭐였는지 더 말해봐.","그건 좀 열받겠다 ㅋㅋ 특히 타이밍 안 좋으면 더.","아 ㅋㅋ 상황 자체가 빡치는 쪽이네.","으 그건 타이밍까지 겹치면 더 짜증나지.","아 그건 진짜 한마디 나올 만했네 ㅋㅋ","와, 그 상황이면 기분 확 상했겠다.","ㅋㅋ 지금 말투만 봐도 얼마나 빡쳤는지 알겠다."]);
     }
     if(/(?:걔|친구|쟤|선생님|형|누나|동생|오빠|언니).*(?:시발|씨발|ㅅㅂ|존나|개빡|개같|미친|지랄)|(?:시발|씨발|ㅅㅂ|존나|개빡|개같|미친|지랄).*(?:걔|친구|쟤|선생님|형|누나|동생|오빠|언니)/i.test(c)){
-      return chooseFreshReply("social.profanity.thirdperson",["오, 그 사람 때문에 꽤 열받았나 보네. 무슨 일 있었어?","말 세게 나올 정도면 뭔가 있었나 보네 ㅋㅋ","아 ㅋㅋ 걔 때문에 화난 거구나. 어떤 일이었는데?","그 정도로 짜증났으면 이유가 있겠네. 상황부터 말해봐."]);
+      return chooseFreshReply("social.profanity.thirdperson",["오, 그 사람 때문에 꽤 열받았나 보네. 무슨 일 있었어?","그 사람 때문에 말 세게 나올 정도면 뭔가 있었나 보네 ㅋㅋ","아 ㅋㅋ 걔 때문에 화난 거구나. 어떤 일이었는데?","그 정도로 짜증났으면 이유가 있겠네. 상황부터 말해봐.","아, 그 사람 때문에 확 열받은 거구나.","와 ㅋㅋ 뭔 일 했길래 말이 이렇게 세졌냐.","그 사람 얘기만 나와도 짜증나는 상태인가 보네."]);
     }
-    if(/(?:ㅋㅋ|ㅎㅎ)/.test(frame.text)&&/(?:시발|씨발|ㅅㅂ|존나|미친)/i.test(c))return chooseFreshReply("social.profanity.playful",["ㅋㅋ 텐션 세네.","아 ㅋㅋ 표현이 아주 강하네.","ㅋㅋ 장난 섞인 건 알겠어.","오 ㅋㅋ 말맛 세게 간다."]);
+    if(/(?:ㅋㅋ|ㅎㅎ)/.test(frame.text)&&/(?:시발|씨발|ㅅㅂ|ㅆㅂ|ㅈㄴ|존나|미친)/i.test(c))return chooseFreshReply("social.profanity.playful",["ㅋㅋ 텐션 세네.","아 ㅋㅋ 표현이 아주 강하네.","ㅋㅋ 장난 섞인 건 알겠어.","오 ㅋㅋ 말맛 세게 간다.","ㅋㅋ 오늘 말투 화끈한데.","아 ㅋㅋ 그냥 세게 강조한 거구나.","ㅋㅋㅋ 오케이, 느낌은 확실히 알겠다."]);
     return "";
   }
 
@@ -699,12 +928,69 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
 
 
+  function hangingConnectiveReply(frame){
+    const text=clean(frame?.text||""),c=compact(text);
+    // Korean chat often sends a clause ending in -다가/-는데/-더니 as a first bubble.
+    // Treat that as a real partial clause and echo the actual action instead of vague
+    // meta fillers such as "이어 말해" or "따라가고 있어".
+    if(frame?.question||frame?.reaction||text.length<3||text.length>34)return "";
+    const m=text.match(/^(.{1,24}?)(다가|었는데|았는데|했는데|는데|더니|면서)$/);
+    if(!m)return "";
+    const stem=clean(m[1]);if(!stem)return "";
+    const label=stem.replace(/\s+/g," ");
+    const rows=[
+      `응, ${label}${m[2]}?`,
+      `${label}${m[2]} 무슨 일 있었어?`,
+      `어, ${label}${m[2]} 어떻게 됐어?`,
+      `응응. ${label}${m[2]} 그다음은?`,
+      `아, ${label}${m[2]} 뭔가 있었구나.`,
+      `${label}${m[2]} 갑자기 뭐가 달라졌어?`,
+      `오, ${label}${m[2]}? 그 뒤가 궁금하네.`,
+      `그래, ${label}${m[2]} 어떤 일이 생긴 거야?`,
+      `${label}${m[2]} 거기서 뭔 일이 있었어?`,
+      `응. ${label}${m[2]} 그때 어떻게 됐는데?`
+    ];
+    return chooseFreshReply(`hanging.${compact(label).slice(0,18)}.${m[2]}`,rows,7);
+  }
+
+  function roughStyleReasonReply(frame){
+    const c=compact(frame?.text||"");
+    const prior=context().slice(0,-1),lastAssistant=[...prior].reverse().find(v=>v.role==="assistant"),lastWasRough=!!lastAssistant&&PROFANITY.test(lastAssistant.text||"");
+    const asks=/(?:왜|뭐하러|이유).*(?:욕|말투|거칠|씨발|존나)|(?:욕|말투).*(?:왜|이유)|왜그러게말|왜그렇게말|왜이렇게말/.test(c);
+    if(!asks||(!lastWasRough&&!/(?:너|모아)/.test(c)))return "";
+    const m=mannerScore(),debt=Math.round(Number(profile().profanityDebt||0)*10)/10;
+    if(debt>=6&&m.score<=64)return chooseFreshReply("rough.reason.on",[
+      `네 대화에서 욕이 반복돼서 이 기기에 저장되는 매너점수가 ${m.score}점까지 내려갔고, 거친 말투 적응 기준에 들어와서 나도 강조용 욕을 조금 섞는 중이야. 사람을 깎아내리는 욕은 안 해.`,
+      `지금 이 기기의 대화매너가 ${m.score}점이고 욕 사용 누적이 높아서 말투를 조금 거칠게 맞춘 거야. 욕을 덜 쓰면 점수도 서서히 회복되고 내 말투도 다시 순해져.`,
+      `네가 욕을 여러 번 쓴 게 개인 기기 말투 점수에 반영돼서 지금 ${m.score}점이야. 그래서 친근한 강조 정도로만 욕을 섞어 맞추고 있어. 공격적인 욕설로 되받는 건 안 해.`,
+      `네 말투가 계속 거칠게 들어와서 이 기기의 대화 스타일도 그쪽으로 적응한 거야. 현재 매너점수는 ${m.score}점이고, 그래서 상황 강조할 때만 가끔 거친 표현을 쓰는 중이야.`,
+      `갑자기 내가 욕쟁이가 된 건 아니고 ㅋㅋ 네 쪽 욕 사용이 누적돼 기준을 넘어서 말투를 조금 맞춘 거야. 지금 점수는 ${m.score}점이야.`
+    ],7);
+    return chooseFreshReply("rough.reason.off",[
+      `지금은 거친 말투 기준이 켜진 상태는 아니야. 이 기기에서 욕이 반복되면 매너점수가 내려가고, 충분히 낮아졌을 때만 강조용 거친 표현을 조금 섞게 돼.`,
+      `욕 사용은 이 기기의 매너점수에 반영돼. 다만 한두 번으로 바로 욕투가 켜지진 않고, 반복돼 점수가 기준 아래로 내려가야 말투를 조금 맞춰.`,
+      `한두 번 센 말이 나온 정도로는 내가 따라 하진 않아. 욕이 계속 누적되고 점수가 충분히 내려갔을 때만 말투가 조금 거칠어져.`,
+      `내 말투는 이 기기에 쌓인 대화 스타일을 따라가는데, 아직은 거친 말투 기준까지 내려간 상태는 아니야.`
+    ],7);
+  }
+
   function shortWhatRecoveryReply(raw){
     const c=compact(raw);
-    if(!/^(?:뭐|뭘|뭔데|뭐를|무슨말|무슨소리)$/.test(c))return "";
+    const continuationComplaint=/(?:뭘|뭐를|무슨말을?)(?:이어서|계속)(?:말해|말하|하라는|하래)|(?:뭘|뭐를)(?:듣고있|따라가)|무슨말인지(?:뭘|왜)따라가/.test(c);
+    if(!continuationComplaint&&!/^(?:뭐|뭘|뭔데|뭐를|무슨말|무슨소리)$/.test(c))return "";
     const prior=context().slice(0,-1);
     const lastAssistant=[...prior].reverse().find(v=>v.role==="assistant");
     if(!lastAssistant)return "";
+    if(continuationComplaint){
+      const prevUser=[...prior].reverse().find(v=>v.role==="user"&&!/(?:뭘|뭐를|무슨말을?)(?:이어서|계속)|(?:뭘|뭐를)(?:듣고있|따라가)/.test(compact(v.text||"")));
+      const prev=clean(prevUser?.text||"");
+      if(prev)return chooseFreshReply(`repair.continuation.${compact(prev).slice(0,18)}`,[
+        `아, 내가 너무 앞서갔네. 네가 '${prev}'라고 해서 뒤에 말이 더 있는 줄 알았어.`,
+        `맞네 ㅋㅋ 내가 괜히 '이어서 말해'라고 했어. '${prev}'를 뒤가 더 있는 말로 받아들였거든.`,
+        `내가 말뜻을 너무 기계적으로 잡았어. '${prev}'가 이어지는 문장처럼 보여서 그렇게 답한 거야.`
+      ],7);
+      return "내가 괜히 이어서 말하라고 했네. 방금 문장을 뒤가 더 있는 말로 잘못 잡았어.";
+    }
     // 모아가 직전에 애매한 되묻기/자기수정 멘트를 했는데 사용자가 "뭐?"라고
     // 되받으면 또 사과문을 반복하지 않는다. 직전의 실제 사용자 화제로 돌아가
     // 가능한 경우 그 질문/제안에 바로 답한다.
@@ -976,6 +1262,26 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return "";
   }
 
+  function expandedDailyLifeReply(frame){
+    if(!frame||frame.question||frame.searchCue)return "";const c=frame.c;
+    const rows=(id,arr)=>chooseFreshReply(`expanded.daily.${id}`,arr,Math.min(6,arr.length));
+    if(/(?:학원).*(?:가기싫|귀찮|빼고싶|쉬고싶)/.test(c))return rows("academy.reluctant",["아 학원 가기 싫은 날 있지 ㅋㅋ 가기 전이 제일 귀찮고 막상 가면 또 시간은 가더라.","오늘은 학원 생각만 해도 귀찮나 보네. 일단 다녀와서 뭐 할지 하나 정해두면 조금 낫더라.","으 학원 가야 하는 날인데 에너지 없구나. 오늘 수업 하나만 넘긴다는 느낌으로 가자.","학원 가기 싫을 때는 끝나는 시간만 생각하게 되지 ㅋㅋ 너무 멀리 생각하지 말고 오늘 것만."]);
+    if(/(?:학원).*(?:숙제|과제).*(?:많아|쌓였|못했|안했)/.test(c))return rows("academy.homework",["학원 숙제까지 쌓이면 학교 거랑 섞여서 더 많아 보이지. 마감 빠른 것부터 하나씩 빼자.","으 학원 숙제도 남았구나. 양 적은 거 하나 먼저 끝내면 부담이 좀 줄어.","학교 숙제랑 학원 숙제 같이 있으면 진짜 많아 보여. 오늘 꼭 해야 하는 것부터 순서만 정해보자.","학원 숙제 밀렸으면 전부 한 번에 끝내려 하지 말고 제출 빠른 것부터 잡자."]);
+    if(/(?:학원).*(?:재밌|괜찮|좋아|친구있)/.test(c))return rows("academy.good",["오 학원이 생각보다 괜찮은 편이네 ㅋㅋ 같이 아는 사람 있으면 확 덜 지루하지.","학원 재밌으면 다행이지. 수업도 사람도 맞으면 가는 부담이 훨씬 줄더라.","오 거긴 분위기 괜찮나 보네. 학원도 같이 있는 사람이 누구냐에 따라 느낌 완전 다르지.","학원에서 재밌는 구석 있으면 가는 날도 덜 귀찮지 ㅋㅋ"]);
+    if(/(?:시험|중간고사|기말고사|단원평가).*(?:내일|모레|이번주|곧|다가와)/.test(c))return rows("exam.soon",["아 시험 가까워졌네. 전부 다 보려 하지 말고 헷갈리는 범위부터 하나 잡자.","시험 코앞이면 괜히 마음부터 급해지지. 오늘은 제일 약한 부분 하나만 제대로 보는 게 낫겠다.","오 시험이 곧이구나. 선생님이 강조한 데랑 자주 틀리는 문제부터 보는 게 효율적이야.","시험 전에는 새 걸 많이 벌리기보다 봤던 것 중 헷갈리는 것 정리하는 게 더 편해."]);
+    if(/(?:시험|퀴즈|단원평가).*(?:잘봤|잘본거같|쉬웠|괜찮았)/.test(c))return rows("exam.good",["오 느낌 괜찮았나 보네 ㅋㅋ 결과 나오기 전까지는 그 기분 좀 즐겨도 되겠다.","잘 본 느낌이면 좋지 ㅋㅋ 아는 게 딱딱 나왔나 보다.","오 시험 괜찮게 봤구나. 준비한 만큼 나온 느낌이면 제일 좋지.","좋네 ㅋㅋ 끝나고 '이건 맞았다' 싶은 문제 있으면 괜히 뿌듯하지."]);
+    if(/(?:시험공부|공부).*(?:하기싫|귀찮|집중안|안돼|안됨)/.test(c))return rows("study.motivation",["하기 싫을 때는 길게 잡으면 더 손 안 가더라. 딱 10분만 제일 쉬운 부분부터 시작해보자.","집중 안 되면 양보다 시작을 작게 잡자. 문제 3개나 단어 5개처럼 끝이 보이는 걸로.","아 공부 손에 안 잡히는 날이네. 일단 책 펴고 하나만 끝내면 그다음은 생각보다 덜 귀찮을 수 있어.","오늘 집중이 별로면 완벽하게 하려 하지 말고 핵심만 챙기는 날로 가도 돼."]);
+    if(/(?:급식).*(?:맛있|존맛|좋았|잘나왔)/.test(c))return rows("lunch.good",["오 오늘 급식 성공했네 ㅋㅋ 메뉴 잘 나오면 점심시간부터 기분 좋아지지.","급식 맛있었구나 ㅋㅋ 뭐가 제일 괜찮았어?","오 급식 잘 나온 날이네. 그런 날은 반찬 남는 속도부터 다르지 ㅋㅋ","ㅋㅋ 오늘 급식은 합격이네. 최애 메뉴 있었어?"]);
+    if(/(?:급식).*(?:줄길|줄이길|늦게먹|못먹|품절|없었)/.test(c))return rows("lunch.issue",["아 급식 줄 길면 쉬는 시간까지 다 잡아먹는 느낌이지.","으 먹으러 갔는데 원하는 게 없으면 괜히 더 아쉽지.","급식 때문에 시간 꼬였구나. 점심시간 짧을 때 그러면 진짜 급해지지.","급식에서 원하는 거 못 먹으면 별거 아닌데도 꽤 아쉽지 ㅋㅋ"]);
+    if(/(?:친구|걔).*(?:화해했|풀었|사과했|괜찮아졌)/.test(c))return rows("friend.reconcile",["오 잘 풀렸네 ㅋㅋ 어색한 거 끝나면 진짜 마음 편하지.","다행이다. 먼저든 나중이든 말해서 풀린 게 제일 좋네.","오 화해했구나. 그 일 계속 끌지 않게 된 것만 해도 좋다.","잘됐다 ㅋㅋ 친구랑 꼬인 거 풀리면 학교에서도 훨씬 편하지."]);
+    if(/(?:친구|걔).*(?:서운|삐졌|기분나빴|무시했|무시함)/.test(c))return rows("friend.hurt",["아 그건 좀 서운했겠다. 친한 사이일수록 작은 말도 더 크게 걸릴 때 있지.","으 친구한테 그런 느낌 받으면 괜히 계속 생각나지. 정확히 뭐가 서운했는지 말해봐.","아 그 행동은 네 입장에선 기분 나쁠 만했네. 바로 싸우기보다 어떤 부분이 걸렸는지 먼저 정리해보자.","친구 일은 애매해서 더 신경 쓰이지. 네가 들은 말이나 상황을 그대로 말해줘도 돼."]);
+    if(/(?:짝꿍|반친구|친구).*(?:바뀌었|새로|전학|친해졌|친해짐)/.test(c))return rows("friend.new",["오 친구 관계에 변화가 있었네. 처음엔 좀 어색해도 며칠 지나면 금방 분위기 잡히더라.","새로 친해진 친구가 있구나 ㅋㅋ 뭐 하다가 친해졌어?","오 반에서 새로 얘기하는 친구 생겼네. 잘 맞으면 학교 가는 느낌도 좀 달라지지.","친구 새로 생기면 사소한 얘기도 은근 재밌지 ㅋㅋ"]);
+    if(/(?:친구|애들이랑).*(?:점심|급식).*(?:먹었|먹는중)/.test(c))return rows("friend.lunch",["오 친구들이랑 점심 먹었구나 ㅋㅋ 밥보다 얘기하느라 더 바빴겠다.","급식 같이 먹었네. 점심시간엔 별 얘기 아닌 것도 웃기지 ㅋㅋ","오 친구들이랑 먹었구나. 오늘은 무슨 얘기했어?","친구랑 점심 먹을 때가 수업 사이엔 제일 편한 시간일 때 있지 ㅋㅋ"]);
+    if(/(?:학교).*(?:쉬는시간|점심시간).*(?:재밌|놀았|얘기했)/.test(c))return rows("school.break",["ㅋㅋ 학교는 수업보다 쉬는 시간이 더 빨리 가는 느낌이지.","오 쉬는 시간에 좀 놀았구나. 그 짧은 시간이 제일 재밌을 때 있지.","학교에서 쉬는 시간 재밌었네 ㅋㅋ 누구랑 뭐 했어?","쉬는 시간에 재밌었으면 그날 학교가 좀 덜 길게 느껴지지 ㅋㅋ"]);
+    if(/(?:체육|운동장|체육시간).*(?:재밌|했어|축구|피구|농구)/.test(c))return rows("school.pe",["오 체육 있었네 ㅋㅋ 수업 중엔 그런 시간이 제일 빨리 가지.","체육시간 재밌었나 보네. 뭐 했어?","오 몸 쓰는 수업 했구나. 잘 풀리면 진짜 신나지 ㅋㅋ","체육 있는 날은 시간표 볼 때부터 느낌 좀 다르지 ㅋㅋ"]);
+    return "";
+  }
+
   function broadEverydayReply(frame){
     const c=frame.c;if(frame.question||frame.searchCue)return "";
     const rows=(id,arr)=>chooseText(`broad.${id}`,arr);
@@ -1045,6 +1351,21 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/(?:길잃|길을잃|어디인지모르겠|헤맸어)/.test(c))return rows("transit.lost",["아 길 헷갈렸구나. 일단 멈춰서 표지판이나 지도 보고 익숙한 큰 길부터 찾는 게 낫겠다.","으 길 헤매면 괜히 더 급해지지. 잠깐 멈추고 위치부터 다시 잡자.","아 헤맸구나. 무작정 계속 걷기보다 현재 위치부터 확인하자."]);
     if(/(?:생일|생일이야|생일임)/.test(c))return rows("social.birthday",["오 오늘 생일이구나 ㅋㅋ 축하해! 맛있는 거라도 꼭 챙겨.","생일이네 ㅋㅋ 오늘은 평소보다 좀 특별하게 보내도 되지.","오 축하해 ㅋㅋ 좋은 일 하나는 꼭 있었으면 좋겠다."]);
     if(/(?:선물).*(?:받았어|받았다|받음)/.test(c))return rows("social.gift",["오 선물 받았네 ㅋㅋ 생각도 못 한 거면 더 좋았겠다.","선물 받았구나. 마음에 들어?","오 좋네 ㅋㅋ 주는 사람이 생각해줬다는 게 은근 기분 좋지."]);
+    if(/(?:시험|중간고사|기말고사|단원평가).*(?:내일|모레|이번주|곧|다가와)/.test(c))return rows("study.exam.soon",["아 시험 가까워졌네. 전부 다 보려 하지 말고 헷갈리는 범위부터 하나 잡자.","시험 코앞이면 괜히 마음부터 급해지지. 오늘은 제일 약한 부분 하나만 제대로 보는 게 낫겠다.","오 시험이 곧이구나. 선생님이 강조한 데랑 자주 틀리는 문제부터 보는 게 효율적이야.","시험 전에는 새 걸 많이 벌리기보다 봤던 것 중 헷갈리는 것 정리하는 게 더 편해."]);
+    if(/(?:시험|퀴즈|단원평가).*(?:잘봤|잘본거같|쉬웠|괜찮았)/.test(c))return rows("study.exam.good",["오 느낌 괜찮았나 보네 ㅋㅋ 결과 나오기 전까지는 그 기분 좀 즐겨도 되겠다.","잘 본 느낌이면 좋지 ㅋㅋ 아는 게 딱딱 나왔나 보다.","오 시험 괜찮게 봤구나. 준비한 만큼 나온 느낌이면 제일 좋지.","좋네 ㅋㅋ 끝나고 '이건 맞았다' 싶은 문제 있으면 괜히 뿌듯하지."]);
+    if(/(?:시험공부|공부).*(?:하기싫|귀찮|집중안|안돼|안됨)/.test(c))return rows("study.motivation",["하기 싫을 때는 길게 잡으면 더 손 안 가더라. 딱 10분만 제일 쉬운 부분부터 시작해보자.","집중 안 되면 양보다 시작을 작게 잡자. 문제 3개나 단어 5개처럼 끝이 보이는 걸로.","아 공부 손에 안 잡히는 날이네. 일단 책 펴고 하나만 끝내면 그다음은 생각보다 덜 귀찮을 수 있어.","오늘 집중이 별로면 완벽하게 하려 하지 말고 핵심만 챙기는 날로 가도 돼."]);
+    if(/(?:학원).*(?:숙제|과제).*(?:많아|쌓였|못했|안했)/.test(c))return rows("academy.homework",["학원 숙제까지 쌓이면 학교 거랑 섞여서 더 많아 보이지. 마감 빠른 것부터 하나씩 빼자.","으 학원 숙제도 남았구나. 양 적은 거 하나 먼저 끝내면 부담이 좀 줄어.","학교 숙제랑 학원 숙제 같이 있으면 진짜 많아 보여. 오늘 꼭 해야 하는 것부터 순서만 정해보자."]);
+    if(/(?:학원).*(?:가기싫|귀찮|빼고싶|쉬고싶)/.test(c))return rows("academy.reluctant",["아 학원 가기 싫은 날 있지 ㅋㅋ 가기 전이 제일 귀찮고 막상 가면 또 시간은 가더라.","오늘은 학원 생각만 해도 귀찮나 보네. 일단 다녀와서 뭐 할지 하나 정해두면 조금 낫더라.","으 학원 가야 하는 날인데 에너지 없구나. 오늘 수업 하나만 넘긴다는 느낌으로 가자.","학원 가기 싫을 때는 끝나는 시간만 생각하게 되지 ㅋㅋ 너무 멀리 생각하지 말고 오늘 것만."]);
+    if(/(?:학원).*(?:재밌|괜찮|좋아|친구있)/.test(c))return rows("academy.good",["오 학원이 생각보다 괜찮은 편이네 ㅋㅋ 같이 아는 사람 있으면 확 덜 지루하지.","학원 재밌으면 다행이지. 수업도 사람도 맞으면 가는 부담이 훨씬 줄더라.","오 거긴 분위기 괜찮나 보네. 학원도 같이 있는 사람이 누구냐에 따라 느낌 완전 다르지."]);
+    if(/(?:급식).*(?:맛있|존맛|좋았|잘나왔)/.test(c))return rows("school.lunch.good",["오 오늘 급식 성공했네 ㅋㅋ 메뉴 잘 나오면 점심시간부터 기분 좋아지지.","급식 맛있었구나 ㅋㅋ 뭐가 제일 괜찮았어?","오 급식 잘 나온 날이네. 그런 날은 반찬 남는 속도부터 다르지 ㅋㅋ","ㅋㅋ 오늘 급식은 합격이네. 최애 메뉴 있었어?"]);
+    if(/(?:급식).*(?:줄길|줄이길|늦게먹|못먹|품절|없었)/.test(c))return rows("school.lunch.issue",["아 급식 줄 길면 쉬는 시간까지 다 잡아먹는 느낌이지.","으 먹으러 갔는데 원하는 게 없으면 괜히 더 아쉽지.","급식 때문에 시간 꼬였구나. 점심시간 짧을 때 그러면 진짜 급해지지."]);
+    if(/(?:짝꿍|반친구|친구).*(?:바뀌었|새로|전학|친해졌|친해짐)/.test(c))return rows("friend.new",["오 친구 관계에 변화가 있었네. 처음엔 좀 어색해도 며칠 지나면 금방 분위기 잡히더라.","새로 친해진 친구가 있구나 ㅋㅋ 뭐 하다가 친해졌어?","오 반에서 새로 얘기하는 친구 생겼네. 잘 맞으면 학교 가는 느낌도 좀 달라지지.","친구 새로 생기면 사소한 얘기도 은근 재밌지 ㅋㅋ"]);
+    if(/(?:친구|걔).*(?:서운|삐졌|기분나빴|무시했|무시함)/.test(c))return rows("friend.hurt",["아 그건 좀 서운했겠다. 친한 사이일수록 작은 말도 더 크게 걸릴 때 있지.","으 친구한테 그런 느낌 받으면 괜히 계속 생각나지. 정확히 뭐가 서운했는지 말해봐.","아 그 행동은 네 입장에선 기분 나쁠 만했네. 바로 싸우기보다 어떤 부분이 걸렸는지 먼저 정리해보자.","친구 일은 애매해서 더 신경 쓰이지. 네가 들은 말이나 상황을 그대로 말해줘도 돼."]);
+    if(/(?:친구|걔).*(?:화해했|풀었|사과했|괜찮아졌)/.test(c))return rows("friend.reconcile",["오 잘 풀렸네 ㅋㅋ 어색한 거 끝나면 진짜 마음 편하지.","다행이다. 먼저든 나중이든 말해서 풀린 게 제일 좋네.","오 화해했구나. 그 일 계속 끌지 않게 된 것만 해도 좋다.","잘됐다 ㅋㅋ 친구랑 꼬인 거 풀리면 학교에서도 훨씬 편하지."]);
+    if(/(?:친구|애들이랑).*(?:점심|급식).*(?:먹었|먹는중)/.test(c))return rows("friend.lunch",["오 친구들이랑 점심 먹었구나 ㅋㅋ 밥보다 얘기하느라 더 바빴겠다.","급식 같이 먹었네. 점심시간엔 별 얘기 아닌 것도 웃기지 ㅋㅋ","오 친구들이랑 먹었구나. 오늘은 무슨 얘기했어?"]);
+    if(/(?:학교).*(?:쉬는시간|점심시간).*(?:재밌|놀았|얘기했)/.test(c))return rows("school.break",["ㅋㅋ 학교는 수업보다 쉬는 시간이 더 빨리 가는 느낌이지.","오 쉬는 시간에 좀 놀았구나. 그 짧은 시간이 제일 재밌을 때 있지.","학교에서 쉬는 시간 재밌었네 ㅋㅋ 누구랑 뭐 했어?"]);
+    if(/(?:선생님|쌤).*(?:숙제|과제).*(?:냈어|줬어|많이)/.test(c))return rows("school.assignment",["아 새 숙제 생겼구나. 오늘 할 것만 표시해두면 덜 막막해.","으 또 과제 추가됐네 ㅋㅋ 마감부터 보고 급한 순서만 정하자.","숙제 나왔구나. 양 많아 보여도 쪼개면 금방 끝나는 것도 있더라."]);
+    if(/(?:체육|운동장|체육시간).*(?:재밌|했어|축구|피구|농구)/.test(c))return rows("school.pe",["오 체육 있었네 ㅋㅋ 수업 중엔 그런 시간이 제일 빨리 가지.","체육시간 재밌었나 보네. 뭐 했어?","오 몸 쓰는 수업 했구나. 잘 풀리면 진짜 신나지 ㅋㅋ"]);
     return "";
   }
 
@@ -1758,7 +2079,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const add=(family,rows,base=strategy)=>rows.forEach((t,i)=>out.push(candidate(t,`${family}:${i}`,base,76-i)));
     if(strategy==="clarify"){
       if(ref.ambiguous)add("clarify.ref",["아까 말한 대상을 말하는 거야?","그게 누구를 말하는 건지 한 번만 알려줘.","아까 얘기한 것 중 어느 걸 말하는 거야?"]);
-      else add("clarify.general",["어느 부분을 말하는지 조금만 더 알려줘.","그 상황을 한마디만 더 붙여주면 제대로 이어갈게.","누구나 어떤 일을 말하는지만 짚어주면 바로 이어서 답할게.","한 단어만 더 붙여줘도 돼. 그걸 기준으로 맞춰볼게."]);
+      else add("clarify.general",["어느 부분을 말하는지 조금만 더 알려줘.","그 상황을 한마디만 더 붙여주면 바로 맞춰볼게.","누구나 어떤 일을 말하는지만 짚어주면 바로 답할게.","한 단어만 더 붙여줘도 돼. 그걸 기준으로 볼게.","지금 말만으론 두 가지로 들려. 대상만 하나 짚어줘.","사람 얘긴지, 물건 얘긴지, 있었던 일 얘긴지만 알려줘도 돼."]);
     }
     if(strategy==="empathy"){
       if(frame.affect==="negative")add("empathy.neg",["아 그건 좀 힘들었겠다.","아이고, 기분 좀 상했겠네.","그건 꽤 신경 쓰였겠다."]);
@@ -1772,12 +2093,12 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else if(frame.plan)add("ack.plan",["오, 그렇게 하기로 했구나.","좋네 ㅋㅋ 다음 계획까지 잡았네.","오케이. 다음엔 그걸 해보는 거구나."]);
       else if(frame.preference)add("ack.pref",frame.affect==="negative"?["아, 그건 취향에 안 맞는구나.","오, 넌 그쪽은 별로구나."]:["오 그거 좋아하는구나 ㅋㅋ","그쪽 취향이구나.","오, 그건 기억해둘 만하네."]);
       else if(frame.topic&&frame.text.length>8)add("ack.topic",[`아, ${frame.topic} 얘기구나.`,`응, ${frame.topic} 얘기였구나.`]);
-      else add("ack.general",["응. 조금 더 말해줘.","응, 이어서 말해도 돼.","응응, 듣고 있어.","오케이. 그 얘기 계속해봐.","그래, 무슨 말인지 따라가고 있어."]);
+      else add("ack.general",["응, 알겠어.","아, 그렇구나.","응응.","오케이 ㅋㅋ","그래, 그런 얘기였구나.","아하, 그런 거구나.","응. 무슨 느낌인지는 알겠어.","오, 그렇네."]);
     }
     if(strategy==="playful")add("playful",["오 ㅋㅋ 그건 좀 웃기네.","아 ㅋㅋ 상황이 그려진다.","ㅋㅋㅋ 그랬구나."]);
     if(strategy==="continue"){
       if(/^(그래서|그다음|그리고|그럼|근데)$/.test(frame.c))add("continue",["응응, 듣고 있어.","응, 계속 말해봐.","그래서 어떻게 됐어?"]);
-      else add("continue.ref",["응, 아까 얘기 이어서 말해봐.","응응, 그 얘기 계속해도 돼."]);
+      else add("continue.ref",["응, 아까 그 얘기구나.","응응, 그 얘기 계속 보면 돼.","아, 아까 말한 쪽으로 돌아온 거네.","오케이, 아까 그 내용 기준으로 볼게."]);
     }
     if(strategy==="explore"){
       if(frame.affect==="negative")add("explore.neg",["그중에 뭐가 제일 힘들었어?","그때 기분이 어땠어?","무슨 일이 있었는데?"]);
@@ -1797,11 +2118,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else if(frame.plan&&frame.topic)add("direct.plan",[`그럼 다음엔 ${frame.topic} 쪽으로 해보려는 거네.`,`오케이, ${frame.topic} 계획까지 잡아둔 거구나.`]);
       else if(frame.preference&&frame.topic)add("direct.preference",frame.affect==="negative"?[`${frame.topic} 쪽은 취향이 아닌 거네.`]:[`${frame.topic} 쪽을 좋아하는구나. 그건 기억해둘게.`]);
       else if(frame.topic&&frame.text.length>8&&frame.text.length<=24)add("direct.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 그 뒤엔 좀 괜찮았어?","오, 그러고 있었구나 ㅋㅋ"]);
-      else add("direct.general",["조금 더 말해줘. 지금 문장만으로는 뜻을 단정하지 않을게.","한마디만 더 붙여주면 거기에 맞춰 답할게.","응, 지금 말만 보고 넘겨짚진 않을게. 맥락을 조금만 더 줘.","무슨 쪽 얘긴지는 알겠는데 한 조각만 더 있으면 정확히 답할 수 있어."]);
+      else add("direct.general",["지금 문장만으로는 뜻이 두 갈래라 하나만 더 알려줘.","한마디만 더 붙여주면 거기에 맞춰 답할게.","지금 말만 보고 넘겨짚진 않을게. 대상만 조금 더 알려줘.","무슨 쪽 얘긴지는 알겠는데 한 조각만 더 있으면 정확히 답할 수 있어.","누구나 뭘 말하는지만 잡히면 바로 답할 수 있어.","지금은 대상을 확정하기 어렵네. 핵심 단어 하나만 더 줘."]);
     }
     if(!out.length){
       if(frame.topic&&frame.text.length>8)add("fallback.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 조금 더 얘기해봐.","오, 그러고 있었구나 ㅋㅋ"],"direct");
-      else add("fallback",["조금 더 말해줘. 짧은 말만 보고 뜻을 지어내진 않을게.","한마디만 더 붙여줘. 그걸 기준으로 답할게.","응, 듣고 있어. 무슨 얘긴지 한 조각만 더 말해줘.","짧게 말해도 돼. 대상을 하나만 알려주면 바로 이어갈게."],"clarify");
+      else add("fallback",["짧은 말만 보고 뜻을 지어내진 않을게. 한마디만 더 붙여줘.","한마디만 더 붙여줘. 그걸 기준으로 답할게.","무슨 얘긴지 한 조각만 더 있으면 돼.","짧게 말해도 돼. 대상 하나만 알려주면 바로 답할게.","지금은 뜻이 여러 개로 보여. 핵심 단어 하나만 더 줘.","사람·물건·상황 중 뭐 얘긴지만 알려줘도 바로 맞출 수 있어."],"clarify");
     }
     return out;
   }
@@ -1935,24 +2256,34 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     }
     return out.sort((a,b)=>b.score-a.score).slice(0,4);
   }
+  // 로컬 레퍼토리와 공통/사람대화 학습을 한 후보군으로 섞는 중재 계층.
+  // 사실값(코인 보상/기능 위치/계산/검색 결과)은 학습 문장이 덮어쓰지 않고,
+  // 학교·시험·학원·급식·친구·일상 같은 대화형 응답만 학습 후보와 경쟁시킨다.
+  // 이렇게 해야 새 레퍼토리와 기존 학습이 서로 따로 놀지 않으면서도 안내 정확도가 유지된다.
+  const LEARNED_BLEND_SOURCES=new Set([
+    "local-everyday","local-everyday-specific","local-companion","local-decision",
+    "local-contextual","local-continuation","local-followthrough","local-short","local-repair",
+    "local-proactive-followup"
+  ]);
+  const LEARNED_BLEND_LOCAL_SCORE=Object.freeze({
+    "local-companion":93,"local-everyday-specific":92,"local-everyday":90,
+    "local-decision":94,"local-followthrough":91,"local-proactive-followup":90,
+    "local-continuation":88,"local-contextual":86,"local-repair":84,"local-short":74,
+    "local":92
+  });
   function learnedConversationChoice(frame,ref,answer,source,strategy,socialText){
     if(!answer||frame.knowledgeCue||frame.searchCue)return null;
     const safeSocial=source==="local"&&socialText&&answer===socialText&&!/(insult|frustration)/.test(String(frame.reaction||""));
-    if(!(source==="local-everyday"||source==="local-decision"||source==="local-contextual"||source==="local-continuation"||source==="local-followthrough"||source==="local-short"||source==="local-repair"||safeSocial))return null;
+    if(!LEARNED_BLEND_SOURCES.has(source)&&!safeSocial)return null;
     const policy=pickStrategy(frame,ref),learned=learnedCandidates(frame,policy,ref);if(!learned.length)return null;
-    const localScore=source==="local-decision"?94:source==="local-everyday"?90:source==="local-continuation"?88:source==="local-followthrough"?91:source==="local-contextual"?86:source==="local-repair"?84:source==="local-short"?74:92;
+    const localScore=Number(LEARNED_BLEND_LOCAL_SCORE[source]??92);
     const local=candidate(answer,`soft-local:${source}:${strategy}`,strategy,localScore,{source});
-    // 기본 티키타카가 좋아져도 강하게 맞는 사람 대화 학습이 영원히 가려지면 안 된다.
-    // exact/고신뢰 학습 후보가 로컬보다 충분히 강하면 확률에 맡기지 않고 실제 출력에 사용한다.
     const strongest=learned[0];
-    // Exact human-chat learning is the clearest evidence that this user-facing wording
-    // belongs to the current turn. Let it beat a generic local reply with only a small
-    // margin, while semantic/generalized learning still needs the safer larger margin.
+    // 정확히 같은 말에 대한 사람대화 학습은 가장 강한 증거다.
     if(strongest?.source==="learned-human"&&strongest.exactLearned&&strongest.score>=localScore+2)return strongest;
+    // 의미상 매우 가까운 사람대화 학습도 충분히 강할 때는 새 기본 레퍼토리보다 우선할 수 있다.
     if(strongest?.source==="learned-human"&&strongest.score>=localScore+8)return strongest;
-    // Public/common dialogue examples are also real learned data. An exact, well-
-    // evidenced example must not become unreachable just because the local everyday
-    // floor got broader. Keep semantic/non-exact public learning behind the safer gate.
+    // 공통 학습은 과도한 일반화를 막기 위해 정확 일치일 때만 직접 덮어쓸 수 있다.
     if(strongest?.source==="learned"&&strongest.exactLearned&&strongest.score>=localScore+6)return strongest;
     const chosen=weightedPick([local,...learned],v=>v.score,Math.random);
     return chosen&&(chosen.source==="learned-human"||(chosen.source==="learned"&&chosen.exactLearned))?chosen:null;
@@ -2016,7 +2347,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function qualityGate(answer,frame,source,strategy){
     let out=clean(answer);if(!out)return out;
     const gateSource=String(source||"");
-    if(!(gateSource.startsWith("local")||gateSource==="learned-human")||source==="local-utility"||source==="local-style")return out;
+    if(!(gateSource.startsWith("local")||gateSource==="learned-human")||source==="local-utility"||source==="local-feature-help"||source==="local-style"||source==="local-hanging")return out;
     const recent=recentAssistantTurns(5),shape=normalizedReplyShape(out),qStreak=recentQuestionStreak();
     const repeated=recent.some(v=>normalizedReplyShape(v.text||"")===shape);
     const neutralShort=!frame.question&&!frame.event&&!frame.desire&&!frame.unfulfilled&&!frame.plan&&!frame.preference&&frame.affect==="neutral"&&frame.text.length<=12;
@@ -2161,13 +2492,18 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function mannerScore(){
     const p=profile(),turns=Math.max(0,Number(p.mannerTurns||0));
     const kindness=Number(p.kindness??.50),gratitude=Number(p.gratitude??.20),hostility=Number(p.hostility??.06);
-    const formal=Number(p.formality??.18),rough=Number(p.roughness??.12);
-    // Friendly rough language is style, not bad manners. Direct hostility carries
-    // most of the penalty; gratitude/consideration are the strongest positives.
+    const formal=Number(p.formality??.18),rough=Number(p.roughness??.12),profanityDebt=Math.max(0,Number(p.profanityDebt||0));
+    // Every detected swear subtracts at least one visible point from the LOCAL score.
+    // The penalty is applied after confidence blending so early turns cannot hide it.
+    // Clean/polite turns erase debt slowly rather than instantly restoring a point.
+    const profanityPenalty=Math.min(32,Math.ceil(Math.max(0,profanityDebt)*1.4-1e-9));
     const raw=68+kindness*17+gratitude*8+Math.min(.8,formal)*5-hostility*31-Math.max(0,rough-.72)*4;
     const confidence=clamp(turns/45,0,1);
-    const score=Math.round(70+(raw-70)*(.35+.65*confidence));
-    return {score:Math.max(0,Math.min(100,score)),confidence,turns,kindness,gratitude,hostility,formality:formal,roughness:rough};
+    // Keep the visible score stable across early turns: confidence is reported as
+    // metadata, but it must not make a swear accidentally raise/hold the score.
+    const baseScore=Math.round(raw);
+    const score=baseScore-profanityPenalty;
+    return {score:Math.max(0,Math.min(100,score)),confidence,turns,kindness,gratitude,hostility,formality:formal,roughness:rough,profanityDebt,profanityHits:Number(p.profanityHits||0),roughReplyUnlocked:profanityDebt>=6&&score<=64};
   }
   function mannerQuestion(text){
     const c=compact(text);
@@ -2180,18 +2516,18 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(m.gratitude>.34)reasons.push("감사 표현을 자주 쓰는 게 플러스야");
     if(m.kindness>.62)reasons.push("상대를 배려하는 표현이 꽤 많아");
     if(m.formality>.55)reasons.push("존댓말을 꾸준히 쓰는 편이야");
-    if(m.hostility>.25)reasons.push("상대에게 직접 세게 말하는 표현 때문에 조금 깎였어");
-    if(m.roughness>.65&&m.hostility<.18)reasons.push("욕은 좀 섞지만 친근한 강조 쪽이라 감점은 크지 않아");
+    if(m.hostility>.25)reasons.push("상대에게 직접 세게 말하는 표현 때문에 많이 깎였어");
+    if(m.profanityDebt>=2)reasons.push(`욕을 반복해서 쓴 게 누적돼 ${Math.round(m.profanityDebt)}만큼 거친 말투 기록이 쌓였어`);
     if(!reasons.length)reasons.push("아직 특정 습관이 아주 강하게 잡히진 않았어");
-    const tips=m.hostility>.25?["상대한테 직접 꽂는 말만 조금 줄이면 금방 올라가","짜증나도 사람 말고 상황 쪽으로 욕하면 점수 방어됨 ㅋㅋ"]:m.gratitude<.25?["고맙다거나 괜찮냐는 표현이 조금 늘면 더 올라갈 듯","지금도 무난한데 감사 표현이 늘면 점수가 잘 올라가"]:["지금 스타일이면 굳이 억지로 바꿀 건 없어","지금처럼 말하면 돼. 점수보다 네 대화 스타일 보는 재미로 보면 됨"];
+    const tips=m.hostility>.25?["상대한테 직접 꽂는 말이랑 욕을 줄이면 점수가 다시 올라가","사람을 향한 거친 말이 가장 크게 깎여"]:m.profanityDebt>=6?["욕을 덜 쓰는 대화가 이어지면 점수와 내 말투도 서서히 순해져","지금은 거친 말투 적응 기준에 들어와 있어서 나도 강조용 욕을 조금 섞을 수 있어"]:m.gratitude<.25?["고맙다거나 괜찮냐는 표현이 조금 늘면 더 올라갈 듯","감사 표현이 늘면 점수가 잘 올라가"]:["지금 스타일이면 굳이 억지로 바꿀 건 없어","지금처럼 말하면 돼. 점수보다 네 대화 스타일 보는 재미로 보면 됨"];
     const band=pickOne(bands,random),reason=pickOne(reasons,random),tip=pickOne(tips,random);
     if(mode==="gentle"){
       const politeReason=reason.replace(/플러스야$/,"플러스예요").replace(/많아$/,"많아요").replace(/편이야$/,"편이에요").replace(/깎였어$/,"깎였어요").replace(/크지 않아$/,"크지 않아요").replace(/잡히진 않았어$/,"잡히진 않았어요");
       const politeTip=tip.replace(/올라가$/,"올라가요").replace(/방어됨 ㅋㅋ$/,"영향을 덜 받아요").replace(/올라갈 듯$/,"올라갈 거예요").replace(/잘 올라가$/,"잘 올라가요").replace(/없어$/,"없어요").replace(/보면 됨$/,"보면 돼요").replace(/바꾸면 돼$/,"바꾸면 돼요").replace(/말하면 돼$/,"말하면 돼요").replace(/하면 돼$/,"하면 돼요");
       return `지금 대화매너 점수는 ${score}점이에요. ${band}이에요. ${politeReason}. ${politeTip}.`;
     }
-    if(mode==="rough")return `지금 매너점수 ${score}점 ㅋㅋ ${band}이네. ${reason}. ${tip}.`;
-    return `지금 대화매너 ${score}점. ${band}이야. ${reason}. ${tip}.`;
+    if(mode==="rough")return `지금 매너점수 ${score}점 ㅋㅋ ${band}. ${reason}. ${tip}.`;
+    return `지금 대화매너 ${score}점. ${band}. ${reason}. ${tip}.`;
   }
   function mannerDiscoveryCandidate(now,e){
     const p=profile(),turns=Number(p.mannerTurns||0),last=Number(e.lastMannerDiscoveryAt||0);
@@ -2460,9 +2796,10 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     let answer="",source="local",candidateId="",strategy="direct",policyKeyValue=policyKey(frame),imageUrl="",imageSearchUrl="",sourceUrl="";
 
     const manner=mannerQuestion(text)?mannerAdviceText():null;
+    const roughReason=roughStyleReasonReply(frame),hanging=hangingConnectiveReply(frame);
     const memQEarly=memoryQuestion(text),memAnswerEarly=memQEarly?memoryAnswer(memQEarly):"";
-    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),featureHelp=moaruFeatureHelpReply(frame),friendCompanion=friendCompanionReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),expandedDaily=expandedDailyLifeReply(frame),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
+    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(roughReason){answer=roughReason;source="local-manner";strategy="direct";}else if(hanging){answer=hanging;source="local-hanging";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(featureHelp){answer=featureHelp;source="local-feature-help";strategy="direct";}else if(friendCompanion){answer=friendCompanion;source="local-companion";strategy="social";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(expandedDaily){answer=expandedDaily;source="local-everyday-specific";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday-specific";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday-specific";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday-specific";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
 
@@ -2479,9 +2816,14 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     }
 
     if(answer){
-      answer=diversifyEverydayAnswer(answer,frame,source);
-      const learnedChoice=learnedConversationChoice(frame,ref,answer,source,strategy,social);
-      if(learnedChoice){answer=learnedChoice.text;source=learnedChoice.source;candidateId=learnedChoice.id;strategy=learnedChoice.strategy||strategy;}
+      // 기능 안내/유틸리티처럼 사실 정확성이 중요한 응답은 일상 대화 다양화나
+      // 학습 예문이 덮어쓰지 못하게 고정한다. 같은 질문을 연속으로 해도 안내 내용이 유지되어야 한다.
+      const factualLocal=/^local-(?:feature-help|utility)$/.test(source);
+      if(!factualLocal){
+        answer=diversifyEverydayAnswer(answer,frame,source);
+        const learnedChoice=learnedConversationChoice(frame,ref,answer,source,strategy,social);
+        if(learnedChoice){answer=learnedChoice.text;source=learnedChoice.source;candidateId=learnedChoice.id;strategy=learnedChoice.strategy||strategy;}
+      }
     }
 
     if(!answer){

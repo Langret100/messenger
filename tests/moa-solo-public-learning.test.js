@@ -4,7 +4,7 @@ const engine=fs.readFileSync('js/ai/moa-communication-engine.js','utf8');
 const gs=fs.readFileSync('docs/apps-script/MOA_AI.gs','utf8');
 const html=fs.readFileSync('index.html','utf8');
 const sw=fs.readFileSync('sw.js','utf8');
-ok(engine.includes('const VERSION = 95'),'v91 engine version missing');
+ok(engine.includes('const VERSION = 99'),'v91 engine version missing');
 ok(engine.includes('feedbackEvidenceKey')&&engine.includes('evidenceKey'),'v91 evidence key missing');
 ok(engine.includes('tier==="solo"')&&engine.includes('tier==="growing"'),'v91 client tier weighting missing');
 ok(html.includes('moa-communication-engine.js?v='),'v91 engine cache bust missing');

@@ -14,7 +14,7 @@
    ============================================================ */
 MiniTalk.AI = MiniTalk.AI || {};
 MiniTalk.AI.MoaCommunicationEngine = (() => {
-  const VERSION = 98;
+  const VERSION = 99;
   const MAX_CONTEXT = 28;
   const MAX_EPISODES = 36;
   const MAX_TIMELINE = 24;
@@ -1041,7 +1041,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
   function everydayContextReply(raw){
     const c=compact(raw);
-    if(/(?:방금|아까)?깼어|잠깼어|막일어났/.test(c))return chooseText("everyday.wakeup.context",["오 이제 깼구나 ㅋㅋ 아직 정신 덜 들었겠다.","방금 깼네. 천천히 정신 차리자.","오 일어났구나. 아직 좀 멍하겠다 ㅋㅋ"]);
+    if(/(?:방금|아까)?깼어|잠깼어|막일어났/.test(c))return chooseText("everyday.wakeup.context",["오 이제 깼구나 ㅋㅋ 아직 정신 덜 들었겠다.","방금 깼네. 천천히 정신 차리자.","오 일어났구나. 아직 좀 멍하겠다 ㅋㅋ","알람 전에 깼으면 괜히 조금 이득 본 느낌이지 ㅋㅋ"]);
     if(/(?:이제|지금).*(?:쉬는중|쉬고있|쉴거)/.test(c))return chooseText("everyday.rest",["오, 이제 좀 쉬는구나. 좋네 ㅋㅋ","드디어 쉬는 시간이네 ㅋㅋ 푹 쉬어.","오케이, 이제 좀 편하게 쉬면 되겠다."]);
     if(/(?:숙제|과제).*(?:끝냈|다했|했어)$/.test(c))return chooseText("everyday.homework",["오, 숙제까지 했네. 이제 좀 편하겠다 ㅋㅋ","숙제 끝냈으면 한결 낫겠다.","오 좋네. 할 일 하나 끝냈구나."]);
     if(/(?:내일|모레|다음주).*(?:시험|발표|경기|약속)/.test(c))return chooseText("everyday.upcoming",["아, 곧 그 일정이 있구나. 신경 좀 쓰이겠다.","오, 그게 곧 있네. 준비할 게 있으면 미리 조금만 챙겨두자.","아, 내일 일정이 있구나. 괜히 신경 쓰일 수 있겠다."]);
@@ -1721,7 +1721,10 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
   function repairConversation(raw){
     const c=compact(raw);
-    if(!/(물었는데|물어봤는데|물었잖아|물어봤잖아|대답해|대답안|말했잖아|뭐가그렇구나|뭘듣고있|뭘듣고|엉뚱|딴소리|한심|답답|왜이래|왜이렇게답|못알아듣|멍청|바보)/.test(c))return "";
+    // 대화 수습은 "답이 이상하다/못 알아듣는다"처럼 실제 응답 품질을 지적할 때만 잡는다.
+    // 단순히 "넌 멍청해/바보야"처럼 모아를 놀리거나 욕한 표현은 socialReactionReply의
+    // insult 경로가 처리해야 하므로 여기서 가로채지 않는다.
+    if(!/(물었는데|물어봤는데|물었잖아|물어봤잖아|대답해|대답안|말했잖아|뭐가그렇구나|뭘듣고있|뭘듣고|엉뚱|딴소리|답답|왜이래|왜이렇게답|못알아듣|못알아먹|말귀|맥락|대답왜|이상하잖)/.test(c))return "";
     let embedded=clean(raw).match(/((?:아침|점심|저녁|야식)?\s*(?:뭐|뭘)\s*먹(?:지|을까|을지))/)?.[1]||"";
     const target=embedded||priorUserPrompt();
     const direct=practicalDecisionReply(target);
@@ -2063,7 +2066,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(frame.reaction==="sad"&&/^짜증/.test(frame.c))return chooseText("social.sad.annoyed",["아, 짜증났구나.","으, 그건 짜증날 만하네.","아이고, 지금 좀 짜증난 상태구나."]);
     if(frame.reaction==="sad"&&/기분안좋/.test(frame.c))return chooseText("social.sad.mood",["아, 오늘 기분이 좀 안 좋구나.","기분이 별로구나. 괜히 더 지치는 날 있지.","아, 마음이 좀 가라앉아 있구나."]);
     if(frame.reaction==="sad"&&/^그냥별로/.test(frame.c))return chooseText("social.sad.meh",["아, 그냥 별로였구나.","응, 딱히 좋진 않았던 거네.","아, 그냥 마음에 안 들었구나."]);
-    if(frame.reaction==="happy"&&/재밌었/.test(frame.c))return chooseText("social.happy.fun",["오, 재밌었구나 ㅋㅋ","오 좋네 ㅋㅋ 제대로 재밌었나 보다.","ㅋㅋ 재밌게 했네."]);
+    if(frame.reaction==="happy"&&/재밌었/.test(frame.c))return chooseText("social.happy.fun",["오, 재밌었구나 ㅋㅋ","오 좋네 ㅋㅋ 제대로 재밌었나 보다.","ㅋㅋ 재밌게 했네.","오 ㅋㅋ 그건 꽤 재밌었겠다."]);
     if(frame.reaction==="happy"&&/(100점|만점)/.test(frame.c))return chooseText("social.happy.score",["와, 만점이면 제대로 잘했네 ㅋㅋ","오 100점! 그건 뿌듯하겠다.","와 잘했다 ㅋㅋ 만점은 인정이지."]);
     if(frame.reaction==="happy"&&/기분좋/.test(frame.c))return chooseText("social.happy.mood",["오, 기분 좋구나 ㅋㅋ 좋네.","좋네 ㅋㅋ 오늘은 기분 괜찮은 날인가 보다.","오 좋다. 그런 날은 그냥 즐기면 되지 ㅋㅋ"]);
     const rows=BASE[frame.reaction]||[];
@@ -2117,11 +2120,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       else if(frame.unfulfilled)add("direct.unfulfilled",["아 아직 못 한 거구나.","오 아직 끝난 건 아니네."]);
       else if(frame.plan&&frame.topic)add("direct.plan",[`그럼 다음엔 ${frame.topic} 쪽으로 해보려는 거네.`,`오케이, ${frame.topic} 계획까지 잡아둔 거구나.`]);
       else if(frame.preference&&frame.topic)add("direct.preference",frame.affect==="negative"?[`${frame.topic} 쪽은 취향이 아닌 거네.`]:[`${frame.topic} 쪽을 좋아하는구나. 그건 기억해둘게.`]);
-      else if(frame.topic&&frame.text.length>8&&frame.text.length<=24)add("direct.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 그 뒤엔 좀 괜찮았어?","오, 그러고 있었구나 ㅋㅋ"]);
+      else if(frame.topic&&frame.text.length>8&&frame.text.length<=24)add("direct.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 그 뒤엔 좀 괜찮았어?","오, 그러고 있었구나 ㅋㅋ","아, 오늘은 그런 일이 있었네."]);
       else add("direct.general",["지금 문장만으로는 뜻이 두 갈래라 하나만 더 알려줘.","한마디만 더 붙여주면 거기에 맞춰 답할게.","지금 말만 보고 넘겨짚진 않을게. 대상만 조금 더 알려줘.","무슨 쪽 얘긴지는 알겠는데 한 조각만 더 있으면 정확히 답할 수 있어.","누구나 뭘 말하는지만 잡히면 바로 답할 수 있어.","지금은 대상을 확정하기 어렵네. 핵심 단어 하나만 더 줘."]);
     }
     if(!out.length){
-      if(frame.topic&&frame.text.length>8)add("fallback.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 조금 더 얘기해봐.","오, 그러고 있었구나 ㅋㅋ"],"direct");
+      if(frame.topic&&frame.text.length>8)add("fallback.topic",["오, 그런 일이 있었구나. 어땠어?","아 그렇구나. 조금 더 얘기해봐.","오, 그러고 있었구나 ㅋㅋ","아, 그런 흐름이었구나."],"direct");
       else add("fallback",["짧은 말만 보고 뜻을 지어내진 않을게. 한마디만 더 붙여줘.","한마디만 더 붙여줘. 그걸 기준으로 답할게.","무슨 얘긴지 한 조각만 더 있으면 돼.","짧게 말해도 돼. 대상 하나만 알려주면 바로 답할게.","지금은 뜻이 여러 개로 보여. 핵심 단어 하나만 더 줘.","사람·물건·상황 중 뭐 얘긴지만 알려줘도 바로 맞출 수 있어."],"clarify");
     }
     return out;
@@ -2331,7 +2334,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function spontaneousAside(answer,frame,source,random=Math.random){
     const src=String(source||"");
     // 사실/계산/검색/수정/부정 감정에는 돌발 멘트를 붙이지 않는다. 생활 잡담에서만 낮은 확률로 사용한다.
-    if(!answer||frame.question||frame.knowledgeCue||frame.affect==="negative"||!(src==="local-everyday"||src==="local-decision"||src==="local"))return answer;
+    if(!answer||frame.question||frame.knowledgeCue||frame.affect==="negative"||!(src==="local-everyday"||src==="local-everyday-specific"||src==="local-decision"||src==="local"))return answer;
     if(Number(random())>=.12)return answer;
     const c=frame.c;let rows=[];
     if(/급식|점심|밥|먹|간식|라면|치킨|피자/.test(c))rows=["급식이나 메뉴는 진짜 한 끼로 기분 갈리긴 해 ㅋㅋ","먹는 얘기 나오면 갑자기 메뉴 고민 시작됨 ㅋㅋ"];
@@ -2367,7 +2370,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(frame.event&&!frame.question&&frame.text.length>=7&&/(?:얘기|쪽)(?:이었구나|였구나|이구나|구나|이었어|였어)[.!]?$/.test(out)){
       if(frame.affect==="positive")out=chooseText("quality.event.positive",["오, 그건 잘됐네 ㅋㅋ","오 좋았겠다. 꽤 기억에 남았겠네.","오, 그건 기분 좋았겠다 ㅋㅋ"]);
       else if(frame.affect==="negative")out=chooseText("quality.event.negative",["아, 그건 좀 아쉬웠겠다.","으, 그건 신경 쓰였겠네.","아 그랬구나. 기분이 좀 별로였겠다."]);
-      else out=chooseText("quality.event.neutral",["아, 그런 일이 있었구나.","오 그렇구나. 상황은 알겠어.","아 그랬구나."]);
+      else out=chooseText("quality.event.neutral",["아, 그런 일이 있었구나.","오 그렇구나. 상황은 알겠어.","아 그랬구나.","응, 무슨 일이었는지는 알겠어."]);
     }
     return out;
   }
@@ -2496,7 +2499,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     // Every detected swear subtracts at least one visible point from the LOCAL score.
     // The penalty is applied after confidence blending so early turns cannot hide it.
     // Clean/polite turns erase debt slowly rather than instantly restoring a point.
-    const profanityPenalty=Math.min(32,Math.ceil(Math.max(0,profanityDebt)*1.4-1e-9));
+    const profanityPenalty=Math.min(16,Math.ceil(Math.max(0,profanityDebt)*1.4-1e-9));
     const raw=68+kindness*17+gratitude*8+Math.min(.8,formal)*5-hostility*31-Math.max(0,rough-.72)*4;
     const confidence=clamp(turns/45,0,1);
     // Keep the visible score stable across early turns: confidence is reported as
@@ -2798,8 +2801,8 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     const manner=mannerQuestion(text)?mannerAdviceText():null;
     const roughReason=roughStyleReasonReply(frame),hanging=hangingConnectiveReply(frame);
     const memQEarly=memoryQuestion(text),memAnswerEarly=memQEarly?memoryAnswer(memQEarly):"";
-    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),featureHelp=moaruFeatureHelpReply(frame),friendCompanion=friendCompanionReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=repairConversation(text),decision=practicalDecisionReply(text),expandedDaily=expandedDailyLifeReply(frame),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(roughReason){answer=roughReason;source="local-manner";strategy="direct";}else if(hanging){answer=hanging;source="local-hanging";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(featureHelp){answer=featureHelp;source="local-feature-help";strategy="direct";}else if(friendCompanion){answer=friendCompanion;source="local-companion";strategy="social";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(expandedDaily){answer=expandedDaily;source="local-everyday-specific";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday-specific";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday-specific";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday-specific";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),featureHelp=moaruFeatureHelpReply(frame),friendCompanion=friendCompanionReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=frame.reaction==="insult"?"":repairConversation(text),decision=practicalDecisionReply(text),expandedDaily=expandedDailyLifeReply(frame),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
+    if(manner){answer=manner;source="local-manner";strategy="direct";}else if(roughReason){answer=roughReason;source="local-manner";strategy="direct";}else if(hanging){answer=hanging;source="local-hanging";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(featureHelp){answer=featureHelp;source="local-feature-help";strategy="direct";}else if(friendCompanion){answer=friendCompanion;source="local-companion";strategy="social";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social&&(frame.reaction==="insult"||(frame.reaction==="correction"&&!/^(?:아니|ㄴㄴ|아님|아니야|아닌데|그건아니야)$/.test(frame.c)))){answer=social;source="local";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(expandedDaily){answer=expandedDaily;source="local-everyday-specific";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday-specific";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday-specific";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday-specific";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
 

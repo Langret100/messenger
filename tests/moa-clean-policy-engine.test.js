@@ -28,6 +28,6 @@ vm.createContext(sandbox);vm.runInContext(engine,sandbox);
  const feedback=(commits.flatMap(x=>x.events||[]));
  ok(feedback.every(x=>['policy_feedback','dialogue_example'].includes(x.type)),'unexpected MOA commit event leaked');ok(feedback.filter(x=>x.type==='policy_feedback').every(x=>!('trigger' in x)&&!('reply' in x)),'policy feedback gained raw dialogue');ok(feedback.filter(x=>x.type==='dialogue_example').every(x=>!('profile' in x)&&!('memory' in x)&&!('userId' in x)),'personal profile leaked into common dialogue learning');
  await e.reply('나는 보드게임 좋아해');r=await e.reply('내가 뭐 좋아한다고 했지?');ok(/보드게임/.test(r.reply),'local explicit memory missing');
- const snap=e.debugSnapshot();ok(snap.version===95&&snap.state.phase,'v89 state/version missing');
+ const snap=e.debugSnapshot();ok(snap.version===99&&snap.state.phase,'v89 state/version missing');
  console.log('MOA_V89_CLEAN_POLICY_ENGINE_OK');
 })().catch(e=>{console.error(e);process.exit(1)});

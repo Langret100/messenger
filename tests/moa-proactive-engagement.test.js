@@ -22,7 +22,7 @@ vm.createContext(sandbox);vm.runInContext(engine,sandbox);
  await e.reply('내일 시험이야');
  const now=Date.now()+2*86400000;
  const p=e.maybeInitiate({now,force:true});ok(p&&p.source==='proactive'&&/시험/.test(p.reply),'dated open-loop proactive follow-up missing');
- let snap=e.debugSnapshot();ok(snap.version===95&&snap.state.openLoops.length>=1&&typeof snap.profile.initiative==='number','v90 engagement state missing');
+ let snap=e.debugSnapshot();ok(snap.version===99&&snap.state.openLoops.length>=1&&typeof snap.profile.initiative==='number','v90 engagement state missing');
  const before=snap.profile.initiative;await e.reply('응 잘 봤어');snap=e.debugSnapshot();ok(snap.profile.initiative>before,'proactive reply did not improve initiative preference');
  const chips=e.starterSuggestions();ok(Array.isArray(chips)&&chips.length>=4&&chips.some(v=>/심심|오늘|하루/.test(v.label)),'social starter suggestions missing');
  e.setInitiativeSettings({enabled:false});ok(e.maybeInitiate({now:now+86400000,force:true})===null,'initiative opt-out ignored');

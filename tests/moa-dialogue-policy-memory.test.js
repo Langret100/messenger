@@ -23,6 +23,6 @@ vm.createContext(sandbox);vm.runInContext(engine,sandbox);
  for(let i=0;i<3;i++){await e.reply('그다음');}
  r=await e.reply('규칙이 어려웠어');ok(!/[?？]$/.test(r.reply),'question pressure failed: '+r.reply);
  await e.reply('맞아');await e.flushCommit();ok(commits.some(c=>c.events.some(x=>x.type==='policy_feedback')),'policy feedback not batched');
- const snap=e.debugSnapshot();ok(snap.version===95&&Array.isArray(snap.state.strategyHistory),'v88 debug/state missing');
+ const snap=e.debugSnapshot();ok(snap.version===99&&Array.isArray(snap.state.strategyHistory),'v88 debug/state missing');
  console.log('MOA_V88_DIALOGUE_POLICY_MEMORY_OK');
 })().catch(e=>{console.error(e);process.exit(1)});

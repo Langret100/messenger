@@ -14,7 +14,7 @@
    ============================================================ */
 MiniTalk.AI = MiniTalk.AI || {};
 MiniTalk.AI.MoaCommunicationEngine = (() => {
-  const VERSION = 101;
+  const VERSION = 99;
   const MAX_CONTEXT = 28;
   const MAX_EPISODES = 36;
   const MAX_TIMELINE = 24;
@@ -384,7 +384,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/^(?:(?:아|와|헐)?(?:ㅋ+|ㅎ+)|하하+|크크+)$/.test(c))return "laughter";
     if(/^(ㅠㅠ+|ㅜㅜ+|흑흑|흐엉)$/.test(c))return "sad";
     if(/^(ㄷㄷ|ㅎㄷㄷ|헉|헐|대박|ㅁㅊ|실화냐|레알)$/.test(c))return "surprise";
-    if(/^(응|웅|ㅇㅇ|맞아|맞음|그치|그렇지|그래|그랭|ㅇㅋ|오케이|좋아|굿|괜찮아|괜찮음|ㄱㅊ|ㅇㅈ|ㄹㅇ|ㄱㄱ)$/.test(c))return "agreement";
+    if(/^(응|웅|ㅇㅇ|맞아|맞음|맞네|그치|그렇지|그래|그랭|ㅇㅋ|오케이|좋아|굿|괜찮아|괜찮음|괜찮네|ㄱㅊ|ㅇㅈ|ㄹㅇ|ㄱㄱ|아하|그렇구나|아그렇구나|그런거였구나|그런거구나|그거맞아|그거맞네|딱맞아|이제알겠어|알겠어|이해됐어|이해했어|오케이이해했어|도움됐어|도움되네|해결됐어)$/.test(c))return "agreement";
     if(/^(ㄴㄴ|노노|아님|아니지|별로|ㅂㄹ)$/.test(c))return "meh";
     if(/^(ㅁㄹ|몰루|모름)$/.test(c))return "confused";
     // "그저 그래/그냥 그래/그럭저럭"은 정보 부족 발화가 아니라
@@ -394,7 +394,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/(멍청|바보|답답|똥멍청|왜이래|헛소리|등신|한심|대답이상|답이상|이상하잖|엉망|왜이렇게답|대답왜|못알아듣|못알아먹)/.test(c))return "insult";
     if(/^(아오+|아휴+|에휴+|으휴+|아이씨+|아씨+)$/.test(c))return "frustration";
     if(/^(아니|아니뭘|아니뭔데|아니뭐)$/.test(c))return "correction";
-    if(/(잘하네|잘했|똑똑|천재|대단|최고)/.test(c))return "praise";
+    if(/(잘하네|잘했|똑똑|천재|대단|최고|설명잘했|설명잘하|답잘했|답괜찮|이번답좋|이해잘되|도움많이됐)/.test(c))return "praise";
     if(/(심심|할거없|노잼)/.test(c))return "bored";
     if(/^(뭐해|뭐함|뭐하고있어|뭐하는중|모아뭐해)$/.test(c))return "whatdoing";
     if(/(배고파|배고픔|배고프다|뭐먹지)/.test(c)&&c.length<18)return "hungry";
@@ -1184,7 +1184,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     // 최근 6턴에서 실제로 등장한 생활 주제 하나를 잡고, 사용자가 '근데/그래도/그래서'처럼
     // 이야기를 이어 붙인 경우에만 사용한다. 주제가 없으면 억지로 추측하지 않는다.
     const domains=[
-        [/(시험|퀴즈|발표|숙제|과제|수행평가|수업|학교|학원|공부|선생님|교실)/,"school"],
+        [/(시험|퀴즈|발표|숙제|과제|수행평가|수업|학교|학원|공부|선생님|교실|과목|수학|국어|사회|과학|영어|체육|미술|음악|실과|청소시간|청소당번)/,"school"],
         [/(축구|농구|야구|배드민턴|게임|롤|발로란트|마크|로블록스|경기|보드게임)/,"game"],
         [/(친구|짝꿍|반친구|애들이랑|걔|단톡|답장|약속)/,"friend"],
         [/(라면|김밥|떡볶이|돈까스|제육|국수|냉면|피자|치킨|햄버거|급식|간식|과자|빵|밥|메뉴|디저트|카페|반찬)/,"food"],
@@ -1376,6 +1376,23 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(/(?:친구|애들이랑).*(?:점심|급식).*(?:먹었|먹는중)/.test(c))return rows("friend.lunch",["오 친구들이랑 점심 먹었구나 ㅋㅋ 밥보다 얘기하느라 더 바빴겠다.","급식 같이 먹었네. 점심시간엔 별 얘기 아닌 것도 웃기지 ㅋㅋ","오 친구들이랑 먹었구나. 오늘은 무슨 얘기했어?","친구랑 점심 먹을 때가 수업 사이엔 제일 편한 시간일 때 있지 ㅋㅋ"]);
     if(/(?:학교).*(?:쉬는시간|점심시간).*(?:재밌|놀았|얘기했)/.test(c))return rows("school.break",["ㅋㅋ 학교는 수업보다 쉬는 시간이 더 빨리 가는 느낌이지.","오 쉬는 시간에 좀 놀았구나. 그 짧은 시간이 제일 재밌을 때 있지.","학교에서 쉬는 시간 재밌었네 ㅋㅋ 누구랑 뭐 했어?","쉬는 시간에 재밌었으면 그날 학교가 좀 덜 길게 느껴지지 ㅋㅋ"]);
     if(/(?:체육|운동장|체육시간).*(?:재밌|했어|축구|피구|농구)/.test(c))return rows("school.pe",["오 체육 있었네 ㅋㅋ 수업 중엔 그런 시간이 제일 빨리 가지.","체육시간 재밌었나 보네. 뭐 했어?","오 몸 쓰는 수업 했구나. 잘 풀리면 진짜 신나지 ㅋㅋ","체육 있는 날은 시간표 볼 때부터 느낌 좀 다르지 ㅋㅋ"]);
+    if(/(?:수학).*(?:어려워|어렵|헷갈|모르겠|막혔|틀렸)/.test(c))return rows("subject.math.hard",["아 수학에서 막혔구나. 어느 문제나 개념에서 막힌 건지 말해주면 같이 볼 수 있어.","수학은 한 군데 헷갈리면 뒤가 같이 꼬일 때 있지. 딱 막힌 부분부터 보자.","으 수학이 오늘 잘 안 풀렸네. 문제 하나만 가져오면 풀이 흐름부터 같이 잡아볼게.","수학은 답보다 어디서 막혔는지 찾는 게 먼저더라. 어떤 단원이야?"]);
+    if(/(?:수학).*(?:재밌|쉬웠|잘풀|다맞|잘했)/.test(c))return rows("subject.math.good",["오 오늘 수학은 잘 풀렸네 ㅋㅋ 딱딱 맞아떨어지면 은근 재밌지.","수학이 잘 풀린 날이네. 그런 날은 문제 더 풀어도 덜 귀찮지 ㅋㅋ","오 자신감 좀 붙었겠다. 막히던 게 풀리면 기분 좋지."]);
+    if(/(?:국어).*(?:글쓰기|독서|읽기|문법|어려워|헷갈|모르겠)/.test(c))return rows("subject.korean",["국어에서 글이나 문장이 헷갈렸구나. 문제나 문장을 그대로 보여주면 같이 정리해볼게.","국어는 보기엔 쉬워 보여도 표현 하나 때문에 애매할 때 있지. 어디가 막혔어?","글쓰기나 읽기 문제면 핵심 문장부터 잡아보자. 필요한 부분 보여줘도 돼."]);
+    if(/(?:사회).*(?:외울|암기|헷갈|어려워|모르겠)/.test(c))return rows("subject.social",["사회는 용어랑 흐름이 같이 나오면 헷갈리지. 단어 하나씩 말고 연결해서 보면 좀 낫더라.","사회에서 뭐가 제일 섞여? 인물, 사건, 경제 같은 범위만 말해줘도 같이 정리해볼게.","사회는 비슷한 말이 많아서 헷갈릴 만해. 지금 배우는 부분부터 짧게 정리해보자."]);
+    if(/(?:과학).*(?:실험|관찰).*(?:했어|재밌|실패|이상했)/.test(c))return rows("subject.science.lab",["오 과학 실험했구나 ㅋㅋ 직접 해보는 날은 수업 느낌이 좀 다르지.","실험했네. 결과가 예상한 대로 나왔어?","과학 실험은 잘되든 실패하든 은근 얘깃거리 생기지 ㅋㅋ 뭐 했어?"]);
+    if(/(?:과학).*(?:어려워|헷갈|모르겠|이해안)/.test(c))return rows("subject.science.hard",["과학 개념이 좀 안 잡혔구나. 지금 배우는 주제만 말해주면 쉬운 말로 풀어볼게.","과학은 그림이나 예시 하나 붙이면 확 쉬워질 때 있어. 어디가 헷갈려?","용어가 어려운 건지 원리가 헷갈리는 건지부터 나눠보자."]);
+    if(/(?:영어).*(?:단어|듣기|문장|문법).*(?:외워|안외워|어려워|헷갈|모르겠)/.test(c))return rows("subject.english",["영어에서 단어나 문장이 안 잡혔구나. 외울 양을 작게 나누면 좀 낫더라.","듣기나 문법은 막히는 이유가 좀 달라. 어느 쪽이야?","영어는 한꺼번에 많이 보면 더 안 들어올 때 있어. 지금 헷갈리는 것 몇 개만 같이 보자."]);
+    if(/(?:미술).*(?:그렸|만들었|망했|잘됐|재밌)/.test(c))return rows("subject.art",["오 미술 했네 ㅋㅋ 결과물이 눈에 보이면 수업 끝나고도 좀 뿌듯하지.","미술 시간에 만든 게 있구나. 생각한 대로 나왔어?","ㅋㅋ 미술은 잘됐을 때랑 망했다고 느낄 때 차이가 크지. 뭐 만들었어?"]);
+    if(/(?:음악).*(?:노래|리코더|악기|연주|불렀|했어)/.test(c))return rows("subject.music",["오 음악 시간 있었네. 직접 부르거나 연주하는 날은 분위기가 확 다르지.","음악에서 뭐 했어? 노래였어, 악기였어?","연주나 노래 했구나 ㅋㅋ 잘 맞으면 은근 재밌지."]);
+    if(/(?:교실|반).*(?:시끄러워|시끄럽|시끄러웠|떠들|정신없)/.test(c))return rows("classroom.noisy",["아 교실이 오늘 엄청 시끄러웠구나. 그런 날은 가만히 있어도 피곤하지.","ㅋㅋ 반 분위기가 완전 들떠 있었나 보네. 수업은 제대로 됐어?","교실이 정신없으면 집중하기 진짜 어렵지. 무슨 일 있었어?"]);
+    if(/(?:교실|반).*(?:조용해|조용했|분위기좋|차분)/.test(c))return rows("classroom.calm",["오 오늘 교실 분위기는 차분했나 보네. 그런 날은 수업도 좀 빨리 가는 느낌이지.","반이 조용했구나. 평소보다 편했겠다.","교실 분위기 괜찮았네. 별일 없는 날이 오히려 편할 때 있지."]);
+    if(/(?:자리|자리바꿈|자리바꿨|자리바꿔|짝).*(?:바뀌었|바꿨|좋아|별로|싫어)/.test(c))return rows("classroom.seat",["오 자리 바뀌었구나. 주변 사람이 달라지면 교실 느낌도 꽤 달라지지.","자리 새로 정해졌네. 위치는 괜찮아?","ㅋㅋ 자리는 창가냐 앞자리냐도 은근 중요하지. 마음에 들어?"]);
+    if(/(?:교실|반).*(?:더워|덥다|추워|춥다|에어컨|히터)/.test(c))return rows("classroom.temp",["아 교실 온도 안 맞으면 수업보다 그게 더 신경 쓰이지 ㅋㅋ","교실 덥거나 추우면 진짜 집중 안 되지. 오늘 꽤 심했나 보네.","에어컨이나 난방 때문에 불편했구나. 자리마다 체감도 달라서 더 애매하지."]);
+    if(/(?:청소|청소시간|청소당번|당번).*(?:귀찮|하기싫|싫어|힘들)/.test(c))return rows("cleaning.reluctant",["ㅋㅋ 청소 시간 귀찮지. 특히 내 구역 넓으면 더 하기 싫고.","아 오늘 청소 당번이구나. 빨리 끝내고 쉬고 싶은 날이지.","청소는 시작 전이 제일 귀찮더라. 맡은 구역만 딱 끝내고 빠지는 게 낫지."]);
+    if(/(?:청소|청소시간).*(?:빗자루|대걸레|걸레|칠판|쓰레기통|분리수거|책상).*(?:했어|담당|맡았|하는중|끝냈)/.test(c))return rows("cleaning.task",["오 오늘 청소 구역 맡았구나. 은근 역할마다 귀찮은 포인트가 다르지 ㅋㅋ","청소하고 있네. 끝나면 교실이 확 달라 보여서 그건 좀 뿌듯하지.","오 맡은 거 하고 있구나. 빨리 끝내고 쉬자 ㅋㅋ"]);
+    if(/(?:(?:청소|분리수거|쓰레기).*(?:같이|친구랑|친구들이랑|애들이랑)|(?:친구랑|친구들이랑|애들이랑).*(?:청소|분리수거|쓰레기)).*(?:했어|하는중|끝냈)/.test(c))return rows("cleaning.together",["친구들이랑 같이 청소했구나 ㅋㅋ 같이 하면 떠들다가도 금방 끝날 때 있지.","오 같이 했네. 역할 잘 나누면 혼자 하는 것보단 훨씬 낫지.","청소도 같이 하면 은근 잡담 시간이 되더라 ㅋㅋ"]);
+    if(/(?:청소|정리).*(?:끝냈|다했|끝남|깨끗해졌|깔끔해졌)/.test(c)&&/(교실|반|학교|칠판|책상|쓰레기)/.test(c))return rows("cleaning.done.school",["오 교실 청소 끝냈네. 딱 끝나고 깨끗해진 거 보면 좀 뿌듯하지 ㅋㅋ","수고했네. 청소 끝나면 이제 진짜 하교할 맛 나지.","오 깔끔해졌겠다. 귀찮아도 끝낸 건 잘했다 ㅋㅋ"]);
     if(/(?:엄마|아빠|부모님|형|누나|언니|오빠|동생).*(?:잔소리|혼냈|뭐라해|화냈|싸웠)/.test(c))return rows("family.conflict",["아 가족한테 그런 말 들으면 집에서도 괜히 기분 가라앉지.","으 집에서 한소리 들었구나. 지금은 좀 풀렸어?","가족이랑 꼬이면 피할 데도 없어서 더 답답하지. 무슨 일 때문이었어?","아 그건 좀 찝찝하겠다. 바로 다시 부딪치기보다 조금 식히는 것도 괜찮아."]);
     if(/(?:엄마|아빠|부모님|형|누나|언니|오빠|동생).*(?:웃겼|재밌|같이먹|같이봤|같이놀)/.test(c))return rows("family.good",["ㅋㅋ 가족이랑 그런 시간 있었구나. 별거 아닌데 은근 기억에 남지.","오 집 분위기 괜찮았네 ㅋㅋ 같이 있으면 사소한 것도 웃길 때 있지.","좋네 ㅋㅋ 가족이랑 편하게 보낸 시간이었구나."]);
     if(/(?:폰|핸드폰|휴대폰).*(?:깨졌|떨어뜨렸|액정|고장|먹통)/.test(c))return rows("phone.broken",["아 폰 문제 생기면 바로 불편하지. 화면이랑 터치는 아직 돼?","으 떨어뜨렸구나. 겉만 깨진 건지 작동도 이상한지 먼저 봐야겠다.","폰 먹통이면 진짜 답답하지. 일단 충전이랑 재부팅부터 확인해보자."]);
@@ -2416,7 +2433,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(direct[t])return direct[t];t=t.replace(/(?:에게|한테|에서|으로|이랑|랑|하고|부터|까지|보다|처럼|은|는|이|가|을|를|에|도|만|의)$/g,"");return t;
   }
   function semanticTokens(text){const stop=new Set(["나는","난","내가","너","넌","니가","오늘","진짜","그냥","근데","그래서","그리고","이거","그거","저거","뭐","왜","어떻게","좀","너무","완전"]),seen=new Set(),out=[];clean(text).replace(/\[[^\]]+\]/g," ").replace(/[^0-9A-Za-z가-힣ㅋㅎㅜㅠ ]/g," ").split(/\s+/).forEach(x=>{const t=semanticLemma(x);if(t.length<2||stop.has(t)||seen.has(t))return;seen.add(t);out.push(t)});return out.slice(0,12)}
-  function semanticCategories(tokens,text=""){const s=` ${tokens.join(" ")} ${clean(text).toLowerCase()}`,out=[];const defs={fruit:/사과|복숭아|딸기|포도|수박|참외|바나나|귤|오렌지|과일/,food:/치킨|피자|떡볶이|라면|김밥|햄버거|밥|급식|과자|빵|간식|메뉴|음식|배고프|먹다|먹을|먹고|마시다|맛있다/,school:/학교|학원|수업|숙제|시험|공부|선생|급식/,game:/게임|플레이|랭크|승리|패배|이기다|지다|캐릭터/,friend:/친구|친구들|반친구|짝꿍/,travel:/버스|지하철|택시|기차|정류장|역|귀가|오다|가다/,emotion:/피곤하다|지치다|졸리다|기쁘|속상|짜증|화나|신나|재미있다|웃기다/,preference:/좋아하다|싫어하다|취향|선호/};Object.entries(defs).forEach(([k,re])=>{if(re.test(s))out.push(k)});return out}
+  function semanticCategories(tokens,text=""){const s=` ${tokens.join(" ")} ${clean(text).toLowerCase()}`,out=[];const defs={fruit:/사과|복숭아|딸기|포도|수박|참외|바나나|귤|오렌지|과일/,food:/치킨|피자|떡볶이|라면|김밥|햄버거|밥|급식|과자|빵|간식|메뉴|음식|배고프|먹다|먹을|먹고|마시다|맛있다/,school:/학교|학원|수업|숙제|시험|공부|선생|급식|교실|과목|수학|국어|사회|과학|영어|체육|미술|음악|실과|청소시간|청소당번/,game:/게임|플레이|랭크|승리|패배|이기다|지다|캐릭터/,friend:/친구|친구들|반친구|짝꿍/,travel:/버스|지하철|택시|기차|정류장|역|귀가|오다|가다/,emotion:/피곤하다|지치다|졸리다|기쁘|속상|짜증|화나|신나|재미있다|웃기다/,preference:/좋아하다|싫어하다|취향|선호/};Object.entries(defs).forEach(([k,re])=>{if(re.test(s))out.push(k)});return out}
   function semanticIntent(frame){const ts=semanticTokens(frame.text),joined=ts.join(" ");if(/좋아하다|싫어하다|취향|선호/.test(joined)&&frame.question)return "ask:preference";if(frame.question)return "ask:question";if(/좋아하다|싫어하다|취향|선호/.test(joined))return "inform:preference";if(frame.affect!=="neutral")return "inform:emotion";return frame.speechAct||frame.act||"inform:statement"}
   function learnedSemanticKey(p){const sem=p?.semantic||{},tokens=(Array.isArray(sem.tokens)&&sem.tokens.length?sem.tokens:semanticTokens(p?.trigger||"")).slice(0,8),replyTokens=semanticTokens(p?.reply||"").slice(0,8),intent=String(sem.intent||p?.act||""),strategy=String(p?.strategy||"direct");return [intent,tokens.join("|"),replyTokens.join("|"),strategy].join("\u001f")}
   function mergeLearnedPatterns(base,delta){const byId=new Map(),bySemantic=new Map(),rank={confirmed:3,growing:2,solo:1,observing:0};const put=p=>{if(!p||!p.id)return;const old=byId.get(p.id),chosen=!old||((rank[p.tier]||0)>(rank[old.tier]||0))||Number(p.evidenceCount||0)>=Number(old.evidenceCount||0)?p:old;byId.set(p.id,chosen)};(base||[]).forEach(put);(delta||[]).forEach(put);const out=[];[...byId.values()].forEach(p=>{const skey=learnedSemanticKey(p),old=bySemantic.get(skey);if(!old){bySemantic.set(skey,p);return}const better=((rank[p.tier]||0)>(rank[old.tier]||0))||((rank[p.tier]||0)===(rank[old.tier]||0)&&Number(p.evidenceCount||0)>Number(old.evidenceCount||0));if(better)bySemantic.set(skey,p)});bySemantic.forEach(p=>out.push(p));out.sort((a,b)=>(rank[b.tier]||0)-(rank[a.tier]||0)||Number(b.evidenceCount||0)-Number(a.evidenceCount||0));return out.slice(0,1400)}

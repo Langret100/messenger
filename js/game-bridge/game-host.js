@@ -117,13 +117,45 @@ MiniTalk.GameHost=(()=>{
     playBgm(game.bgm);
   }
 
+  function normalizeExternalUrl(value){
+    const raw=String(value||"" ).trim();
+    if(!raw)return "";
+    const candidate=/^https?:\/\//i.test(raw)?raw:`https://${raw.replace(/^\/+/,"")}`;
+    try{return new URL(candidate).href}catch{return ""}
+  }
+
+  function externalUrlStorageKey(game){
+    return `moaru.externalGameUrl.${String(game?.id||game?.rankingName||"external")}`;
+  }
+
+  function resolveExternalUrl(game){
+    const storageKey=externalUrlStorageKey(game);
+    const saved=normalizeExternalUrl(localStorage.getItem(storageKey));
+    if(saved)return saved;
+    const configured=normalizeExternalUrl(game?.url);
+    if(configured)return configured;
+    const label=String(game?.title||"외부 게임");
+    const input=window.prompt(`${label} 주소를 입력하세요.\n예) https://example.github.io/MY_TAMAGOTCHI/`,"");
+    const resolved=normalizeExternalUrl(input);
+    if(resolved){
+      try{localStorage.setItem(storageKey,resolved)}catch{}
+      return resolved;
+    }
+    return "";
+  }
+
   function openExternal(game){
+    const url=resolveExternalUrl(game);
+    if(!url){
+      MiniTalk.UI.Shell.toast(`${game?.title||"외부 게임"} 주소가 설정되지 않았습니다.`);
+      return false;
+    }
     let popup=null;
     try{
-      popup=window.open(game.url,"MoaruMathPet",mobileGameMode()?"":popupFeatures());
+      popup=window.open(url,"MoaruTamagotchi",mobileGameMode()?"":popupFeatures());
     }catch{}
     if(!popup)return false;
-    gamePopup=popup;popupClosing=false;currentGame=game;frame=null;titleNode=null;
+    gamePopup=popup;popupClosing=false;currentGame={...game,url};frame=null;titleNode=null;
     attachMessageWindow(window);
     if(!mobileGameMode())enforcePopupBounds(popup);
     try{popup.focus()}catch{}
@@ -131,12 +163,13 @@ MiniTalk.GameHost=(()=>{
   }
 
   function open(game){
-    if(!game?.url)throw new Error("게임 주소가 없습니다.");
+    if(!game)throw new Error("게임 정보가 없습니다.");
     if(gamePopup&&!gamePopup.closed){try{gamePopup.focus()}catch{}return}
     if(game.external){
-      if(!openExternal(game))MiniTalk.UI.Shell.toast("게임 창을 열지 못했습니다. 팝업 허용 상태를 확인해 주세요.");
+      openExternal(game);
       return;
     }
+    if(!game.url)throw new Error("게임 주소가 없습니다.");
     if(!mobileGameMode()&&openDesktop(game))return;
     openInline(game);
   }

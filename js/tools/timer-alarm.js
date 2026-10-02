@@ -187,11 +187,14 @@ MiniTalk.Tools.TimerAlarm = (() => {
     const name = D.el("input", { id: "alarmName", value: "알람", maxlength: "30" });
     const state = D.el("p", { id: "alarmState", class: "tool-modal-state muted" });
     const quick = D.el("div", { class: "button-row" }, [10, 30, 60].map(min => D.el("button", {
-      class: "button secondary", type: "button", text: min === 60 ? "1시간 뒤" : `${min}분 뒤`, onclick: () => setRelativeAlarm(min, name.value.trim() || "알람")
+      class: "button secondary", type: "button", text: min === 60 ? "1시간 뒤" : `${min}분 뒤`, onclick: () => {
+        setRelativeAlarm(min, name.value.trim() || "알람");
+        MiniTalk.UI.Shell.closeModal();
+      }
     })));
     const test = D.el("button", { class: "button secondary", type: "button", text: "🔊 알람 소리 테스트", onclick: async () => {
-      const ok = await MiniTalk.Tools.Notifications?.testSound?.();
-      MiniTalk.UI.Shell.toast(ok ? "알람 소리가 재생되었습니다." : "소리를 재생하지 못했습니다. 화면을 한 번 누른 뒤 다시 테스트해 주세요.");
+      const ok = await MiniTalk.Tools.Notifications?.playAlarmDefault?.();
+      MiniTalk.UI.Shell.toast(ok ? "기본 알람음이 재생되었습니다." : "소리를 재생하지 못했습니다. 화면을 한 번 누른 뒤 다시 테스트해 주세요.");
     } });
     body.append(
       quick,
@@ -201,7 +204,10 @@ MiniTalk.Tools.TimerAlarm = (() => {
       D.el("div", { class: "button-row" }, [
         D.el("button", { class: "button secondary", type: "button", text: "해제", onclick: () => clearAlarm() }),
         D.el("button", { class: "button primary", type: "button", text: "이 시간으로 설정", onclick: () => {
-          try { setAlarm(time.value, name.value.trim() || "알람"); }
+          try {
+            setAlarm(time.value, name.value.trim() || "알람");
+            MiniTalk.UI.Shell.closeModal();
+          }
           catch (error) { MiniTalk.UI.Shell.toast(error.message); }
         } })
       ])

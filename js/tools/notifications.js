@@ -8,6 +8,7 @@ MiniTalk.Tools.Notifications = (() => {
   const STORAGE_KEY = "chat.notificationMode";
   const MODES = new Set(["sound", "vibrate", "mute"]);
   let sharedNotifyAudio = null;
+  let sharedAlarmAudio = null;
   let audioPrimed = false;
   let audioContext = null;
   let alarmTimer = null;
@@ -42,6 +43,16 @@ MiniTalk.Tools.Notifications = (() => {
     return sharedNotifyAudio;
   }
 
+
+  function alarmAudio() {
+    if (!sharedAlarmAudio) {
+      sharedAlarmAudio = new Audio("assets/sounds/alarm-default.wav");
+      sharedAlarmAudio.preload = "auto";
+      sharedAlarmAudio.playsInline = true;
+    }
+    return sharedAlarmAudio;
+  }
+
   function ensureAudioContext() {
     try {
       if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -72,25 +83,29 @@ MiniTalk.Tools.Notifications = (() => {
     } catch { return false; }
   }
 
-  function primeAudio() {
-    if (mode() !== "sound") return;
-    ensureAudioContext();
-    if (audioPrimed) return;
+  function primeOneAudio(audio) {
     try {
-      const audio = notifyAudio();
       const volume = audio.volume;
       audio.volume = 0;
       audio.currentTime = 0;
       const pending = audio.play();
-      if (pending?.then) {
-        pending.then(() => {
-          audio.pause();
-          audio.currentTime = 0;
-          audio.volume = volume;
-          audioPrimed = true;
-        }).catch(() => { audio.volume = volume; });
-      }
-    } catch {}
+      if (pending?.then) return pending.then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = volume;
+        return true;
+      }).catch(() => { audio.volume = volume; return false; });
+      return Promise.resolve(true);
+    } catch { return Promise.resolve(false); }
+  }
+
+  function primeAudio() {
+    if (mode() !== "sound") return;
+    ensureAudioContext();
+    if (audioPrimed) return;
+    Promise.all([primeOneAudio(notifyAudio()), primeOneAudio(alarmAudio())]).then(results => {
+      audioPrimed = results.some(Boolean);
+    }).catch(() => {});
   }
 
   ["pointerdown", "keydown", "touchstart"].forEach(type => {
@@ -162,6 +177,27 @@ MiniTalk.Tools.Notifications = (() => {
       audio.pause();
       audio.currentTime = 0;
     } catch {}
+    try {
+      const audio = alarmAudio();
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {}
+  }
+
+  async function playAlarmDefault() {
+    if (mode() !== "sound") return false;
+    primeAudio();
+    try {
+      const audio = alarmAudio();
+      audio.volume = 1;
+      audio.currentTime = 0;
+      await audio.play();
+      return true;
+    } catch (error) {
+      const ok = fallbackBeep(true);
+      if (!ok) console.warn("기본 알람음 재생이 브라우저에 의해 제한되었습니다.", error);
+      return ok;
+    }
   }
 
   function startAlarmSound(label = "알람") {
@@ -177,7 +213,7 @@ MiniTalk.Tools.Notifications = (() => {
     if (currentMode === "sound") {
       const ring = () => {
         if (!alarmActive) return;
-        playSound(true);
+        playAlarmDefault();
         vibrate([180, 70, 180]);
       };
       ring();
@@ -330,6 +366,6 @@ MiniTalk.Tools.Notifications = (() => {
 
   return {
     mode, setMode, notify, notifyIncoming, notifyGift, notifyTask, notifyRoomInvite, notifyCoinReward,
-    openSettings, permissionLabel, primeAudio, playSound, testSound, startAlarmSound, stopAlarmSound
+    openSettings, permissionLabel, primeAudio, playSound, testSound, playAlarmDefault, startAlarmSound, stopAlarmSound
   };
 })();

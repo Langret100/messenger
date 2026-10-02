@@ -129,18 +129,8 @@ MiniTalk.GameHost=(()=>{
   }
 
   function resolveExternalUrl(game){
-    const storageKey=externalUrlStorageKey(game);
-    const saved=normalizeExternalUrl(localStorage.getItem(storageKey));
-    if(saved)return saved;
     const configured=normalizeExternalUrl(game?.url);
     if(configured)return configured;
-    const label=String(game?.title||"외부 게임");
-    const input=window.prompt(`${label} 주소를 입력하세요.\n예) https://example.github.io/MY_TAMAGOTCHI/`,"");
-    const resolved=normalizeExternalUrl(input);
-    if(resolved){
-      try{localStorage.setItem(storageKey,resolved)}catch{}
-      return resolved;
-    }
     return "";
   }
 

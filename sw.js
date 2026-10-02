@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-runtime-bundle-63";
+const CACHE = "moaru-runtime-bundle-64";
 const CORE = [
   "./",
   "./index.html",
@@ -123,6 +123,7 @@ const CORE = [
   "./assets/sounds/games/game2.mp3",
   "./assets/sounds/games/game3.mp3",
   "./assets/sounds/notify.mp3",
+  "./assets/sounds/alarm-default.wav",
   "./assets/sounds/stamp.mp3",
   "./assets/sounds/delivery-order-1.mp3",
   "./assets/sounds/delivery-order-2.mp3"

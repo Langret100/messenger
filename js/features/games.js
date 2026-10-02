@@ -15,7 +15,7 @@ MiniTalk.Features.Games=(()=>{
     {id:"dice",title:"주사위 합 맞추기",rankingName:"덧셈주사위",desc:"주사위 눈의 합을 계산하는 짧은 수학 게임",icon:"⚄",url:"games/dice-sum.html",tag:"계산",bgm:"assets/sounds/games/game2.mp3"},
     {id:"shape",title:"도형 추적자",rankingName:"꿈틀이도형추적자",desc:"움직이는 도형을 관찰하고 찾아내는 게임",icon:"◇",url:"games/shape-tracker.html",tag:"도형",bgm:"assets/sounds/games/game3.mp3"},
     {id:"explorer",title:"수학 탐험대",rankingName:"수학탐험대",desc:"전투와 수학 문제를 결합한 긴 플레이 게임",icon:"⚔",url:"games/math-explorer.html",tag:"탐험"},
-    {id:"tamagotchi",title:"마이 다마고치",rankingName:"마이다마고치",desc:"작은 캐릭터를 돌보며 즐기는 미니 게임",icon:"◉",url:"games/tamagotchi.html",tag:"육성"}
+    {id:"mathpet",title:"메스-펫",rankingName:"마이다마고치",desc:"펫을 키우고 학습·배틀하며 종합 점수를 올리는 육성 게임",icon:"◉",url:MiniTalkConfig.mathPetUrl,tag:"육성",external:true}
   ];
 
   function render(host){

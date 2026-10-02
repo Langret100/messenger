@@ -117,9 +117,26 @@ MiniTalk.GameHost=(()=>{
     playBgm(game.bgm);
   }
 
+  function openExternal(game){
+    let popup=null;
+    try{
+      popup=window.open(game.url,"MoaruMathPet",mobileGameMode()?"":popupFeatures());
+    }catch{}
+    if(!popup)return false;
+    gamePopup=popup;popupClosing=false;currentGame=game;frame=null;titleNode=null;
+    attachMessageWindow(window);
+    if(!mobileGameMode())enforcePopupBounds(popup);
+    try{popup.focus()}catch{}
+    return true;
+  }
+
   function open(game){
     if(!game?.url)throw new Error("게임 주소가 없습니다.");
     if(gamePopup&&!gamePopup.closed){try{gamePopup.focus()}catch{}return}
+    if(game.external){
+      if(!openExternal(game))MiniTalk.UI.Shell.toast("게임 창을 열지 못했습니다. 팝업 허용 상태를 확인해 주세요.");
+      return;
+    }
     if(!mobileGameMode()&&openDesktop(game))return;
     openInline(game);
   }
@@ -185,11 +202,16 @@ MiniTalk.GameHost=(()=>{
   }
 
   function onMessage(event){
-    if(!frame||event.source!==frame.contentWindow)return;
+    const external=Boolean(currentGame?.external&&gamePopup&&!gamePopup.closed);
+    if(external){if(event.source!==gamePopup)return;}
+    else if(!frame||event.source!==frame.contentWindow)return;
     const data=event.data;
     if(!data)return;
     if(data==="WG_EXIT_GAME"||data.type==="WG_EXIT_GAME")return closeGame();
-    if(data.type==="GAME_SCORE")return sendScore(data.gameName||data.game,data.score);
+    if(data.type==="GAME_SCORE"){
+      const gameName=external?(currentGame?.rankingName||"마이다마고치"):(data.gameName||data.game);
+      return sendScore(gameName,data.score);
+    }
     if(data.type==="MATH_EXPLORER_RESULT"){
       const rawScore=Math.max(0,Math.floor(Number(data.score)||0));
       const supplied=Math.max(0,Math.floor(Number(data.rankingScore)||0));

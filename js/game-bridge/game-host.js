@@ -117,21 +117,16 @@ MiniTalk.GameHost=(()=>{
     playBgm(game.bgm);
   }
 
-  function normalizeExternalUrl(value){
-    const raw=String(value||"" ).trim();
-    if(!raw)return "";
-    const candidate=/^https?:\/\//i.test(raw)?raw:`https://${raw.replace(/^\/+/,"")}`;
-    try{return new URL(candidate).href}catch{return ""}
-  }
+  const MY_TAMAGOTCHI_URL="https://langret100.github.io/On-pet/";
 
-  function externalUrlStorageKey(game){
-    return `moaru.externalGameUrl.${String(game?.id||game?.rankingName||"external")}`;
+  function normalizeExternalUrl(value){
+    const raw=String(value||"").trim();
+    if(!raw)return "";
+    try{return new URL(raw).href}catch{return ""}
   }
 
   function resolveExternalUrl(game){
-    const configured=normalizeExternalUrl(game?.url);
-    if(configured)return configured;
-    return "";
+    return normalizeExternalUrl(game?.url)||MY_TAMAGOTCHI_URL;
   }
 
   function openExternal(game){

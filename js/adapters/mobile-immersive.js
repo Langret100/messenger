@@ -15,7 +15,7 @@
      best-effort 처리입니다. 실패해도 앱 레이아웃은 정상이어야 합니다.
    ============================================================ */
 MiniTalk.MobileImmersive=(()=>{
-  let started=false,viewportTimer=0,lastViewportHeight=0,touchStartY=0;
+  let started=false,viewportTimer=0,lastViewportHeight=0;
 
   const standalone=()=>MiniTalk.WindowMode?.standalone?.()===true ||
     matchMedia("(display-mode: standalone)").matches || navigator.standalone===true;
@@ -87,10 +87,9 @@ MiniTalk.MobileImmersive=(()=>{
     document.documentElement.dataset.mobileImmersive="1";
     const full=await requestFullscreenFromGesture();
     updateViewport();
-    if(!full){
-      setTimeout(nudgeBrowserChrome,80);
-      setTimeout(nudgeBrowserChrome,450);
-    }
+    /* 일반 모바일 브라우저에서 주소창을 억지로 접기 위한 반복 스크롤은 하지 않습니다.
+       visualViewport 높이만 맞추면 레이아웃은 안정적으로 유지됩니다. */
+    if(!full) scheduleViewportUpdate();
     return full;
   }
 
@@ -108,10 +107,10 @@ MiniTalk.MobileImmersive=(()=>{
     if(!isMobile())return;
     document.documentElement.dataset.mobileImmersive="1";
     updateViewport();
-    if(!isFullscreen()){
-      setTimeout(nudgeBrowserChrome,100);
-      setTimeout(nudgeBrowserChrome,600);
-    }
+    /* 앱 표시 직후에는 프로그램 스크롤을 발생시키지 않습니다.
+       초기 focus/주소창 애니메이션과 겹치면 전체 화면이 여러 번 다시 그려져
+       새로고침처럼 보이기 때문입니다. */
+    scheduleViewportUpdate();
   }
 
   function start(){
@@ -123,10 +122,10 @@ MiniTalk.MobileImmersive=(()=>{
     window.visualViewport?.addEventListener("resize",scheduleViewportUpdate,{passive:true});
     window.visualViewport?.addEventListener("scroll",scheduleViewportUpdate,{passive:true});
     addEventListener("resize",scheduleViewportUpdate,{passive:true});
-    addEventListener("orientationchange",()=>setTimeout(()=>{updateViewport();nudgeBrowserChrome()},180),{passive:true});
-    addEventListener("focus",()=>setTimeout(nudgeBrowserChrome,120),{passive:true});
-    addEventListener("touchstart",event=>{touchStartY=Number(event.touches?.[0]?.clientY||0)},{passive:true});
-    addEventListener("touchmove",event=>{const y=Number(event.touches?.[0]?.clientY||0);if(touchStartY-y>22){nudgeBrowserChrome();touchStartY=y}},{passive:true});
+    addEventListener("orientationchange",()=>setTimeout(updateViewport,180),{passive:true});
+    /* focus/touchmove에서 강제 root 스크롤을 하지 않습니다.
+       브라우저 크롬의 자연스러운 접힘은 브라우저에 맡기고 viewport만 추적합니다. */
+    addEventListener("focus",scheduleViewportUpdate,{passive:true});
     const onFullscreenChange=()=>{updateViewport();MiniTalk.Events.emit("fullscreen:change",isFullscreen())};
     document.addEventListener("fullscreenchange",onFullscreenChange,{passive:true});
     document.addEventListener("webkitfullscreenchange",onFullscreenChange,{passive:true});

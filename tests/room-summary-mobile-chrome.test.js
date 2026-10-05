@@ -9,7 +9,7 @@ ok(rt.includes('[`${roomSummariesPath()}/${roomId}/lastMessage`]'),'message send
 ok(rt.includes('async function getRoom(roomId)')&&chats.includes('if(!room?._detail)room=await MiniTalk.Realtime.getRoom(roomId)'),'room detail is not loaded on demand');
 ok(rules.includes('"roomSummaries"')&&rules.includes('"userRooms"'),'Firebase rules missing summary/index paths');
 ok(css.includes('min-height:calc(100dvh + 72px);overflow-y:auto')&&css.includes('.app-shell{position:sticky;top:0}'),'mobile root scroll allowance missing');
-ok(mobile.includes('touchStartY-y>22')&&mobile.includes('nudgeBrowserChrome()'),'mobile chrome gesture assist missing');
-ok(html.includes('js/adapters/realtime.js?v=')&&html.includes('js/adapters/mobile-immersive.js?v=')&&html.includes('js/features/chats.js?v=')&&html.includes('js/app.js?v='),'v5.24 cache versions stale');
+ok(!mobile.includes('touchStartY-y>22')&&mobile.includes('addEventListener("focus",scheduleViewportUpdate'),'mobile startup must avoid forced browser-chrome scrolling');
+ok(html.includes('js/adapters/realtime.js?v=')&&html.includes('js/adapters/mobile-immersive.js?v=')&&html.includes('js/features/chats.js?v=')&&html.includes('js/app.js?v='),'mobile cache versions stale');
 ok(sw.includes('moaru-runtime-bundle-')&&app.includes('sw.js?v='),'v5.24 service worker stale');
 console.log('ROOM_SUMMARY_MOBILE_CHROME_OK');

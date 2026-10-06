@@ -141,6 +141,9 @@ MiniTalk.Features.Chats=(()=>{
     const moaItem=MiniTalk.Features.MoaChat?.listItem?.();if(moaItem)nodes.push(moaItem);
     /* MOA_CHAT_INTEGRATION_END */
     nodes.push(...allRooms.map(room=>roomItem(room)));nodes.push(D.el("div",{class:"empty-state filter-empty hidden","data-filter-empty":"1"},[D.el("span",{text:"●"}),D.el("strong",{text:allRooms.length?"표시할 대화방이 없습니다":"대화방이 없습니다"}),D.el("small",{class:"muted",text:allRooms.length?"그룹 탭에서 참여할 대화방을 찾아보세요.":"오른쪽 위 ＋ 버튼으로 새 대화를 만들 수 있어요."})]));
+    // 실시간 방 정보가 연속으로 들어올 때 목록 전체가 다시 그려지더라도
+    // 갱신 때마다 입장 애니메이션을 재실행하지 않아 깜박임처럼 보이지 않게 한다.
+    nodes.forEach(node=>node?.classList?.remove("conversation-enter"));
     list.replaceChildren(...nodes);filter(query,list,mode,view);list.scrollTop=scrollTop;markRoomListReady(view);
   }
   function canShowRoomPreview(room){return !room?.hasPassword||canViewRoom(room)}

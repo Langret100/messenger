@@ -5,6 +5,6 @@ ok(admin.includes('function ensureOverlayHost()'),'admin overlay host fallback m
 ok(admin.includes('host=ensureOverlayHost()'),'admin image/stamp effects are not routed through global overlay host');
 ok(chats.includes('function roomHasVisibleActivity(room)'),'legacy group-room activity fallback missing');
 ok(chats.includes('"data-has-message":roomHasVisibleActivity(room)?"1":"0"'),'group room visibility is not based on legacy activity fallback');
-ok(rt.includes('async function lastMessageSummary(roomId,room)')&&rt.includes('limitToLast(1)'),'legacy room last-message migration fallback missing');
+ok(rt.includes('async function lastMessageSummary(roomId,room)')&&rt.includes('limitToLast(10)'),'legacy room last-message migration fallback missing');
 ok(css.includes('.app-notification-banner{display:grid') && css.includes('border:0;border-radius:18px'),'top notification chrome was not softened');
 console.log('ADMIN_OVERLAY_ROOM_LEGACY_OK');

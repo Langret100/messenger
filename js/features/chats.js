@@ -99,8 +99,20 @@ MiniTalk.Features.Chats=(()=>{
     fresh.forEach(room=>MiniTalk.Features.Tools?.notifyRoomInvite?.(room));
   }
   function profileForMessage(message){const profiles=MiniTalk.Store.get("profiles")||{},stored=profiles[message.user_id]||profiles[message.nickname]||{},avatar=stored.avatar||message.avatar||message.profileImage||message.profile_image||message.profileImageUrl||message.avatarUrl||message.photoURL||message.photoUrl||"";return{...stored,avatar}}
+  function roomDisplaySummary(room){
+    if(!canShowRoomPreview(room))return room;
+    const latest=(messagesByRoom[room.id]||[]).filter(m=>m.type!=="game"||m.game?.kind==="game-invite").reduce((a,b)=>!a||Number(b.ts||b.clientTs||0)>Number(a.ts||a.clientTs||0)?b:a,null);
+    if(!latest||Number(latest.ts||latest.clientTs||0)<Number(room.lastMessageAt||0))return room;
+    const text=latest.type==="image"?"[사진]":latest.type==="file"?`[파일] ${latest.fileName||"파일"}`:String(latest.text||"");
+    return {...room,lastMessage:text,lastMessageAt:Number(latest.ts||latest.clientTs||0),lastMessageUserId:latest.user_id,lastMessageNickname:latest.nickname,lastMessageAvatar:profileForMessage(latest).avatar,lastMessageEmoticon:latest.emoticon};
+  }
   /* 방 이미지가 없으면 1:1 상대, 방 제목과 같은 사용자, 마지막 발신자 순으로 프로필을 찾습니다. */
   function roomAvatar(room){
+    if(canShowRoomPreview(room)&&room?.lastMessageUserId){
+      const last=profileForMessage({user_id:room.lastMessageUserId,nickname:room.lastMessageNickname,avatar:room.lastMessageAvatar});
+      if(last.avatar)return last.avatar;
+      return "assets/mascot-avatar.png";
+    }
     const direct=room?.avatar||room?.profileImage||room?.profile_image||room?.imageUrl||room?.image_url||room?.icon||"";
     if(direct)return direct;
     const profiles=MiniTalk.Store.get("profiles")||{},userId=MiniTalk.Store.get("user")?.user_id||"";
@@ -148,7 +160,7 @@ MiniTalk.Features.Chats=(()=>{
   }
   function canShowRoomPreview(room){return !room?.hasPassword||canViewRoom(room)}
   function roomPreview(room){const D=MiniTalk.UI.Dom,node=D.el("p",{class:"conversation-preview"});if(!canShowRoomPreview(room)){node.textContent="잠긴 대화방";return node}const text=String(room?.lastMessage||"");if(text)MiniTalk.Chat.Emoji.appendText(text,node,room?.lastMessageEmoticon||"");else node.textContent="대화를 시작하세요";return node}
-  function roomItem(room){const D=MiniTalk.UI.Dom,unread=MiniTalk.Chat.Unread.count(room.id),previewAllowed=canShowRoomPreview(room),messageAt=previewAllowed?roomMessageTime(room):0,time=messageAt?new Date(messageAt).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}):"",tone=[...(room.id||"")].reduce((sum,char)=>sum+char.charCodeAt(0),0)%4,node=D.el("button",{class:"conversation-item conversation-enter",type:"button","data-room-id":room.id,"data-tone":String(tone),"data-unread":unread?"1":"0","data-favorite":isFavorite(room.id)?"1":"0","data-member":canViewRoom(room)?"1":"0","data-room-type":room.type||"group","data-has-message":roomHasVisibleActivity(room)?"1":"0"},[
+  function roomItem(room){room=roomDisplaySummary(room);const D=MiniTalk.UI.Dom,unread=MiniTalk.Chat.Unread.count(room.id),previewAllowed=canShowRoomPreview(room),messageAt=previewAllowed?roomMessageTime(room):0,time=messageAt?new Date(messageAt).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}):"",tone=[...(room.id||"")].reduce((sum,char)=>sum+char.charCodeAt(0),0)%4,node=D.el("button",{class:"conversation-item conversation-enter",type:"button","data-room-id":room.id,"data-tone":String(tone),"data-unread":unread?"1":"0","data-favorite":isFavorite(room.id)?"1":"0","data-member":canViewRoom(room)?"1":"0","data-room-type":room.type||"group","data-has-message":roomHasVisibleActivity(room)?"1":"0"},[
     D.el("div",{class:"avatar-wrap"},[D.el("img",{class:"avatar profile-image",src:roomAvatar(room),alt:`${room.title||"대화방"} 이미지`,onerror:event=>{event.currentTarget.onerror=null;event.currentTarget.src="assets/mascot-avatar.png"}}),room.hasPassword?D.el("span",{class:"room-lock-badge",text:MiniTalk.Realtime.isRoomMember(room)?"🔓":"🔒","aria-label":MiniTalk.Realtime.isRoomMember(room)?"참여 중인 비밀번호방":"잠긴 비밀번호방"}):null]),
     D.el("div",{class:"conversation-main"},[D.el("strong",{class:"conversation-title"},[D.el("span",{text:`${isFavorite(room.id)?"★ ":""}${room.title||room.id}`})]),roomPreview(room)]),
     D.el("div",{class:"conversation-meta"},[D.el("time",{text:time}),unread?D.el("b",{class:"unread",text:String(Math.min(99,unread))}):null])
@@ -329,3 +341,4 @@ MiniTalk.Features.Chats=(()=>{
   bindEvents();return{id:"chats",title:"대화",icon:"◉",render,leave,waitForRoomList};
 })();
 MiniTalk.Registry.register(MiniTalk.Features.Chats);
+

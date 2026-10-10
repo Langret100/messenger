@@ -289,9 +289,9 @@ MiniTalk.Realtime=(()=>{
   function clearMemberSummarySubscriptions(){for(const off of memberSummaryUnsubs.values()){try{off()}catch{}}memberSummaryUnsubs.clear()}
   function previewFromMessage(value={}){const type=value.type||(value.fileUrl?"file":(value.image||value.imageUrl?"image":"text"));return type==="file"?`[파일] ${value.fileName||"파일"}`:type==="image"?"[사진]":String(value.text||"")}
   async function lastMessageSummary(roomId,room){
-    if(Number(room.lastMessageAt||0)>0||String(room.lastMessage||"").trim())return roomSummaryValue(room);
+    if(String(room.lastMessage||"").trim()&&room.lastMessageUserId)return roomSummaryValue(room);
     try{
-      const snap=await db.ref(messagesPath(roomId)).orderByChild("ts").limitToLast(1).once("value");let latest=null,key="";snap.forEach(child=>{key=child.key;latest=child.val()||{}});
+      const snap=await db.ref(messagesPath(roomId)).orderByChild("ts").limitToLast(10).once("value");let latest=null,key="";snap.forEach(child=>{const candidate=child.val()||{};if(candidate.type==="game"&&candidate.game?.kind!=="game-invite")return;key=child.key;latest=candidate;});
       if(!latest)return roomSummaryValue({...room,lastMessageAt:0});
       return roomSummaryValue({...room,lastMessage:previewFromMessage(latest),lastMessageEmoticon:latest.emoticon||null,lastMessageAt:Number(latest.ts||latest.clientTs||0),lastMessageUserId:String(latest.user_id||""),lastMessageNickname:String(latest.nickname||"")})
     }catch{return roomSummaryValue({...room,lastMessageAt:0})}
@@ -315,12 +315,22 @@ MiniTalk.Realtime=(()=>{
     }
     if(Object.keys(updates).length)await ref.update(updates);await readyRef.set(1)
   }
+  const previewRepairs=new Map(),summaryRevisions=new Map();
   function attachMemberSummary(roomId,membership){
     memberRoomMemberships[roomId]=membership&&typeof membership==="object"?membership:{role:"member",status:"member"};
     memberSummaryUnsubs.get(roomId)?.();
     const ref=db.ref(`${roomSummariesPath()}/${roomId}`),onValue=async snapshot=>{
+      const revision=(summaryRevisions.get(roomId)||0)+1;summaryRevisions.set(roomId,revision);
       let value=snapshot.val();
       if(!value){const detail=await getRoom(roomId).catch(()=>null);if(!detail){db.ref(`${userRoomsPath(user.user_id)}/${roomId}`).remove().catch(()=>{});delete memberRoomMemberships[roomId];delete roomsCache[roomId];delete roomDirectoryCache[roomId];publishRooms();return}value=await lastMessageSummary(roomId,detail);ref.set(value).catch(()=>{})}
+      const needsPreview=!String(value.lastMessage||"").trim()||!value.lastMessageUserId;
+      if(needsPreview&&String(memberRoomMemberships[roomId]?.status||"member")!=="invited"){
+        const key=`${user?.user_id}:${roomId}:${value.lastMessageAt}`;
+        if(!previewRepairs.has(key))previewRepairs.set(key,lastMessageSummary(roomId,value));
+        const repaired=await previewRepairs.get(key);
+        if(summaryRevisions.get(roomId)!==revision)return;
+        if(repaired.lastMessage)value={...value,...repaired};
+      }
       const next=normalizeRoomSummary(roomId,value,memberRoomMemberships[roomId]);roomsCache[roomId]=next;if(roomListRequested)roomDirectoryCache[roomId]=next;publishRooms()
     };
     ref.on("value",onValue,error=>console.warn("내 대화방 요약을 읽지 못했습니다.",error));memberSummaryUnsubs.set(roomId,()=>ref.off("value",onValue))

@@ -65,8 +65,8 @@ const controlCSS=":root[data-season=\"spring\"]{--season-nav-y:0%;}\n:root[data-
 
 const dialogThemeCSS=`
 :root[data-season] .app-shell{border-radius:0!important;}
-:root[data-season] .auth-host{position:relative;isolation:isolate;background:var(--surface);align-content:start;padding-top:12px;}
-:root[data-season] .auth-card{margin:0 auto;}
+:root[data-season] .auth-host{position:relative;isolation:isolate;background:var(--surface);}
+
 :root[data-season] .auth-host::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:-1;background-image:var(--season-wall,none);background-size:100% auto;background-repeat:no-repeat;background-position:bottom right;opacity:.23;}
 :root[data-season] .auth-card{position:relative;}
 :root[data-season] .auth-host::after{content:'';position:absolute;pointer-events:none;left:auto;right:0;top:0;width:110px;height:110px;background-image:url('assets/season-decor.webp');background-size:400% 200%;background-position:var(--season-art-x) var(--season-art-y);transform:scaleX(-1);opacity:.32;}
@@ -75,7 +75,7 @@ const dialogThemeCSS=`
 :root:is([data-season=winter],[data-season=christmas]) #loginAction{position:relative;}
 :root:is([data-season=winter],[data-season=christmas]) #loginAction::before{content:'';position:absolute;pointer-events:none;left:0;right:0;top:-10px;height:18px;background:var(--messenger-snow-image) center/100% 100% no-repeat;}
 
-:root[data-season] .modal{position:relative;background:var(--surface)!important;border-color:var(--line-strong)!important;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent;}
+:root[data-season] .modal{position:relative;background:var(--surface)!important;border-color:var(--line-strong)!important;overflow-x:hidden;scrollbar-color:var(--line-strong) transparent;}
  :root[data-season] .modal>header{position:relative;min-height:34px;}
 :root[data-season] .modal::before{content:'';position:absolute;pointer-events:none;left:0;top:0;width:100px;height:100px;background-image:url('assets/season-decor.webp');background-size:400% 200%;background-position:var(--season-art-x) var(--season-art-y);opacity:.16;z-index:0;}
 :root[data-season] .modal>*{position:relative;z-index:1;}
@@ -98,7 +98,7 @@ const dialogThemeCSS=`
 
 
 const utilityIconCSS=ids.map((id,i)=>`:root[data-season="${id}"]{--utility-x:${i*100/7}%;}`).join('')+`
-:root[data-season] :is(.tool-glyph,.settings-row-icon,.random-mark,.shortcut-icon){font-size:0!important;background-color:transparent!important;background-image:url('assets/season-utility.webp?v=3')!important;background-size:800% 1300%!important;background-position:var(--utility-x) var(--utility-y,0%)!important;background-repeat:no-repeat!important;box-shadow:none!important;border:0!important;border-radius:0!important;transition:transform .16s ease!important;}
+:root[data-season] :is(.tool-glyph,.settings-row-icon,.random-mark,.shortcut-icon){font-size:0!important;background-color:transparent!important;background-image:url('assets/season-utility.webp?v=4')!important;background-size:800% 1300%!important;background-position:var(--utility-x) var(--utility-y,0%)!important;background-repeat:no-repeat!important;box-shadow:none!important;border:0!important;border-radius:0!important;transition:transform .16s ease!important;}
 :root[data-season] img[src*="assets/mascot-avatar.png"]{content:url('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');background:var(--season-avatar,none) center/contain no-repeat;object-fit:contain;}
 :root[data-season] .random-mark{--utility-y:58.3333333333%;}
 :root[data-season] .tool-shortcuts .shortcut-row:nth-child(1) .shortcut-icon{--utility-y:33.3333333333%;}
@@ -133,7 +133,7 @@ function motion(root,id){
  if(doc.hidden)root.dataset.seasonHidden='';
 }
 const homeCSS=`
-:root[data-season] .app-shell{background-color:var(--surface);background-image:linear-gradient(color-mix(in srgb,var(--surface) 82%,transparent),color-mix(in srgb,var(--surface) 82%,transparent)),var(--season-home,none);background-position:center,top left;background-size:100% 100%,cover;background-repeat:no-repeat;}
+:root[data-season] .app-shell{background-color:var(--surface);background-image:linear-gradient(color-mix(in srgb,var(--surface) 65%,transparent),color-mix(in srgb,var(--surface) 65%,transparent)),var(--season-home,none);background-position:center,top left;background-size:100% 100%,cover;background-repeat:no-repeat;}
 :root[data-season] .view-host{position:relative;background:transparent!important;}
 :root[data-season] :is(.workspace,.chat-home,.chat-home-top,.conversation-list){background:transparent!important;}
 :root[data-season] :is(.app-header,.bottom-nav,.side-rail,.composer-zone){background:color-mix(in srgb,var(--surface) 72%,transparent)!important;}
@@ -153,15 +153,14 @@ const homeCSS=`
 :root[data-season] :is(.chat-search,.search-hint,.chat-filter){background:color-mix(in srgb,var(--surface-3) 38%,transparent)!important;color:var(--muted)!important;}
 :root[data-season] .chat-filter.active{background:color-mix(in srgb,var(--accent) 18%,transparent)!important;color:var(--accent)!important;}
 :root[data-season][data-season] :is(.shop-product-card,.shop-inventory-v2-card,.shop-inventory-panel,.shop-inventory-toggle,.shop-inventory-fab){background:color-mix(in srgb,var(--surface) 32%,transparent)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
-:root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal){scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--accent) 65%,var(--surface)) color-mix(in srgb,var(--surface-3) 35%,transparent);}
-:root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar{width:6px;height:6px;}
+:root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal){scrollbar-color:color-mix(in srgb,var(--accent) 65%,var(--surface)) color-mix(in srgb,var(--surface-3) 35%,transparent);}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar-track{background:color-mix(in srgb,var(--surface-3) 35%,transparent);}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--accent) 65%,var(--surface));border-radius:999px;}
 `;
 let avatarAtlasPromise;const avatarImages=new Map();
 function avatarWallpaper(id){
  if(avatarImages.has(id))return Promise.resolve(avatarImages.get(id));
- if(!avatarAtlasPromise)avatarAtlasPromise=new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=new URL('assets/season-utility.webp?v=3',document.baseURI).href;});
+ if(!avatarAtlasPromise)avatarAtlasPromise=new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=new URL('assets/season-utility.webp?v=4',document.baseURI).href;});
  return avatarAtlasPromise.then(image=>{const size=image.width/8,c=document.createElement('canvas');c.width=c.height=size;c.getContext('2d').drawImage(image,ids.indexOf(id)*size,0,size,size,0,0,size,size);const url='url("'+c.toDataURL('image/webp',.85)+'")';avatarImages.set(id,url);return url;});
 }
 let homeAtlasPromise;const homeWalls=new Map();
@@ -217,6 +216,7 @@ const initial=window.MiniTalk.Persistence?.get('layout.preferences',null)?.theme
 if(['light','dark','forest'].includes(initial))document.documentElement.dataset.theme=initial;
 apply(document.documentElement,initial);
 })();
+
 
 
 

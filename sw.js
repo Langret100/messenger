@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-runtime-season-91";
+const CACHE = "moaru-runtime-bundle-92";
 const CORE = [
   "./js/features/season-theme.js",
   "./assets/season-chat.webp",
@@ -209,3 +209,4 @@ self.addEventListener("fetch", event => {
     cachedAsset(event.request).then(hit => hit || fetch(event.request).then(response => remember(event.request, response)))
   );
 });
+

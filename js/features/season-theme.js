@@ -152,7 +152,12 @@ const homeCSS=`
 :root[data-season][data-season] .conversation-item{background:color-mix(in srgb,var(--surface) 32%,transparent)!important;}
 :root[data-season] :is(.chat-search,.search-hint,.chat-filter){background:color-mix(in srgb,var(--surface-3) 68%,transparent)!important;color:var(--muted)!important;}
 :root[data-season] .chat-filter.active{background:color-mix(in srgb,var(--accent) 38%,transparent)!important;color:var(--accent)!important;}
-:root[data-season][data-season] :is(.shop-product-card,.shop-inventory-v2-card,.shop-inventory-panel,.shop-inventory-toggle,.shop-inventory-fab){background:color-mix(in srgb,var(--surface) 32%,transparent)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+:root[data-season][data-season] :is(.shop-product-card,.shop-inventory-v2-card,.shop-inventory-toggle,.shop-inventory-fab){background:color-mix(in srgb,var(--surface) 32%,transparent)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+:root[data-season][data-season] .shop-inventory-panel{background:var(--surface)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:var(--line-strong);overflow:visible;isolation:isolate;}
+:root[data-season] .shop-inventory-panel::before{content:'';position:absolute;pointer-events:none;left:0;top:0;width:100px;height:100px;background-image:url('assets/season-decor.webp');background-size:400% 200%;background-position:var(--season-art-x) var(--season-art-y);opacity:.16;z-index:-1;}
+:root[data-season] .shop-inventory-panel>.shop-inventory-v2-list{border-radius:0 0 18px 18px;}
+:root:is([data-season=winter],[data-season=christmas]) .shop-inventory-panel::after{content:'';position:absolute;left:0;right:0;top:-13px;height:24px;pointer-events:none;background:var(--messenger-snow-image) center/100% 100% no-repeat;z-index:3;}
+
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal){scrollbar-color:color-mix(in srgb,var(--accent) 65%,var(--surface)) color-mix(in srgb,var(--surface-3) 35%,transparent);}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar-track{background:color-mix(in srgb,var(--surface-3) 35%,transparent);}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--accent) 65%,var(--surface));border-radius:999px;}

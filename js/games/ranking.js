@@ -11,21 +11,27 @@ MiniTalk.Games.Ranking = (() => {
     const list = D.el("div", { class: "ranking-list" });
     const refresh = D.el("button", { class: "button secondary compact-button", type: "button", text: "새로고침" });
 
-    async function load() {
-      refresh.disabled = true;
-      status.textContent = "랭킹을 불러오는 중...";
+    let loadVersion=0;
+    async function load(force=false) {
+      const version=++loadVersion,gameName=select.value;
+      refresh.disabled=true;
+      const cached=MiniTalk.Games.ScoreService.cachedRanking(gameName);
       list.replaceChildren();
+      if(cached)renderRows(list,cached.rows);
+      status.textContent=cached?"최근 온라인 랭킹 · 확인 중…":"랭킹을 불러오는 중...";
       try {
-        const result = await MiniTalk.Games.ScoreService.ranking(select.value);
-        renderRows(list, result.rows);
-        status.textContent = result.online ? "토리 온라인 랭킹" : "연결할 수 없어 이 기기의 기록을 표시합니다.";
+        const result=await MiniTalk.Games.ScoreService.ranking(gameName,{force});
+        if(version!==loadVersion)return;
+        list.replaceChildren();renderRows(list,result.rows);
+        status.textContent=result.stale?"연결 지연 · 최근 온라인 랭킹을 표시합니다.":result.online?"토리 온라인 랭킹":"연결할 수 없어 이 기기의 기록을 표시합니다.";
+      } catch(error) {
+        if(version===loadVersion)status.textContent="랭킹을 불러오지 못했습니다. 다시 시도해주세요.";
       } finally {
-        refresh.disabled = false;
+        if(version===loadVersion)refresh.disabled=false;
       }
     }
-
-    select.onchange = load;
-    refresh.onclick = load;
+    select.onchange=()=>load();
+    refresh.onclick=()=>load(true);
     body.append(
       D.el("div", { class: "community-toolbar" }, [select, refresh]),
       status,

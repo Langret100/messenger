@@ -182,7 +182,7 @@ MiniTalk.Tools.TimerAlarm = (() => {
   function openAlarm() {
     const D = MiniTalk.UI.Dom;
     const saved = MiniTalk.Persistence.get(ALARM_KEY);
-    const body = modalBody("시간을 고르거나 빠른 설정을 누르세요. 알람 소리는 아래에서 바로 테스트할 수 있습니다.");
+    const body = D.el("div", { class: "tool-modal-body modal-stack" });
     const time = D.el("input", { id: "alarmTime", type: "time", value: nextClockValue() });
     const name = D.el("input", { id: "alarmName", value: "알람", maxlength: "30" });
     const state = D.el("p", { id: "alarmState", class: "tool-modal-state muted" });
@@ -203,7 +203,7 @@ MiniTalk.Tools.TimerAlarm = (() => {
       test,
       D.el("div", { class: "button-row" }, [
         D.el("button", { class: "button secondary", type: "button", text: "해제", onclick: () => clearAlarm() }),
-        D.el("button", { class: "button primary", type: "button", text: "이 시간으로 설정", onclick: () => {
+        D.el("button", { class: "button primary", type: "button", text: "설정", onclick: () => {
           try {
             setAlarm(time.value, name.value.trim() || "알람");
             MiniTalk.UI.Shell.closeModal();

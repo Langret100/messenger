@@ -4,6 +4,11 @@
  */
 MiniTalk.Games = MiniTalk.Games || {};
 MiniTalk.Games.ScoreService = (() => {
+  const rankingCache = new Map(), rankingRequests = new Map();
+  const RANKING_TTL = 60000;
+  function rankingKey(gameName){return `${MiniTalk.Store.get("user")?.user_id||"guest"}:${gameName}`;}
+  function cachedRanking(gameName){return rankingCache.get(rankingKey(gameName))?.result||null;}
+
   const STORAGE_KEY = "games.localScores";
 
   function loadLocal() {
@@ -73,6 +78,7 @@ MiniTalk.Games.ScoreService = (() => {
           throw error;
         }
         // Apps Script의 GAME_SCORE_BUSY 또는 일시적인 네트워크 실패는 같은 최고점 요청으로 안전하게 재시도합니다.
+        rankingCache.delete(rankingKey(gameName));
         MiniTalk.UI.Shell.toast(`${gameName} ${normalized}점 기록`);
         return true;
       } catch (error) {
@@ -110,8 +116,17 @@ MiniTalk.Games.ScoreService = (() => {
       .map((item, index) => ({ ...item, rank: index + 1 }));
   }
 
-  async function ranking(gameName) {
+  function ranking(gameName, options = {}) {
+    const key=rankingKey(gameName),cached=rankingCache.get(key);
+    if(!options.force&&cached&&Date.now()-cached.at<RANKING_TTL)return Promise.resolve(cached.result);
+    if(rankingRequests.has(key))return rankingRequests.get(key);
+    const request=fetchRanking(gameName,key).finally(()=>rankingRequests.delete(key));
+    rankingRequests.set(key,request);return request;
+  }
+
+  async function fetchRanking(gameName,key) {
     const local = localRanking(gameName);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try {
       const url = new URL(MiniTalkConfig.sheetUrl);
       url.searchParams.set("mode", "game_ranking");
@@ -119,9 +134,10 @@ MiniTalk.Games.ScoreService = (() => {
       const user = MiniTalk.Store.get("user");
       if (user?.user_id && !user.isGuest) url.searchParams.set("user_id", String(user.user_id));
       url.searchParams.set("t", String(Date.now()));
-      const response = await fetch(url);
+      const response = await fetch(url,{signal:controller.signal});
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const json = await response.json();
+      if(json?.ok===false)throw new Error(json.error||"RANKING_UNAVAILABLE");
       // 랭킹 조회도 읽기 전용입니다. 코인 지급은 월요일 오전 9시 서버 트리거만 담당합니다.
       const list = Array.isArray(json.list) ? json.list : Array.isArray(json.data) ? json.data : [];
       // 온라인 조회가 성공한 경우에는 구글 시트가 유일한 랭킹 원본입니다.
@@ -132,12 +148,15 @@ MiniTalk.Games.ScoreService = (() => {
           const br = Number(b.rank) || Number.MAX_SAFE_INTEGER;
           return ar - br || b.score - a.score;
         });
-      return { rows: remote, online: true };
+      const result={rows:remote,online:true};
+      rankingCache.set(key,{at:Date.now(),result});
+      return result;
     } catch (error) {
       console.warn("게임 랭킹 불러오기 실패", error);
-      return { rows: local, online: false };
-    }
+      const cached=rankingCache.get(key);
+      return cached?{...cached.result,stale:true}:{rows:local,online:false};
+    } finally {clearTimeout(timer);}
   }
 
-  return { submit, ranking, localRanking, recordLocal };
+  return { submit, ranking, cachedRanking, localRanking, recordLocal };
 })();

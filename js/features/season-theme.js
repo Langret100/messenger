@@ -150,9 +150,22 @@ const homeCSS=`
 :root[data-season=christmas] .app-header{background:color-mix(in srgb,#256544 65%,transparent)!important;color:var(--text);}
 :root:is([data-season=halloween],[data-season=christmas]) .app-header .icon-button{color:var(--text);}
 :root[data-season][data-season] .conversation-item{background:color-mix(in srgb,var(--surface) 32%,transparent)!important;}
+@media (hover:hover){:root[data-season][data-season] .conversation-item:hover{background:color-mix(in srgb,var(--accent) 12%,color-mix(in srgb,var(--surface) 56%,transparent))!important;}}
 :root[data-season] :is(.chat-search,.search-hint,.chat-filter){background:color-mix(in srgb,var(--surface-3) 68%,transparent)!important;color:var(--muted)!important;}
 :root[data-season] .chat-filter.active{background:color-mix(in srgb,var(--accent) 38%,transparent)!important;color:var(--accent)!important;}
 :root[data-season][data-season] :is(.shop-product-card,.shop-inventory-v2-card,.shop-inventory-toggle,.shop-inventory-fab){background:color-mix(in srgb,var(--surface) 32%,transparent)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+:root[data-season] .app-header{background:color-mix(in srgb,var(--surface) 80%,transparent)!important;}
+:root[data-season=halloween] .app-header{background:color-mix(in srgb,#40362e 80%,transparent)!important;}
+:root[data-season=christmas] .app-header{background:color-mix(in srgb,#256544 80%,transparent)!important;}
+:root[data-season] .app-shell .bottom-nav{z-index:4;}
+:root[data-season] .shop-random-machine{background:var(--surface);border-color:var(--line-strong);overflow:visible;isolation:isolate;}
+:root[data-season] .shop-random-machine::before{content:'';position:absolute;pointer-events:none;left:0;top:0;width:100px;height:100px;background-image:url('assets/season-decor.webp');background-size:400% 200%;background-position:var(--season-art-x) var(--season-art-y);opacity:.16;z-index:-1;}
+:root:is([data-season=winter],[data-season=christmas]) .shop-random-machine::after{content:'';position:absolute;left:0;right:0;top:-13px;height:24px;pointer-events:none;background:var(--messenger-snow-image) center/100% 100% no-repeat;z-index:8;}
+:root[data-season] .shop-random-window{background:var(--surface-2);border-color:var(--line);}
+:root[data-season] :is(.shop-random-tap,.shop-random-cost){background:color-mix(in srgb,var(--surface) 94%,transparent);border-color:var(--line-strong);color:var(--text);}
+:root[data-season] :is(.shop-random-tap strong,.shop-random-kicker){color:var(--accent);}
+:root[data-season] :is(.shop-random-tap small,.shop-random-cost small,.shop-random-foot,.shop-random-status small){color:var(--muted);}
+:root[data-season] :is(.shop-random-reel-cell,.shop-random-status strong){color:var(--text);}
 :root[data-season][data-season] .shop-inventory-panel{background:var(--surface)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:var(--line-strong);overflow:visible;isolation:isolate;}
 :root[data-season] .shop-inventory-panel::before{content:'';position:absolute;pointer-events:none;left:0;top:0;width:100px;height:100px;background-image:url('assets/season-decor.webp');background-size:400% 200%;background-position:var(--season-art-x) var(--season-art-y);opacity:.16;z-index:-1;}
 :root[data-season] .shop-inventory-panel>.shop-inventory-v2-list{border-radius:0 0 18px 18px;}

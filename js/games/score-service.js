@@ -126,7 +126,7 @@ MiniTalk.Games.ScoreService = (() => {
 
   async function fetchRanking(gameName,key) {
     const local = localRanking(gameName);
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
     try {
       const url = new URL(MiniTalkConfig.sheetUrl);
       url.searchParams.set("mode", "game_ranking");

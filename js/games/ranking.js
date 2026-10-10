@@ -22,7 +22,10 @@ MiniTalk.Games.Ranking = (() => {
       try {
         const result=await MiniTalk.Games.ScoreService.ranking(gameName,{force});
         if(version!==loadVersion)return;
-        list.replaceChildren();renderRows(list,result.rows);
+        list.replaceChildren();
+        if(!result.online&&!result.rows.length){
+          list.append(D.el("div",{class:"empty-state compact-empty"},[D.el("strong",{text:"온라인 기록을 확인하지 못했어요"}),D.el("small",{class:"muted",text:"새로고침으로 다시 확인해주세요."})]));
+        }else renderRows(list,result.rows);
         status.textContent=result.stale?"연결 지연 · 최근 온라인 랭킹을 표시합니다.":result.online?"토리 온라인 랭킹":"연결할 수 없어 이 기기의 기록을 표시합니다.";
       } catch(error) {
         if(version===loadVersion)status.textContent="랭킹을 불러오지 못했습니다. 다시 시도해주세요.";

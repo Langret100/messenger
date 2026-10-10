@@ -23,7 +23,8 @@ const css=ids.map((id,i)=>{const [name,bg,surface,soft,text,muted,accent,mine]=p
 :root[data-season] :is(.app-header,.bottom-nav,.side-rail,.composer-zone){background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:none;-webkit-backdrop-filter:none;}
 :root[data-season] .app-header{border-bottom:2px solid var(--line-strong);box-shadow:none;}
 :root[data-season]:not(.chat-custom-background) .message-list{background-image:linear-gradient(to bottom,var(--surface-2) 35%,transparent 75%),var(--season-wall,none);background-size:100% 100%,100% auto;background-position:bottom center;background-repeat:no-repeat;background-color:var(--surface-2);}
-:root[data-season] .app-header::before{content:'';position:absolute;left:0;top:0;width:100px;height:100%;background-image:var(--season-wall,none);background-size:100px auto;background-repeat:no-repeat;background-position:top left;opacity:.2;mix-blend-mode:multiply;mask-image:linear-gradient(to right,transparent,#000 35%);pointer-events:none;}
+:root[data-season] .app-header::before{content:none;}
+:root[data-season=winter] .app-header{background:var(--surface);}
 :root[data-season] .app-header>*{position:relative;z-index:1;}
 :root[data-season] .conversation-item{background:var(--surface);border-color:var(--line);}
 :root[data-season] .conversation-item:hover{background:var(--surface-3);}
@@ -96,8 +97,8 @@ const dialogThemeCSS=`
 
 
 const utilityIconCSS=ids.map((id,i)=>`:root[data-season="${id}"]{--utility-x:${i*100/7}%;}`).join('')+`
-:root[data-season] :is(.tool-glyph,.settings-row-icon,.random-mark,.shortcut-icon){font-size:0!important;background-color:transparent!important;background-image:url('assets/season-utility.webp?v=2')!important;background-size:800% 1300%!important;background-position:var(--utility-x) var(--utility-y,0%)!important;background-repeat:no-repeat!important;box-shadow:none!important;border:0!important;border-radius:0!important;transition:transform .16s ease!important;}
-:root[data-season] img[src*="assets/mascot-avatar.png"]{content:url('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');background:url('assets/season-utility.webp?v=2') var(--utility-x) 0%/800% 1300% no-repeat;object-fit:contain;}
+:root[data-season] :is(.tool-glyph,.settings-row-icon,.random-mark,.shortcut-icon){font-size:0!important;background-color:transparent!important;background-image:url('assets/season-utility.webp?v=3')!important;background-size:800% 1300%!important;background-position:var(--utility-x) var(--utility-y,0%)!important;background-repeat:no-repeat!important;box-shadow:none!important;border:0!important;border-radius:0!important;transition:transform .16s ease!important;}
+:root[data-season] img[src*="assets/mascot-avatar.png"]{content:url('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');background:url('assets/season-utility.webp?v=3') var(--utility-x) 0%/800% 1300% no-repeat;object-fit:contain;}
 :root[data-season] .random-mark{--utility-y:58.3333333333%;}
 :root[data-season] .tool-shortcuts .shortcut-row:nth-child(1) .shortcut-icon{--utility-y:33.3333333333%;}
 :root[data-season] .tool-shortcuts .shortcut-row:nth-child(2) .shortcut-icon{--utility-y:75%;}
@@ -130,6 +131,25 @@ function motion(root,id){
  if(!motionDocuments.has(doc)){motionDocuments.add(doc);doc.addEventListener('visibilitychange',()=>{if(doc.hidden)root.dataset.seasonHidden='';else delete root.dataset.seasonHidden;});}
  if(doc.hidden)root.dataset.seasonHidden='';
 }
+const homeCSS=`
+:root[data-season] .app-shell{background-color:var(--surface);background-image:linear-gradient(color-mix(in srgb,var(--surface) 82%,transparent),color-mix(in srgb,var(--surface) 82%,transparent)),var(--season-home,none);background-position:center,top left;background-size:100% 100%,cover;background-repeat:no-repeat;}
+:root[data-season] .view-host{position:relative;background:transparent;}
+:root[data-season] :is(.app-header,.bottom-nav,.side-rail,.composer-zone){background:color-mix(in srgb,var(--surface) 72%,transparent);}
+:root[data-season=halloween] .app-header{background:color-mix(in srgb,#40362e 72%,transparent);}
+:root[data-season=christmas] .app-header{background:color-mix(in srgb,#256544 72%,transparent);}
+:root[data-season] .view-host>:is(.chat-home,.utility-view,.task-center-view){background:transparent;}
+:root[data-season] :is(.modern-tool,.profile-summary){background:color-mix(in srgb,var(--surface) 72%,transparent);}
+:root[data-season] :is(.conversation-item,.settings-group,.shortcut-group,.section-card,.tool-card,.task-card,.settings-card,.assigned-task-card,.shop-market-hero,.shop-product-card,.task-center-view .card,.shopping-screen .card){background:color-mix(in srgb,var(--surface) 72%,transparent)!important;}
+:root[data-season] .button.secondary,:root[data-season] .mini-action{background-color:color-mix(in srgb,var(--surface-3) 72%,transparent);}
+:root[data-season] .button.primary{background-color:color-mix(in srgb,var(--accent) 72%,transparent);}
+:root[data-season] :is(.conversation-item,.settings-row,.shortcut-row):hover{background:color-mix(in srgb,var(--surface-3) 82%,transparent)!important;}
+`;
+let homeAtlasPromise;const homeWalls=new Map();
+function homeWallpaper(id){
+ if(homeWalls.has(id))return Promise.resolve(homeWalls.get(id));
+ if(!homeAtlasPromise)homeAtlasPromise=new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=new URL('assets/season-home.webp?v=1',document.baseURI).href;});
+ return homeAtlasPromise.then(image=>{const i=ids.indexOf(id),w=image.width/4,h=image.height/2,c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(image,i%4*w,Math.floor(i/4)*h,w,h,0,0,w,h);const url='url("'+c.toDataURL('image/webp',.75)+'")';homeWalls.set(id,url);return url;});
+}
 let atlasPromise;const wallpapers=new Map();
 function wallpaper(id){
  if(wallpapers.has(id))return Promise.resolve(wallpapers.get(id));
@@ -142,11 +162,12 @@ function decorateEmoji(img,code){img.dataset.seasonEmoji=code;if(!img.dataset.ba
 function refreshEmoji(root){root.ownerDocument.querySelectorAll('[data-season-emoji]').forEach(img=>decorateEmoji(img,img.dataset.seasonEmoji));}
 
 function apply(root,requested){
- const doc=root.ownerDocument;if(!doc.getElementById('messenger-season-style')){const style=doc.createElement('style');style.id='messenger-season-style';style.textContent=css+controlCSS+snowCSS+iconTransitionCSS+compactNavCSS+springAutumnMotionCSS+composerPlusCSS+headerHoverCSS+connectionBadgeCSS+dialogThemeCSS+utilityIconCSS+classInfoCSS;doc.head.append(style);}
+ const doc=root.ownerDocument;if(!doc.getElementById('messenger-season-style')){const style=doc.createElement('style');style.id='messenger-season-style';style.textContent=css+controlCSS+snowCSS+iconTransitionCSS+compactNavCSS+springAutumnMotionCSS+composerPlusCSS+headerHoverCSS+connectionBadgeCSS+dialogThemeCSS+utilityIconCSS+classInfoCSS+homeCSS;doc.head.append(style);}
  const id=requested==='auto'?today:requested;
- if(!palettes[id]){delete root.dataset.season;root.style.removeProperty('--season-wall');motion(root,null);refreshEmoji(root);return;}
+ if(!palettes[id]){delete root.dataset.season;root.style.removeProperty('--season-wall');root.style.removeProperty('--season-home');motion(root,null);refreshEmoji(root);return;}
  root.dataset.theme='light';root.dataset.season=id;refreshEmoji(root);
  wallpaper(id).then(url=>{if(root.dataset.season===id)root.style.setProperty('--season-wall',url);}).catch(()=>{});
+ homeWallpaper(id).then(url=>{if(root.dataset.season===id)root.style.setProperty('--season-home',url);}).catch(()=>{});
  motion(root,id);
 }
 const notificationVoices=new WeakMap();
@@ -175,5 +196,6 @@ const initial=window.MiniTalk.Persistence?.get('layout.preferences',null)?.theme
 if(['light','dark','forest'].includes(initial))document.documentElement.dataset.theme=initial;
 apply(document.documentElement,initial);
 })();
+
 
 

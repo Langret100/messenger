@@ -137,21 +137,21 @@ const homeCSS=`
 :root[data-season] .view-host{position:relative;background:transparent!important;}
 :root[data-season] :is(.workspace,.chat-home,.chat-home-top,.conversation-list){background:transparent!important;}
 :root[data-season] :is(.app-header,.bottom-nav,.side-rail,.composer-zone){background:color-mix(in srgb,var(--surface) 72%,transparent)!important;}
-:root[data-season=halloween] .app-header{background:color-mix(in srgb,#40362e 32%,transparent)!important;}
-:root[data-season=christmas] .app-header{background:color-mix(in srgb,#256544 32%,transparent)!important;}
+:root[data-season=halloween] .app-header{background:color-mix(in srgb,#40362e 65%,transparent)!important;}
+:root[data-season=christmas] .app-header{background:color-mix(in srgb,#256544 65%,transparent)!important;}
 :root[data-season] .view-host>:is(.chat-home,.utility-view,.task-center-view){background:transparent;}
 :root[data-season] :is(.modern-tool,.profile-summary){background:color-mix(in srgb,var(--surface) 72%,transparent);}
 :root[data-season] :is(.conversation-item,.settings-group,.shortcut-group,.section-card,.tool-card,.task-card,.settings-card,.assigned-task-card,.shop-market-hero,.shop-product-card,.task-center-view .card,.shopping-screen .card){background:color-mix(in srgb,var(--surface) 72%,transparent)!important;}
 :root[data-season] .button.secondary,:root[data-season] .mini-action{background-color:color-mix(in srgb,var(--surface-3) 72%,transparent);}
 :root[data-season] .button.primary{background-color:color-mix(in srgb,var(--accent) 72%,transparent);}
 :root[data-season] :is(.conversation-item,.settings-row,.shortcut-row):hover{background:color-mix(in srgb,var(--surface-3) 82%,transparent)!important;}
-:root[data-season] :is(.app-header,.bottom-nav){background:color-mix(in srgb,var(--surface) 32%,transparent)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
-:root[data-season=halloween] .app-header{background:color-mix(in srgb,#40362e 32%,transparent)!important;color:var(--text);}
-:root[data-season=christmas] .app-header{background:color-mix(in srgb,#256544 32%,transparent)!important;color:var(--text);}
+:root[data-season] :is(.app-header,.bottom-nav){background:color-mix(in srgb,var(--surface) 65%,transparent)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+:root[data-season=halloween] .app-header{background:color-mix(in srgb,#40362e 65%,transparent)!important;color:var(--text);}
+:root[data-season=christmas] .app-header{background:color-mix(in srgb,#256544 65%,transparent)!important;color:var(--text);}
 :root:is([data-season=halloween],[data-season=christmas]) .app-header .icon-button{color:var(--text);}
 :root[data-season][data-season] .conversation-item{background:color-mix(in srgb,var(--surface) 32%,transparent)!important;}
-:root[data-season] :is(.chat-search,.search-hint,.chat-filter){background:color-mix(in srgb,var(--surface-3) 38%,transparent)!important;color:var(--muted)!important;}
-:root[data-season] .chat-filter.active{background:color-mix(in srgb,var(--accent) 18%,transparent)!important;color:var(--accent)!important;}
+:root[data-season] :is(.chat-search,.search-hint,.chat-filter){background:color-mix(in srgb,var(--surface-3) 68%,transparent)!important;color:var(--muted)!important;}
+:root[data-season] .chat-filter.active{background:color-mix(in srgb,var(--accent) 38%,transparent)!important;color:var(--accent)!important;}
 :root[data-season][data-season] :is(.shop-product-card,.shop-inventory-v2-card,.shop-inventory-panel,.shop-inventory-toggle,.shop-inventory-fab){background:color-mix(in srgb,var(--surface) 32%,transparent)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal){scrollbar-color:color-mix(in srgb,var(--accent) 65%,var(--surface)) color-mix(in srgb,var(--surface-3) 35%,transparent);}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar-track{background:color-mix(in srgb,var(--surface-3) 35%,transparent);}

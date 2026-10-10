@@ -5,12 +5,12 @@
 MiniTalk.Features.Layout = (() => {
   const KEY = "layout.preferences";
   const UI_VERSION = 3;
-  const THEMES = new Set(["dark", "light", "forest"]);
+  const THEMES = new Set(["dark", "light", "forest", "auto", "spring", "summer", "autumn", "winter", "halloween", "christmas", "seollal", "chuseok"]);
   const NAV_SIZES = new Set(["comfortable", "large"]);
   const MOTIONS = new Set(["full", "reduced"]);
   const FONT_SIZES = new Set([16, 18, 20]);
   const DEFAULT = {
-    theme: "light",
+    theme: "auto",
     fontSize: 16,
     navSize: "comfortable",
     motion: "full",
@@ -47,6 +47,7 @@ MiniTalk.Features.Layout = (() => {
     ].filter(Boolean));
     for (const root of roots) {
       root.dataset.theme = next.theme;
+      MiniTalk.SeasonTheme?.apply(root, next.theme);
       root.dataset.navSize = next.navSize;
       root.dataset.motion = next.motion;
       root.style.setProperty("--font-size", `${next.fontSize}px`);
@@ -65,7 +66,7 @@ MiniTalk.Features.Layout = (() => {
       <p class="muted modal-note">읽기 편한 크기와 동작 방식으로 바꿀 수 있습니다.</p>
       <label class="field">화면 색상
         <select id="layoutTheme">
-          ${option("light", "라이트")}${option("dark", "다크")}${option("forest", "포레스트")}
+          ${option("auto", "계절·명절 자동")}${Object.entries(MiniTalk.SeasonTheme?.names||{}).map(([id,label])=>option(id,label)).join("")}${option("light", "라이트")}${option("dark", "다크")}${option("forest", "포레스트")}
         </select>
       </label>
       <label class="field">글자 크기

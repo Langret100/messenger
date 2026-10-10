@@ -21,7 +21,7 @@ MiniTalk.Chat.Emoji=(()=>{
   function byCode(code){return list().find(item=>item.code===String(code||""))||null}
   function appendImage(info,container){
     const doc=container.ownerDocument||document,img=doc.createElement("img");
-    img.className="chat-emoticon";img.src=info.src;img.alt=info.fallback||info.token;img.loading="lazy";
+    img.className="chat-emoticon";img.src=info.src;img.alt=info.fallback||info.token;img.loading="lazy";MiniTalk.SeasonTheme?.decorateEmoji(img,info.code);
     img.onerror=()=>{img.replaceWith(doc.createTextNode(info.fallback||info.token))};container.append(img);
   }
   function appendText(text,container,emoticonCode=""){

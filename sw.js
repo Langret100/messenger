@@ -4,8 +4,11 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-runtime-bundle-67";
+const CACHE = "moaru-runtime-season-91";
 const CORE = [
+  "./js/features/season-theme.js",
+  "./assets/season-chat.webp",
+  "./assets/season-nav.webp",
   "./",
   "./index.html",
   "./camera-tool.html",

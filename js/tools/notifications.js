@@ -36,7 +36,7 @@ MiniTalk.Tools.Notifications = (() => {
 
   function notifyAudio() {
     if (!sharedNotifyAudio) {
-      sharedNotifyAudio = new Audio("assets/sounds/notify.mp3");
+      sharedNotifyAudio = new Audio("assets/sounds/notify-chime.mp3");
       sharedNotifyAudio.preload = "auto";
       sharedNotifyAudio.playsInline = true;
     }
@@ -46,7 +46,7 @@ MiniTalk.Tools.Notifications = (() => {
 
   function alarmAudio() {
     if (!sharedAlarmAudio) {
-      sharedAlarmAudio = new Audio("assets/sounds/alarm-default.wav");
+      sharedAlarmAudio = new Audio("assets/sounds/alarm-chime.wav");
       sharedAlarmAudio.preload = "auto";
       sharedAlarmAudio.playsInline = true;
     }
@@ -114,6 +114,9 @@ MiniTalk.Tools.Notifications = (() => {
 
   async function playSound(strong = false) {
     if (mode() !== "sound") return false;
+    const themeCtx = ensureAudioContext();
+    if (themeCtx?.state === "suspended") { try { await themeCtx.resume(); } catch {} }
+    if (MiniTalk.SeasonTheme?.playNotification(themeCtx, strong)) return true;
     primeAudio();
     try {
       const audio = notifyAudio();
@@ -168,6 +171,7 @@ MiniTalk.Tools.Notifications = (() => {
 
   function stopAlarmSound() {
     alarmActive = false;
+    MiniTalk.SeasonTheme?.stopNotification(audioContext);
     if (alarmTimer) clearInterval(alarmTimer);
     if (alarmStopTimer) clearTimeout(alarmStopTimer);
     alarmTimer = null;
@@ -186,6 +190,9 @@ MiniTalk.Tools.Notifications = (() => {
 
   async function playAlarmDefault() {
     if (mode() !== "sound") return false;
+    const themeCtx = ensureAudioContext();
+    if (themeCtx?.state === "suspended") { try { await themeCtx.resume(); } catch {} }
+    if (MiniTalk.SeasonTheme?.playNotification(themeCtx, true)) return true;
     primeAudio();
     try {
       const audio = alarmAudio();
@@ -369,3 +376,4 @@ MiniTalk.Tools.Notifications = (() => {
     openSettings, permissionLabel, primeAudio, playSound, testSound, playAlarmDefault, startAlarmSound, stopAlarmSound
   };
 })();
+

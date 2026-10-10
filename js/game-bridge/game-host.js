@@ -73,8 +73,20 @@ MiniTalk.GameHost=(()=>{
     return{width:Math.round(Math.max(500,width)),height:Math.round(Math.max(540,height)),left:Math.round(left),top:Math.round(top)};
   }
 
-  function popupFeatures(){const b=popupBounds();return `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${b.width},height=${b.height},left=${b.left},top=${b.top}`;}
-  function enforcePopupBounds(win){const b=popupBounds(),apply=()=>{try{win.resizeTo(b.width,b.height);win.moveTo(b.left,b.top)}catch{}};apply();setTimeout(apply,80);setTimeout(apply,260);}
+  function tamagotchiPopupBounds(){
+    const view=MiniTalk.UI.Dom.doc()?.defaultView||window,scr=view.screen||{};
+    const x=Number(scr.availLeft)||0,y=Number(scr.availTop)||0;
+    const screenWidth=Number(scr.availWidth)||1280,screenHeight=Number(scr.availHeight)||800;
+    const height=Math.min(860,Math.max(240,screenHeight-32));
+    const width=Math.min(446,Math.max(240,Math.round((height-70)*.54)+16),screenWidth-16);
+    const currentLeft=Number(view.screenX??view.screenLeft)||x,currentWidth=Number(view.outerWidth)||390;
+    const beside=currentLeft+currentWidth+20;
+    const left=beside+width<=x+screenWidth-8?beside:Math.max(x+8,Math.min(currentLeft-width-20,x+screenWidth-width-8));
+    return{width,height,left:Math.round(left),top:Math.round(y+(screenHeight-height)/2)};
+  }
+
+  function popupFeatures(b=popupBounds()){return `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${b.width},height=${b.height},left=${b.left},top=${b.top}`;}
+  function enforcePopupBounds(win,b=popupBounds()){const apply=()=>{try{win.resizeTo(b.width,b.height);win.moveTo(b.left,b.top)}catch{}};apply();setTimeout(apply,80);setTimeout(apply,260);}
 
   function cleanupPopupState(win){
     if(gamePopup!==win)return;
@@ -137,12 +149,12 @@ MiniTalk.GameHost=(()=>{
     }
     let popup=null;
     try{
-      popup=window.open(url,"MoaruTamagotchi",mobileGameMode()?"":popupFeatures());
+      popup=window.open(url,"MoaruTamagotchi",mobileGameMode()?"":popupFeatures(tamagotchiPopupBounds()));
     }catch{}
     if(!popup)return false;
     gamePopup=popup;popupClosing=false;currentGame={...game,url};frame=null;titleNode=null;
     attachMessageWindow(window);
-    if(!mobileGameMode())enforcePopupBounds(popup);
+    if(!mobileGameMode())enforcePopupBounds(popup,tamagotchiPopupBounds());
     try{popup.focus()}catch{}
     return true;
   }

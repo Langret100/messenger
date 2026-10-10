@@ -79,6 +79,23 @@ MiniTalk.Features.Shopping = (() => {
     return (items||[]).reduce((count,item)=>count+((item?.usedAt||String(item?.deliveryStatus||"").toLowerCase()==="completed")?0:1),0);
   }
 
+  function toggleInventory(host, open=!inventoryOpen) {
+    const view=host?.querySelector(".shopping-view");
+    if(!view)return;
+    inventoryOpen=open;
+    if(open)Service.enter().catch(error=>console.warn("쇼핑 데이터 갱신 실패",error));
+    if(!open){bulkDeliveryMode=false;bulkDeliverySelected.clear();}
+    const panel=view.querySelector(".shop-inventory-panel");
+    if(open&&!panel){
+      const user=MiniTalk.Store.get("user")||{};
+      view.insertBefore(inventoryPanel(user,user.isGuest?[]:Service.inventory(),()=>toggleInventory(host,false)),view.querySelector(".shop-inventory-fab"));
+    }else if(!open)panel?.remove();
+    const button=view.querySelector(".shop-inventory-fab");
+    button?.classList.toggle("active",open);
+    button?.setAttribute("aria-expanded",String(open));
+    button?.setAttribute("aria-label",open?"보관함 닫기":"보관함 열기");
+  }
+
   function patchVisible(host) {
     const D = MiniTalk.UI.Dom, screen = host.querySelector(".shopping-screen"), view = host.querySelector(".shopping-view");
     if (!screen || !view) return render(host, { animate: false, preserveScroll: true, refreshCatalog: false });
@@ -91,11 +108,13 @@ MiniTalk.Features.Shopping = (() => {
     }
     const oldPanel = view.querySelector(".shop-inventory-panel");
     if (inventoryOpen) {
-      const panel = inventoryPanel(user, owned, () => { inventoryOpen = false;render(host); });
+      const previousPanelScroll=oldPanel?.querySelector(".shop-inventory-v2-list")?.scrollTop||0;
+      const panel = inventoryPanel(user, owned, () => toggleInventory(host,false));
       oldPanel ? oldPanel.replaceWith(panel) : view.insertBefore(panel, view.querySelector(".shop-inventory-fab"));
+      const inventoryList=panel.querySelector(".shop-inventory-v2-list");if(inventoryList)inventoryList.scrollTop=previousPanelScroll;
     } else oldPanel?.remove();
     const activeCount=activeInventoryCount(owned);
-    const button = D.el("button", { class: `shop-inventory-fab${inventoryOpen ? " active" : ""}`, type: "button", "aria-expanded": String(inventoryOpen), "aria-label": inventoryOpen ? "보관함 닫기" : "보관함 열기", onclick: () => { inventoryOpen = !inventoryOpen;render(host); } }, [D.el("small", { text: "보관함" }), activeCount ? D.el("b", { text: String(activeCount) }) : null].filter(Boolean));
+    const button = D.el("button", { class: `shop-inventory-fab${inventoryOpen ? " active" : ""}`, type: "button", "aria-expanded": String(inventoryOpen), "aria-label": inventoryOpen ? "보관함 닫기" : "보관함 열기", onclick: () => toggleInventory(host) }, [D.el("small", { text: "보관함" }), activeCount ? D.el("b", { text: String(activeCount) }) : null].filter(Boolean));
     const oldButton = view.querySelector(".shop-inventory-fab");oldButton ? oldButton.replaceWith(button) : view.append(button);
     screen.scrollTop = scrollTop;
   }
@@ -122,11 +141,11 @@ MiniTalk.Features.Shopping = (() => {
       type: "button",
       "aria-expanded": String(inventoryOpen),
       "aria-label": inventoryOpen ? "보관함 닫기" : "보관함 열기",
-      onclick: () => { inventoryOpen = !inventoryOpen; render(host); }
+      onclick: () => toggleInventory(host)
     }, [D.el("small", { text: "보관함" }), activeCount ? D.el("b", { text: String(activeCount) }) : null].filter(Boolean));
 
     view.append(wrap);
-    if (inventoryOpen) view.append(inventoryPanel(user, owned, () => { inventoryOpen = false; render(host); }));
+    if (inventoryOpen) view.append(inventoryPanel(user, owned, () => toggleInventory(host,false)));
     view.append(inventoryButton);
     host.replaceChildren(view);
     MiniTalk.UI.DragScroll?.bind?.(wrap);

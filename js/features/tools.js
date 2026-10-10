@@ -170,11 +170,12 @@ MiniTalk.Features.Tools = (() => {
 
 
   function render(host) {
+    const previousList=host?.querySelector(".tools-screen"),previousScroll=previousList?.scrollTop||0;
     if(activeDragList){MiniTalk.UI.DragScroll?.unbind?.(activeDragList);activeDragList=null}
     const D = MiniTalk.UI.Dom;
     const user = MiniTalk.Store.get("user") || {};
     const profile = MiniTalk.Store.get("profiles")?.[user.user_id] || {};
-    const view = D.el("section", { class: "view utility-view view-enter" });
+    const view = D.el("section", { class: previousList ? "view utility-view" : "view utility-view view-enter" });
     const list = D.el("div", { class: "card-list tools-screen" });
     const profileCard = D.el("button", {
       class: `profile-summary${user.isGuest ? " guest-profile" : ""}`,
@@ -206,6 +207,7 @@ MiniTalk.Features.Tools = (() => {
     );
     view.append(list);
     host.replaceChildren(view);
+    if(previousList)list.scrollTop=previousScroll;
     // 과제탭과 같은 공용 pointer 드래그 경로를 사용합니다.
     // 도구 화면은 대부분 버튼/링크이므로 해당 요소 위에서도 세로 드래그만 허용합니다.
     MiniTalk.UI.DragScroll?.bind?.(list,{allowInteractive:".profile-summary,.modern-tool,.shortcut-row"});

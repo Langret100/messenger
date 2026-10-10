@@ -2,7 +2,8 @@
 MiniTalk.Features.Settings=(()=>{
   const CHAT_BG_KEY="chat.background.image";
   function render(host){
-    const D=MiniTalk.UI.Dom,user=MiniTalk.Store.get("user")||{},profile=MiniTalk.Store.get("profiles")?.[user.user_id]||{},view=D.el("section",{class:"view utility-view view-enter"}),list=D.el("div",{class:"card-list settings-screen"});
+    const previousList=host?.querySelector(".settings-screen"),previousScroll=previousList?.scrollTop||0;
+    const D=MiniTalk.UI.Dom,user=MiniTalk.Store.get("user")||{},profile=MiniTalk.Store.get("profiles")?.[user.user_id]||{},view=D.el("section",{class:previousList?"view utility-view":"view utility-view view-enter"}),list=D.el("div",{class:"card-list settings-screen"});
     const account=D.el("section",{class:"settings-card account-summary"},[
       MiniTalk.Tools.ProfileEditor.avatarNode(profile,user.nickname,"settings-avatar"),
       D.el("div",{class:"settings-copy"},[D.el("strong",{text:user.nickname||"사용자"}),D.el("small",{class:"muted",text:user.isGuest?"게스트 계정":user.user_id||""})])
@@ -12,7 +13,7 @@ MiniTalk.Features.Settings=(()=>{
     const admin=D.el("button",{class:"settings-row",type:"button",disabled:Boolean(user.isGuest),onclick:()=>MiniTalk.AdminSession.authorized()?MiniTalk.Router.go("admin"):openAdminUnlock()},[D.el("span",{class:"settings-row-icon",text:"◆"}),D.el("span",{class:"settings-row-copy"},[D.el("strong",{text:"관리 페이지"}),D.el("small",{class:"muted",text:user.isGuest?"로그인 후 관리자 페이지 인증 가능":MiniTalk.AdminSession.authorized()?`${MiniTalk.AdminSession.role()==="SHOP_MANAGER"?"쇼핑몰 관리 페이지":"총괄 관리 페이지"} 인증됨 · 열기`:"총괄 관리자/쇼핑몰 관리자 비밀번호로 페이지 인증"})]),D.el("span",{class:"row-arrow",text:user.isGuest?"":"›"})]);
     const about=D.el("div",{class:"settings-row static-row"},[D.el("span",{class:"settings-row-icon",text:"i"}),D.el("span",{class:"settings-row-copy"},[D.el("strong",{text:"모아루"}),D.el("small",{class:"muted",text:`버전 ${MiniTalkConfig.version}`})])]);
     const logout=D.el("button",{class:"settings-row danger-row",type:"button",onclick:()=>MiniTalk.Features.Auth.logout()},[D.el("span",{class:"settings-row-icon",text:"↪"}),D.el("span",{class:"settings-row-copy"},[D.el("strong",{text:"로그아웃"}),D.el("small",{class:"muted",text:"현재 계정에서 나갑니다."})])]);
-    list.append(account,D.el("section",{class:"settings-group"},[appearance,background,admin,about]),D.el("section",{class:"settings-group"},[logout]));view.append(list);host.replaceChildren(view)
+    list.append(account,D.el("section",{class:"settings-group"},[appearance,background,admin,about]),D.el("section",{class:"settings-group"},[logout]));view.append(list);host.replaceChildren(view);if(previousList)list.scrollTop=previousScroll
   }
   function openAdminUnlock(){
     const D=MiniTalk.UI.Dom,body=D.el("div",{class:"modal-stack"}),input=D.el("input",{type:"password",maxlength:"80",autocomplete:"off",placeholder:"총괄 관리자 또는 쇼핑몰 관리자 비밀번호"}),submit=D.el("button",{class:"button primary",type:"button",text:"페이지 인증"});

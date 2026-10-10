@@ -168,7 +168,7 @@ const homeCSS=`
 :root[data-season] :is(.shop-random-reel-cell,.shop-random-status strong){color:var(--text);}
 .modal:has(#rankingGame),.modal:has(#rankingGame) .ranking-list{scrollbar-width:none;}
 .modal:has(#rankingGame)::-webkit-scrollbar,.modal:has(#rankingGame) .ranking-list::-webkit-scrollbar{display:none;width:0;height:0;}
-:root[data-season][data-season] .shop-inventory-fab.active{color:var(--accent)!important;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))!important;}
+:root[data-season][data-season] .shop-inventory-fab:is(:hover,.active){color:var(--accent)!important;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))!important;}
 :root[data-season] .shop-inventory-fab.active b{background:var(--accent);color:var(--surface);}
 :root[data-season][data-season] .shop-inventory-panel{background:var(--surface)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:var(--line-strong);overflow:visible;isolation:isolate;}
 :root[data-season] .shop-inventory-panel::before{content:'';position:absolute;pointer-events:none;left:0;top:0;width:100px;height:100px;background-image:url('assets/season-decor.webp');background-size:400% 200%;background-position:var(--season-art-x) var(--season-art-y);opacity:.16;z-index:-1;}

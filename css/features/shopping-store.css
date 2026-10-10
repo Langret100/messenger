@@ -42,12 +42,12 @@
 .purchase-product-image { width: min(100%, 240px); aspect-ratio: 4 / 3; margin: 0 auto 4px; border-radius: 15px; object-fit: cover; background: var(--surface-3); }
 
 .shop-inventory-fab { position: absolute; z-index: 8; right: 11px; bottom: 10px; min-width: 68px; height: 36px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px 0 11px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--surface) 97%, var(--accent) 3%); color: var(--text); box-shadow: 0 6px 18px rgba(19, 43, 82, .13); cursor: pointer; transition: .18s var(--ease); }
-.shop-inventory-fab:hover, .shop-inventory-fab.active { border-color: var(--accent); background: var(--accent); color: white; transform: translateY(-1px); }
+.shop-inventory-fab:hover, .shop-inventory-fab.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent); transform: none; }
 .shop-inventory-fab small { display: flex; align-items: center; height: 20px; font-size: 10px; font-weight: 800; letter-spacing: 0; line-height: 1; }
 .shop-inventory-fab b { flex: 0 0 18px; width: 18px; min-width: 18px; height: 18px; display: grid; place-items: center; margin: 0; padding: 0; border-radius: 50%; background: var(--accent); color: white; font-size: 9px; font-variant-numeric: tabular-nums; line-height: 1; }
-.shop-inventory-fab.active b { background: white; color: var(--accent); }
+.shop-inventory-fab.active b { background: var(--accent); color: var(--surface); }
 
-.shop-inventory-panel { position: absolute; z-index: 7; right: 11px; bottom: 54px; width: min(348px, calc(100% - 20px)); max-height: calc(100% - 68px); display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line)); border-radius: 18px; background: color-mix(in srgb, var(--surface) 98%, transparent); box-shadow: 0 14px 38px rgba(18, 38, 72, .2); backdrop-filter: blur(18px); animation: shop-drawer-in .2s var(--ease); }
+.shop-inventory-panel { position: absolute; z-index: 7; right: 11px; bottom: 54px; width: min(348px, calc(100% - 20px)); max-height: calc(100% - 68px); display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line)); border-radius: 18px; background: color-mix(in srgb, var(--surface) 98%, transparent); box-shadow: 0 14px 38px rgba(18, 38, 72, .2); backdrop-filter: blur(18px); animation: none; }
 .shop-inventory-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 13px 11px 15px; border-bottom: 1px solid var(--line); }
 .shop-inventory-panel > header > div { display: grid; gap: 3px; }
 .shop-inventory-panel > header strong { font-size: 14px; }

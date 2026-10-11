@@ -15,7 +15,9 @@ ok(capture.includes('async function captureAndSend(roomId = "")')&&capture.inclu
 ok(shell.includes('options.hostClass')&&shell.includes('options.modalClass'),'modal class options are missing');
 ok(profile.includes('hostClass: "profile-modal-host"')&&chats.includes('hostClass:"profile-modal-host"'),'profile edit or view modal is not centered');
 ok(css.includes('.modal-host{align-items:center;padding:14px}')&&css.includes('.header-create-button{font-size:23px!important')&&css.includes('.header-search-button::before{content:"⌕"')&&css.includes('transform:translate(-50%,-68%)'),'mobile modal centering or header icon sizing is missing');
-ok(chats.includes('text:"⌕","aria-label":"검색"')&&chats.includes('class:"search-glyph",text:"⌕"'),'original search glyph was not preserved');
+ok(!chats.includes('class:"icon-button subtle header-search-button"'),'redundant chat header search button remains');
+ok(chats.includes('class:"icon-button subtle header-create-button"'),'chat header room creation button is missing');
+ok(chats.includes('class:"search-glyph",text:"⌕"'),'chat search field glyph was not preserved');
 ok(css.includes('.room-lock-badge{right:-5px;bottom:-4px;min-width:0;width:auto;height:auto;border:0;border-radius:0;background:transparent;box-shadow:none'),'room lock badge still has a circular overlay');
 ok(html.includes('js/features/chats.js?v='), 'stale cache version for js/features/chats.js');
 ok(html.includes('js/features/auth.js?v='),'stale cache version for js/features/auth.js');

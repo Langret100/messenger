@@ -14,7 +14,7 @@ ok(chats.includes('MiniTalk.Realtime.isRoomMember(room)?"🔓":"🔒"')&&chats.i
 ok(capture.includes('async function captureAndSend(roomId = "")')&&capture.includes('String(roomId || MiniTalk.Store.get("activeRoom") || "")'),'capture service does not prioritize the open room');
 ok(shell.includes('options.hostClass')&&shell.includes('options.modalClass'),'modal class options are missing');
 ok(profile.includes('hostClass: "profile-modal-host"')&&chats.includes('hostClass:"profile-modal-host"'),'profile edit or view modal is not centered');
-ok(css.includes('.modal-host{align-items:center;padding:14px}')&&css.includes('.header-create-button{font-size:23px!important')&&css.includes('.header-search-button::before{content:"⌕"')&&css.includes('transform:translate(-50%,-68%)'),'mobile modal centering or header icon sizing is missing');
+ok(css.includes('.modal-host{align-items:center;padding:14px}')&&css.includes('.header-create-button{font-size:19px!important;font-family:Arial,sans-serif;font-weight:400}')&&css.includes('.header-search-button::before{content:"⌕"')&&css.includes('transform:translate(-50%,-68%)'),'mobile modal centering or header icon sizing is missing');
 ok(!chats.includes('class:"icon-button subtle header-search-button"'),'redundant chat header search button remains');
 ok(chats.includes('class:"icon-button subtle header-create-button"'),'chat header room creation button is missing');
 ok(chats.includes('class:"search-glyph",text:"⌕"'),'chat search field glyph was not preserved');

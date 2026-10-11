@@ -212,7 +212,7 @@ body{min-height:100dvh}
 .attach-action span,.tool-glyph,.shortcut-icon,.settings-row-icon,.shop-market-mark,.shop-empty-illustration{display:flex;align-items:center;justify-content:center;padding:0}
 .attach-action span{font-size:19px;font-weight:750}
 .header-create-button,.header-search-button{width:36px!important;height:36px!important;line-height:1!important}
-.header-create-button{font-size:23px!important;font-family:Arial,sans-serif;font-weight:600}
+.header-create-button{font-size:19px!important;font-family:Arial,sans-serif;font-weight:400}
 .header-search-button{position:relative;font-size:0!important;padding:0!important}
 .header-search-button::before{content:"⌕";position:absolute;left:50%;top:50%;font-family:inherit;font-size:30px;font-weight:500;line-height:1;transform:translate(-50%,-68%)}
 .chat-search-wrap .search-glyph{width:22px;height:22px;display:grid;place-items:center;font-size:23px!important;line-height:1;transform:translateY(-72%)}

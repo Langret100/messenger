@@ -1,6 +1,7 @@
 /* 모아와 대화하기 - 기존 채팅 UI 위에 필요한 부분만 확장 */
 .moa-chat-list-item{border-color:color-mix(in srgb,var(--accent) 18%,var(--line));background:linear-gradient(135deg,color-mix(in srgb,var(--accent-soft) 52%,var(--surface)),var(--surface))}
-.moa-ai-avatar,.moa-ai-mini-avatar{display:block;object-fit:cover;background:#fff;border:1px solid color-mix(in srgb,var(--accent) 14%,var(--line));box-shadow:0 1px 5px rgba(40,52,75,.10)}
+.moa-ai-avatar,.moa-ai-mini-avatar{display:block;object-fit:cover;background:#fff;border:0;box-shadow:none}
+:root .conversation-item .moa-ai-avatar,:root .message-row .moa-ai-mini-avatar{border:0;box-shadow:none}
 .moa-ai-avatar{padding:0}.moa-ai-mini-avatar{padding:0}
 .moa-ai-badge{font-size:9px;font-weight:900;color:var(--accent);padding:3px 6px;border-radius:999px;background:var(--accent-soft)}
 .moa-chat-room{background:linear-gradient(180deg,color-mix(in srgb,var(--accent-soft) 22%,var(--surface-2)),var(--surface-2) 20%)}

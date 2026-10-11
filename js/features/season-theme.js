@@ -123,12 +123,24 @@ const classInfoCSS=`
 `;
 
 const motionDocuments=new WeakSet();
+const snowMotionCSS=`
+:root:is([data-season=winter],[data-season=christmas]) .messenger-season-motion i{animation-name:messenger-snow-fall;background:linear-gradient(to right,transparent 44%,#8baebe 44%,#8baebe 56%,transparent 56%);border-radius:0;box-shadow:none;opacity:.8;}
+:root:is([data-season=winter],[data-season=christmas]) .messenger-season-motion i::before,:root:is([data-season=winter],[data-season=christmas]) .messenger-season-motion i::after{content:'';position:absolute;inset:0;background:inherit;transform:rotate(60deg);}
+:root:is([data-season=winter],[data-season=christmas]) .messenger-season-motion i::after{transform:rotate(120deg);}
+@keyframes messenger-snow-fall{0%{transform:translate3d(0,0,0) rotate(-15deg)}45%{transform:translate3d(var(--drift),48vh,0) rotate(45deg)}100%{transform:translate3d(calc(var(--drift) * -.45),calc(100vh + 36px),0) rotate(100deg)}}
+@media(max-width:600px){:root:is([data-season=winter],[data-season=christmas]) .messenger-season-motion i:nth-child(n+4){display:block}:root:is([data-season=winter],[data-season=christmas]) .messenger-season-motion i:nth-child(n+7){display:none}}
+`;
 function motion(root,id){
  const doc=root.ownerDocument,shell=doc.getElementById('appShell');if(!shell)return;
  shell.querySelector('.messenger-season-motion')?.remove();
  if(!['winter','christmas','spring','autumn'].includes(id))return;
  const layer=doc.createElement('div');layer.className='messenger-season-motion';layer.setAttribute('aria-hidden','true');
- for(let i=0;i<(['winter','christmas'].includes(id)?6:8);i++){const dot=doc.createElement('i'),seasonal=['spring','autumn'].includes(id),duration=seasonal?16+Math.random()*10:20+Math.random()*14;dot.style.cssText='--sx:'+(seasonal?5+(([0,7,2,5,1,6,3,4][i]+Math.random())*90/8):8+Math.random()*84)+'%;--ss:'+(seasonal?9+Math.random()*5:4+Math.random()*4)+'px;--st:'+duration+'s;--sd:-'+Math.random()*duration+'s;--drift:'+(seasonal?(i%2?1:-1)*(20+Math.random()*30):Math.random()*30-15)+'px';layer.append(dot);}shell.append(layer);
+ for(let i=0;i<8;i++){
+  const dot=doc.createElement('i'),seasonal=['spring','autumn'].includes(id),duration=seasonal?16+Math.random()*10:21+Math.random()*16;
+  const x=seasonal?5+(([0,7,2,5,1,6,3,4][i]+Math.random())*90/8):4+([0,7,2,5,1,6,3,4][i]+.15+Math.random()*.7)*92/8;
+  const phase=seasonal?Math.random():(i*.61803398875+Math.random()*.08)%1;
+  dot.style.cssText='--sx:'+x+'%;--ss:'+(seasonal?9+Math.random()*5:7+Math.random()*5)+'px;--st:'+duration+'s;--sd:-'+phase*duration+'s;--drift:'+(seasonal?(i%2?1:-1)*(20+Math.random()*30):(i%2?-1:1)*(20+Math.random()*25))+'px';layer.append(dot);
+ }shell.append(layer);
  if(!motionDocuments.has(doc)){motionDocuments.add(doc);doc.addEventListener('visibilitychange',()=>{if(doc.hidden)root.dataset.seasonHidden='';else delete root.dataset.seasonHidden;});}
  if(doc.hidden)root.dataset.seasonHidden='';
 }
@@ -178,6 +190,12 @@ const homeCSS=`
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal){scrollbar-color:color-mix(in srgb,var(--accent) 65%,var(--surface)) color-mix(in srgb,var(--surface-3) 35%,transparent);}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar-track{background:color-mix(in srgb,var(--surface-3) 35%,transparent);}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--accent) 65%,var(--surface));border-radius:999px;}
+:root[data-season=summer] .app-shell{background-image:none;}
+:root[data-season=summer] .app-shell::before,:root[data-season=summer] .app-shell::after{content:'';position:absolute;pointer-events:none;z-index:0;width:clamp(220px,64%,320px);height:210px;background-image:var(--season-home,none);background-size:100% auto;background-repeat:no-repeat;opacity:.75;}
+:root[data-season=summer] .app-shell::before{left:0;top:0;background-position:left top;mask-image:radial-gradient(ellipse farthest-side at top left,#000 50%,transparent 100%);}
+:root[data-season=summer] .app-shell::after{right:0;bottom:0;background-position:right bottom;mask-image:radial-gradient(ellipse farthest-side at bottom right,#000 50%,transparent 100%);}
+:root[data-season=summer] .workspace{position:relative;z-index:1;}
+:root[data-season=summer] .app-header{background:color-mix(in srgb,var(--surface) 45%,transparent)!important;}
 `;
 let avatarAtlasPromise;const avatarImages=new Map();
 function avatarWallpaper(id){
@@ -188,7 +206,7 @@ function avatarWallpaper(id){
 let homeAtlasPromise;const homeWalls=new Map();
 function homeWallpaper(id){
  if(homeWalls.has(id))return Promise.resolve(homeWalls.get(id));
- if(!homeAtlasPromise)homeAtlasPromise=new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=new URL('assets/season-home.webp?v=1',document.baseURI).href;});
+ if(!homeAtlasPromise)homeAtlasPromise=new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=new URL('assets/season-home.webp?v=2',document.baseURI).href;});
  return homeAtlasPromise.then(image=>{const i=ids.indexOf(id),w=image.width/4,h=image.height/2,c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(image,i%4*w,Math.floor(i/4)*h,w,h,0,0,w,h);const url='url("'+c.toDataURL('image/webp',.75)+'")';homeWalls.set(id,url);return url;});
 }
 let atlasPromise;const wallpapers=new Map();
@@ -212,7 +230,7 @@ function prepareControls(root){
 prepareControls(document.documentElement);
 function apply(root,requested){
  prepareControls(root);
- const doc=root.ownerDocument;if(!doc.getElementById('messenger-season-style')){const style=doc.createElement('style');style.id='messenger-season-style';style.textContent=css+controlCSS+snowCSS+iconTransitionCSS+compactNavCSS+springAutumnMotionCSS+composerPlusCSS+headerHoverCSS+connectionBadgeCSS+dialogThemeCSS+utilityIconCSS+classInfoCSS+homeCSS;doc.head.append(style);}
+ const doc=root.ownerDocument;if(!doc.getElementById('messenger-season-style')){const style=doc.createElement('style');style.id='messenger-season-style';style.textContent=css+controlCSS+snowCSS+iconTransitionCSS+compactNavCSS+springAutumnMotionCSS+snowMotionCSS+composerPlusCSS+headerHoverCSS+connectionBadgeCSS+dialogThemeCSS+utilityIconCSS+classInfoCSS+homeCSS;doc.head.append(style);}
  const id=requested==='auto'?today:requested;
  if(!palettes[id]){delete root.dataset.season;root.style.removeProperty('--season-wall');root.style.removeProperty('--season-home');motion(root,null);refreshEmoji(root);return;}
  root.dataset.theme='light';root.dataset.season=id;refreshEmoji(root);

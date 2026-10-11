@@ -162,7 +162,8 @@ MiniTalk.Shopping.StoreService = (() => {
     if(current.user_id&&!current.isGuest&&(inventoryDirty||!Object.keys(objectValue(MiniTalk.Store.get("shopInventory"))).length))jobs.push(refreshInventory(true).then(rows=>{inventoryDirty=false;return rows}).catch(error=>{console.warn("보관함을 불러오지 못했습니다.",error);return inventory()}));
     return Promise.all(jobs)
   }
-  function leave(){shopActive=false;if(catalogRecheckTimer){clearTimeout(catalogRecheckTimer);catalogRecheckTimer=null}}
+  function leave(){shopActive=false}
+  // 예약된 재조회는 비활성 상태에서 네트워크 요청을 하지 않고 자연 종료합니다.
 
   async function saveProduct(product) { const current=requireLogin(),value=normalizeProduct({...product,id:product?.id||crypto.randomUUID(),updatedAt:Date.now()});if(!value.name||value.price<=0)throw new Error("상품 이름과 가격을 입력하세요.");const result=await MiniTalk.AuthApi.shopSaveProduct(current.user_id,MiniTalk.AdminSession.requireToken("SHOP"),value),saved=normalizeProduct({...value,...(result.product||{}),imageUrl:result.product?.imageUrl||result.product?.image_url||value.imageUrl});writeCatalog({...objectValue(MiniTalk.Store.get("shopCatalog")),[saved.id]:saved});catalogLoadedAt=Date.now();MiniTalk.Economy.Runtime?.setProductStock?.(saved).catch?.(error=>console.warn("Firebase 재고 반영 지연",error));return saved; }
   async function deleteProduct(id) { const current=requireLogin();await MiniTalk.AuthApi.shopDeleteProduct(current.user_id,MiniTalk.AdminSession.requireToken("SHOP"),id);const catalog={...objectValue(MiniTalk.Store.get("shopCatalog"))};delete catalog[id];writeCatalog(catalog);catalogLoadedAt=Date.now();MiniTalk.Economy.Runtime?.deleteProductStock?.(id).catch?.(error=>console.warn("Firebase 재고 삭제 지연",error)); }

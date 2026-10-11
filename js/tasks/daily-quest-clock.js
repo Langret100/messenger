@@ -53,5 +53,22 @@ MiniTalk.Tasks.DailyQuestClock = (() => {
     return element;
   }
 
-  return { dateKey, nextReset, remaining, label, banner };
+  function weekKey(key=dateKey()) {
+    if(typeof key!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(key))return "";
+    const [y,m,d]=key.split("-").map(Number),date=new Date(Date.UTC(y,m-1,d));
+    date.setUTCDate(date.getUTCDate()-(date.getUTCDay()+6)%7);
+    return date.toISOString().slice(0,10);
+  }
+
+  // Reserve disjoint retry banks for all seven days. Base sets still advance five slots daily.
+  function dayPool(items,key=dateKey()) {
+    const monday=weekKey(key),serial=value=>Math.floor(Date.parse(`${value}T00:00:00Z`)/86400000);
+    const day=serial(key)-serial(monday),start=serial(monday)*5,n=items.length,out=[];
+    if(n<35)throw new Error("주간 문제 풀이 부족합니다.");
+    for(let i=0;i<5;i++)out.push(items[((start+day*5+i)%n+n)%n]);
+    for(let i=35+day;i<n;i+=7)out.push(items[((start+i)%n+n)%n]);
+    return out;
+  }
+
+  return { dateKey, weekKey, dayPool, nextReset, remaining, label, banner };
 })();

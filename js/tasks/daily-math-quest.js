@@ -25,12 +25,12 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
   }
 
   function loadDailySeen() {
-    const base={date:dateKey(),userId:userId(),missions:{},recent:[]};
+    const base={date:dateKey(),week:MiniTalk.Tasks.DailyQuestClock.weekKey(),userId:userId(),missions:{},recent:[]};
     const saved=MiniTalk.Persistence.get(SEEN_STORAGE_KEY,null);
-    if(!saved||saved.date!==base.date||saved.userId!==base.userId)return base;
+    if(!saved||(saved.week||MiniTalk.Tasks.DailyQuestClock.weekKey(saved.date))!==base.week||saved.userId!==base.userId)return base;
     const missions={};
-    MISSIONS.forEach(mission=>{missions[mission.id]=Array.isArray(saved.missions?.[mission.id])?saved.missions[mission.id].map(String).filter(Boolean).slice(-240):[]});
-    return {...base,missions,recent:Array.isArray(saved.recent)?saved.recent.map(String).filter(Boolean).slice(-240):[]};
+    MISSIONS.forEach(mission=>{missions[mission.id]=Array.isArray(saved.missions?.[mission.id])?saved.missions[mission.id].map(String).filter(Boolean):[]});
+    return {...base,missions,recent:Array.isArray(saved.recent)?saved.recent.map(String).filter(Boolean):[]};
   }
 
   function saveDailySeen(state){MiniTalk.Persistence.set(SEEN_STORAGE_KEY,state)}
@@ -114,16 +114,19 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
 
   function daySerial(key){const [year,month,day]=String(key||dateKey()).split("-").map(Number);return Math.floor(Date.UTC(year,month-1,day)/86400000)}
 
+  const poolCache=new Map();
   function stableProblemPool(missionId,target=420){
+    const cacheKey=`${userId()}|${missionId}|${target}`;if(poolCache.has(cacheKey))return poolCache.get(cacheKey);
     const rng=random(hash(`${userId()}|${missionId}|stable-large-pool-v3`)),items=[],seen=new Set();let guard=0;
     while(items.length<target&&guard<30000){guard+=1;const item=problem(missionId,rng),key=problemKey(item);if(seen.has(key))continue;seen.add(key);items.push(item)}
-    return items;
+    poolCache.set(cacheKey,items);return items;
   }
 
   /* 구구단/나눗셈은 계산 사실만 72개라 식만 보여 주면 약 2주 만에 되풀이됩니다.
    * 같은 계산도 식·묶음·줄·상자·나누기 상황으로 나누어 72×5=360개의 서로 다른 화면 문제로 순환합니다. */
   function finiteArithmeticPool(missionId){
     if(missionId!=="multiplication"&&missionId!=="division")return null;
+    const cacheKey=`${userId()}|${missionId}|finite`;if(poolCache.has(cacheKey))return poolCache.get(cacheKey);
     const rows=[];
     if(missionId==="multiplication"){
       for(let left=2;left<=9;left+=1)for(let right=1;right<=9;right+=1){const ans=String(left*right);rows.push(
@@ -142,11 +145,11 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
         {question:`공 ${total}개를 한 상자에 ${divisor}개씩 담으면 상자는 몇 개 필요한가요?`,answer:ans,inputMode:"numeric"}
       )}
     }
-    const rng=random(hash(`${userId()}|${missionId}|finite-order-v3`));for(let i=rows.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[rows[i],rows[j]]=[rows[j],rows[i]]}return rows;
+    const rng=random(hash(`${userId()}|${missionId}|finite-order-v3`));for(let i=rows.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[rows[i],rows[j]]=[rows[j],rows[i]]}poolCache.set(cacheKey,rows);return rows;
   }
 
   function generate(missionId,variant=0,forcedDate=""){
-    const key=forcedDate||dateKey(),pool=finiteArithmeticPool(missionId)||stableProblemPool(missionId,420),v=Math.max(0,Number(variant)||0),start=((daySerial(key)*QUESTIONS_PER_MISSION)+(v*17))%pool.length,out=[];
+    const key=forcedDate||dateKey(),pool=MiniTalk.Tasks.DailyQuestClock.dayPool(finiteArithmeticPool(missionId)||stableProblemPool(missionId,1400),key),v=Math.max(0,Number(variant)||0),start=v%pool.length,out=[];
     for(let i=0;i<QUESTIONS_PER_MISSION;i+=1)out.push(pool[(start+i)%pool.length]);
     return out;
   }
@@ -283,7 +286,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
       const nextItem = items[questionIndex];
       if (nextItem && !seenKeys.has(visibleProblemKey(nextItem)) && visibleProblemKey(nextItem) !== visibleProblemKey(currentItem) && correctPosition(missionId, questionIndex, candidate) !== currentPosition && remainingQuestionsAreFresh(items,questionIndex,seenKeys)) return candidate;
     }
-    return candidate;
+    return -1;
   }
 
   function render(onProgress) {
@@ -347,12 +350,13 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     (dailySeen.missions?.[missionId]||[]).forEach(key=>seenProblems.add(key));
     let variant = 0;
     const freshStart=firstFreshVariant(missionId,seenProblems,0,0);
-    if(freshStart<0){seenProblems.clear();dailySeen.missions[missionId]=[];dailySeen.recent=[];saveDailySeen(dailySeen)}else variant=freshStart;
+    if(freshStart<0){MiniTalk.UI.Shell.toast("오늘의 새 문제를 모두 사용했어요. 다음 초기화 후 다시 도전해 주세요.");return;}variant=freshStart;
     let questions = generate(missionId, variant);
     let wrongCount = 0;
     let sessionCorrect = 0;
 
     function renderQuestion() {
+      if(dateKey()!==progress.date){MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("문제 초기화 시간이 지났어요. 미션을 다시 열어 주세요.");onProgress?.();return;}
       const index = sessionCorrect;
       body.replaceChildren();
       if (index >= QUESTIONS_PER_MISSION || progress.completed[missionId]) {
@@ -362,7 +366,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
 
       const current = questions[index];
       seenProblems.add(visibleProblemKey(current));
-      dailySeen.missions[missionId]=[...seenProblems].slice(-240);dailySeen.recent=[...(dailySeen.recent||[]),visibleProblemKey(current)].filter((value,index,array)=>array.lastIndexOf(value)===index).slice(-240);saveDailySeen(dailySeen);
+      dailySeen.missions[missionId]=[...seenProblems];dailySeen.recent=[...(dailySeen.recent||[]),visibleProblemKey(current)].filter((value,index,array)=>array.lastIndexOf(value)===index);saveDailySeen(dailySeen);
       const feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" });
       const choiceGrid = D.el("div", { class: "quest-choice-grid", role: "group", "aria-label": "정답 보기" });
       let answerLocked = false;
@@ -391,6 +395,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
           feedback.textContent = "아쉬워요. 새 문제로 바꿀게요. 한 번 더 틀리면 이 미션은 다시 시작해요.";
           feedback.className = "quest-feedback wrong";
           const next = nextVariant(missionId, index, current, variant, seenProblems);
+          if(next<0){MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("오늘의 새 문제를 모두 사용했어요. 다음 초기화 후 다시 도전해 주세요.");return;}
           variant = next;
           questions = generate(missionId, variant);
           setTimeout(renderQuestion, 520);

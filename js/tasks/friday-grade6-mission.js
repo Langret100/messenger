@@ -7,7 +7,7 @@
 MiniTalk.Tasks=MiniTalk.Tasks||{};
 MiniTalk.Tasks.FridayGrade6Mission=(()=>{
   const OPEN_HOUR=9,TOTAL=20,PATH="moaru/v3/fridayMission",REWARD_TYPE="WEEKLY_CHECK_OVER80",REWARD_COIN=5,ALT_ANCHOR_WEEK="2026-08-17";
-  const QUESTION_SET_VERSION="v8",mathCats=["분수·소수","비와 비율","도형","자료 해석","문장제"];
+  const QUESTION_SET_VERSION="v9",mathCats=["분수·소수","비와 비율","도형","자료 해석","문장제"];
   const korBank=[
     ["독해","'비가 와서 운동회가 연기되었다.'에서 운동회가 연기된 까닭은?","비가 와서",["비가 와서","날씨가 더워서","학생이 적어서","운동장이 넓어서"]],
     ["독해","글에서 반복되거나 강조되는 내용을 살펴보는 주된 까닭은?","중심 생각을 찾기 위해",["중심 생각을 찾기 위해","글자 수를 세기 위해","문장부호를 찾기 위해","종이 크기를 알기 위해"]],
@@ -147,6 +147,9 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     ["요약","다음 글의 요약으로 가장 알맞은 것은? '모둠 활동에서는 역할을 나누고 서로의 의견을 들으며, 맡은 일을 끝낸 뒤 진행 상황을 함께 확인하면 더 좋은 결과를 만들 수 있다.'","역할 분담과 소통은 모둠 활동을 원활하게 한다",["역할 분담과 소통은 모둠 활동을 원활하게 한다","모둠 활동은 한 사람이 모두 해야 한다","의견은 서로 듣지 않는 것이 좋다","맡은 일은 확인하지 않아도 된다"]]
   ];
 
+  // v9 additions are kept separate so v4–v8 saved answers retain their original question sets.
+  const korExpanded=[["어휘","'객관적'의 뜻으로 가장 알맞은 것은?","개인의 생각이나 감정에 치우치지 않는",["개인의 생각이나 감정에 치우치지 않는","자신의 기분에만 따르는","아무 근거 없이 결정하는","언제나 혼자 행동하는"]],["어휘","'타당하다'의 뜻으로 가장 알맞은 것은?","이치에 맞아 옳다",["이치에 맞아 옳다","모양이 크고 둥글다","일이 아주 급하다","소리가 작고 낮다"]],["어휘","'일관되다'의 뜻으로 가장 알맞은 것은?","태도나 방법이 처음부터 끝까지 한결같다",["태도나 방법이 처음부터 끝까지 한결같다","상황마다 아무렇게나 바뀐다","서로 연락을 끊는다","한 번에 여러 일을 한다"]],["어휘","'공정하다'의 뜻으로 가장 알맞은 것은?","한쪽으로 치우치지 않고 올바르다",["한쪽으로 치우치지 않고 올바르다","무조건 빠르게 처리하다","친한 사람을 먼저 돕다","어려운 일을 피하다"]],["어휘","'대안'의 뜻으로 가장 알맞은 것은?","기존 방법을 대신할 다른 방안",["기존 방법을 대신할 다른 방안","이미 끝난 일의 결과","반드시 따라야 할 한 가지 명령","아무 의미 없는 소문"]],["어휘","'편견'의 뜻으로 가장 알맞은 것은?","공정하지 못하고 한쪽으로 치우친 생각",["공정하지 못하고 한쪽으로 치우친 생각","충분한 증거로 확인한 사실","여러 의견을 고르게 살핀 판단","직접 재어 얻은 길이"]],["어휘","'유사하다'의 뜻으로 가장 알맞은 것은?","서로 비슷하다",["서로 비슷하다","완전히 반대이다","시간이 지나다","여럿이 모이다"]],["어휘","'점진적'의 뜻으로 가장 알맞은 것은?","조금씩 차례로 나아가는",["조금씩 차례로 나아가는","한꺼번에 모두 사라지는","순서 없이 뒤섞이는","아무 변화도 없는"]],["어휘","'효율적'의 뜻으로 가장 알맞은 것은?","적은 노력이나 비용으로 좋은 결과를 얻는",["적은 노력이나 비용으로 좋은 결과를 얻는","노력을 많이 써도 결과가 없는","과정을 무조건 생략하는","가장 비싼 물건을 고르는"]],["어휘","'정확하다'의 뜻으로 가장 알맞은 것은?","바르고 확실하다",["바르고 확실하다","크고 무겁다","새롭고 낯설다","느리고 조용하다"]],["어휘","'신중하다'의 뜻으로 가장 알맞은 것은?","여러 가지를 살펴 조심스럽게 판단하다",["여러 가지를 살펴 조심스럽게 판단하다","생각 없이 바로 결정하다","남의 말을 무조건 무시하다","일을 끝내지 않고 멈추다"]],["어휘","'공감하다'의 뜻으로 가장 알맞은 것은?","다른 사람의 감정이나 생각을 이해하다",["다른 사람의 감정이나 생각을 이해하다","다른 사람을 이기려 하다","상대의 말을 외우기만 하다","자신의 의견만 반복하다"]],["어휘","'보존하다'의 뜻으로 가장 알맞은 것은?","잘 보호하여 그대로 남기다",["잘 보호하여 그대로 남기다","모두 부수어 없애다","아무 곳에나 버리다","다른 물건으로 바꾸다"]],["어휘","'절충하다'의 뜻으로 가장 알맞은 것은?","서로 다른 의견에서 알맞은 점을 취해 조정하다",["서로 다른 의견에서 알맞은 점을 취해 조정하다","한쪽 의견만 무조건 따르다","모든 의견을 버리다","문제를 끝까지 숨기다"]],["어휘","'검증하다'의 뜻으로 가장 알맞은 것은?","사실이나 주장이 옳은지 확인하다",["사실이나 주장이 옳은지 확인하다","주장을 더 크게 외치다","내용을 보지 않고 외우다","관련 자료를 모두 없애다"]],["어휘","'생략하다'의 뜻으로 가장 알맞은 것은?","일부를 줄이거나 빼다",["일부를 줄이거나 빼다","내용을 새로 덧붙이다","순서를 반대로 바꾸다","같은 말을 계속 반복하다"]],["어휘","'비판하다'의 뜻으로 가장 알맞은 것은?","좋고 나쁜 점을 따져 판단하다",["좋고 나쁜 점을 따져 판단하다","상대를 무조건 놀리다","내용을 그대로 베끼다","아무 생각 없이 칭찬하다"]],["어휘","'전달하다'의 뜻으로 가장 알맞은 것은?","말이나 물건을 다른 사람에게 전하다",["말이나 물건을 다른 사람에게 전하다","받은 것을 모두 감추다","일을 혼자 끝내다","뜻을 반대로 바꾸다"]],["어휘","'자발적'의 뜻으로 가장 알맞은 것은?","스스로 원하여 하는",["스스로 원하여 하는","남이 강제로 시켜 하는","아무 뜻 없이 우연히 되는","항상 규칙을 어기는"]],["어휘","'협의하다'의 뜻으로 가장 알맞은 것은?","여러 사람이 함께 의논하다",["여러 사람이 함께 의논하다","혼자 몰래 결정하다","정해진 내용을 잊다","상대의 의견을 막다"]],["문법","'새들이 하늘을 날았다.'에서 주어는?","새들이",["새들이","하늘을","날았다","하늘"]],["문법","'동생이 우유를 마셨다.'에서 주어는?","동생이",["동생이","우유를","마셨다","우유"]],["문법","'바람이 나뭇가지를 흔들었다.'에서 주어는?","바람이",["바람이","나뭇가지를","흔들었다","나뭇가지"]],["문법","'할아버지께서 신문을 읽으셨다.'에서 주어는?","할아버지께서",["할아버지께서","신문을","읽으셨다","신문"]],["문법","'아이들이 운동장에서 달렸다.'에서 주어는?","아이들이",["아이들이","운동장에서","달렸다","운동장"]],["문법","'개구리가 연못으로 뛰었다.'에서 주어는?","개구리가",["개구리가","연못으로","뛰었다","연못"]],["문법","'우리 반이 발표를 준비했다.'에서 주어는?","우리 반이",["우리 반이","발표를","준비했다","발표"]],["문법","'누나가 화분에 물을 주었다.'에서 주어는?","누나가",["누나가","화분에","물을","주었다"]],["문법","'친구들이 교실을 청소했다.'에서 주어는?","친구들이",["친구들이","교실을","청소했다","교실"]],["문법","'강아지가 마당에서 짖었다.'에서 주어는?","강아지가",["강아지가","마당에서","짖었다","마당"]],["문법","'유나가 편지를 썼다.'에서 목적어는?","편지를",["편지를","유나가","썼다","유나"]],["문법","'아버지가 자전거를 고치셨다.'에서 목적어는?","자전거를",["자전거를","아버지가","고치셨다","아버지"]],["문법","'학생들이 전시회를 관람했다.'에서 목적어는?","전시회를",["전시회를","학생들이","관람했다","학생들"]],["문법","'내가 책상을 닦았다.'에서 목적어는?","책상을",["책상을","내가","닦았다","나"]],["문법","'선생님께서 이야기를 들려주셨다.'에서 목적어는?","이야기를",["이야기를","선생님께서","들려주셨다","선생님"]],["문법","'언니가 노래를 불렀다.'에서 목적어는?","노래를",["노래를","언니가","불렀다","언니"]],["문법","'민호가 축구공을 찼다.'에서 목적어는?","축구공을",["축구공을","민호가","찼다","민호"]],["문법","'우리들이 나무를 심었다.'에서 목적어는?","나무를",["나무를","우리들이","심었다","우리들"]],["문법","'엄마가 창문을 여셨다.'에서 목적어는?","창문을",["창문을","엄마가","여셨다","엄마"]],["문법","'동생이 그림을 그렸다.'에서 목적어는?","그림을",["그림을","동생이","그렸다","동생"]],["독해","다음 글에서 알 수 있는 것은? '학교 신문은 학생들이 취재하고 편집한다. 이번 호에는 동아리 소개와 운동회 소식이 실렸다.'","학교 신문에는 학교 활동 소식이 담겨 있다",["학교 신문에는 학교 활동 소식이 담겨 있다","학교 신문은 동아리에서만 읽는다","운동회는 취소되었다","신문은 선생님 혼자 만든다"]],["독해","다음 글에서 알 수 있는 것은? '학교 앞 횡단보도에 안전 도우미가 서 있다. 학생들은 신호가 바뀐 뒤 안내에 따라 길을 건넌다.'","학생들은 신호와 안내에 따라 길을 건넌다",["학생들은 신호와 안내에 따라 길을 건넌다","학생들은 신호를 무시한다","횡단보도는 폐쇄되었다","안전 도우미는 교실 안에 있다"]],["독해","다음 글에서 알 수 있는 것은? '수빈이는 책을 읽다가 모르는 낱말에 표시했다. 책을 다 읽은 뒤 사전에서 그 뜻을 찾았다.'","수빈이는 모르는 낱말의 뜻을 확인했다",["수빈이는 모르는 낱말의 뜻을 확인했다","수빈이는 책을 끝까지 읽지 않았다","수빈이는 사전을 버렸다","수빈이는 모든 낱말을 알고 있었다"]],["독해","다음 글에서 알 수 있는 것은? '박물관 안내문에는 전시품을 만지지 말고 사진 촬영은 허용된 곳에서만 하라고 적혀 있다.'","전시품을 보호하며 관람해야 한다",["전시품을 보호하며 관람해야 한다","모든 전시품을 만져도 된다","사진은 어디서나 찍어도 된다","박물관은 사진 전시만 한다"]],["독해","다음 글에서 알 수 있는 것은? '우리 반은 토의 전에 자료를 조사했다. 토의할 때는 조사한 내용을 근거로 의견을 제시했다.'","자료를 근거로 의견을 나누었다",["자료를 근거로 의견을 나누었다","아무 자료 없이 추측만 했다","모든 의견을 발표 전에 취소했다","토의 중 자료를 모두 버렸다"]],["독해","다음 글에서 알 수 있는 것은? '도서관은 다음 주부터 수요일마다 한 시간 일찍 문을 닫는다. 다른 요일의 운영 시간은 그대로이다.'","수요일 운영 시간이 짧아진다",["수요일 운영 시간이 짧아진다","모든 요일에 문을 닫는다","수요일에 한 시간 늦게 연다","다른 요일도 한 시간 일찍 닫는다"]],["독해","다음 글에서 알 수 있는 것은? '환경 동아리는 점심시간 뒤 운동장을 돌며 쓰레기를 주웠다. 모은 쓰레기는 종류별로 나누어 버렸다.'","쓰레기를 줍고 분리배출했다",["쓰레기를 줍고 분리배출했다","점심시간 전에 운동장을 청소했다","쓰레기를 모두 한곳에 섞었다","쓰레기를 교실에 쌓아 두었다"]],["독해","다음 글에서 알 수 있는 것은? '미술관은 예약한 관람객에게 먼저 입장권을 준다. 예약하지 않은 사람은 남은 자리 수에 따라 입장할 수 있다.'","예약하면 입장권을 먼저 받을 수 있다",["예약하면 입장권을 먼저 받을 수 있다","예약하지 않으면 언제나 입장할 수 없다","모든 사람은 무료로 입장한다","예약한 사람도 입장권을 받을 수 없다"]],["독해","다음 글에서 알 수 있는 것은? '지호는 실험 전에 준비물을 확인했다. 실험 중 관찰한 변화를 적고 끝난 뒤 결과를 비교했다.'","지호는 실험 과정을 기록했다",["지호는 실험 과정을 기록했다","실험 전에 결과를 정했다","실험 중 아무것도 관찰하지 않았다","실험 준비물을 확인하지 않았다"]],["독해","다음 글에서 알 수 있는 것은? '학교에서는 사용하지 않는 전등을 끄고 냉난방 중에는 창문을 닫도록 안내했다.'","에너지를 아껴 쓰도록 안내했다",["에너지를 아껴 쓰도록 안내했다","전등을 항상 켜 두도록 했다","냉난방 중 창문을 열도록 했다","교실을 사용하지 말라고 했다"]],["추론","등산로 입구에 낙석 주의 표지판이 있다. 가장 자연스럽게 짐작할 수 있는 것은?","돌이 떨어질 위험에 주의해야 한다",["돌이 떨어질 위험에 주의해야 한다","등산로에 돌이 전혀 없다","누구나 뛰어 내려가야 한다","산에 나무가 없다는 뜻이다"]],["추론","행사장 좌석 대부분에 가방이 놓여 있고 사람들이 무대 앞에 서 있다. 가장 자연스럽게 짐작할 수 있는 것은?","많은 사람이 행사에 참여하고 있다",["많은 사람이 행사에 참여하고 있다","행사장에는 아무도 오지 않았다","행사가 영구히 취소되었다","모든 좌석이 고장 났다"]],["추론","도서관 반납함에 책이 가득하고 직원이 책을 정리하고 있다. 가장 자연스럽게 짐작할 수 있는 것은?","반납된 책을 정리하는 중이다",["반납된 책을 정리하는 중이다","모든 책이 새로 출판되었다","도서관에서 책을 팔고 있다","직원이 책을 읽을 수 없다"]],["추론","모둠 친구들이 지도에서 길을 찾고 출발 시간을 확인한다. 가장 자연스럽게 짐작할 수 있는 것은?","이동 계획을 세우고 있다",["이동 계획을 세우고 있다","지도를 그리는 시험을 보고 있다","이미 목적지에 도착했다","길을 찾는 일을 포기했다"]],["추론","교실 게시판에 발표 순서가 적혀 있고 학생들이 자료를 점검한다. 가장 자연스럽게 짐작할 수 있는 것은?","발표를 준비하고 있다",["발표를 준비하고 있다","학생들이 체육복을 구매한다","교실이 영원히 폐쇄된다","발표 자료가 모두 없어졌다"]],["추론","농구공의 바람이 빠져 있고 친구가 공기 주입기를 가져온다. 가장 자연스럽게 짐작할 수 있는 것은?","공에 바람을 넣으려 한다",["공에 바람을 넣으려 한다","공을 물에 담그려 한다","공을 버리기로 했다","농구장이 사라졌다"]],["추론","버스 안내판에 운행이 지연된다는 글이 뜨고 승객들이 기다린다. 가장 자연스럽게 짐작할 수 있는 것은?","버스 도착이 늦어지고 있다",["버스 도착이 늦어지고 있다","버스가 평소보다 빨리 도착했다","승객들이 모두 목적지에 도착했다","오늘 버스 요금이 무료이다"]],["추론","친구가 뜨거운 국그릇을 두 손으로 조심스럽게 내려놓는다. 가장 자연스럽게 짐작할 수 있는 것은?","뜨거운 그릇을 안전하게 옮기려 한다",["뜨거운 그릇을 안전하게 옮기려 한다","국이 차가워졌음을 알 수 있다","친구가 음식을 버리려 한다","그릇을 깨뜨리려 한다"]],["추론","운동회 계주 선수들이 출발 전에 바통을 주고받는 연습을 한다. 가장 자연스럽게 짐작할 수 있는 것은?","바통 전달을 잘하려고 준비한다",["바통 전달을 잘하려고 준비한다","계주를 하지 않기로 했다","운동회가 이미 끝났다","바통이 필요 없는 경기이다"]],["추론","공연장 입구에서 직원이 관람객의 표를 확인한다. 가장 자연스럽게 짐작할 수 있는 것은?","입장 자격을 확인하고 있다",["입장 자격을 확인하고 있다","모든 표를 새로 만들고 있다","공연 내용을 외우게 한다","공연장이 비어 있다는 뜻이다"]]];
+
   function subjectRunIndex(){return Math.floor(weekNumberFromAnchor()/2)}
   function cycleKoreanQuestions(bank,r,uniqueVisibleText=false){
     const ordered=shuffle(bank,rng(hash(`${user().user_id||"guest"}|weekly-korean-cycle-v2`))),run=subjectRunIndex(),blockCount=Math.max(1,Math.floor(ordered.length/TOTAL)),epoch=Math.floor(run/blockCount),legacyStart=(((run*TOTAL)+(epoch*7))%ordered.length+ordered.length)%ordered.length;
@@ -161,9 +164,9 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     return out;
   }
 
-  function makeMathQuestion(cat,r,variant=null){
+  function makeMathQuestion(cat,r,variant=null,modeOffset=Math.abs(weekNumberFromAnchor())){
     if(cat==="분수·소수"){
-      const mode=variant==null?between(r,0,4):(variant+Math.abs(weekNumberFromAnchor()))%5;
+      const mode=variant==null?between(r,0,4):(variant+modeOffset)%5;
       if(mode===0){const a=between(r,8,48)/10,b=between(r,2,19)/10,ans=(a+b).toFixed(1);return q("수학",cat,`주스가 ${a.toFixed(1)}L 있었는데 ${b.toFixed(1)}L를 더 부었습니다. 지금 주스는 모두 몇 L인가요?`,ans,[ans,(a+b+.1).toFixed(1),(Math.max(0,a+b-.1)).toFixed(1),(Math.max(0,a-b)).toFixed(1)],r,"word")}
       if(mode===1){const a=between(r,25,90)/10,b=between(r,5,Math.max(5,Math.floor(a*10)-5))/10,ans=(a-b).toFixed(1);return q("수학",cat,`${a.toFixed(1)}kg의 밀가루 중 ${b.toFixed(1)}kg을 사용했습니다. 남은 밀가루는 몇 kg인가요?`,ans,[ans,(a+b).toFixed(1),(Math.max(0,a-b+.1)).toFixed(1),(Math.max(0,a-b-.1)).toFixed(1)],r,"word")}
       if(mode===2){const d=between(r,4,10),n=between(r,1,d-2),extra=between(r,1,d-n),ans=`${n+extra}/${d}`;return q("수학",cat,`한 판을 ${d}등분한 피자에서 처음 ${n}조각, 나중에 ${extra}조각을 먹었습니다. 먹은 양을 분수로 나타내면?`,ans,[ans,`${n}/${d}`,`${extra}/${d}`,`${d}/${n+extra}`],r,"word")}
@@ -171,14 +174,14 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
       const whole=between(r,2,7),d=between(r,3,8),n=between(r,1,d-1),ans=`${whole} ${n}/${d}`;return q("수학",cat,`${whole*d+n}/${d}를 대분수로 나타내면?`,ans,[ans,`${whole+1} ${n}/${d}`,`${whole} ${d-n}/${d}`,`${n} ${whole}/${d}`],r)
     }
     if(cat==="비와 비율"){
-      const mode=variant==null?between(r,0,3):(variant+Math.abs(weekNumberFromAnchor()))%4;
+      const mode=variant==null?between(r,0,3):(variant+modeOffset)%4;
       if(mode===0){const totals=[20,40,50,80],total=totals[between(r,0,totals.length-1)],rates=[20,25,40,50,60,75,80],rate=rates[between(r,0,rates.length-1)],part=total*rate/100,ans=`${rate}%`;return q("수학",cat,`동아리 학생 ${total}명 중 ${part}명이 발표에 참여했습니다. 참여한 학생의 비율은 몇 %인가요?`,ans,percentChoices(ans,r),r,"word")}
       if(mode===1){const total=[20,40,50,100][between(r,0,3)],rate=[10,20,25,30,40,50,60][between(r,0,6)],ans=String(total*rate/100);return q("수학",cat,`${total}개의 구슬 중 ${rate}%가 파란색입니다. 파란 구슬은 몇 개인가요?`,ans,[ans,String(total-rate),String(rate),String(total*rate/100+5)],r,"word")}
       if(mode===2){const pairs=[[2,3],[2,5],[3,4],[3,5],[4,5],[5,6]],pair=pairs[between(r,0,pairs.length-1)],a=pair[0],b=pair[1],k=between(r,2,5),ans=`${a}:${b}`;return q("수학",cat,`빨간 블록 ${a*k}개와 파란 블록 ${b*k}개의 수를 가장 간단한 비로 나타내면?`,ans,[ans,`${a*k}:${b*k}`,`${b}:${a}`,`${a+b}:${b}`],r,"word")}
       const original=between(r,4,9)*1000,discount=[10,20,25][between(r,0,2)],ans=String(original*(100-discount)/100);return q("수학",cat,`${original}원인 물건을 ${discount}% 할인합니다. 할인된 가격은 얼마인가요?`,ans,[ans,String(original*discount/100),String(original-discount),String(original*(100-discount)/100+500)],r,"word")
     }
     if(cat==="도형"){
-      const mode=variant==null?between(r,0,4):(variant+Math.abs(weekNumberFromAnchor()))%5,w=between(r,4,15),h=between(r,3,12);
+      const mode=variant==null?between(r,0,4):(variant+modeOffset)%5,w=between(r,4,15),h=between(r,3,12);
       if(mode===0){const ans=String(w*h);return q("수학",cat,`가로 ${w}cm, 세로 ${h}cm인 직사각형 모양 종이의 넓이는 몇 ㎠인가요?`,ans,[ans,String(2*(w+h)),String(w+h),String(w*h+h)],r,"word")}
       if(mode===1){const ans=String(2*(w+h));return q("수학",cat,`가로 ${w}m, 세로 ${h}m인 직사각형 화단 둘레에 끈을 한 바퀴 두르려고 합니다. 필요한 끈의 길이는 몇 m인가요?`,ans,[ans,String(w*h),String(w+h),String(2*w+h)],r,"word")}
       if(mode===2){const side=between(r,4,14),ans=String(side*side);return q("수학",cat,`한 변의 길이가 ${side}cm인 정사각형의 넓이는 몇 ㎠인가요?`,ans,[ans,String(side*4),String(side*2),String(side*side+side)],r,"word")}
@@ -187,13 +190,13 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     }
     if(cat==="자료 해석"){
       let vals=[between(r,20,95),between(r,20,95),between(r,20,95),between(r,20,95)];while(new Set(vals).size<4)vals=[between(r,20,95),between(r,20,95),between(r,20,95),between(r,20,95)];
-      const mode=variant==null?between(r,0,3):(variant+Math.abs(weekNumberFromAnchor()))%4,max=Math.max(...vals),min=Math.min(...vals),sum=vals.reduce((a,b)=>a+b,0);
+      const mode=variant==null?between(r,0,3):(variant+modeOffset)%4,max=Math.max(...vals),min=Math.min(...vals),sum=vals.reduce((a,b)=>a+b,0);
       if(mode===0){const ans=String(vals.indexOf(max)+1);return q("수학",cat,`1~4모둠의 재활용품 수가 차례로 ${vals.join(", ")}개입니다. 가장 많이 모은 모둠은 몇 모둠인가요?`,ans,["1","2","3","4"],r,"word")}
       if(mode===1){const ans=String(max-min);return q("수학",cat,`네 모둠의 독서 기록이 ${vals.join(", ")}권입니다. 가장 많은 기록과 가장 적은 기록의 차이는 몇 권인가요?`,ans,[ans,String(max),String(min),String(max-min+5)],r,"word")}
       if(mode===2){const ans=String(sum);return q("수학",cat,`월~목요일에 모은 우유갑 수가 각각 ${vals.join(", ")}개입니다. 나흘 동안 모두 몇 개를 모았나요?`,ans,[ans,String(max),String(sum-min),String(sum+10)],r,"word")}
       const even=[20,30,40,50,60,70,80,90],data=shuffle(even,r).slice(0,4),avg=data.reduce((a,b)=>a+b,0)/4,ans=String(avg);return q("수학",cat,`네 번의 기록이 ${data.join(", ")}점입니다. 평균은 몇 점인가요?`,ans,[ans,String(Math.max(...data)),String(Math.min(...data)),String(avg+5)],r,"word")
     }
-    const mode=variant==null?between(r,0,6):(variant+Math.abs(weekNumberFromAnchor()))%7;
+    const mode=variant==null?between(r,0,6):(variant+modeOffset)%7;
     if(mode===0){const price=between(r,2,9)*500,count=between(r,2,6),paid=Math.ceil(price*count/5000)*5000,ans=String(paid-price*count);return q("수학",cat,`${price}원짜리 공책 ${count}권을 사고 ${paid}원을 냈습니다. 거스름돈은 얼마인가요?`,ans,[ans,String(price*count),String(paid-price),String(Math.max(0,paid-price*count-500))],r,"word")}
     if(mode===1){const per=between(r,3,8),boxes=between(r,2,6),used=between(r,1,per*boxes-1),ans=String(per*boxes-used);return q("수학",cat,`한 상자에 귤이 ${per}개씩 든 상자가 ${boxes}개 있습니다. 그중 ${used}개를 먹었다면 남은 귤은 몇 개인가요?`,ans,[ans,String(per*boxes),String(used),String(per+boxes-used)],r,"word")}
     if(mode===2){const each=between(r,4,9)*100,people=between(r,3,7),ans=String(each*people);return q("수학",cat,`한 사람에게 ${each}원씩 간식비를 나누어 주려고 합니다. ${people}명에게 필요한 돈은 모두 얼마인가요?`,ans,[ans,String(each+people),String(each*(people-1)),String(each*people+100)],r,"word")}
@@ -276,9 +279,33 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     return rows;
   }
 
+  const mathPoolCache=new Map();
+  function expandedMathQuestions(orderR){
+    const rows=[],run=subjectRunIndex(),counts={"분수·소수":5,"비와 비율":4,"도형":5,"자료 해석":4,"문장제":7};
+    for(const cat of mathCats){
+      for(let slot=0;slot<4;slot++){
+        const mode=((run+slot)%counts[cat]+counts[cat])%counts[cat],cacheKey=`${user().user_id||"guest"}|${cat}|${mode}`;
+        if(!mathPoolCache.has(cacheKey)){
+          const r=rng(hash(`${cacheKey}|weekly-math-pool-v9`)),pool=[],seen=new Set();
+          for(let guard=0;pool.length<60&&guard<300;guard++){
+            const item=makeMathQuestion(cat,r,mode,0),key=item.text.replace(/\s+/g," ").trim();
+            if(seen.has(key)||new Set(item.choices).size!==4||!item.choices.includes(item.answer))continue;
+            seen.add(key);pool.push(item);
+          }
+          if(!pool.length)throw new Error("주간 수학 문제 풀이 부족합니다.");
+          mathPoolCache.set(cacheKey,pool);
+        }
+        const pool=mathPoolCache.get(cacheKey),index=((run%pool.length)+pool.length)%pool.length;
+        rows.push(pool[index]);
+      }
+    }
+    return shuffle(rows,orderR);
+  }
+
   function makeQuestions(version=QUESTION_SET_VERSION){
     const subject=missionSubject(),legacy=version==="v4",previous=version==="v5",previous6=version==="v6",seedVersion=legacy?"v4":previous?"v5":previous6?"v6":"v7",r=rng(hash(`${weekKey()}|${user().user_id||"guest"}|grade6-worksheet-${seedVersion}|${subject}`)),rows=[];
-    if(subject==="수학"){
+    if(subject==="수학"&&version==="v9"){rows.push(...expandedMathQuestions(r));}
+    else if(subject==="수학"){
       const cats=[];for(const cat of mathCats)for(let i=0;i<4;i++)cats.push({cat,variant:i});
       shuffle(cats,r).forEach(item=>rows.push(legacy?makeMathQuestionV4(item.cat,r):makeMathQuestion(item.cat,r,item.variant)));
     }else if(version==="v7"){
@@ -287,7 +314,7 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
     }else{
       /* v8: 검수된 고정 문제은행만 순환합니다. 장소와 행동을 따로 뽑지 않으므로
        * '박물관에서 준비 운동' 같은 의미 불일치와 이름만 바뀐 복제 문항이 생기지 않습니다. */
-      const bank=legacy?korBank:previous?korBank.concat(korExtra):korBank.concat(korExtra,korCycleExtra),selected=(legacy||previous)?shuffle(bank,r).slice(0,TOTAL):cycleKoreanQuestions(bank,r,version==="v8");
+      const bank=legacy?korBank:previous?korBank.concat(korExtra):korBank.concat(korExtra,korCycleExtra,version==="v9"?korExpanded:[]),selected=(legacy||previous)?shuffle(bank,r).slice(0,TOTAL):cycleKoreanQuestions(bank,r,(version==="v8"||version==="v9"));
       selected.forEach(([cat,text,ans,choices])=>rows.push(q("국어",cat,text,ans,choices,r,/다음 글|다음 내용|다음 문장|짐작|요약|안내문/.test(text)?"passage":"short")));
     }
     return rows.slice(0,TOTAL).map((x,i)=>({...x,id:`q${i+1}`}));
@@ -465,3 +492,4 @@ MiniTalk.Tasks.FridayGrade6Mission=(()=>{
   function render(){const D=MiniTalk.UI.Dom,info=windowInfo(),subject=missionSubject(),desktop=desktopWorksheet(),accordion=MiniTalk.Tasks.QuestAccordion;const restore=D.el("button",{class:"friday-mission-compact-toggle",type:"button","data-no-drag-scroll":"true","aria-label":`금요일 초6 ${subject} 학습점검 펼치기`,onclick:event=>{event.preventDefault();event.stopPropagation();accordion?.activate?.("weekly")}},[D.el("span",{class:"friday-compact-copy"},[D.el("strong",{text:`금요일 초6 ${subject} 학습점검`}),D.el("small",{text:info.open?`20문항 · 80점 이상 · 🪙 +${REWARD_COIN}`:`금요일 ${OPEN_HOUR}시부터 열려요`})]),D.el("span",{class:"friday-compact-arrow",text:"⌄","aria-hidden":"true"})]);const copy=D.el("div",{class:"friday-mission-copy"},[D.el("div",{class:"friday-mission-eyebrow",text:"주간 미션"}),D.el("strong",{text:`금요일 초6 ${subject} 학습점검`}),D.el("div",{class:"friday-mission-meta"},[D.el("span",{text:`${subject} · 20문항`}),D.el("span",{text:"80점 이상"}),D.el("span",{class:"friday-reward-pill"},[D.el("img",{src:"assets/ui/notebook-coin.svg",alt:""}),D.el("b",{text:`+${REWARD_COIN}`})])]),D.el("b",{class:"friday-countdown",text:info.open?"오늘 자정까지 참여할 수 있어요":`열리기까지 ${remainLabel()}`})]);const action=info.open?D.el("div",{class:"friday-mission-action"},[D.el("button",{class:"button primary compact-button friday-start-button",type:"button",text:desktop?"시험지 열기":"시작하기",disabled:user().isGuest,onclick:open})]):D.el("div",{class:"friday-lock-overlay","aria-hidden":"true"},[D.el("span",{text:"🔒"})]);const card=D.el("section",{class:`friday-mission-card section-card ${info.open?"open":"locked"}`,"data-quest-key":"weekly"},[restore,copy,action]);if(!info.open){const label=card.querySelector(".friday-countdown"),timer=setInterval(()=>{if(!card.isConnected)return clearInterval(timer);const next=windowInfo();if(next.open){clearInterval(timer);if(MiniTalk.Store.get("route")==="tasks")MiniTalk.Features.Tasks.render(MiniTalk.UI.Dom.byId("viewHost"));return}label.textContent=`열리기까지 ${remainLabel()}`},30000)}return card}
   return{render,open,windowInfo,makeQuestions,buildReport,weekKey,missionSubject,scorePercent,rewardEligible,ensureWeeklyReward,desktopWorksheet,serializeAnswers};
 })();
+

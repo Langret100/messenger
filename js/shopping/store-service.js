@@ -9,7 +9,7 @@ MiniTalk.Shopping.StoreService = (() => {
   let catalogState = { status: "idle", code: "" };
   let catalogOff=null,catalogLiveDirty=false,catalogWatchers=0;
   const catalogVisible=()=>shopActive||catalogWatchers>0;
-  function attachCatalog(){if(catalogOff||!MiniTalk.Shopping.CatalogCloud||MiniTalk.Realtime?.getMode?.()!=="firebase")return;catalogOff=MiniTalk.Shopping.CatalogCloud.subscribe(()=>{if(!catalogVisible())return;if(catalogPromise){catalogLiveDirty=true;return;}refreshCatalog(true).catch(error=>{console.warn("Firebase 상품 목록 갱신 실패",error);scheduleCatalogFailureRetry();});});}
+  function attachCatalog(){if(catalogOff||!MiniTalk.Shopping.CatalogCloud||MiniTalk.Realtime?.getMode?.()!=="firebase"&&!user().isGuest)return;catalogOff=MiniTalk.Shopping.CatalogCloud.subscribe(()=>{if(!catalogVisible())return;if(catalogPromise){catalogLiveDirty=true;return;}refreshCatalog(true).catch(error=>{console.warn("Firebase 상품 목록 갱신 실패",error);scheduleCatalogFailureRetry();});});}
   function releaseCatalog(){if(!catalogVisible()){if(catalogOff){catalogOff();catalogOff=null;}if(catalogRecheckTimer){clearTimeout(catalogRecheckTimer);catalogRecheckTimer=null;}}}
   function watchCatalog(){catalogWatchers++;attachCatalog();refreshCatalog(false).catch(error=>{console.warn("관리자 상품 목록 갱신 실패",error);scheduleCatalogFailureRetry();});let stopped=false;return()=>{if(stopped)return;stopped=true;catalogWatchers--;releaseCatalog();};}
   function catalogStatus(){return {...catalogState};}
@@ -161,7 +161,7 @@ MiniTalk.Shopping.StoreService = (() => {
   function start(current=user()) {
     /* 경제 런타임은 Firebase 현재 상태를 기준으로 사용합니다.
      * Sheets 보관함은 장기 백업이며 쇼핑 진입 때 Firebase와 합치거나 주기 조회하지 않습니다. */
-    hydrateCatalogCache();shopActive=false;inventoryDirty=true;
+    hydrateCatalogCache();shopActive=false;releaseCatalog();inventoryDirty=true;
     const nextUserId=!current.user_id||current.isGuest?"":String(current.user_id);
     if(activeUserId!==nextUserId){inventoryVersion++;inventoryLiveEpoch++;inventoryPromise=null;activeUserId=nextUserId;const cached=activeUserId?objectValue(MiniTalk.Persistence.get(inventoryCacheKey(activeUserId),{})):{};MiniTalk.Store.set("shopInventory",cached)}
     if(!activeUserId)return;
@@ -184,10 +184,11 @@ MiniTalk.Shopping.StoreService = (() => {
     const current=requireLogin(),value=normalizeProduct({...product,id:product?.id||crypto.randomUUID(),updatedAt:Date.now()}),token=MiniTalk.AdminSession.requireToken("SHOP");
     if(!value.name||value.price<=0)throw new Error("상품 이름과 가격을 입력하세요.");
     if(MiniTalk.Shopping.CatalogCloud){
-      await MiniTalk.Shopping.CatalogCloud.change("save",value,current.user_id);
-      writeCatalog({...objectValue(MiniTalk.Store.get("shopCatalog")),[value.id]:value});catalogLoadedAt=Date.now();
+      const change=await MiniTalk.Shopping.CatalogCloud.change("save",value,current.user_id,product?.changedFields);
+      const saved=normalizeProduct(change?.product||value);
+      writeCatalog({...objectValue(MiniTalk.Store.get("shopCatalog")),[saved.id]:saved});catalogLoadedAt=Date.now();
       let backupPending=false;try{backupPending=(await syncProductBackups())>0;}catch(error){backupPending=true;console.warn("상품 백업 동기화 대기",error);}
-      return {...value,backupPending};
+      return {...saved,backupPending};
     }
     const result=await MiniTalk.AuthApi.shopSaveProduct(current.user_id,token,value),saved=normalizeProduct({...value,...(result.product||{}),imageUrl:result.product?.imageUrl||result.product?.image_url||value.imageUrl});writeCatalog({...objectValue(MiniTalk.Store.get("shopCatalog")),[saved.id]:saved});catalogLoadedAt=Date.now();MiniTalk.Economy.Runtime?.setProductStock?.(saved).catch?.(error=>console.warn("Firebase 재고 반영 지연",error));return saved;
   }

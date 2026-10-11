@@ -121,7 +121,13 @@ MiniTalk.DataCache=(()=>{
     await setMeta("maintenance.last",now());return true
   }
 
+  async function clearAll(){
+    const db=await open();
+    if(!db&&typeof indexedDB!=="undefined")throw new Error("기기 캐시를 비울 수 없습니다.");
+    if(db)await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).clear();tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("기기 캐시 초기화 실패"));tx.onabort=()=>reject(tx.error||new Error("기기 캐시 초기화 취소"))});
+    memory.clear();return true;
+  }
   function start(){cleanup().catch(error=>console.warn("기기 캐시 정리 실패",error))}
 
-  return{get,put,remove,list,touch,getMeta,setMeta,getMessages,getMessagesBefore,putMessage,removeMessage,removeMessageRoom,cleanup,start,MAX_AGE,CHAT_MAX};
+  return{get,put,remove,list,touch,getMeta,setMeta,getMessages,getMessagesBefore,putMessage,removeMessage,removeMessageRoom,cleanup,clearAll,start,MAX_AGE,CHAT_MAX};
 })();

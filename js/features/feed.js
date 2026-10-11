@@ -144,7 +144,18 @@ MiniTalk.Features.Feed=(()=>{
   function queueCleanup(id){if(!id)return;const rows=[...new Set(pendingCleanup().concat(String(id)))].slice(-30);MiniTalk.Persistence.set(CLEANUP_KEY,rows)}
   async function retryCleanup(){const rows=pendingCleanup();if(!rows.length)return;const failed=[];for(const id of rows){try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{failed.push(id)}}MiniTalk.Persistence.set(CLEANUP_KEY,failed)}
   async function reconcileFeedCacheAndLimit(){
+    const generation=feedGeneration,cachedBefore=await MiniTalk.DataCache?.list?.(POST_CACHE,{touchRecords:false})||[],visibleBefore=Object.keys(state.posts);
     const keys=await MiniTalk.Realtime.cloudKeys(POSTS_PATH),serverSet=new Set(keys.map(String)),excess=Math.max(0,keys.length-MAX_POSTS),removed=[];
+    if(generation!==feedGeneration)return serverSet;
+    // A confirmed empty server is a reset, not the normal 30-post archive pruning.
+    // Capture old IDs before the request so a concurrently added new post survives.
+    if(!keys.length){
+      const stale=new Set([...visibleBefore,...cachedBefore.map(row=>String(row.key||row.value?.id||""))].filter(Boolean));
+      await Promise.all([...stale].flatMap(id=>[POST_CACHE,MEDIA_CACHE,THUMB_CACHE].map(type=>MiniTalk.DataCache?.remove?.(type,id))));
+      if(generation!==feedGeneration)return serverSet;
+      for(const id of stale)delete state.posts[id];
+      removed.push(...stale);
+    }
     if(excess){
       const saved=await mutateHeartState(next=>{
         const rows=Object.entries(next.posts||{}).sort((a,b)=>Number(a[1].createdAt)-Number(b[1].createdAt)||a[0].localeCompare(b[0]));

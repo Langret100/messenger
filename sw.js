@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-runtime-bundle-122";
+const CACHE = "moaru-runtime-bundle-127";
 const CORE = [
   "./assets/season-controls.webp",
   "./assets/season-utility.webp",
@@ -42,6 +42,7 @@ const CORE = [
   "./js/core/router.js",
   "./js/adapters/persistence.js",
   "./js/adapters/data-cache.js",
+  "./js/adapters/server-generation.js",
   "./js/adapters/auth-api.js",
   "./js/adapters/realtime.js",
   "./js/adapters/window-mode.js",
@@ -212,6 +213,7 @@ self.addEventListener("fetch", event => {
     cachedAsset(event.request).then(hit => hit || fetch(event.request).then(response => remember(event.request, response)))
   );
 });
+
 
 
 

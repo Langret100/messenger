@@ -1,5 +1,6 @@
 /* APP BOOTSTRAP - 초기화 순서만 담당 */
-addEventListener("DOMContentLoaded",()=>{
+addEventListener("DOMContentLoaded",async()=>{
+  if(await MiniTalk.ServerGeneration?.check?.())return;
   MiniTalk.UI.Shell.start();
   MiniTalk.UI.InteractionGuard?.start?.();
   MiniTalk.MobileImmersive?.start?.();

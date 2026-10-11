@@ -5,7 +5,16 @@ MiniTalk.Shopping.StoreService = (() => {
   const CATALOG_CACHE_KEY = "shop.catalog.cache.v2";
   const objectValue = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-  let catalogPromise = null, catalogLoadedAt = 0, catalogEmptyFirstSeenAt = 0, catalogEmptyChecks = 0, catalogNoCacheChecks = 0, catalogRetryFailures = 0, catalogRecheckTimer = null, inventoryPromise = null, activeUserId = "", inventoryVersion = 0, inventoryLiveEpoch = 0, shopActive = false, inventoryDirty = true;
+  let catalogPromise = null, catalogLoadedAt = 0, catalogCacheHydrated = false, catalogRetryFailures = 0, catalogRecheckTimer = null, inventoryPromise = null, activeUserId = "", inventoryVersion = 0, inventoryLiveEpoch = 0, shopActive = false, inventoryDirty = true;
+  let catalogState = { status: "idle", code: "" };
+  let catalogOff=null,catalogLiveDirty=false,catalogWatchers=0;
+  const catalogVisible=()=>shopActive||catalogWatchers>0;
+  function attachCatalog(){if(catalogOff||!MiniTalk.Shopping.CatalogCloud||MiniTalk.Realtime?.getMode?.()!=="firebase")return;catalogOff=MiniTalk.Shopping.CatalogCloud.subscribe(()=>{if(!catalogVisible())return;if(catalogPromise){catalogLiveDirty=true;return;}refreshCatalog(true).catch(error=>{console.warn("Firebase 상품 목록 갱신 실패",error);scheduleCatalogFailureRetry();});});}
+  function releaseCatalog(){if(!catalogVisible()){if(catalogOff){catalogOff();catalogOff=null;}if(catalogRecheckTimer){clearTimeout(catalogRecheckTimer);catalogRecheckTimer=null;}}}
+  function watchCatalog(){catalogWatchers++;attachCatalog();refreshCatalog(false).catch(error=>{console.warn("관리자 상품 목록 갱신 실패",error);scheduleCatalogFailureRetry();});let stopped=false;return()=>{if(stopped)return;stopped=true;catalogWatchers--;releaseCatalog();};}
+  function catalogStatus(){return {...catalogState};}
+  function setCatalogStatus(status,code=""){catalogState={status,code};MiniTalk.Events.emit("shopping:catalog-status",catalogStatus());}
+  function validProduct(raw){return !!raw&&typeof raw==="object"&&!Array.isArray(raw)&&!!String(raw.id||"").trim()&&!!String(raw.name||"").trim()&&Number.isFinite(Number(raw.price))&&Number(raw.price)>0;}
   const pendingPurchaseKeys = new Map();
   const pendingGiftKeys = new Map();
   const pendingDeliveryKeys = new Map();
@@ -19,19 +28,27 @@ MiniTalk.Shopping.StoreService = (() => {
   function patchProductQuantity(productId,quantity){if(quantity===undefined)return;const catalog={...objectValue(MiniTalk.Store.get("shopCatalog"))},current=catalog[productId];if(!current)return;catalog[productId]=normalizeProduct({...current,quantity});writeCatalog(catalog);catalogLoadedAt=Date.now()}
   function normalizeInventory(item={}) { const product=objectValue(MiniTalk.Store.get("shopCatalog"))[item.productId]||{};const status=String(item.deliveryStatus||item.delivery_status||"").trim().toLowerCase();return{...item,id:String(item.id||""),productId:String(item.productId||""),name:item.name||product.name||"상품",description:item.description||product.description||"",imageUrl:item.imageUrl||product.imageUrl||"",price:Number(item.price||product.price)||0,deliveryStatus:["owned","requested","shipping","completed","cancelled"].includes(status)?status:(item.usedAt?"completed":"owned"),deliveryRequestedAt:Number(item.deliveryRequestedAt||item.delivery_requested_at)||0,deliveryCompletedAt:Number(item.deliveryCompletedAt||item.delivery_completed_at)||0,deliveryCancelledAt:Number(item.deliveryCancelledAt||item.delivery_cancelled_at)||0,deliveryHandledBy:String(item.deliveryHandledBy||item.delivery_handled_by||"")}; }
 
-  function writeCatalog(catalog) { const current=objectValue(MiniTalk.Store.get("shopCatalog"));if(sameValue(current,catalog))return false;MiniTalk.Store.set("shopCatalog",catalog);MiniTalk.Persistence.set(CATALOG_CACHE_KEY,catalog);return true; }
-  function hydrateCatalogCache() { const cached=objectValue(MiniTalk.Persistence.get(CATALOG_CACHE_KEY,{}));if(Object.keys(cached).length&&!Object.keys(objectValue(MiniTalk.Store.get("shopCatalog"))).length)MiniTalk.Store.set("shopCatalog",cached); }
+  function writeCatalog(catalog) { const current=objectValue(MiniTalk.Store.get("shopCatalog"));if(sameValue(current,catalog))return false;MiniTalk.Store.set("shopCatalog",catalog);try{MiniTalk.Persistence.set(CATALOG_CACHE_KEY,catalog);}catch(error){console.warn("상품 목록 기기 캐시 저장 실패",error);}return true; }
+  function hydrateCatalogCache() {
+    // Device storage is optional. Hydrate once so failed writes cannot resurrect deleted products.
+    if(catalogCacheHydrated)return;
+    catalogCacheHydrated=true;
+    try{
+      const cached=objectValue(MiniTalk.Persistence.get(CATALOG_CACHE_KEY,{})),catalog={};
+      Object.values(cached).filter(validProduct).forEach(raw=>{const item=normalizeProduct(raw);catalog[item.id]=item;});
+      if(Object.keys(catalog).length&&!Object.keys(objectValue(MiniTalk.Store.get("shopCatalog"))).length)MiniTalk.Store.set("shopCatalog",catalog);
+    }catch(error){console.warn("상품 목록 기기 캐시 읽기 실패",error);}
+  }
   hydrateCatalogCache();
 
-  // Google ScriptCache는 120초간 동일한 빈 응답을 돌려줄 수 있습니다.
-  // 이 기간의 중복 응답으로 전체 상품 삭제를 확정하면 안 됩니다.
-  function scheduleCatalogRecheck(delay=125000) {
-    if (!shopActive || typeof setTimeout !== "function") return;
+  // Retry only failed requests; successful empty catalogs are authoritative.
+  function scheduleCatalogRecheck(delay) {
+    if (!catalogVisible() || typeof setTimeout !== "function") return;
     // An earlier long empty-response timer must not block an urgent network-error retry.
     if (catalogRecheckTimer) clearTimeout(catalogRecheckTimer);
     catalogRecheckTimer = setTimeout(() => {
       catalogRecheckTimer = null;
-      if (shopActive) refreshCatalog(true).catch(error => {
+      if (catalogVisible()) return refreshCatalog(true).catch(error => {
         console.warn("상품 목록 재검증 실패", error);
         scheduleCatalogFailureRetry();
       });
@@ -39,7 +56,7 @@ MiniTalk.Shopping.StoreService = (() => {
   }
 
   function scheduleCatalogFailureRetry() {
-    if (!shopActive) return;
+    if (!catalogVisible()) return;
     catalogRetryFailures = Math.min(catalogRetryFailures + 1, 5);
     scheduleCatalogRecheck([0, 4000, 12000, 30000, 60000, 120000][catalogRetryFailures]);
   }
@@ -65,19 +82,20 @@ MiniTalk.Shopping.StoreService = (() => {
     const merged={...current,...incoming};if(!sameValue(current,merged))MiniTalk.Store.set("shopInventory",merged)
   });
 
-  function products() { return Object.values(objectValue(MiniTalk.Store.get("shopCatalog"))).map(normalizeProduct).filter(item=>item.id&&item.name&&item.price>0).sort((a,b)=>a.price-b.price||a.name.localeCompare(b.name,"ko")); }
+  function products() { return Object.values(objectValue(MiniTalk.Store.get("shopCatalog"))).filter(validProduct).map(normalizeProduct).sort((a,b)=>a.price-b.price||a.name.localeCompare(b.name,"ko")); }
   async function refreshCatalog(force=false) {
     hydrateCatalogCache();
+    if(catalogVisible())attachCatalog();
     if(!force&&Date.now()-catalogLoadedAt<30000)return products();
     if(catalogPromise)return catalogPromise;
-    catalogPromise=MiniTalk.AuthApi.shopCatalog().then(rows=>{
+    catalogLiveDirty=false;
+    setCatalogStatus("loading");
+    catalogPromise=(MiniTalk.Shopping.CatalogCloud?MiniTalk.Shopping.CatalogCloud.read():MiniTalk.AuthApi.shopCatalog()).then(rows=>{
       // 서버가 ok:true인데 products를 누락하거나 일부 행을 손상시킨 경우는 '상품 없음'이 아닙니다.
       if(!Array.isArray(rows))throw new Error("상품 목록 응답 형식이 올바르지 않습니다.");
       const catalog={};
       rows.forEach(raw=>{
-        if(!raw || typeof raw!=="object" || Array.isArray(raw) ||
-           !String(raw.id||"").trim() || !String(raw.name||"").trim() ||
-           !Number.isFinite(Number(raw.price)) || Number(raw.price)<=0) {
+        if(!validProduct(raw)) {
           throw new Error("상품 목록에 잘못된 상품 정보가 포함되었습니다.");
         }
         const item=normalizeProduct(raw);
@@ -86,12 +104,13 @@ MiniTalk.Shopping.StoreService = (() => {
       // ok:true + products:[] is an authoritative successful empty catalog.
       // Only transport/HTTP/JSON/schema failures throw and trigger retries.
       const now=Date.now();
-      catalogEmptyFirstSeenAt=0;catalogEmptyChecks=0;catalogNoCacheChecks=0;catalogRetryFailures=0;
+      catalogRetryFailures=0;
       if(catalogRecheckTimer){clearTimeout(catalogRecheckTimer);catalogRecheckTimer=null;}
       catalogLoadedAt=now;
       writeCatalog(catalog);
+      setCatalogStatus("ready");
       return products();
-    }).finally(()=>{catalogPromise=null});
+    }).catch(error=>{setCatalogStatus("error",String(error?.code||error?.name||"CATALOG_FAILED"));throw error;}).finally(()=>{catalogPromise=null;if(catalogLiveDirty&&catalogVisible()){catalogLiveDirty=false;refreshCatalog(true).catch(error=>{console.warn("Firebase 상품 목록 재동기화 실패",error);scheduleCatalogFailureRetry();});}});
     return catalogPromise;
   }
 
@@ -151,16 +170,35 @@ MiniTalk.Shopping.StoreService = (() => {
   }
   async function enter(){
     shopActive=true;const current=user();hydrateCatalogCache();
+    attachCatalog();
     const jobs=[refreshCatalog(false).catch(error=>{console.warn("상품 목록을 불러오지 못했습니다.",error);scheduleCatalogFailureRetry();return products()})];
     if(current.user_id&&!current.isGuest&&(inventoryDirty||!Object.keys(objectValue(MiniTalk.Store.get("shopInventory"))).length))jobs.push(refreshInventory(true).then(rows=>{inventoryDirty=false;return rows}).catch(error=>{console.warn("보관함을 불러오지 못했습니다.",error);return inventory()}));
     return Promise.all(jobs)
   }
   function leave(){shopActive=false}
-  function leaveAndCancelRetry(){leave();if(catalogRecheckTimer){clearTimeout(catalogRecheckTimer);catalogRecheckTimer=null;}}
+  function leaveAndCancelRetry(){leave();releaseCatalog();}
   // 예약된 재조회는 비활성 상태에서 네트워크 요청을 하지 않고 자연 종료합니다.
 
-  async function saveProduct(product) { const current=requireLogin(),value=normalizeProduct({...product,id:product?.id||crypto.randomUUID(),updatedAt:Date.now()});if(!value.name||value.price<=0)throw new Error("상품 이름과 가격을 입력하세요.");const result=await MiniTalk.AuthApi.shopSaveProduct(current.user_id,MiniTalk.AdminSession.requireToken("SHOP"),value),saved=normalizeProduct({...value,...(result.product||{}),imageUrl:result.product?.imageUrl||result.product?.image_url||value.imageUrl});writeCatalog({...objectValue(MiniTalk.Store.get("shopCatalog")),[saved.id]:saved});catalogLoadedAt=Date.now();MiniTalk.Economy.Runtime?.setProductStock?.(saved).catch?.(error=>console.warn("Firebase 재고 반영 지연",error));return saved; }
-  async function deleteProduct(id) { const current=requireLogin();await MiniTalk.AuthApi.shopDeleteProduct(current.user_id,MiniTalk.AdminSession.requireToken("SHOP"),id);const catalog={...objectValue(MiniTalk.Store.get("shopCatalog"))};delete catalog[id];writeCatalog(catalog);catalogLoadedAt=Date.now();MiniTalk.Economy.Runtime?.deleteProductStock?.(id).catch?.(error=>console.warn("Firebase 재고 삭제 지연",error)); }
+  async function syncProductBackups(){const current=requireLogin(),token=MiniTalk.AdminSession.requireToken("SHOP");return MiniTalk.Shopping.CatalogCloud?MiniTalk.Shopping.CatalogCloud.flush(current.user_id,token):0;}
+  async function saveProduct(product) {
+    const current=requireLogin(),value=normalizeProduct({...product,id:product?.id||crypto.randomUUID(),updatedAt:Date.now()}),token=MiniTalk.AdminSession.requireToken("SHOP");
+    if(!value.name||value.price<=0)throw new Error("상품 이름과 가격을 입력하세요.");
+    if(MiniTalk.Shopping.CatalogCloud){
+      await MiniTalk.Shopping.CatalogCloud.change("save",value,current.user_id);
+      writeCatalog({...objectValue(MiniTalk.Store.get("shopCatalog")),[value.id]:value});catalogLoadedAt=Date.now();
+      let backupPending=false;try{backupPending=(await syncProductBackups())>0;}catch(error){backupPending=true;console.warn("상품 백업 동기화 대기",error);}
+      return {...value,backupPending};
+    }
+    const result=await MiniTalk.AuthApi.shopSaveProduct(current.user_id,token,value),saved=normalizeProduct({...value,...(result.product||{}),imageUrl:result.product?.imageUrl||result.product?.image_url||value.imageUrl});writeCatalog({...objectValue(MiniTalk.Store.get("shopCatalog")),[saved.id]:saved});catalogLoadedAt=Date.now();MiniTalk.Economy.Runtime?.setProductStock?.(saved).catch?.(error=>console.warn("Firebase 재고 반영 지연",error));return saved;
+  }
+  async function deleteProduct(id) {
+    const current=requireLogin(),token=MiniTalk.AdminSession.requireToken("SHOP");
+    if(MiniTalk.Shopping.CatalogCloud)await MiniTalk.Shopping.CatalogCloud.change("delete",{id:String(id)},current.user_id);
+    else await MiniTalk.AuthApi.shopDeleteProduct(current.user_id,token,id);
+    const catalog={...objectValue(MiniTalk.Store.get("shopCatalog"))};delete catalog[id];writeCatalog(catalog);catalogLoadedAt=Date.now();
+    if(MiniTalk.Shopping.CatalogCloud){let backupPending=false;try{backupPending=(await syncProductBackups())>0;}catch(error){backupPending=true;console.warn("상품 백업 삭제 대기",error);}return{backupPending};}
+    MiniTalk.Economy.Runtime?.deleteProductStock?.(id).catch?.(error=>console.warn("Firebase 재고 삭제 지연",error));return{backupPending:false};
+  }
   function inventory(now=Date.now()) { return Object.values(objectValue(MiniTalk.Store.get("shopInventory"))).map(normalizeInventory).filter(item=>!item.usedAt||now-Number(item.usedAt)<USED_VISIBLE_MS).sort((a,b)=>Number(b.createdAt||b.giftedAt||0)-Number(a.createdAt||a.giftedAt||0)); }
   function usedRemainingDays(item,now=Date.now()){return item?.usedAt?Math.max(0,Math.ceil((USED_VISIBLE_MS-(now-Number(item.usedAt)))/86400000)):0}
   function recipients(){return MiniTalk.UserDirectory?.all?.()||[]}
@@ -384,5 +422,5 @@ MiniTalk.Shopping.StoreService = (() => {
     }
   }
 
-  return{products,refreshCatalog,refreshInventory,start,enter,leave:leaveAndCancelRetry,saveProduct,deleteProduct,inventory,recipients,purchase,randomPurchase,use,requestDelivery,requestDeliveryBulk,gift,normalizeProduct,normalizeInventory,isSoldOut,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
+  return{watchCatalog,syncProductBackups,catalogStatus,products,refreshCatalog,refreshInventory,start,enter,leave:leaveAndCancelRetry,saveProduct,deleteProduct,inventory,recipients,purchase,randomPurchase,use,requestDelivery,requestDeliveryBulk,gift,normalizeProduct,normalizeInventory,isSoldOut,usedRemainingDays,requireLogin,USED_VISIBLE_MS};
 })();

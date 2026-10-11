@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-runtime-bundle-120";
+const CACHE = "moaru-runtime-bundle-122";
 const CORE = [
   "./assets/season-controls.webp",
   "./assets/season-utility.webp",
@@ -51,6 +51,7 @@ const CORE = [
   "./js/economy/coin-wallet.js",
   "./js/economy/quest-reward.js",
   "./js/shopping/store-service.js",
+  "./js/shopping/catalog-cloud.js",
   "./js/chat/emoji.js",
   "./js/chat/linkify.js",
   "./js/chat/attachments.js",

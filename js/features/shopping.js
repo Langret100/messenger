@@ -64,6 +64,7 @@ MiniTalk.Features.Shopping = (() => {
   }
 
   MiniTalk.Events.on("state:shopCatalog", refreshVisible);
+  MiniTalk.Events.on("shopping:catalog-status", refreshVisible);
   MiniTalk.Events.on("state:shopInventory", refreshVisible);
 
   function refreshVisible() {
@@ -165,7 +166,7 @@ MiniTalk.Features.Shopping = (() => {
         D.el("strong", { text: "랜덤구매" }),
         D.el("small", { text: guest ? "로그인하고 3코인 랜덤구매를 이용해보세요" : "3코인으로 등록 상품 하나를 무작위로 뽑아요" })
       ]),
-      D.el("span", { class: "shop-market-count", text: count ? `${count}개 상품` : "준비 중" })
+      D.el("span", { class: "shop-market-count", text: count ? `${count}개 상품` : Service.catalogStatus?.().status === "error" ? "조회 실패" : Service.catalogStatus?.().status === "ready" ? "0개 상품" : "불러오는 중" })
     ]);
   }
 
@@ -327,10 +328,14 @@ MiniTalk.Features.Shopping = (() => {
 
   function marketEmpty() {
     const D = MiniTalk.UI.Dom;
+    const state=Service.catalogStatus?.()||{status:"idle"};
+    const failed=state.status==="error",ready=state.status==="ready";
     return D.el("section", { class: "shop-market-empty" }, [
       D.el("div", { class: "shop-empty-illustration", "aria-hidden": "true" }, [D.el("span", { text: "◇" }), D.el("i", { text: "+" })]),
-      D.el("strong", { text: "상점을 준비하고 있어요" })
-    ]);
+      D.el("strong", { text: failed ? "상품 목록을 불러오지 못했어요" : ready ? "등록된 상품이 없어요" : "상품 목록을 불러오고 있어요" }),
+      failed ? D.el("p", {text:"연결을 확인해주세요. 잠시 후 자동으로 다시 확인합니다."}) : null,
+      failed ? D.el("button", {type:"button",class:"btn",text:"다시 불러오기",onclick:()=>Service.refreshCatalog(true).catch(error=>console.warn("상품 목록 재조회 실패",error))}) : null
+    ].filter(Boolean));
   }
 
   function inventoryPanel(user, owned, close) {
@@ -565,18 +570,30 @@ MiniTalk.Features.Shopping = (() => {
 
   function adminPanel(onChanged, context = {}) {
     const D = context.Dom || MiniTalk.UI.Dom, Shell = context.Shell || MiniTalk.UI.Shell, panel = D.el("section", { class: "tool-card admin-shop-panel" });
-    if (!Service.products().length) Service.refreshCatalog().then(rows => { if (rows.length) onChanged?.(); }).catch(error => console.warn("상품 목록을 불러오지 못했습니다.", error));
     const add = D.el("button", { class: "button primary compact-button", type: "button", text: "상품 추가", onclick: () => openProductEditor(null, onChanged, { D, Shell }) });
-    panel.append(D.el("div", { class: "admin-shop-head" }, [D.el("div", {}, [D.el("strong", { text: "쇼핑 상품 관리" }), D.el("small", { class: "muted", text: "상품 이름·가격·설명과 선택 재고 수량을 설정합니다." })]), add]));
+    const sync=D.el("button",{class:"mini-action",type:"button",text:"백업 동기화",onclick:async()=>{sync.disabled=true;try{const pending=await Service.syncProductBackups();Shell.toast(pending?"새 변경의 백업이 대기 중입니다. 다시 동기화해주세요.":"상품 백업 동기화를 완료했습니다.");}catch(error){Shell.toast("상품 백업 동기화 실패: "+error.message);}finally{sync.disabled=false;}}});
+    panel.append(D.el("div", { class: "admin-shop-head" }, [D.el("div", {}, [D.el("strong", { text: "쇼핑 상품 관리" }), D.el("small", { class: "muted", text: "상품 이름·가격·설명과 선택 재고 수량을 설정합니다." })]), D.el("div",{class:"button-row"},[sync,add])]));
     const list = D.el("div", { class: "admin-product-list" });
+    const draw=()=>{
+    list.replaceChildren();
     const products = Service.products();
-    if (!products.length) list.append(empty("등록된 상품이 없어요", "상품 추가 버튼으로 첫 상품을 등록하세요."));
+    if (!products.length) {const status=Service.catalogStatus?.().status;list.append(D.el("p",{class:"muted",text:status==="error"?"상품 목록 조회에 실패했습니다. 연결을 확인해주세요.":status==="ready"?"등록된 상품이 없어요":"상품 목록을 불러오고 있어요"}));}
     products.forEach(product => list.append(D.el("article", { class: "admin-product-row" }, [
       product.imageUrl ? D.el("img", { class: "admin-product-image", src: product.imageUrl, alt: "", loading: "lazy" }) : D.el("span", { class: "admin-product-image placeholder", text: "▤" }),
       D.el("div", {}, [D.el("strong", { text: product.name }), D.el("small", { class: "muted admin-product-meta" }, [coinAmount(product.price, "coin-amount inline-coin"), D.el("span", { text: ` · ${product.quantity === null ? "재고 무제한" : product.quantity <= 0 ? "품절" : `재고 ${product.quantity}개`} · ${product.description || "설명 없음"}` })])]),
       D.el("div", { class: "button-row compact-row" }, [D.el("button", { class: "button secondary compact-button", type: "button", text: "수정", onclick: () => openProductEditor(product, onChanged, { D, Shell }) }), D.el("button", { class: "button secondary compact-button", type: "button", text: "삭제", onclick: () => deleteProduct(product, onChanged, { D, Shell }) })])
     ])));
-    panel.append(list);return panel;
+    };
+    draw();panel.append(list);
+    const offState=MiniTalk.Events.on("state:shopCatalog",draw),offStatus=MiniTalk.Events.on("shopping:catalog-status",draw),offCloud=Service.watchCatalog?.();
+    let observer=null,closed=false;
+    const cleanup=()=>{if(closed)return;closed=true;offState?.();offStatus?.();offCloud?.();observer?.disconnect();view?.removeEventListener?.("pagehide",cleanup);};
+    const doc=panel.ownerDocument,view=doc?.defaultView;
+    view?.addEventListener?.("pagehide",cleanup,{once:true});
+    if(view?.MutationObserver&&doc?.documentElement){observer=new view.MutationObserver(()=>{if(!panel.isConnected)cleanup();});observer.observe(doc.documentElement,{childList:true,subtree:true});}
+    // Retry durable backup operations after reopening either administrator view.
+    if(MiniTalk.Shopping.CatalogCloud)Service.syncProductBackups().catch(error=>{if(!closed)Shell.toast("상품 백업이 대기 중입니다. 백업 동기화 버튼으로 다시 처리해주세요.");});
+    return panel;
   }
 
   function openProductEditor(product, onChanged, context = {}) {
@@ -593,7 +610,7 @@ MiniTalk.Features.Shopping = (() => {
     const chooseImage = async input => { const file = input.files?.[0];if (!file) return;actions.classList.add("hidden");picker.disabled = true;try { pendingImage = await compressProductImage(file);updatePreview(pendingImage); } catch (error) { Shell.toast(error.message); } finally { picker.disabled = false;input.value = ""; } };
     cameraInput.onchange = () => chooseImage(cameraInput);galleryInput.onchange = () => chooseImage(galleryInput);
     body.querySelector("#productName").value = product?.name || "";body.querySelector("#productPrice").value = product?.price || "";body.querySelector("#productQuantity").value = product?.quantity === null || product?.quantity === undefined ? "" : String(product.quantity);body.querySelector("#productDescription").value = product?.description || "";
-    body.querySelector("#productSave").onclick = async event => { const button = event.currentTarget,name = body.querySelector("#productName").value.trim(),price = body.querySelector("#productPrice").value,quantityText = body.querySelector("#productQuantity").value.trim(),quantity = quantityText === "" ? null : Math.max(0,Math.floor(Number(quantityText)||0)),description = body.querySelector("#productDescription").value;button.disabled = true;try { if (pendingImage) imageUrl = pendingImage;await Service.saveProduct({ id: product?.id, name, price, quantity, description, imageUrl });Shell.closeModal();Shell.toast("상품을 저장했습니다.");onChanged?.(); } catch (error) { Shell.toast(error.message);button.disabled = false; } };
+    body.querySelector("#productSave").onclick = async event => { const button = event.currentTarget,name = body.querySelector("#productName").value.trim(),price = body.querySelector("#productPrice").value,quantityText = body.querySelector("#productQuantity").value.trim(),quantity = quantityText === "" ? null : Math.max(0,Math.floor(Number(quantityText)||0)),description = body.querySelector("#productDescription").value;button.disabled = true;try { if (pendingImage) imageUrl = pendingImage;const result=await Service.saveProduct({ id: product?.id, name, price, quantity, description, imageUrl });Shell.closeModal();Shell.toast(result?.backupPending?"상품은 저장됐지만 백업이 대기 중입니다. 백업 동기화를 눌러주세요.":"상품과 백업을 저장했습니다.");onChanged?.(); } catch (error) { Shell.toast(error.message);button.disabled = false; } };
     Shell.modal(product ? "상품 수정" : "상품 추가", body);
   }
 
@@ -627,7 +644,7 @@ MiniTalk.Features.Shopping = (() => {
 
   function deleteProduct(product, onChanged, context = {}) {
     const D = context.D || MiniTalk.UI.Dom, Shell = context.Shell || MiniTalk.UI.Shell, body = D.el("div", { class: "modal-stack" }), remove = D.el("button", { class: "button primary", type: "button", text: "삭제" });
-    remove.onclick = async () => { remove.disabled = true;try { await Service.deleteProduct(product.id);Shell.closeModal();Shell.toast("상품을 삭제했습니다.");onChanged?.(); } catch (error) { Shell.toast(error.message);remove.disabled = false; } };
+    remove.onclick = async () => { remove.disabled = true;try { const result=await Service.deleteProduct(product.id);Shell.closeModal();Shell.toast(result?.backupPending?"상품은 삭제됐지만 백업 삭제가 대기 중입니다. 백업 동기화를 눌러주세요.":"상품과 백업을 삭제했습니다.");onChanged?.(); } catch (error) { Shell.toast(error.message);remove.disabled = false; } };
     body.append(D.el("p", { text: `${product.name} 상품을 삭제할까요?` }), D.el("small", { class: "muted", text: "이미 구매한 사용자의 보관함 상품은 유지됩니다." }), remove);Shell.modal("상품 삭제", body);
   }
 

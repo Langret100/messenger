@@ -17,7 +17,7 @@ if(!server.includes('createTextFinder')||server.includes('SpreadsheetApp.flush()
 if(!service.includes('CATALOG_CACHE_KEY')||!service.includes('refreshCatalog(true)'))throw new Error('startup catalog cache/prefetch is missing');
 if(!service.includes('MiniTalk.AuthApi.shopGift')||!server.includes('function handleShopGift'))throw new Error('server-mediated gift flow is missing');
 if(!service.includes('notifyGift')||!server.includes('giftedAt'))throw new Error('gift receipt notification metadata is missing');
-if(ui.includes('관리자가 상품을 등록하면')||!ui.includes('상점을 준비하고 있어요'))throw new Error('empty shop copy is not clean');
+if(ui.includes('관리자가 상품을 등록하면')||!ui.includes('등록된 상품이 없어요')||!ui.includes('상품 목록을 불러오지 못했어요'))throw new Error('empty and failed catalog states must be distinct');
 if(!css.includes('transform: translate(-50%, -50%) rotate(45deg)')||!css.includes('.shop-market-hero { grid-template-columns: 40px minmax(0, 1fr) auto')||!css.includes('.shop-market-count { justify-self: end; margin: 0;')||!css.includes('.shop-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;')||!css.includes('.shop-product-card { min-height: 0; grid-template-columns: 1fr;'))throw new Error('shop hero icon alignment or compact mobile one-row layout is stale');
 if(!css.includes('.shop-inventory-fab b { flex: 0 0 18px')||!css.includes('margin: 0; padding: 0'))throw new Error('inventory count badge alignment is stale');
 if(!ui.includes('modal-close-button')||!math.includes('icon: "123"')||math.includes('icon: "∑"'))throw new Error('inventory close or elementary math icon polish is missing');

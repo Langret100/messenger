@@ -1,0 +1,48 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const root = path.resolve(__dirname, '..');
+const product = {id:'p', name:'상품', price:10};
+function device(cache, blocked=false) {
+  const state={user:{isGuest:true}, shopCatalog:{}}, timers=new Map();
+  let next=0, calls=0, rows=[product];
+  const ctx={console:{warn(){},info(){}}, Date, setTimeout(fn){timers.set(++next,fn);return next},clearTimeout(id){timers.delete(id)}, MiniTalk:{Shopping:{},Events:{on(){},emit(){}},Store:{get:key=>state[key],set:(key,value)=>state[key]=value},Persistence:{get:()=>cache,set:(key,value)=>{if(blocked)throw new Error('QuotaExceededError');cache=value}},AuthApi:{shopCatalog:async()=>{calls++;if(rows instanceof Error)throw rows;return rows}}}};
+  vm.runInNewContext(fs.readFileSync(path.join(root,'js/shopping/store-service.js'),'utf8'),ctx);
+  return {service:ctx.MiniTalk.Shopping.StoreService,state,timers,calls:()=>calls,reply:value=>rows=value};
+}
+(async()=>{
+  const damaged=device({broken:null, good:product});
+  assert.equal(damaged.service.products().length,1,'invalid cached rows must not crash mobile rendering');
+  await damaged.service.enter();
+  assert.equal(damaged.calls(),1,'damaged device cache must not stop the server request');
+  assert.equal(damaged.service.products().length,1);
+  const blocked=device({p:product},true);
+  await blocked.service.enter();
+  assert.equal(blocked.timers.size,0,'storage failure must not turn a successful fetch into a retry');
+  blocked.reply([]);
+  await blocked.service.refreshCatalog(true);
+  await blocked.service.enter();
+  assert.equal(blocked.service.products().length,0,'old cache must not resurrect after authoritative empty result');
+  assert.equal(blocked.timers.size,0,'valid empty result must not be retried');
+  const offline=device({});
+  offline.reply(new Error('network failed'));
+  await offline.service.enter();
+  assert.equal(offline.timers.size,1);
+  assert.equal(offline.service.catalogStatus().status,'error');
+  offline.reply([product]);
+  const retry=[...offline.timers.values()][0];offline.timers.clear();await retry();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(offline.service.products().length,1);
+  assert.equal(offline.service.catalogStatus().status,'ready');
+  offline.reply(new Error('network failed'));
+  await offline.service.refreshCatalog(true).catch(()=>{});
+  assert.equal(offline.service.products().length,1,'failed fetch must retain current products');
+  offline.service.leave();
+  assert.equal(offline.timers.size,0);
+  const invalid=device({});invalid.reply([{id:'bad',name:'bad',price:0}]);
+  await invalid.service.enter();
+  assert.equal(invalid.service.catalogStatus().status,'error');
+  assert.equal(invalid.timers.size,1);
+  console.log('SHOPPING_CATALOG_DEVICE_RECOVERY_OK');
+})().catch(error=>{console.error(error);process.exitCode=1});

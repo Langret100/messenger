@@ -327,10 +327,15 @@ function handleShopProductSave(e) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
+    const backupRevision = Number(p.backup_revision) || 0;
+    const backupKey = "SHOP_BACKUP_REVISION_" + shopProductPropertyKey_(product.id);
+    const previousRevision = Number(PropertiesService.getScriptProperties().getProperty(backupKey)) || 0;
+    if (backupRevision > 0 && backupRevision < previousRevision) return shopJson_({ ok: true, stale_backup: true });
     if (product.imageUrl && !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(product.imageUrl)) {
       return shopJson_({ ok: false, error: "INVALID_PRODUCT_IMAGE" });
     }
     writeShopProduct_(product);
+    if (backupRevision > 0) PropertiesService.getScriptProperties().setProperty(backupKey, String(backupRevision));
     clearShopCatalogCaches_();
     return shopJson_({ ok: true, product: product });
   } finally {
@@ -349,8 +354,13 @@ function handleShopProductDelete(e) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(2000)) return shopJson_({ ok: false, error: "SHOP_BUSY" });
   try {
+    const backupRevision = Number(p.backup_revision) || 0;
+    const backupKey = "SHOP_BACKUP_REVISION_" + shopProductPropertyKey_(productId);
+    const previousRevision = Number(PropertiesService.getScriptProperties().getProperty(backupKey)) || 0;
+    if (backupRevision > 0 && backupRevision < previousRevision) return shopJson_({ ok: true, stale_backup: true });
     PropertiesService.getScriptProperties().deleteProperty(shopProductPropertyKey_(productId));
     removeLegacyShopProduct_(productId);
+    if (backupRevision > 0) PropertiesService.getScriptProperties().setProperty(backupKey, String(backupRevision));
     clearShopCatalogCaches_();
     return shopJson_({ ok: true, deleted: productId });
   } finally {

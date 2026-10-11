@@ -122,7 +122,7 @@ MiniTalk.AuthApi = (() => {
       const data = await post({ mode: "user_directory", user_id: userId }, 30000);
       return Array.isArray(data.users) ? data.users : [];
     },
-    async shopSaveProduct(userId, adminToken, product) {
+    async shopSaveProduct(userId, adminToken, product, backupRevision = null) {
       return post({
         mode: "shop_product_save",
         user_id: userId,
@@ -132,15 +132,17 @@ MiniTalk.AuthApi = (() => {
         price: product.price,
         description: product.description || "",
         quantity: product.quantity === null || product.quantity === undefined ? "" : product.quantity,
-        image_data: product.imageUrl || ""
+        image_data: product.imageUrl || "",
+        backup_revision: backupRevision ?? ""
       }, 30000);
     },
-    async shopDeleteProduct(userId, adminToken, productId) {
+    async shopDeleteProduct(userId, adminToken, productId, backupRevision = null) {
       return post({
         mode: "shop_product_delete",
         user_id: userId,
         admin_token: adminToken,
-        product_id: productId
+        product_id: productId,
+        backup_revision: backupRevision ?? ""
       }, 30000);
     },
     /*

@@ -115,7 +115,8 @@ MiniTalk.AuthApi = (() => {
     },
     async shopCatalog() {
       const data = await post({ mode: "shop_catalog" }, 30000);
-      return Array.isArray(data.products) ? data.products : [];
+      if (!Array.isArray(data.products)) { const error = new Error("상품 목록 응답이 누락되거나 잘못되었습니다."); error.code = "INVALID_SHOP_CATALOG"; throw error; }
+      return data.products;
     },
     async userDirectory(userId) {
       const data = await post({ mode: "user_directory", user_id: userId }, 30000);

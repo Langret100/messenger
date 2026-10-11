@@ -190,11 +190,12 @@ const homeCSS=`
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal){scrollbar-color:color-mix(in srgb,var(--accent) 65%,var(--surface)) color-mix(in srgb,var(--surface-3) 35%,transparent);}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar-track{background:color-mix(in srgb,var(--surface-3) 35%,transparent);}
 :root[data-season] :is(.message-list,.conversation-list,.view-host,.card-list,.modal)::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--accent) 65%,var(--surface));border-radius:999px;}
-:root[data-season=summer] .app-shell{background-image:none;}
-:root[data-season=summer] .app-shell::before,:root[data-season=summer] .app-shell::after{content:'';position:absolute;pointer-events:none;z-index:0;width:clamp(220px,64%,320px);height:210px;background-image:var(--season-home,none);background-size:100% auto;background-repeat:no-repeat;opacity:.75;}
-:root[data-season=summer] .app-shell::before{left:0;top:0;background-position:left top;mask-image:radial-gradient(ellipse farthest-side at top left,#000 50%,transparent 100%);}
-:root[data-season=summer] .app-shell::after{right:0;bottom:0;background-position:right bottom;mask-image:radial-gradient(ellipse farthest-side at bottom right,#000 50%,transparent 100%);}
-:root[data-season=summer] .workspace{position:relative;z-index:1;}
+:root[data-season] .app-shell{background-image:none;}
+:root[data-season] .app-shell::before,:root[data-season] .app-shell::after{content:'';position:absolute;pointer-events:none;z-index:0;width:clamp(220px,64%,320px);height:260px;background-image:var(--season-home,none);background-size:100% auto;background-repeat:no-repeat;opacity:.35;}
+:root[data-season] .app-shell::before{left:0;top:0;background-position:left top;mask-image:radial-gradient(ellipse farthest-side at top left,#000 50%,transparent 100%);}
+:root[data-season] .app-shell::after{right:0;bottom:0;background-position:right bottom;mask-image:radial-gradient(ellipse farthest-side at bottom right,#000 50%,transparent 100%);}
+:root[data-season] .workspace{position:relative;z-index:1;}
+:root[data-season=summer] .app-shell::before,:root[data-season=summer] .app-shell::after{height:210px;opacity:.75;}
 :root[data-season=summer] .app-header{background:color-mix(in srgb,var(--surface) 45%,transparent)!important;}
 `;
 let avatarAtlasPromise;const avatarImages=new Map();

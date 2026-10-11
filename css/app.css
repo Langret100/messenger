@@ -360,6 +360,6 @@ body{min-height:100dvh}
 
 /* Native touch feedback should not obscure the themed controls. Keyboard focus remains. */
 html{-webkit-tap-highlight-color:transparent}
-:root .app-header .header-actions .header-create-button{color:var(--accent)!important;background:var(--accent-soft);border-radius:11px}
-:root .app-header .header-actions .header-create-button:hover{color:var(--accent)!important;background:var(--surface-3)!important}
+:root .app-header .header-actions .header-create-button{color:var(--accent)!important;background:transparent!important;border:0;box-shadow:none}
+:root .app-header .header-actions .header-create-button:hover{color:var(--accent)!important;background:transparent!important}
 :root .chat-search-wrap .search-glyph{color:var(--accent)!important}

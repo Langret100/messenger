@@ -357,3 +357,9 @@ body{min-height:100dvh}
 .chat-file-drop-card small{font-size:12px;opacity:.7}
 
 .conversation-list::-webkit-scrollbar{display:none;width:0;height:0}
+
+/* Native touch feedback should not obscure the themed controls. Keyboard focus remains. */
+html{-webkit-tap-highlight-color:transparent}
+:root .app-header .header-actions .header-create-button{color:var(--accent)!important;background:var(--accent-soft);border-radius:11px}
+:root .app-header .header-actions .header-create-button:hover{color:var(--accent)!important;background:var(--surface-3)!important}
+:root .chat-search-wrap .search-glyph{color:var(--accent)!important}

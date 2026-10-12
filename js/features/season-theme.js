@@ -43,6 +43,8 @@ const css=ids.map((id,i)=>{const [name,bg,surface,soft,text,muted,accent,mine]=p
 :root[data-season=christmas] .app-header .connection-badge{color:var(--accent);}
 :root:is([data-season=christmas],[data-season=winter]) .mine .bubble:not(.emoji-only):not(.media-bubble):not(.preview-only):not(.game-bubble){box-shadow:none;}
 :root:is([data-season=seollal],[data-season=chuseok]) .app-header{box-shadow:none;}
+/* Anchor particles to the shell even when display-clarity removes its transform. */
+:root[data-season] .app-shell{position:relative;}
 .messenger-season-motion{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2;}
 .messenger-season-motion i{position:absolute;left:var(--sx);top:-14px;width:var(--ss);height:var(--ss);background:#fff;border-radius:50%;opacity:.75;box-shadow:0 0 2px #7097bb55;animation:messenger-season-fall var(--st) linear infinite;animation-delay:var(--sd);}
 :root[data-season=spring] .messenger-season-motion i{background:#e9b0c2;border-radius:80% 10% 80% 10%;opacity:.5;box-shadow:none;}
@@ -98,7 +100,7 @@ const dialogThemeCSS=`
 
 
 const utilityIconCSS=ids.map((id,i)=>`:root[data-season="${id}"]{--utility-x:${i*100/7}%;}`).join('')+`
-:root[data-season][data-season-utility-ready] :is(.tool-glyph,.settings-row-icon,.random-mark,.shortcut-icon){font-size:0!important;background-color:transparent!important;background-image:url('assets/season-utility.webp?v=4')!important;background-size:800% 1300%!important;background-position:var(--utility-x) var(--utility-y,0%)!important;background-repeat:no-repeat!important;box-shadow:none!important;border:0!important;border-radius:0!important;transition:transform .16s ease!important;}
+:root[data-season][data-season-utility-ready] :is(.tool-glyph,.settings-row-icon,.random-mark,.shortcut-icon){font-size:0!important;background-color:transparent!important;background-image:url('assets/season-utility.webp?v=5')!important;background-size:800% 1300%!important;background-position:var(--utility-x) var(--utility-y,0%)!important;background-repeat:no-repeat!important;box-shadow:none!important;border:0!important;border-radius:0!important;transition:transform .16s ease!important;}
 :root[data-season] img[src*="assets/mascot-avatar.png"]{content:url('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');background:var(--season-avatar,none) center/contain no-repeat;object-fit:contain;}
 :root[data-season] .random-mark{--utility-y:58.3333333333%;}
 :root[data-season] .tool-shortcuts .shortcut-row:nth-child(1) .shortcut-icon{--utility-y:33.3333333333%;}
@@ -142,7 +144,7 @@ function motion(root,id){
   dot.style.cssText='--sx:'+x+'%;--ss:'+(seasonal?9+Math.random()*5:7+Math.random()*5)+'px;--st:'+duration+'s;--sd:-'+phase*duration+'s;--drift:'+(seasonal?(i%2?1:-1)*(20+Math.random()*30):(i%2?-1:1)*(20+Math.random()*25))+'px';layer.append(dot);
  }shell.append(layer);
  if(!motionDocuments.has(doc)){motionDocuments.add(doc);doc.addEventListener('visibilitychange',()=>{if(doc.hidden)root.dataset.seasonHidden='';else delete root.dataset.seasonHidden;});}
- if(doc.hidden)root.dataset.seasonHidden='';
+ if(doc.hidden)root.dataset.seasonHidden='';else delete root.dataset.seasonHidden;
 }
 const homeCSS=`
 :root[data-season] .app-shell{background-color:var(--surface);background-image:linear-gradient(color-mix(in srgb,var(--surface) 65%,transparent),color-mix(in srgb,var(--surface) 65%,transparent)),var(--season-home,none);background-position:center,top left;background-size:100% 100%,cover;background-repeat:no-repeat;}
@@ -201,7 +203,7 @@ const homeCSS=`
 let avatarAtlasPromise;const avatarImages=new Map();
 function avatarWallpaper(id){
  if(avatarImages.has(id))return Promise.resolve(avatarImages.get(id));
- if(!avatarAtlasPromise)avatarAtlasPromise=new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=new URL('assets/season-utility.webp?v=4',document.baseURI).href;});
+ if(!avatarAtlasPromise)avatarAtlasPromise=new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=new URL('assets/season-utility.webp?v=5',document.baseURI).href;});
  return avatarAtlasPromise.then(image=>{const size=image.width/8,c=document.createElement('canvas');c.width=c.height=size;c.getContext('2d').drawImage(image,ids.indexOf(id)*size,0,size,size,0,0,size,size);const url='url("'+c.toDataURL('image/webp',.85)+'")';avatarImages.set(id,url);return url;});
 }
 let homeAtlasPromise;const homeWalls=new Map();
@@ -223,7 +225,7 @@ function refreshEmoji(root){root.ownerDocument.querySelectorAll('[data-season-em
 
 const controlLoads=new Map();
 function prepareControls(root){
- for(const [key,src] of [['seasonNavReady','assets/season-controls.webp?v=2'],['seasonUtilityReady','assets/season-utility.webp?v=4']]){
+ for(const [key,src] of [['seasonNavReady','assets/season-controls.webp?v=2'],['seasonUtilityReady','assets/season-utility.webp?v=5']]){
   if(!controlLoads.has(src))controlLoads.set(src,new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve();image.onerror=()=>{controlLoads.delete(src);reject();};image.src=new URL(src,document.baseURI).href;}));
   controlLoads.get(src).then(()=>{root.dataset[key]='true';}).catch(()=>{});
  }

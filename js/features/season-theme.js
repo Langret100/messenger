@@ -53,7 +53,11 @@ const css=ids.map((id,i)=>{const [name,bg,surface,soft,text,muted,accent,mine]=p
 :root[data-season-hidden] .messenger-season-motion i{animation-play-state:paused;}
 :root[data-motion=reduced] .messenger-season-motion{display:none;}
 @media(max-width:600px){.messenger-season-motion i:nth-child(n+4){display:none;}}
-@media(prefers-reduced-motion:reduce){.messenger-season-motion{display:none;}}
+/* An explicit in-app full-motion choice wins over the OS default for particles. */
+@media(prefers-reduced-motion:reduce){
+ :root:not([data-motion=full]) .messenger-season-motion{display:none;}
+ :root[data-motion=full] .messenger-season-motion i{animation-duration:var(--st)!important;animation-iteration-count:infinite!important;}
+}
 @media(prefers-reduced-motion:reduce){:root[data-season] *{scroll-behavior:auto!important;}}
 `;
 const springAutumnMotionCSS=":root:is([data-season=spring],[data-season=autumn]) .messenger-season-motion i{opacity:.72;animation-name:messenger-petal-fall;box-shadow:none}:root[data-season=spring] .messenger-season-motion i{background:linear-gradient(135deg,#ffdce9,#dc82a8);border-radius:75% 25% 65% 25%;height:calc(var(--ss) * .75)}:root[data-season=spring] .messenger-season-motion i:nth-child(3n){background:linear-gradient(135deg,#fff0f7,#eda3bf)}:root[data-season=autumn] .messenger-season-motion i{background:linear-gradient(135deg,#e8aa48,#ba592b);border-radius:80% 8% 75% 10%;height:calc(var(--ss) * .8);animation-name:messenger-leaf-fall}:root[data-season=autumn] .messenger-season-motion i:nth-child(3n){background:linear-gradient(135deg,#e6bd65,#ad7628)}:root[data-season=autumn] .messenger-season-motion i::after{content:'';position:absolute;left:15%;top:50%;width:70%;height:1px;background:#87452566;transform:rotate(-40deg)}@keyframes messenger-petal-fall{0%{transform:translate3d(0,0,0) rotate(-25deg)}45%{transform:translate3d(var(--drift),320px,0) rotate(55deg)}100%{transform:translate3d(calc(var(--drift) * -.5),720px,0) rotate(160deg)}}@keyframes messenger-leaf-fall{0%{transform:translate3d(0,0,0) rotate(-40deg)}35%{transform:translate3d(var(--drift),240px,0) rotate(65deg)}70%{transform:translate3d(calc(var(--drift) * -.4),490px,0) rotate(-20deg)}100%{transform:translate3d(var(--drift),720px,0) rotate(125deg)}}@media(max-width:600px){:root:is([data-season=spring],[data-season=autumn]) .messenger-season-motion i:nth-child(n+4){display:block}:root:is([data-season=spring],[data-season=autumn]) .messenger-season-motion i:nth-child(n+7){display:none}}";

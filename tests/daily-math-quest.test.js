@@ -47,9 +47,9 @@ for(const mission of missions){
     }else if(mission.id==='subtraction'){
       const m=item.question.match(/(\d+) − (\d+)/);if(!m||Number(m[1])-Number(m[2])!==Number(item.answer)||Number(item.answer)<0)throw new Error('bad subtraction');
     }else if(mission.id==='multiplication'){
-      const nums=(item.question.match(/\d+/g)||[]).map(Number);if(nums.length<2||nums[0]*nums[1]!==Number(item.answer)&&nums[1]*nums[0]!==Number(item.answer))throw new Error('bad multiplication');
+      const nums=(item.question.match(/\d+/g)||[]).map(Number);if(item.factKey?.startsWith('mul:missing:')){if(nums.length<2||nums[0]*Number(item.answer)!==nums[1])throw new Error('bad missing multiplication factor');}else if(nums.length<2||nums[0]*nums[1]!==Number(item.answer))throw new Error('bad multiplication');
     }else if(mission.id==='division'){
-      const nums=(item.question.match(/\d+/g)||[]).map(Number);if(nums.length<2||nums[0]/nums[1]!==Number(item.answer))throw new Error('bad division');
+      const nums=(item.question.match(/\d+/g)||[]).map(Number);if(item.factKey?.startsWith('div:divisor:')){if(nums.length<2||nums[0]/Number(item.answer)!==nums[1])throw new Error('bad missing divisor');}else if(nums.length<2||nums[0]/nums[1]!==Number(item.answer))throw new Error('bad division');
     }else {
       if(!/^\d+\/\d+$/.test(item.answer))throw new Error('bad fraction');
       if(!item.question.includes('기약분수'))throw new Error('fraction mission did not increase beyond direct fraction reading');

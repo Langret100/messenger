@@ -122,34 +122,37 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     poolCache.set(cacheKey,items);return items;
   }
 
-  /* 구구단/나눗셈은 계산 사실만 72개라 식만 보여 주면 약 2주 만에 되풀이됩니다.
-   * 같은 계산도 식·묶음·줄·상자·나누기 상황으로 나누어 72×5=360개의 서로 다른 화면 문제로 순환합니다. */
+  /* 식의 순서/소재만 바꾸는 문제는 같은 개념으로 판정하고,
+   * 곱·몫 계산과 빈칸 추론처럼 풀이 목표가 다른 문제를 추가합니다. */
   function finiteArithmeticPool(missionId){
     if(missionId!=="multiplication"&&missionId!=="division")return null;
     const cacheKey=`${userId()}|${missionId}|finite`;if(poolCache.has(cacheKey))return poolCache.get(cacheKey);
     const rows=[];
+    // 한 계산 사실은 한 문제로만 취급합니다. 단어만 바꾼 복제 문제는 생성하지 않습니다.
     if(missionId==="multiplication"){
-      for(let left=2;left<=9;left+=1)for(let right=1;right<=9;right+=1){const ans=String(left*right);rows.push(
-        {question:`${left} × ${right} = ?`,answer:ans,inputMode:"numeric"},
-        {question:`사탕을 ${left}개씩 ${right}묶음 만들었습니다. 사탕은 모두 몇 개인가요?`,answer:ans,inputMode:"numeric"},
-        {question:`한 줄에 스티커를 ${left}장씩 붙인 줄이 ${right}줄 있습니다. 스티커는 모두 몇 장인가요?`,answer:ans,inputMode:"numeric"},
-        {question:`친구 ${right}명에게 연필을 ${left}자루씩 주려면 연필은 모두 몇 자루 필요한가요?`,answer:ans,inputMode:"numeric"},
-        {question:`상자 ${right}개에 공이 각각 ${left}개씩 들어 있습니다. 공은 모두 몇 개인가요?`,answer:ans,inputMode:"numeric"}
-      )}
+      const frames=[(a,b)=>`${a} × ${b} = ?`,(a,b)=>`한 묶음에 ${a}개씩 ${b}묶음이 있습니다. 모두 몇 개인가요?`,(a,b)=>`${a}개씩 놓인 줄이 ${b}줄입니다. 모두 몇 개인가요?`];
+      for(let a=2;a<=9;a++)for(let b=1;b<=9;b++){
+        // 3×4 and 4×3 are one mathematical fact; vary actual learning target without duplicating that fact.
+        if(b>=2&&b<a)continue;
+        const missing=(a+b)%3===0;
+        rows.push(missing
+          ? {question:`${a} × □ = ${a*b}입니다. □에 들어갈 수는?`,answer:String(b),inputMode:"numeric",factKey:`mul:missing:${a}:${b}`,familyKey:`mul:family:${Math.min(a,b)}:${Math.max(a,b)}`}
+          : {question:frames[(a+b)%frames.length](a,b),answer:String(a*b),inputMode:"numeric",factKey:`mul:product:${Math.min(a,b)}:${Math.max(a,b)}`,familyKey:`mul:family:${Math.min(a,b)}:${Math.max(a,b)}`});
+      }
     }else{
-      for(let divisor=2;divisor<=9;divisor+=1)for(let quotient=1;quotient<=9;quotient+=1){const total=divisor*quotient,ans=String(quotient);rows.push(
-        {question:`${total} ÷ ${divisor} = ?`,answer:ans,inputMode:"numeric"},
-        {question:`사탕 ${total}개를 ${divisor}명에게 똑같이 나누면 한 명이 몇 개씩 받나요?`,answer:ans,inputMode:"numeric"},
-        {question:`스티커 ${total}장을 ${divisor}묶음으로 똑같이 나누면 한 묶음에 몇 장씩 들어가나요?`,answer:ans,inputMode:"numeric"},
-        {question:`길이 ${total}m인 길을 ${divisor}개의 같은 구간으로 나누면 한 구간은 몇 m인가요?`,answer:ans,inputMode:"numeric"},
-        {question:`공 ${total}개를 한 상자에 ${divisor}개씩 담으면 상자는 몇 개 필요한가요?`,answer:ans,inputMode:"numeric"}
-      )}
+      const frames=[(n,d)=>`${n} ÷ ${d} = ?`,(n,d)=>`${n}개를 ${d}명에게 똑같이 나누면 한 명이 몇 개씩 받나요?`,(n,d)=>`${n}개를 한 묶음에 ${d}개씩 담으면 몇 묶음인가요?`];
+      for(let d=2;d<=9;d++)for(let q=1;q<=9;q++){
+        const n=d*q,missing=(d+q)%4===0;
+        rows.push(missing
+          ? {question:`${n} ÷ □ = ${q}입니다. □에 들어갈 수는?`,answer:String(d),inputMode:"numeric",factKey:`div:divisor:${n}:${q}`,familyKey:`div:family:${n}:${d}`}
+          : {question:frames[(d+q)%frames.length](n,d),answer:String(q),inputMode:"numeric",factKey:`div:quotient:${n}:${d}`,familyKey:`div:family:${n}:${d}`});
+      }
     }
-    const rng=random(hash(`${userId()}|${missionId}|finite-order-v3`));for(let i=rows.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[rows[i],rows[j]]=[rows[j],rows[i]]}poolCache.set(cacheKey,rows);return rows;
+    const rng=random(hash(`${userId()}|${missionId}|finite-order-v6-audited`));for(let i=rows.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[rows[i],rows[j]]=[rows[j],rows[i]]}poolCache.set(cacheKey,rows);return rows;
   }
 
   function generate(missionId,variant=0,forcedDate=""){
-    const key=forcedDate||dateKey(),pool=MiniTalk.Tasks.DailyQuestClock.dayPool(finiteArithmeticPool(missionId)||stableProblemPool(missionId,1400),key),v=Math.max(0,Number(variant)||0),start=v%pool.length,out=[];
+    const key=forcedDate||dateKey(),facts=finiteArithmeticPool(missionId),items=facts||stableProblemPool(missionId,1400),pool=MiniTalk.Tasks.DailyQuestClock.dayPool(items,key),v=Math.max(0,Number(variant)||0),start=v%pool.length,out=[];
     for(let i=0;i<QUESTIONS_PER_MISSION;i+=1)out.push(pool[(start+i)%pool.length]);
     return out;
   }
@@ -275,7 +278,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
   }
 
   function visibleProblemKey(item) {
-    return String(item?.question || "").replace(/\s+/g, " ").trim();
+    return item?.familyKey || item?.factKey || String(item?.question || "").replace(/\s+/g, " ").trim();
   }
 
   function nextVariant(missionId, questionIndex, currentItem, currentVariant, seenKeys = new Set()) {

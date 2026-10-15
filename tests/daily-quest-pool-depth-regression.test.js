@@ -29,8 +29,16 @@ for(const mission of kor.missions()){
   if(mission.id==='spacing'&&!foundGrandma)throw new Error('spacing pool never exposed 할머니 댁 regression case');
 }
 for(const missionId of ['multiplication','division']){
-  const unique=new Set();
-  for(let day=0;day<14;day++)for(const item of math.generate(missionId,0,date(day))){const key=`${item.question}|${item.answer}`;if(unique.has(key))throw new Error(`${missionId} repeated within first 14 daily sets: ${key}`);unique.add(key)}
-  if(unique.size!==70)throw new Error(`${missionId} expected 70 distinct facts across 14 days, got ${unique.size}`);
+  // Similar math wordings and inverse questions must not disguise the same fact.
+  // The pool is intentionally finite, so the guarantee is scoped to the current week.
+  for(let week=0;week<2;week++){
+    const seen=new Set();
+    for(let day=week*7;day<week*7+7;day++)for(const item of math.generate(missionId,0,date(day))){
+      const key=item.familyKey||item.factKey||`${item.question}|${item.answer}`;
+      if(seen.has(key))throw new Error(`${missionId} repeated same math fact within week: ${key}`);
+      seen.add(key);
+    }
+    if(seen.size!==35)throw new Error(`${missionId} expected 35 distinct facts in one week, got ${seen.size}`);
+  }
 }
 console.log('DAILY_QUEST_POOL_DEPTH_REGRESSION_OK');

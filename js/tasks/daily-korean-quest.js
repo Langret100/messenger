@@ -50,7 +50,7 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       ["띄어쓰기가 바른 문장은?", "책상 위에 연필이 있다.", ["책상위에 연필이 있다.", "책상 위에연필이 있다.", "책상 위에 연필이 있다.", "책상위에연필이 있다."]],
       ["띄어쓰기가 바른 것은?", "집에 가는 길", ["집에가는 길", "집에 가는길", "집에 가는 길", "집에가는길"]],
       ["띄어쓰기가 바른 문장은?", "밥을 먹고 나서 놀았다.", ["밥을먹고 나서 놀았다.", "밥을 먹고나서 놀았다.", "밥을 먹고 나서 놀았다.", "밥을먹고나서 놀았다."]],
-      ["띄어쓰기가 바른 것은?", "할머니 댁", ["할머니댁", "할머니 댁", "할 머니 댁", "할머니 집"]],
+      ["띄어쓰기가 바른 것은?", "할머니 댁", ["할머니댁", "할머니 댁", "할 머니댁", "할머 니 댁"]],
       ["띄어쓰기가 바른 문장은?", "내일 아침에 만나자.", ["내일아침에 만나자.", "내일 아침에만나자.", "내일 아침에 만나자.", "내일아침에만나자."]],
       ["띄어쓰기가 바른 것은?", "두 사람", ["두사람", "두 사람", "두사 람", "둘 사람"]],
       ["띄어쓰기가 바른 문장은?", "오늘 비가 많이 온다.", ["오늘비가 많이 온다.", "오늘 비가많이 온다.", "오늘 비가 많이 온다.", "오늘비가많이 온다."]],
@@ -198,36 +198,71 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
    * 문맥형 문제를 추가 생성합니다. 정규화·보기 검증 뒤에도 유형별 최소 340개 이상의 서로 다른 문제를 유지합니다. */
   function buildDeepBank() {
     const out={spelling:[],expression:[],spacing:[],punctuation:[],conjunction:[]};
-    const add=(id,q,a,c)=>out[id].push([q,a,c]);
+    const add=(id,q,a,c)=>{
+      if(id!=="spacing"){out[id].push([q,a,c]);return;}
+      const normalize=value=>String(value).normalize("NFC").replace(/\s+/g," ").trim();
+      const candidates=[...c],seen=new Set();let fixed=[];
+      for(const option of candidates){const key=normalize(option);if(!seen.has(key)){seen.add(key);fixed.push(option)}}
+      // Older seeds sometimes contain a doubled space that renders exactly like the answer.
+      // Replace such distractors, rather than silently throwing away the whole problem.
+      const words=String(a).split(/\s+/).filter(Boolean);
+      const variants=[];
+      for(let i=0;i<words.length-1;i++)variants.push([...words.slice(0,i),words[i]+words[i+1],...words.slice(i+2)].join(" "));
+      for(let i=0;i<words.length;i++)for(let j=1;j<words[i].length;j++)variants.push([...words.slice(0,i),words[i].slice(0,j),words[i].slice(j),...words.slice(i+1)].join(" "));
+      for(const candidate of variants){const key=normalize(candidate);if(key!==normalize(a)&&!seen.has(key)){seen.add(key);fixed.push(candidate)}if(fixed.length===4)break}
+      out[id].push([q,a,fixed.slice(0,4)]);
+    };
 
     const spellingSeeds=[
       ["어쨌든",["어쨋든","어쨌든","어쨌던","어째든"]],["오랜만",["오랜만","오랫만","오랜 만","오랫 만"]],
       ["틈틈이",["틈틈이","틈틈히","틈틈 이","틈틈니"]],["일일이",["일일이","일일히","일 일이","일이리"]],
       ["깨달았다",["깨달았다","깨닳았다","깨달앗다","깨닳앗다"]],["삼가다",["삼가다","삼가하다","삼가 하다","삼갇다"]],
-      ["바라다",["바라다","바래다","바라 다","바래 다"]],["잠갔다",["잠갔다","잠궜다","잠갓다","잠구었다"]],
+      ["바라다",["바라다","바라 다","발하다","바라따"]],["잠갔다",["잠갔다","잠궜다","잠갓다","잠구었다"]],
       ["담갔다",["담갔다","담궜다","담갓다","담구었다"]],["치렀다",["치렀다","치뤘다","치럿다","치루었다"]],
-      ["들렀다",["들렀다","들렸다","들럿다","들르었다"]],["부딪쳤다",["부딪쳤다","부딪혔다","부딫쳤다","부딛쳤다"]],
-      ["맞혔다",["맞혔다","맞췄다","맞혓다","맟혔다"]],["붙였다",["붙였다","부쳤다","붙혔다","붙이였다"]],
+      ["들렀다",["들렀다","들럿다","들르었다","들렀따"]],["부딪쳤다",["부딪쳤다","부딫쳤다","부딛쳤다","부딪쳣다"]],
+      ["맞혔다",["맞혔다","맞혓다","맟혔다","맞히였다"]],["붙였다",["붙였다","붙혔다","붙이였다","부티였다"]],
       ["베개",["베개","배개","베게","배게"]],["희한하다",["희한하다","희안하다","희한 하다","희안 하다"]],
       ["어렴풋이",["어렴풋이","어렴풋히","어렴푸시","어렴풋 이"]],["곁땀",["곁땀","겨땀","곁 땀","겻땀"]],
       ["사흘",["사흘","사흘날","사흘 일","사흘이"]],["나흘",["나흘","나흘날","나흘 일","나흘이"]],
       ["으레",["으레","의레","으례","의례"]],["웬만하면",["웬만하면","왠만하면","웬 만하면","왠 만하면"]],
       ["어떡하지",["어떡하지","어떻하지","어떡 하 지","어떻 하 지"]],["돼요",["돼요","되요","돼 요","됬어요"]],
-      ["됐어요",["됐어요","됬어요","되었어요","됫어요"]],["안 돼",["안 돼","않 돼","안 되","않 되"]],
-      ["않았다",["않았다","안았다","않앗다","안 았다"]],["낫다",["낫다","낳다","낮다","낟다"]],
-      ["낳았다",["낳았다","나았다","낫았다","낮았다"]],["쫓아가다",["쫓아가다","좇아가다","쫒아가다","쫓아 가다"]],
-      ["좇다",["좇다","쫓다","좃다","좇 따"]],["며칠째",["며칠째","몇일째","며칠 째","몇 일째"]],
+      ["됐어요",["됐어요","됬어요","됫어요","됏어요"]],["안 돼",["안 돼","않 돼","안 됀","않 됀"]],
+      ["않았다",["않았다","안았다","않앗다","안 았다"]],["낫다",["낫다","낟다","낫따","낮타"]],
+      ["낳았다",["낳았다","낫았다","나핬다","낳앗다"]],["쫓아가다",["쫓아가다","쫒아가다","쫓아 가다","쫓아갇다"]],
+      ["좇다",["좇다","좃다","좇 따","좇따"]],["며칠째",["며칠째","몇일째","며칠 째","몇 일째"]],
       ["설렘",["설렘","설레임","설램","설 렘"]],["뒤처지다",["뒤처지다","뒤쳐지다","뒤처 지다","뒤쳐 지다"]],
       ["무릅쓰다",["무릅쓰다","무릎쓰다","무릅 쓰다","무릎 쓰다"]],["뵙겠습니다",["뵙겠습니다","봽겠습니다","뵙겟습니다","봬겠습니다"]],
       ["예삿일",["예삿일","예사일","예삿 일","예사 일"]],["오뚝이",["오뚝이","오똑이","오뚜기","오뚝 이"]],
       ["거뜬히",["거뜬히","거뜬이","거뜬 히","거뜬니"]],["꼼꼼히",["꼼꼼히","꼼꼼이","꼼꼼 히","꼼꼬미"]]
     ];
+    spellingSeeds.push(
+      ["금세",["금새","금세","금쎄","금셰"]], ["왠지",["웬지","왠지","왠찌","왠 지"]],
+      ["웬일",["왠일","웬일","웬 일","왠 일"]], ["아무튼",["아뭏든","아무튼","아무던","아무 턴"]],
+      ["어이없다",["어의없다","어이없다","어이 업다","어이업다"]], ["결재",["결제","결재","결쩨","결제에"]],
+      ["결제",["결재","결제","결재에","결쟤"]], ["무난하다",["문안하다","무난하다","무난 하다","무난핟다"]],
+      ["대가",["댓가","대가","대까","댓까"]], ["가르치다",["가리키다","가르치다","가르 치다","가르키다"]],
+      ["가리키다",["가르키다","가리키다","가리키 다","가르치이다"]], ["통째로",["통채로","통째로","통쩨로","통 째로"]],
+      ["곰곰이",["곰곰히","곰곰이","곰곰 이","곰고미"]], ["반드시",["반드씨","반드시","반드 시","반드시이"]],
+      ["속수무책",["속수무첵","속수무책","속수 무책","속쑤무책"]], ["갑자기",["갑작이","갑자기","갑 자기","갑짜기"]],
+      ["따뜻하다",["따뜨하다","따뜻하다","따뜻 하다","따뜻핟다"]], ["어떻게",["어떡해","어떻게","어떻 게","어 떻게"]],
+      ["나중에",["나중애","나중에","나 중에","나중 에"]], ["차라리",["차라히","차라리","차라 리","찰하리"]]
+    );
     const spellFrames=[
       wrong=>`맞춤법 문제: ‘${wrong}’의 바른 표기를 고르세요.`,
       wrong=>`다음 잘못 적은 말 ‘${wrong}’을 바르게 고친 것은?`,
       wrong=>`‘${wrong}’을 표준 맞춤법에 맞게 고친 말을 고르세요.`
     ];
-    spellingSeeds.forEach(([a,c])=>c.filter(x=>x!==a).forEach(wrong=>spellFrames.forEach(f=>add("spelling",f(wrong),a,c))));
+    const spellingContexts={
+      "결재":"회사에서 담당자의 승인을 받는 일을 나타내는 말은?",
+      "결제":"상품값을 카드로 지불하는 일을 나타내는 말은?",
+      "왠지":"이유는 모르지만 그런 느낌이 든다는 뜻의 말은?",
+      "웬일":"뜻밖의 일을 보고 놀라서 묻는 말은?",
+      "낫다":"감기가 다 나아 건강을 되찾는다는 뜻의 말은?",
+      "낳았다":"암탉이 알을 만들어 밖으로 냈다는 뜻의 말은?",
+      "좇다":"훌륭한 선생님의 뜻을 따른다는 의미의 말은?",
+      "바라다":"시험에 합격하기를 간절히 원한다는 뜻의 말은?"
+    };
+    spellingSeeds.forEach(([a,c])=>{const wrong=c.find(x=>x!==a);if(wrong)add("spelling",spellingContexts[a]||spellFrames[0](wrong),a,c)});
 
     const expressionSeeds=[
       ["메모했다",["메모했다","지워 버렸다","숨겨 두었다","찢어 버렸다"],"중요한 안내를 잊지 않으려고 공책에 ___"],
@@ -296,28 +331,28 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       ["실천했다",["실천했다","미뤘다","잊었다","포기했다"],"하루에 책 20쪽 읽기 계획을 꾸준히 ___"]
     );
     const exprFrames=[s=>`빈칸에 가장 알맞은 표현을 고르세요. ${s}.`,s=>`문장이 자연스럽도록 빈칸을 채우세요. ${s}.`,s=>`상황에 알맞은 말을 고르세요. ${s}.`,s=>`다음 행동을 가장 자연스럽게 나타낸 말을 고르세요. ${s}.`,s=>`문맥에 어울리는 표현을 찾으세요. ${s}.`,s=>`빈칸에 들어갈 가장 자연스러운 말을 고르세요. ${s}.`,s=>`상황에 맞는 행동 표현을 고르세요. ${s}.`,s=>`문장의 뜻에 맞도록 빈칸을 채우세요. ${s}.`,s=>`가장 자연스러운 서술어를 고르세요. ${s}.`,s=>`앞뒤 내용에 어울리는 표현을 고르세요. ${s}.`];
-    expressionSeeds.forEach(([a,c,s])=>exprFrames.forEach(f=>add("expression",f(s),a,c)));
+    expressionSeeds.forEach(([a,c,s])=>add("expression",exprFrames[0](s),a,c));
 
     const spacingSeeds=[
-      ["다음 날",["다음날","다음 날","다 음 날","다음  날"]],["이틀 동안",["이틀동안","이틀 동안","이 틀 동안","이틀  동안"]],
-      ["한 시간",["한시간","한 시간","한시 간","한  시간"]],["몇 번",["몇번","몇 번","몇  번","몆 번"]],
-      ["한 장",["한장","한 장","한  장","한짱"]],["다섯 명",["다섯명","다섯 명","다섯  명","다섯명씩"]],
+      ["다음 날 아침",["다음날 아침","다음 날아침","다음 날 아침","다음날아침"]],["이틀 동안",["이틀동안","이틀 동안","이 틀 동안","이틀  동안"]],
+      ["한 시간",["한시간","한 시간","한시 간","한  시간"]],["몇 번 더",["몇번 더","몇 번더","몇 번 더","몇번더"]],
+      ["한 장 더",["한장 더","한 장더","한 장 더","한장더"]],["다섯 명",["다섯명","다섯 명","다섯  명","다섯명씩"]],
       ["한 가지",["한가지","한 가지","한  가지","한가 지"]],["첫 번째",["첫번째","첫 번째","첫번 째","첫  번째"]],
-      ["세 시간 동안",["세시간 동안","세 시간동안","세 시간 동안","세시간동안"]],["할 때",["할때","할 때","할  때","할떄"]],
-      ["오는 길",["오는길","오는 길","오 는 길","오는  길"]],["집 안",["집안","집 안","집  안","집 앉"]],
+      ["세 시간 동안",["세시간 동안","세 시간동안","세 시간 동안","세시간동안"]],["공부할 때",["공부할때","공부 할 때","공부할 때","공부 할때"]],
+      ["학교 오는 길",["학교오는 길","학교 오는길","학교 오는 길","학교오는길"]],["집 안 구석구석",["집안 구석구석","집 안구석구석","집 안 구석구석","집안구석구석"]],
       ["운동장 앞",["운동장앞","운동장 앞","운동 장 앞","운동장  앞"]],["두 사람씩",["두사람씩","두 사람씩","두 사람 씩","두사람 씩"]],
       ["본 적이 없다",["본적이 없다","본 적이없다","본 적이 없다","본적이없다"]],["온 지 오래되었다",["온지 오래되었다","온 지오래되었다","온 지 오래되었다","온지오래되었다"]],
       ["갈 수밖에 없다",["갈수밖에 없다","갈 수 밖에 없다","갈 수밖에 없다","갈수 밖에없다"]],["할 뿐이다",["할뿐이다","할 뿐이다","할 뿐 이다","할뿐 이다"]],
-      ["먹은 뒤",["먹은뒤","먹은 뒤","먹 은 뒤","먹은  뒤"]],["끝난 후",["끝난후","끝난 후","끝난  후","끝난후에"]]
+      ["밥을 먹은 뒤",["밥을먹은 뒤","밥을 먹은뒤","밥을 먹은 뒤","밥을먹은뒤"]],["끝난 후",["끝난후","끝난 후","끝난  후","끝난후에"]]
     ];
     spacingSeeds.push(
       ["한 달 동안",["한달 동안","한 달동안","한 달 동안","한달동안"]],
       ["두 번씩",["두번씩","두 번씩","두 번 씩","두번 씩"]],
       ["세 명씩",["세명씩","세 명씩","세 명 씩","세명 씩"]],
       ["볼 수 있다",["볼수 있다","볼 수있다","볼 수 있다","볼수있다"]],
-      ["읽어 본 책",["읽어본 책","읽어 본책","읽어 본 책","읽어본책"]],
+      ["읽어 본 책",["읽어봄 책","읽어 본책","읽어 본 책","읽어봄책"]],
       ["간 지 오래다",["간지 오래다","간 지오래다","간 지 오래다","간지오래다"]],
-      ["할 만한 일",["할만한 일","할 만한일","할 만한 일","할만한일"]],
+      ["할 만한 일",["할만한일","할 만한일","할 만한 일","할만한일"]],
       ["할 수 있는",["할수 있는","할 수있는","할 수 있는","할수있는"]],
       ["먹고 난 뒤",["먹고난 뒤","먹고 난뒤","먹고 난 뒤","먹고난뒤"]],
       ["만난 적이 있다",["만난적이 있다","만난 적이있다","만난 적이 있다","만난적이있다"]],
@@ -331,6 +366,28 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       ["비가 온 뒤",["비가온 뒤","비가 온뒤","비가 온 뒤","비가온뒤"]],
       ["학교에 간 지",["학교에 간지","학교에간 지","학교에 간 지","학교에간지"]],
       ["두 가지 방법",["두가지 방법","두 가지방법","두 가지 방법","두가지방법"]]
+    );
+    spacingSeeds.push(
+      ["세 권의 책",["세권의 책","세 권의 책","세 권의책","세권의책"]],
+      ["일 년 뒤",["일년 뒤","일 년뒤","일 년 뒤","일년뒤"]],
+      ["날마다 한 번",["날마다한 번","날마다 한 번","날마다 한번","날마다한번"]],
+      ["그럴 수 있다",["그럴수 있다","그럴 수있다","그럴 수 있다","그럴수있다"]],
+      ["읽을 줄 안다",["읽을줄 안다","읽을 줄안다","읽을 줄 안다","읽을줄안다"]],
+      ["할 수 없었다",["할수 없었다","할 수없었다","할 수 없었다","할수없었다"]],
+      ["아는 만큼 보인다",["아는만큼 보인다","아는 만큼보인다","아는 만큼 보인다","아는만큼보인다"]],
+      ["보이는 대로",["보이는대로","보이는 대로","보 이는대로","보이는대 로"]],
+      ["말한 대로",["말한대로","말한 대로","말 한대로","말한대 로"]],
+      ["예쁜 꽃 한 송이",["예쁜꽃 한 송이","예쁜 꽃 한송이","예쁜 꽃 한 송이","예쁜꽃한송이"]],
+      ["책상 아래",["책상아래","책상 아래","책 상아래","책상아 래"]],
+      ["한 번 더",["한번 더","한 번더","한 번 더","한번더"]],
+      ["달이 뜬 밤",["달이뜬 밤","달이 뜬밤","달이 뜬 밤","달이뜬밤"]],
+      ["그때부터 지금까지",["그때부터지금까지","그때부터 지금까지","그때 부터 지금까지","그때부터 지금 까지"]],
+      ["나무 두 그루",["나무두 그루","나무 두그루","나무 두 그루","나무두그루"]],
+      ["한 걸음 뒤로",["한걸음 뒤로","한 걸음뒤로","한 걸음 뒤로","한걸음뒤로"]],
+      ["하루 종일",["하루종일","하루 종일","하 루 종일","하루종 일"]],
+      ["밤 열 시",["밤열 시","밤 열시","밤 열 시","밤열시"]],
+      ["두 번째 줄",["두번째 줄","두 번째줄","두 번째 줄","두번째줄"]],
+      ["꼭 필요한 것",["꼭필요한 것","꼭 필요한것","꼭 필요한 것","꼭필요한것"]]
     );
     const spacingFrames=[
       compact=>`띄어쓰기 문제: ‘${compact}’를 바르게 띄어 쓴 것은?`,
@@ -346,10 +403,10 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       compact=>`‘${compact}’를 띄어쓰기 원칙에 맞게 쓴 것은?`,
       compact=>`바른 띄어쓰기를 적용한 ‘${compact}’의 형태는?`
     ];
-    spacingSeeds.forEach(([a,c])=>{const compact=String(a).replace(/\s+/g,"");spacingFrames.forEach(f=>add("spacing",f(compact),a,c))});
+    spacingSeeds.forEach(([a,c])=>{const compact=String(a).replace(/\s+/g,"");add("spacing",spacingFrames[0](compact),a,c)});
 
     const punctPrompts=["문장부호를 바르게 쓴 문장을 고르세요.","끝맺는 부호가 알맞은 문장을 고르세요.","문장의 뜻에 맞게 부호를 붙인 문장을 고르세요.","문장부호 사용이 올바른 문장을 고르세요.","표준 문장부호에 맞는 문장을 고르세요.","문장의 느낌에 맞는 부호를 사용한 문장을 고르세요."];
-    const addPunct=(answer,choices)=>punctPrompts.forEach(prompt=>add("punctuation",`${prompt} ${String(answer).replace(/[.?!]$/,'')}`,answer,choices));
+    const addPunct=(answer,choices)=>add("punctuation",`${punctPrompts[0]} ${String(answer).replace(/[.?!]$/,'')}`,answer,choices);
     const questionLines=["오늘 체육 수업이 몇 시에 시작하니","이 책을 다 읽었니","내일 준비물을 가져올 수 있니","어디에서 만나기로 했니","점심을 먹고 도서관에 갈래","이 문제의 답을 찾았니","우산을 챙겼니","버스는 몇 시에 오니","발표 준비는 끝났니","지금 창문을 닫아도 될까"];
     const exclaimLines=["와, 정말 멋진 작품이다","앗, 깜짝이야","우와, 드디어 해냈다","어머, 무지개가 떴다","야호, 우리 팀이 이겼다","아, 정말 시원하다","와, 꽃이 활짝 피었다","앗, 공이 굴러간다","우와, 하늘이 정말 맑다","야, 정말 빠르다"];
     const statements=["오늘은 하늘이 맑다","우리는 도서관에서 책을 읽었다","운동장에 학생들이 모였다","나는 숙제를 모두 끝냈다","친구와 함께 집에 돌아왔다","화분에 새잎이 돋았다","교실 창문을 활짝 열었다","아침에 비가 조금 내렸다","우리 반은 발표회를 준비했다","책상 위에 공책이 놓여 있다"];
@@ -366,8 +423,8 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
     quotes.forEach(([who,line])=>{const end=/물었다/.test(who)||/갈래|돼|시작해/.test(line)?"?":".";const ans=`${who}. “${line}${end}”`;addPunct(ans,[ans,`${who}? ${line}.`,`${who}, “${line}!”`,`${who}! ${line},`])});
 
     const conjunctionSeeds=[
-      ["비가 많이 왔다","우산을 썼다","그래서"],["길이 미끄러웠다","천천히 걸었다","그래서"],["늦잠을 잤다","서둘러 준비했다","그래서"],["날씨가 추웠다","두꺼운 외투를 입었다","그래서"],["숙제를 끝냈다","책가방을 정리했다","그다음"],
-      ["손을 깨끗이 씻었다","간식을 먹었다","그다음"],["자료를 찾았다","내용을 정리했다","그다음"],["운동을 마쳤다","물을 마셨다","그다음"],["열심히 연습했다","경기에서 졌다","하지만"],["피곤했다","숙제를 끝까지 했다","하지만"],
+      ["비가 많이 왔다","우산을 썼다","그래서"],["새벽에 눈이 내렸다","미끄러지지 않도록 조심했다","그래서"],["늦잠을 잤다","서둘러 준비했다","그래서"],["강한 바람이 불었다","모자를 꼭 눌러썼다","그래서"],["독후감을 완성했다","파일에 넣어 제출했다","그다음"],
+      ["손을 깨끗이 씻었다","간식을 먹었다","그다음"],["자료를 찾았다","내용을 정리했다","그다음"],["운동을 마쳤다","물을 마셨다","그다음"],["충분히 준비했다","예상하지 못한 결과를 받아들였다","하지만"],["피곤했다","숙제를 끝까지 했다","하지만"],
       ["비가 왔다","예정대로 소풍을 갔다","하지만"],["문제가 어려웠다","포기하지 않았다","하지만"],["연필로 써도 된다","볼펜으로 써도 된다","또는"],["버스를 타도 된다","지하철을 타도 된다","또는"],["사과를 고를 수 있다","귤을 고를 수 있다","또는"],
       ["오늘 제출해도 된다","내일 아침 제출해도 된다","또는"],["나는 우산을 챙겼다","비가 온다는 예보를 보았기 때문이다","왜냐하면"],["창문을 닫았다","바람이 세게 불었기 때문이다","왜냐하면"],["일찍 잠자리에 들었다","내일 아침 일찍 일어나야 하기 때문이다","왜냐하면"],["물을 자주 마셨다","날씨가 매우 더웠기 때문이다","왜냐하면"],
       ["형은 축구를 좋아한다","나는 농구를 좋아한다","반면에"],["민지는 아침형이다","서연이는 밤에 집중이 잘된다","반면에"],["이 길은 짧지만 가파르다","저 길은 길지만 평평하다","반면에"],["도시는 사람이 많다","시골은 비교적 한적하다","반면에"]
@@ -384,7 +441,7 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       ["실내화를 갈아 신었다","교실 바닥을 깨끗하게 사용해야 하기 때문이다","왜냐하면"],["목소리를 낮췄다","도서관이었기 때문이다","왜냐하면"],["민수는 계획을 꼼꼼히 세운다","지호는 먼저 시작하며 방법을 찾는다","반면에"],["낮에는 기온이 높다","밤에는 기온이 내려간다","반면에"]
     );
     const conjFrames=[(a,b)=>`${a}. ___ ${b}.`,(a,b)=>`앞뒤 문장을 자연스럽게 이으세요. ${a}. ___ ${b}.`,(a,b)=>`빈칸에 알맞은 이어 주는 말을 고르세요. ${a}. ___ ${b}.`,(a,b)=>`두 문장의 관계에 맞는 접속 표현을 고르세요. ${a}. ___ ${b}.`,(a,b)=>`문맥이 자연스럽도록 빈칸을 채우세요. ${a}. ___ ${b}.`,(a,b)=>`두 문장의 관계를 생각해 알맞은 말을 고르세요. ${a}. ___ ${b}.`];
-    conjunctionSeeds.forEach(([a,b,ans])=>conjFrames.forEach(f=>add("conjunction",f(a,b),ans,["그래서","하지만","또는","왜냐하면","그다음","반면에"].filter(x=>x!==ans).slice(0,3).concat(ans))));
+    conjunctionSeeds.forEach(([a,b,ans])=>add("conjunction",conjFrames[0](a,b),ans,["그래서","하지만","또는","왜냐하면","그다음","반면에"].filter(x=>x!==ans).slice(0,3).concat(ans)));
     return out;
   }
   const DEEP_BANK=buildDeepBank();
@@ -422,6 +479,36 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
   }
   function daySerial(key){const [year,month,day]=String(key||dateKey()).split("-").map(Number);return Math.floor(Date.UTC(year,month-1,day)/86400000)}
   const poolCache=new Map();
+  const weeklyDayBankCache=new Map();
+  function weeklyDayBank(items,missionId,key){
+    const week=MiniTalk.Tasks.DailyQuestClock.weekKey(key),cacheKey=`${userId()}|${missionId}|${week}`;
+    let groups=weeklyDayBankCache.get(cacheKey);
+    if(!groups){
+      // Reserve all 35 regular questions first, each with a different learning target.
+      // Assign remaining alternatives to exactly one day: retries cannot leak into another day.
+      const shuffled=items.slice(),rng=random(hash(`${userId()}|${missionId}|${week}|week-diverse-v1`));
+      for(let i=shuffled.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]]}
+      // Even when the calendar week changes, do not repeat Sunday's exact question on Monday.
+      const prevDate=new Date(Date.parse(`${week}T00:00:00Z`)-7*86400000).toISOString().slice(0,10);
+      const prevOrder=items.slice(),prevRng=random(hash(`${userId()}|${missionId}|${prevDate}|week-diverse-v1`));
+      for(let i=prevOrder.length-1;i>0;i--){const j=Math.floor(prevRng()*(i+1));[prevOrder[i],prevOrder[j]]=[prevOrder[j],prevOrder[i]]}
+      const prevBase=[],prevConcepts=new Set();for(const item of prevOrder){const concept=conceptKey(item,missionId);if(!prevConcepts.has(concept)){prevConcepts.add(concept);prevBase.push(item);if(prevBase.length===35)break}}
+      const sundayKeys=new Set(prevBase.slice(30,35).map(visibleProblemKey));
+      const used=new Set(),base=[],extras=[];
+      for(const item of shuffled){const concept=conceptKey(item,missionId);if(base.length<5&&sundayKeys.has(visibleProblemKey(item))){extras.push(item);continue}if(base.length<35&&!used.has(concept)){used.add(concept);base.push(item)}else extras.push(item)}
+      if(base.length<35)throw new Error(`국어 주간 문제은행 부족: ${missionId}`);
+      groups=Array.from({length:7},(_,day)=>base.slice(day*5,day*5+5));
+      // Spread extras among days while favoring concepts not already assigned to that day.
+      const dayConcepts=groups.map(group=>new Set(group.map(item=>conceptKey(item,missionId))));
+      extras.forEach(item=>{const concept=conceptKey(item,missionId);let pick=-1,best=Infinity;
+        for(let day=0;day<7;day++){const cost=groups[day].length*2+(dayConcepts[day].has(concept)?1000:0);if(cost<best){best=cost;pick=day}}
+        groups[pick].push(item);dayConcepts[pick].add(concept);
+      });
+      weeklyDayBankCache.set(cacheKey,groups);
+    }
+    const day=Math.floor((Date.parse(`${key}T00:00:00Z`)-Date.parse(`${week}T00:00:00Z`))/86400000);
+    return groups[Math.max(0,Math.min(6,day))];
+  }
   function generate(missionId, variant = 0, forcedDate = "") {
     const key=forcedDate||dateKey(),cacheKey=`${userId()}|${missionId}`,uniqueItems=new Set();let items=poolCache.get(cacheKey);if(!items){items=missionBank(missionId).map(([raw,answer,choices])=>{
       const cleanAnswer=visualChoiceKey(answer),seen=new Set(),cleanChoices=[];
@@ -430,10 +517,10 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       return {...formatQuestion(raw),answer:cleanAnswer,choices:cleanChoices};
     }).filter(item=>item.choices.length>=4).filter(item=>{const itemKey=problemKey(item);if(uniqueItems.has(itemKey))return false;uniqueItems.add(itemKey);return true});
     if(!items.length)return [];
-    const rng=random(hash(`${userId()}|${missionId}|korean-pool-v3`));for(let i=items.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[items[i],items[j]]=[items[j],items[i]]}
+    const rng=random(hash(`${userId()}|${missionId}|korean-pool-v6-audited`));for(let i=items.length-1;i>0;i-=1){const j=Math.floor(rng()*(i+1));[items[i],items[j]]=[items[j],items[i]]}
     const uniqueVisible=new Map();for(const item of items){const identity=visibleProblemKey(item);if(!uniqueVisible.has(identity))uniqueVisible.set(identity,item);}
     items=[...uniqueVisible.values()];poolCache.set(cacheKey,items);}
-    const pool=MiniTalk.Tasks.DailyQuestClock.dayPool(items,key),v=Math.max(0,Number(variant)||0),start=v%pool.length,out=[];
+    const pool=weeklyDayBank(items,missionId,key),v=Math.max(0,Number(variant)||0),start=v%pool.length,out=[];
     for(let i=0;i<QUESTIONS_PER_MISSION;i++)out.push(pool[(start+i)%pool.length]);
     return out.map((item,index)=>positionChoicesForDate(item,missionId,index,variant,key));
   }
@@ -450,9 +537,16 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
 
   function problemKey(item){return `${item?.instruction||""}|${item?.question||""}|${item?.answer||""}`}
   function visibleProblemKey(item){return `${String(item?.question||"").normalize("NFC").replace(/\s+/g," ").trim()}|${(item?.choices||[]).map(visualChoiceKey).sort().join("¦")}`}
-  function remainingQuestionsAreFresh(items,startIndex,seenKeys){const local=new Set();for(let index=startIndex;index<QUESTIONS_PER_MISSION;index+=1){const key=visibleProblemKey(items[index]);if(!key||seenKeys.has(key)||seenKeys.has(String(items[index]?.question||"" ).replace(/\s+/g," ").trim())||local.has(key))return false;local.add(key)}return true}
-  function firstFreshVariant(missionId,seenKeys,startIndex=0,startVariant=0){let candidate=Math.max(0,Number(startVariant)||0);for(let guard=0;guard<512;guard+=1,candidate+=1){const items=generate(missionId,candidate);if(remainingQuestionsAreFresh(items,startIndex,seenKeys))return candidate}return -1}
-  function nextVariant(missionId,questionIndex,currentItem,currentVariant,seenKeys=new Set()){const currentPosition=currentItem?.choices?.indexOf(currentItem.answer)??correctPosition(missionId,questionIndex,currentVariant);let candidate=Math.max(0,Number(currentVariant)||0)+1;for(let guard=0;guard<512;guard+=1,candidate+=1){const items=generate(missionId,candidate),nextItem=items[questionIndex],nextPosition=nextItem?.choices?.indexOf(nextItem.answer);if(nextItem&&!seenKeys.has(visibleProblemKey(nextItem))&&!seenKeys.has(String(nextItem.question||"" ).replace(/\s+/g," ").trim())&&visibleProblemKey(nextItem)!==visibleProblemKey(currentItem)&&nextPosition!==currentPosition&&remainingQuestionsAreFresh(items,questionIndex,seenKeys))return candidate}return -1}
+  function conceptKey(item,missionId){
+    const answer=visualChoiceKey(item?.answer);
+    if(["spelling","spacing","expression"].includes(missionId))return `concept:${missionId}:${answer}`;
+    const question=String(item?.question||"").replace(/^(?:앞뒤 문장을 자연스럽게 이으세요\.|빈칸에 알맞은 이어 주는 말을 고르세요\.|두 문장의 관계에 맞는 접속 표현을 고르세요\.|문맥이 자연스럽도록 빈칸을 채우세요\.|두 문장의 관계를 생각해 알맞은 말을 고르세요\.)\s*/,"").replace(/\s+/g," ").trim();
+    return `concept:${missionId}:${answer}:${question}`;
+  }
+  function seenItem(item,missionId,seen){return seen.has(visibleProblemKey(item))||seen.has(conceptKey(item,missionId));}
+  function remainingQuestionsAreFresh(items,startIndex,seenKeys,missionId){const local=new Set();for(let index=startIndex;index<QUESTIONS_PER_MISSION;index+=1){const key=visibleProblemKey(items[index]);if(!key||seenItem(items[index],missionId,seenKeys)||local.has(conceptKey(items[index],missionId)))return false;local.add(conceptKey(items[index],missionId))}return true}
+  function firstFreshVariant(missionId,seenKeys,startIndex=0,startVariant=0){let candidate=Math.max(0,Number(startVariant)||0);for(let guard=0;guard<512;guard+=1,candidate+=1){const items=generate(missionId,candidate);if(remainingQuestionsAreFresh(items,startIndex,seenKeys,missionId))return candidate}return -1}
+  function nextVariant(missionId,questionIndex,currentItem,currentVariant,seenKeys=new Set()){const currentPosition=currentItem?.choices?.indexOf(currentItem.answer)??correctPosition(missionId,questionIndex,currentVariant);let candidate=Math.max(0,Number(currentVariant)||0)+1;for(let guard=0;guard<512;guard+=1,candidate+=1){const items=generate(missionId,candidate),nextItem=items[questionIndex],nextPosition=nextItem?.choices?.indexOf(nextItem.answer);if(nextItem&&!seenKeys.has(visibleProblemKey(nextItem))&&!seenItem(nextItem,missionId,seenKeys)&&conceptKey(nextItem,missionId)!==conceptKey(currentItem,missionId)&&nextPosition!==currentPosition&&remainingQuestionsAreFresh(items,questionIndex,seenKeys,missionId))return candidate}return -1}
 
   function render(onProgress) {
     const D = MiniTalk.UI.Dom, guest = Boolean(MiniTalk.Store.get("user")?.isGuest), progress = loadProgress(), grid = D.el("div", { class: "daily-quest-grid" });syncProgress(onProgress);
@@ -479,7 +573,7 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
       if(dateKey()!==progress.date){MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("문제 초기화 시간이 지났어요. 미션을 다시 열어 주세요.");onProgress?.();return;}
       const index = sessionCorrect; body.replaceChildren();
       if (index >= 5 || progress.completed[missionId]) return renderComplete();
-      const current = questions[index];seenProblems.add(visibleProblemKey(current));dailySeen.missions[missionId]=[...seenProblems];dailySeen.recent=[...(dailySeen.recent||[]),visibleProblemKey(current)].filter((value,index,array)=>array.lastIndexOf(value)===index);saveDailySeen(dailySeen);const feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" }), choiceGrid = D.el("div", { class: "quest-choice-grid korean-choice-grid", role: "group", "aria-label": "정답 보기" });
+      const current = questions[index];seenProblems.add(visibleProblemKey(current));seenProblems.add(conceptKey(current,missionId));dailySeen.missions[missionId]=[...seenProblems];dailySeen.recent=[...(dailySeen.recent||[]),visibleProblemKey(current),conceptKey(current,missionId)].filter((value,index,array)=>array.lastIndexOf(value)===index);saveDailySeen(dailySeen);const feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" }), choiceGrid = D.el("div", { class: "quest-choice-grid korean-choice-grid", role: "group", "aria-label": "정답 보기" });
       let answerLocked=false;
       current.choices.forEach(answer => { const button = D.el("button", { class: "quest-choice korean-choice", type: "button", text: answer }); button.onclick = () => submit(answer, button); choiceGrid.append(button); });
       function submit(answer, selected) {

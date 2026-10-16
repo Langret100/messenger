@@ -60,7 +60,7 @@ MiniTalk.Tasks.TaskWindow = (() => {
     const source = await readDataUrl(file), image = await new Promise((resolve, reject) => { const node = new Image();node.onload = () => resolve(node);node.onerror = () => reject(new Error("이미지를 읽지 못했습니다."));node.src = source; });
     let max = 720, quality = .62, result = "";
     for (let attempt = 0; attempt < 7; attempt++) {
-      const scale = Math.min(1, max / Math.max(image.naturalWidth, image.naturalHeight)), canvas = document.createElement("canvas");canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);result = canvas.toDataURL("image/jpeg", quality);if (result.length <= IMAGE_MAX_CHARS) return result;max = Math.round(max * .74);quality = Math.max(.34, quality - .06);
+      const scale = Math.min(1, max / Math.max(image.naturalWidth, image.naturalHeight)), canvas = document.createElement("canvas");canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);result = canvas.toDataURL(MiniTalk.Images?.mime||"image/jpeg", quality);if (result.length <= IMAGE_MAX_CHARS) return result;max = Math.round(max * .74);quality = Math.max(.34, quality - .06);
     }
     throw new Error("이미지를 더 작은 크기로 선택해주세요.");
   }

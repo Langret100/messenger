@@ -10,7 +10,7 @@ ok(src.includes('function externalGamePopupBounds(sourceView)'),'positioned play
 ok(src.includes('gap = 42'),'playground must preserve 42px messenger gap');
 ok(src.includes('rightStart = Math.min(availLeft + availWidth, messengerLeft + messengerW + gap)'),'right-side non-overlap calculation missing');
 ok(src.includes('bottomStart = Math.min(availTop + availHeight, messengerTop + messengerH + gap)'),'vertical fallback non-overlap calculation missing');
-ok(src.includes('window.open("", "MoaruOnlinePlayground", features)'),'desktop playground must use named positioned popup');
+ok(src.includes('window.open("", popupName, features)'),'desktop playground must use named positioned popup');
 ok(src.includes('popup.resizeTo(bounds.width, bounds.height); popup.moveTo(bounds.left, bounds.top)'),'popup bounds enforcement missing');
 ok(!src.includes('title: "온라인 놀이터", description: "친구와 온라인으로 놀기", url:'),'playground must not remain a plain target=_blank card');
 ok(html.includes('js/features/tools.js?v='),'tools cache-bust stale');

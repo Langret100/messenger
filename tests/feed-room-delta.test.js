@@ -7,7 +7,7 @@ ok(feed.includes('if(!observer)observer=new IntersectionObserver'),"feed media o
 ok(css.includes("scrollbar-width:none")&&css.includes("::-webkit-scrollbar{display:none"),"feed scrollbar should be hidden while native drag/scroll remains");
 ok(css.includes("bottom:calc(-20px + 58px"),"feed add button was not lowered");
 ok(rt.includes('function startMemberRoomIndexSubscription()')&&rt.includes('orderByChild("lastMessageAt").startAt(1)'),"room list should use member summaries and group summaries on demand");
-ok(rt.includes('base.limitToLast(CHAT_PAGE_SIZE)')&&rt.includes('base.startAt(lastTs)'),"room messages must use 25-message cold load and cache delta subscription");
+ok(rt.includes('base.limitToLast(CHAT_PAGE_SIZE)')&&rt.includes('ref.on("child_changed",fn,fail)'),"room messages must use 25-message cold load and cache delta subscription");
 ok(chats.includes('"data-has-message":roomHasVisibleActivity(room)?"1":"0"')&&chats.includes('mode==="group"&&item.dataset.roomType==="group"&&hasMessage'),"empty room UI fallback filter missing");
 ok(chats.includes('class:"room-summary-icon profile-image"')&&chats.includes('class:"room-member-avatar profile-image"'),"room information profile images missing");
 ok(appcss.includes('.room-summary-icon{')&&appcss.includes('object-fit:cover'),"room profile image crop style missing");

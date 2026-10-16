@@ -8,7 +8,7 @@ MiniTalk.Features.Tools = (() => {
   const items = [
     { id: "tarot", icon: "✧", title: "오늘의 타로", description: "카드를 뽑아 보는 운세" },
     { id: "alarm", icon: "◉", title: "알람", description: "원하는 시간에 알림" },
-    { id: "lookalike", icon: "?", title: "닮은 생물 찾기", description: "3·2·1 찍고 닮은 동식물 보기" },
+    { id: "blockfield", icon: "▦", title: "블록 필드", description: "함께 꾸미는 세상" },
     { id: "playground", icon: "↗", title: "온라인 놀이터", description: "친구와 온라인으로 놀기" },
     { id: "timetable", icon: "▦", title: "오늘의 시간표", description: "이미지로 함께 갱신" },
     { id: "lunch", icon: "☰", title: "오늘의 급식표", description: "TXT에서 오늘 급식 보기" }
@@ -23,6 +23,7 @@ MiniTalk.Features.Tools = (() => {
     lunch: () => MiniTalk.Tools.ClassInfo.openLunch(),
     "face-toy": () => openCameraTool(MiniTalk.Tools.FaceToy, "페이스 체인지"),
     playground: () => openOnlinePlayground(),
+    blockfield: () => openOnlinePlayground("https://blockfield-game.blockfield-equipment-lab.workers.dev/", "MoaruBlockField"),
     lookalike: () => openCameraTool(MiniTalk.Tools.LookalikePlay, "닮은 생물 찾기")
   };
 
@@ -145,8 +146,7 @@ MiniTalk.Features.Tools = (() => {
     return { width: Math.round(Math.max(500, width)), height: Math.round(Math.max(540, height)), left: Math.round(left), top: Math.round(top) };
   }
 
-  function openOnlinePlayground() {
-    const url = "https://langret100.github.io/multiroom-playground/";
+  function openOnlinePlayground(url = "https://langret100.github.io/multiroom-playground/", popupName = "MoaruOnlinePlayground") {
     if (mobileCameraTool()) {
       try { window.open(url, "_blank", "noopener,noreferrer"); } catch {}
       return;
@@ -155,7 +155,7 @@ MiniTalk.Features.Tools = (() => {
     const bounds = externalGamePopupBounds(sourceView);
     const features = `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=yes,resizable=yes,width=${bounds.width},height=${bounds.height},left=${bounds.left},top=${bounds.top}`;
     let popup = null;
-    try { popup = window.open("", "MoaruOnlinePlayground", features); } catch {}
+    try { popup = window.open("", popupName, features); } catch {}
     if (!popup) {
       try { window.open(url, "_blank", "noopener,noreferrer"); } catch {}
       return;
@@ -225,7 +225,7 @@ MiniTalk.Features.Tools = (() => {
     const D = MiniTalk.UI.Dom;
     const linked = Boolean(item.url);
     return D.el(linked ? "a" : "button", {
-      class: "tool-button modern-tool",
+      class: `tool-button modern-tool${item.id === "blockfield" ? " blockfield-tool" : ""}`,
       ...(linked ? { href: item.url, target: "_blank", rel: "noopener noreferrer", "aria-label": `${item.title} 새 창으로 열기` } : { type: "button", onclick: () => open(item.id) })
     }, [
       D.el("span", { class: "tool-glyph", text: item.icon }),

@@ -8,7 +8,7 @@ if(!realtime.includes('cloudSubscribeChildren'))throw new Error('child subscript
 if(realtime.includes('const snap=await ref.once("value"),saved='))throw new Error('sendMessage still re-downloads the message immediately after writing');
 if(!realtime.includes('방금 쓴 메시지를 Firebase에서 다시 읽지 않습니다'))throw new Error('no-readback send path is missing');
 if(realtime.includes('bindFirstValue(db.ref(MiniTalkConfig.paths.legacyProfiles)')||realtime.includes('bindFirstValue(db.ref(MiniTalkConfig.paths.profiles)'))throw new Error('profile lists still use whole-value live subscriptions');
-if(!realtime.includes('startProfileCollection(legacyProfilesRef,"legacy"')||!realtime.includes('startProfileCollection(currentProfilesRef,"current"')||!realtime.includes('orderByChild("updatedAt").startAt(latest+1)'))throw new Error('profile cache/delta optimization is incomplete');
+if(!realtime.includes('startProfileCollection(legacyProfilesRef,"legacy"')||!realtime.includes('startProfileCollection(currentProfilesRef,"current"')||!realtime.includes('orderByChild("updatedAt").startAt(Math.max(1,latest))'))throw new Error('profile cache/delta optimization is incomplete');
 if(feed.includes('cloudSubscribe(STATE_PATH'))throw new Error('feed still subscribes to the entire feedState');
 for(const required of ['cloudSubscribeDelta(POSTS_PATH','TOTALS_PATH','VIDEO_LIMIT=700*1024','feed-fab','video-gated','leave:stopSub'])if(!feed.includes(required))throw new Error(`feed optimization missing: ${required}`);
 for(const removed of ['id: "notifications"','id: "timer"','id: "layout"'])if(tools.includes(removed))throw new Error(`removed tool still visible: ${removed}`);

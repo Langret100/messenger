@@ -8,7 +8,7 @@
 MiniTalk.Tools = MiniTalk.Tools || {};
 MiniTalk.Tools.FaceToy = (() => {
   const MAX_EDGE = 980;
-  const CHAT_DATA_LIMIT = 60 * 1024;
+  const CHAT_DATA_LIMIT = 45 * 1024;
   let stream = null;
   let facing = "user";
   let closeCallback = null;
@@ -616,12 +616,12 @@ MiniTalk.Tools.FaceToy = (() => {
   async function chatSizedImage() {
     const temp = doc().createElement("canvas");
     let scale = Math.min(1, 720 / Math.max(canvas.width, canvas.height));
-    const encode = quality => new Promise(resolve => temp.toBlob(resolve, "image/jpeg", quality));
+    const encode = quality => new Promise(resolve => temp.toBlob(resolve, MiniTalk.Images?.mime||"image/jpeg", quality));
     for (let pass = 0; pass < 7; pass++) {
       temp.width = Math.max(1, Math.round(canvas.width * scale)); temp.height = Math.max(1, Math.round(canvas.height * scale));
       const ctx = temp.getContext("2d", { alpha: false }); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, temp.width, temp.height); ctx.drawImage(canvas, 0, 0, temp.width, temp.height);
       for (const q of [.76, .64, .52, .42, .34, .28]) {
-        const blob = await encode(q); if (!blob || blob.size > 44 * 1024) continue;
+        const blob = await encode(q); if (!blob || blob.size > 33 * 1024) continue;
         const data = await blobToDataUrl(blob); if (data.length <= CHAT_DATA_LIMIT) return data;
       }
       scale *= .82;

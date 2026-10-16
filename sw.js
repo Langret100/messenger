@@ -4,8 +4,11 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-runtime-bundle-132";
+const CACHE = "moaru-runtime-bundle-135-20261016-optimized";
 const CORE = [
+  "./js/ui/video-codec.js",
+  "./js/ui/image-codec.js",
+  "./assets/blockfield-seasons.webp",
   "./assets/season-controls.webp",
   "./assets/season-utility.webp",
   "./js/features/season-theme.js",

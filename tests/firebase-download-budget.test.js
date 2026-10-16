@@ -4,25 +4,25 @@ const feed=read('js/features/feed.js'),rt=read('js/adapters/realtime.js'),chat=r
 ok(feed.includes('MAX_POSTS=30')&&feed.includes('INITIAL_SIZE=6')&&feed.includes('PAGE_SIZE=5'),'feed must retain 30 posts, initially load 6, and page older posts by 5');
 ok(feed.includes('cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToLast:INITIAL_SIZE})'),'feed initial server read must be latest 6 only');
 ok(feed.includes('endAt:Number(oldest.createdAt)')&&feed.includes('limitToLast:PAGE_SIZE+1'),'feed older page cursor query missing');
-ok(feed.includes('reconcileFeedCacheAndLimit()')&&feed.includes('cloudKeys(POSTS_PATH)')&&feed.includes('const saved=await mutateHeartState(next=>')&&!feed.includes('cloudGet(POSTS_PATH'),'feed 30-post server pruning/cache reconciliation must use shallow keys plus the atomic feed-state transaction');
-ok(feed.includes('PHOTO_LIMIT=60*1024')&&feed.includes('PHOTO_BLOB_TARGET=44*1024'),'feed photo Firebase budget missing');
-ok(feed.includes('VIDEO_LIMIT=700*1024')&&feed.includes('VIDEO_BLOB_LIMIT=500*1024')&&feed.includes('videoBitsPerSecond:420000'),'camera video must be constrained at capture time');
+ok(feed.includes('reconcileFeedCacheAndLimit()')&&feed.includes('cloudKeys(POSTS_PATH)')&&feed.includes('limitToFirst:excess')&&feed.includes('cloudUpdate(POSTS_PATH,deletion)'),'feed 30-post server pruning/cache reconciliation must use shallow keys and only the selected old post IDs');
+ok(feed.includes('PHOTO_LIMIT=45*1024')&&feed.includes('PHOTO_BLOB_TARGET=33*1024'),'feed photo Firebase budget missing');
+ok(feed.includes('VIDEO_LIMIT=700*1024')&&feed.includes('VIDEO_BLOB_LIMIT=500*1024')&&feed.includes('MiniTalk.Video.createRecorder(stream)'),'camera video must be constrained at capture time');
 ok(feed.includes('cachedPostRows')&&feed.includes('takeCachedOlder(oldest,PAGE_SIZE)'),'feed older pages must reuse device cache before Firebase');
 ok(feed.includes('THUMB_CACHE="feed-thumb"')&&feed.includes('VIDEO_THUMB_LIMIT=18*1024')&&feed.includes('cloudGet(`${MEDIA_PATH}/${id}/thumbnail`'),'video thumbnail must load separately from the full video payload');
 ok(feed.includes('captureFrame(video,video.videoWidth,video.videoHeight)')&&feed.includes('thumbnailPromise'),'camera video must create its preview frame without decoding the recorded blob');
 
-ok(att.includes('CHAT_IMAGE_DATA_LIMIT=60*1024')&&att.includes('CHAT_IMAGE_BLOB_TARGET=44*1024'),'chat image 60KB Firebase budget missing');
+ok(att.includes('CHAT_IMAGE_DATA_LIMIT=45*1024')&&att.includes('CHAT_IMAGE_BLOB_TARGET=33*1024'),'chat image 45KB Firebase budget missing');
 ok(profile.includes('PROFILE_DATA_LIMIT=15*1024'),'profile 15KB Firebase budget missing');
 ok(rt.includes('avatar.length>15*1024'),'profile server-side client validation budget missing');
 ok(rt.includes('const CHAT_PAGE_SIZE=25')&&rt.includes('base.limitToLast(CHAT_PAGE_SIZE)')&&rt.includes('function loadOlderMessages'),'chat message pagination missing');
 ok(chat.includes('list.scrollTop<=72')&&chat.includes('MiniTalk.Realtime.loadOlderMessages'),'chat scroll-up paging hook missing');
 ok(cache.includes('function getMessagesBefore')||cache.includes('async function getMessagesBefore'),'chat cache-before paging missing');
 ok(!rt.includes('presenceListRef.once("value")'),'presence must not be downloaded once then replayed through child_added');
-ok(rt.includes('orderByChild("updatedAt").startAt(latest+1)'),'cached profile boundary must not be downloaded again on startup');
+ok(rt.includes('orderByChild("updatedAt").startAt(Math.max(1,latest))'),'cached profile boundary must not be downloaded again on startup');
 ok(classInfo.includes('TIMETABLE_CACHE="class-timetable"')&&classInfo.includes('cloudGet(`${TIMETABLE}/updatedAt`,null)')&&classInfo.includes('cachedUpdatedAt===Number(serverVersion)'),'unchanged timetable image must be reused from device cache');
-ok(rules.rules.socialChat.$msgId['.validate'].includes('<= 61440')&&rules.rules.socialChatRooms.$roomId.$msgId['.validate'].includes('<= 61440'),'chat image rules must enforce the 60KB stored-string budget');
+ok(rules.rules.socialChat.$msgId['.validate'].includes('<= 46080')&&rules.rules.socialChatRooms.$roomId.$msgId['.validate'].includes('<= 46080'),'chat image rules must enforce the 45KB stored-string budget');
 ok(rules.rules.profiles.$nickname['.validate'].includes('<= 15360')&&rules.rules.moaru.v3.profiles.$userId['.validate'].includes('<= 15360'),'profile image rules must enforce the 15KB budget');
-ok(rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 61440')&&rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 716800')&&rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 18432'),'feed media rules must enforce image/video/thumbnail budgets');
+ok(rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 46080')&&rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 716800')&&rules.rules.moaru.v3.feedMedia.$postId['.validate'].includes('<= 18432'),'feed media rules must enforce image/video/thumbnail budgets');
 
 ok((rules.rules.moaru.v3.feedState.posts['.indexOn']||[]).includes('createdAt'),'feed createdAt query index missing');
 for(const ref of ['data-cache.js?v=','realtime.js?v=','attachments.js?v=','chats.js?v=','feed.js?v=','profile-editor.js?v='])ok(html.includes(ref),`cache version missing: ${ref}`);

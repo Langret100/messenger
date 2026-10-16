@@ -6,8 +6,8 @@ ok(cache.includes('MAX_AGE=30*24*60*60*1000')&&cache.includes('CLEAN_INTERVAL=24
 ok(cache.includes('async function getMessages(roomId,limit=CHAT_MAX)')&&cache.includes('async function putMessage(roomId,message)'),"chat cache API missing");
 ok(index.includes('js/adapters/data-cache.js?v='),"data cache script not loaded");
 ok(sw.includes('"./js/adapters/data-cache.js"'),"data cache module missing from offline core");
-ok(rt.includes('MiniTalk.DataCache?.getMessages?.(cacheRoom,CHAT_PAGE_SIZE)')&&rt.includes('base.limitToLast(CHAT_PAGE_SIZE)')&&rt.includes('base.startAt(lastTs)')&&rt.includes('`${user.user_id}|${roomId}`'),"chat should use user-scoped cached history then Firebase delta");
-ok(rt.includes('startProfileCollection')&&rt.includes('orderByChild("updatedAt").startAt(latest+1)'),"profile delta sync missing");
+ok(rt.includes('MiniTalk.DataCache?.getMessages?.(cacheRoom,CHAT_PAGE_SIZE)')&&rt.includes('base.limitToLast(CHAT_PAGE_SIZE)')&&rt.includes('ref.on("child_changed",fn,fail)')&&rt.includes('`${user.user_id}|${roomId}`'),"chat should use user-scoped cached history then Firebase delta");
+ok(rt.includes('startProfileCollection')&&rt.includes('orderByChild("updatedAt").startAt(Math.max(1,latest))'),"profile delta sync missing");
 ok(feed.includes('MiniTalk.DataCache?.get?.(MEDIA_CACHE,id,null)')&&feed.includes('MiniTalk.DataCache?.put?.(MEDIA_CACHE,id,media'),"feed media cache-first loading missing");
 ok(feed.includes("cachedPostRows")&&feed.includes("takeCachedOlder(oldest,PAGE_SIZE)"),"feed older pages must use cached posts before server reads");
 ok(feed.includes('MiniTalk.DataCache?.get?.(THUMB_CACHE,id,"')&&feed.includes('cloudGet(`${MEDIA_PATH}/${id}/thumbnail`'),"video thumbnail cache-first loading missing");

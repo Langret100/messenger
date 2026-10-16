@@ -1,45 +1,62 @@
 /* 학급 피드: 서버 최신 30개만 유지하고 5개씩 페이지 조회합니다. 미디어는 별도 경로에서 지연 로드합니다. */
 MiniTalk.Features.Feed=(()=>{
-  const STATE_PATH="moaru/v3/feedState",POSTS_PATH=`${STATE_PATH}/posts`,TOTALS_PATH=`${STATE_PATH}/totals`,MEDIA_PATH="moaru/v3/feedMedia",MAX_POSTS=30,INITIAL_SIZE=6,PAGE_SIZE=5,MAX_COMMENTS=20,COMMENT_LIMIT=60,PHOTO_LIMIT=60*1024,PHOTO_BLOB_TARGET=44*1024,VIDEO_LIMIT=700*1024,VIDEO_BLOB_LIMIT=500*1024,VIDEO_THUMB_LIMIT=18*1024,VIDEO_THUMB_BLOB_TARGET=12*1024,VIDEO_SECONDS=7,CLEANUP_KEY="feed.pendingMediaCleanup",POST_CACHE="feed-post",MEDIA_CACHE="feed-media",THUMB_CACHE="feed-thumb";
+  const STATE_PATH="moaru/v3/feedState",POSTS_PATH=`${STATE_PATH}/posts`,TOTALS_PATH="moaru/v3/receivedHearts",MEDIA_PATH="moaru/v3/feedMedia",MAX_POSTS=30,INITIAL_SIZE=6,PAGE_SIZE=5,MAX_COMMENTS=20,COMMENT_LIMIT=60,PHOTO_LIMIT=45*1024,PHOTO_BLOB_TARGET=33*1024,VIDEO_LIMIT=700*1024,VIDEO_BLOB_LIMIT=500*1024,VIDEO_THUMB_LIMIT=18*1024,VIDEO_THUMB_BLOB_TARGET=12*1024,VIDEO_SECONDS=7,CLEANUP_KEY="feed.pendingMediaCleanup",POST_CACHE="feed-post",MEDIA_CACHE="feed-media",THUMB_CACHE="feed-thumb";
   let state={posts:{}},postsUnsub=null,totalUnsub=null,observer=null,totalHearts=0,totalHeartReady=false,syncStarting=false,loadingOlder=false,hasMorePosts=true,pagingArmed=false,heartAudioCtx=null,cachedPostRows=[],serverPostCount=0,feedUserKey="",feedGeneration=0;const pendingLocalHeartEffects=new Set(),pendingHeartRequests=new Set(),pendingCommentRequests=new Set(),openCommentComposers=new Set();
   const user=()=>MiniTalk.Store.get("user")||{};
+  const olderPostUnsubs=new Map(),latestPostIds=new Set();
+  function watchOlderPost(id){
+    if(latestPostIds.has(id)||olderPostUnsubs.has(id)||!postsUnsub)return;
+    const generation=feedGeneration,uid=safeUserKey(user().user_id),path=POSTS_PATH+"/"+id;
+    const patch=changes=>{if(generation===feedGeneration&&state.posts[id])applyPost(id,{...state.posts[id],...changes},state.posts[id])};
+    const offs=[
+      MiniTalk.Realtime.cloudSubscribe(path+"/hearts",value=>patch({hearts:value||{}})),
+      MiniTalk.Realtime.cloudSubscribe(path+"/heartVersions/"+uid,value=>patch({heartVersions:{...(state.posts[id]?.heartVersions||{}),[uid]:Number(value)||0}})),
+      MiniTalk.Realtime.cloudSubscribe(path+"/comments",value=>patch({comments:value||{}}))
+    ];
+    olderPostUnsubs.set(id,()=>offs.forEach(off=>off?.()));
+  }
   const safeUserKey=id=>String(id||"").replace(/[.#$\[\]\/]/g,"_");
   function canonicalHeartCount(post){return Object.values(post?.hearts||{}).filter(value=>value===true).length}
   function postRows(){return Object.values(state.posts||{}).filter(Boolean).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)||String(b.id).localeCompare(String(a.id)))}
   function avatarForPost(post){const profiles=MiniTalk.Store.get("profiles")||{},profile=profiles[post?.user_id]||profiles[post?.nickname]||{};return profile.avatar||post?.avatar||"assets/mascot-avatar.png"}
   function playHeaderHeartFeedback(on=true){if(MiniTalk.Router.current()!=="feed")return;const badge=MiniTalk.UI.Dom.one(".header-heart-inline");if(!badge)return;animateHeartTarget(badge,.22,380);if(on)spawnHeartBurst(badge,3,{spread:12,rise:25,size:10,duration:560})}
   function patchHeaderHeart(animate=false,on=true){if(MiniTalk.Router.current()!=="feed")return;const host=MiniTalk.UI.Dom.byId("headerActions"),count=host?.querySelector?.(".header-heart-inline b");if(count)count.textContent=String(totalHearts);if(animate)playHeaderHeartFeedback(on)}
-  // 게시물 멤버십과 누적 합계는 같은 Firebase 트랜잭션에서 확정합니다.
-  // 삭제된 게시물은 archived로 넘깁니다. 과거 totals 원본은 마이그레이션 기록으로 보존합니다.
-  function prepareHeartAccounting(current){
-    const next=structuredClone(current||{}),active={};
-    for(const post of Object.values(next.posts||{})){if(!post)continue;const key=safeUserKey(post.user_id);active[key]=(active[key]||0)+canonicalHeartCount(post)}
-    if(!next.heartAccounting){
-      const legacyTotals=structuredClone(next.totals||{}),legacyCarry={};
-      for(const [key,value] of Object.entries(legacyTotals))legacyCarry[key]=Math.max(0,(Number(value)||0)-(active[key]||0));
-      // legacyCarry는 검증 불가능한 옛 누적 잔여분입니다. 삭제/추정 보정하지 않고 구분 보존합니다.
-      next.heartAccounting={version:1,archived:{},legacyCarry,legacyTotals};
-    }
-    return next;
-  }
-  function recountHeartTotals(next){
-    const ledger=next.heartAccounting,totals={};
-    for(const [key,value] of Object.entries(ledger.legacyCarry||{}))totals[key]=Number(value)||0;
-    for(const [key,value] of Object.entries(ledger.archived||{}))totals[key]=(totals[key]||0)+(Number(value)||0);
-    for(const post of Object.values(next.posts||{})){if(!post)continue;const key=safeUserKey(post.user_id);post.heartCount=canonicalHeartCount(post);totals[key]=(totals[key]||0)+post.heartCount}
-    next.totals=totals;return next;
-  }
-  async function mutateHeartState(change){
-    return MiniTalk.Realtime.cloudTransaction(STATE_PATH,current=>{
-      const next=prepareHeartAccounting(current);change(next);return recountHeartTotals(next);
-    },{applyLocally:false,requireCommit:true});
+  // Only the surviving legacy total is transferred once. Account totals are never
+  // reconstructed from current posts, and pruning never writes them.
+  const accountReady=new Map();
+  function ensureHeartAccount(uid){
+    if(accountReady.has(uid))return accountReady.get(uid);
+    const pending=(async()=>{
+      const existing=await MiniTalk.Realtime.cloudGet(TOTALS_PATH+"/"+uid+"/total",null);
+      if(typeof existing==="number")return existing;
+      const seed=Math.max(0,Number(await MiniTalk.Realtime.cloudGet(STATE_PATH+"/totals/"+uid,0))||0);
+      const saved=await MiniTalk.Realtime.cloudTransaction(TOTALS_PATH+"/"+uid,current=>current?undefined:{total:seed},{applyLocally:false});
+      return Number(saved?.total)||0;
+    })();
+    accountReady.set(uid,pending);pending.catch(()=>{if(accountReady.get(uid)===pending)accountReady.delete(uid)});return pending;
   }
   async function reconcileOwnHeartTotal(){
-    const u=user(),generation=feedGeneration;if(!u?.user_id||u.isGuest)return totalHearts;
-    const saved=await mutateHeartState(()=>{});
-    if(generation!==feedGeneration||u.user_id!==user().user_id)return totalHearts;
-    totalHearts=Number(saved?.totals?.[safeUserKey(u.user_id)])||0;totalHeartReady=true;patchHeaderHeart(false,true);
-    return totalHearts;
+    const u=user();if(!u?.user_id||u.isGuest)return totalHearts;
+    await ensureHeartAccount(safeUserKey(u.user_id));return totalHearts;
+  }
+  async function commitHeart(post,uid,on,operationId){
+    const ownerKey=safeUserKey(post.user_id);
+    await ensureHeartAccount(ownerKey);
+    try{
+      await MiniTalk.Realtime.commitFeedHeart({postId:String(post.id),ownerKey,userKey:uid,on,operationId,version:(Number(post.heartVersions?.[uid])||0)+1});
+      const current=state.posts[post.id]||post,version=(Number(post.heartVersions?.[uid])||0)+1;
+      if((Number(current.heartVersions?.[uid])||0)>version)return current;
+      const hearts={...(current.hearts||{})};
+      if(on)hearts[uid]=true;else delete hearts[uid];
+      const next={...current,hearts,heartVersions:{...(current.heartVersions||{}),[uid]:version},heartCount:canonicalHeartCount({hearts})};return next;
+    }catch(error){
+      // The rules reject repeated intents atomically. Read just this post on a
+      // rejected/ambiguous request; an already fulfilled intent is a success.
+      const remote=await MiniTalk.Realtime.cloudGet(POSTS_PATH+"/"+post.id,null);
+      if(!remote)throw new Error("이미 정리된 게시물입니다.");
+      if((remote.hearts?.[uid]===true)===on)return remote;
+      throw error;
+    }
   }
   function samePostBody(a,b){return Boolean(a&&b)&&["id","user_id","nickname","avatar","text","mediaType","createdAt"].every(key=>String(a?.[key]??"")===String(b?.[key]??""))}
   function sameComments(a,b){const rows=value=>commentRows(value).map(row=>[String(row.id||""),String(row.user_id||""),String(row.nickname||""),String(row.text||""),Number(row.createdAt)||0]);return JSON.stringify(rows(a))===JSON.stringify(rows(b))}
@@ -61,18 +78,18 @@ MiniTalk.Features.Feed=(()=>{
     if(loadingOlder||!hasMorePosts||MiniTalk.Router.current()!=="feed")return;let rows=postRows(),oldest=rows[rows.length-1];if(!oldest){hasMorePosts=false;return}loadingOlder=true;pagingArmed=false;
     try{
       const cachedOlder=takeCachedOlder(oldest,PAGE_SIZE);
-      cachedOlder.forEach(row=>applyPost(String(row.key||row.value?.id||""),row.value));
+      cachedOlder.forEach(row=>{const id=String(row.key||row.value?.id||"");applyPost(id,row.value);watchOlderPost(id)});
       if(cachedOlder.length>=PAGE_SIZE){hasMorePosts=postRows().length<Math.max(serverPostCount,cachedPostRows.length);return}
       rows=postRows();oldest=rows[rows.length-1];
       const page=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",endAt:Number(oldest.createdAt)||0,endKey:String(oldest.id||""),limitToLast:PAGE_SIZE+1}),known=new Set(Object.keys(state.posts));
       const need=Math.max(0,PAGE_SIZE-cachedOlder.length),older=page.filter(row=>row.key!==String(oldest.id)&&!known.has(String(row.key))).slice(-need);
-      older.forEach(row=>applyPost(row.key,row.value));
+      older.forEach(row=>{applyPost(row.key,row.value);watchOlderPost(row.key)});
       hasMorePosts=postRows().length<Math.max(serverPostCount,cachedPostRows.length)||page.length>=need+1;
     }catch(error){console.warn("이전 소식을 불러오지 못했습니다.",error)}finally{loadingOlder=false}
   }
   async function ensureSub(){
     const generation=feedGeneration;
-    if(!totalUnsub){const uid=safeUserKey(user().user_id);totalUnsub=MiniTalk.Realtime.cloudSubscribe(`${TOTALS_PATH}/${uid}`,value=>{if(generation!==feedGeneration)return;const next=Math.max(0,Number(value)||0),animate=totalHeartReady&&next!==totalHearts,on=next>totalHearts;totalHearts=next;patchHeaderHeart(animate,on);totalHeartReady=true})}
+    if(!totalUnsub){const uid=safeUserKey(user().user_id);totalUnsub=MiniTalk.Realtime.cloudSubscribe(`${TOTALS_PATH}/${uid}/total`,value=>{if(generation!==feedGeneration)return;if(typeof value==="number")accountReady.set(uid,Promise.resolve(value));const next=Math.max(0,Number(value)||0),animate=totalHeartReady&&next!==totalHearts,on=next>totalHearts;totalHearts=next;patchHeaderHeart(animate,on);totalHeartReady=true})}
     if(postsUnsub||syncStarting)return;syncStarting=true;
     try{
       const cached=await MiniTalk.DataCache?.list?.(POST_CACHE)||[];if(generation!==feedGeneration)return;
@@ -92,17 +109,17 @@ MiniTalk.Features.Feed=(()=>{
       reconcileOwnHeartTotal().catch(error=>console.warn("받은 하트 총합 확인 실패",error));
       hasMorePosts=latest.length===INITIAL_SIZE;
       reconcileFeedCacheAndLimit().catch(error=>console.warn("피드 30개/기기 캐시 동기화 실패",error));
-      const latestCreated=latest.reduce((max,row)=>Math.max(max,Number(row.value?.createdAt)||0),0);
-      const apply=(id,value)=>{applyPost(id,value);if(serverPostCount)serverPostCount=Math.min(MAX_POSTS,serverPostCount+1)};
+      latestPostIds.clear();latest.forEach(row=>latestPostIds.add(row.key));
+      const apply=(id,value)=>{latestPostIds.add(id);olderPostUnsubs.get(id)?.();olderPostUnsubs.delete(id);applyPost(id,value);if(serverPostCount)serverPostCount=Math.min(MAX_POSTS,serverPostCount+1)};
       const changed=(id,value)=>{if(!state.posts[id])return;applyPost(id,value,state.posts[id])};
       /* 서버의 child_removed는 30개 제한 정리에서도 발생합니다. 그것을 실제 사용자 삭제와 구분할
          tombstone이 없으므로, 여기서 기기 캐시/화면 기록을 지우면 "기존 기기는 본 소식을 계속 보관"
          규칙이 깨집니다. 서버 개수만 갱신하고 이미 본 게시물은 기기에 그대로 둡니다. */
-      const remove=id=>{serverPostCount=Math.max(0,serverPostCount-1);hasMorePosts=postRows().length<Math.max(serverPostCount,cachedPostRows.length);patchPost(id)};
-      postsUnsub=MiniTalk.Realtime.cloudSubscribeDelta(POSTS_PATH,{added:apply,changed,removed:remove},{orderByChild:"createdAt",startAt:latestCreated?latestCreated+1:1});
+      const remove=id=>{latestPostIds.delete(id);if(state.posts[id])watchOlderPost(id);hasMorePosts=postRows().length<Math.max(serverPostCount,cachedPostRows.length);patchPost(id)};
+      postsUnsub=MiniTalk.Realtime.cloudSubscribeDelta(POSTS_PATH,{added:apply,changed,removed:remove},{orderByChild:"createdAt",limitToLast:INITIAL_SIZE});
     }finally{if(generation===feedGeneration)syncStarting=false}
   }
-  function stopSub(){feedGeneration++;postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;loadingOlder=false;hasMorePosts=true;pagingArmed=false;totalHeartReady=false;serverPostCount=0;pendingLocalHeartEffects.clear();openCommentComposers.clear()}
+  function stopSub(){feedGeneration++;for(const off of olderPostUnsubs.values())off?.();olderPostUnsubs.clear();latestPostIds.clear();postsUnsub?.();postsUnsub=null;totalUnsub?.();totalUnsub=null;observer?.disconnect?.();observer=null;syncStarting=false;loadingOlder=false;hasMorePosts=true;pagingArmed=false;totalHeartReady=false;serverPostCount=0;pendingLocalHeartEffects.clear();openCommentComposers.clear()}
   async function compressImageFile(file,maxSide=960,target=PHOTO_LIMIT){
     if(!file?.type?.startsWith("image/"))throw new Error("사진 파일을 선택해주세요.");
     const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("사진을 읽지 못했습니다."));r.readAsDataURL(file)});
@@ -111,7 +128,7 @@ MiniTalk.Features.Feed=(()=>{
   }
   async function encodeCanvas(source,w,h,maxSide,target=PHOTO_LIMIT,blobTarget=PHOTO_BLOB_TARGET){
     let scale=Math.min(1,maxSide/Math.max(w,h));const c=document.createElement("canvas"),ctx=c.getContext("2d",{alpha:false});
-    for(let pass=0;pass<6;pass++){c.width=Math.max(1,Math.round(w*scale));c.height=Math.max(1,Math.round(h*scale));ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(source,0,0,c.width,c.height);for(const q of [.78,.68,.58,.48,.38,.3]){const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",q));if(!blob||blob.size>blobTarget)continue;const data=await blobToData(blob);if(data.length<=target)return data}scale*=.82}throw new Error(target===VIDEO_THUMB_LIMIT?"영상 첫 화면을 작게 만들지 못했습니다.":"사진을 Firebase 저장 기준 60KB 이하로 줄이지 못했습니다.")
+    for(let pass=0;pass<6;pass++){c.width=Math.max(1,Math.round(w*scale));c.height=Math.max(1,Math.round(h*scale));ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(source,0,0,c.width,c.height);for(const q of [.78,.68,.58,.48,.38,.3]){const blob=await new Promise(r=>c.toBlob(r,MiniTalk.Images?.mime||"image/jpeg",q));if(!blob||blob.size>blobTarget)continue;const data=await blobToData(blob);if(data.length<=target)return data}scale*=.82}throw new Error(target===VIDEO_THUMB_LIMIT?"영상 첫 화면을 작게 만들지 못했습니다.":"사진을 Firebase 저장 기준 45KB 이하로 줄이지 못했습니다.")
   }
   function captureFrame(source,w,h){const c=document.createElement("canvas");c.width=Math.max(1,Number(w)||320);c.height=Math.max(1,Number(h)||240);const ctx=c.getContext("2d",{alpha:false});ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(source,0,0,c.width,c.height);return c}
   const blobToData=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("미디어를 읽지 못했습니다."));r.readAsDataURL(blob)});
@@ -134,7 +151,7 @@ MiniTalk.Features.Feed=(()=>{
     photoBtn.onclick=async()=>{if(!video.videoWidth)return;photoBtn.disabled=videoBtn.disabled=true;try{const data=await encodeCanvas(video,video.videoWidth,video.videoHeight,640,PHOTO_LIMIT,PHOTO_BLOB_TARGET);cleanup();MiniTalk.UI.Shell.closeModal();onDone({type:"image",data})}catch(e){MiniTalk.UI.Shell.toast(e.message);photoBtn.disabled=videoBtn.disabled=false}};
     videoBtn.onclick=async()=>{
       if(!stream||typeof MediaRecorder==="undefined")return MiniTalk.UI.Shell.toast("이 브라우저는 영상 촬영을 지원하지 않습니다.");if(!video.videoWidth)return MiniTalk.UI.Shell.toast("카메라 준비가 끝난 뒤 다시 눌러주세요.");photoBtn.disabled=videoBtn.disabled=true;
-      const frame=captureFrame(video,video.videoWidth,video.videoHeight),thumbnailPromise=encodeCanvas(frame,frame.width,frame.height,320,VIDEO_THUMB_LIMIT,VIDEO_THUMB_BLOB_TARGET).catch(()=>""),chunks=[];let chunkBytes=0,stopping=false,mime=["video/webm;codecs=vp8","video/webm"].find(v=>MediaRecorder.isTypeSupported?.(v))||"",recorder;try{recorder=new MediaRecorder(stream,{mimeType:mime||undefined,videoBitsPerSecond:420000})}catch{recorder=new MediaRecorder(stream)}
+      const frame=captureFrame(video,video.videoWidth,video.videoHeight),thumbnailPromise=encodeCanvas(frame,frame.width,frame.height,320,VIDEO_THUMB_LIMIT,VIDEO_THUMB_BLOB_TARGET).catch(()=>""),chunks=[];let chunkBytes=0,stopping=false,recorder;try{recorder=MiniTalk.Video.createRecorder(stream)}catch(error){status.textContent="영상 녹화를 시작하지 못했습니다.";photoBtn.disabled=videoBtn.disabled=false;return}
       const stop=()=>{if(stopping||recorder.state==="inactive")return;stopping=true;try{recorder.stop()}catch{}};recorder.ondataavailable=e=>{if(!e.data?.size)return;chunks.push(e.data);chunkBytes+=e.data.size;if(chunkBytes>=VIDEO_BLOB_LIMIT)stop()};const done=new Promise(resolve=>recorder.onstop=resolve);recorder.start(200);
       let left=VIDEO_SECONDS;status.textContent=`촬영 중 · ${left}초`;timer=setInterval(()=>{left-=1;status.textContent=`촬영 중 · ${Math.max(0,left)}초`;if(left<=0){clearInterval(timer);stop()}},1000);await done;cleanup();const blob=new Blob(chunks,{type:recorder.mimeType||"video/webm"});if(blob.size>VIDEO_BLOB_LIMIT){MiniTalk.UI.Shell.toast("영상 용량이 너무 큽니다. 다시 촬영해주세요.");MiniTalk.UI.Shell.closeModal();return}const data=await blobToData(blob);if(data.length>VIDEO_LIMIT){MiniTalk.UI.Shell.toast("영상이 Firebase 저장 기준 700KB를 넘었습니다. 다시 촬영해주세요.");MiniTalk.UI.Shell.closeModal();return}const thumbnail=await thumbnailPromise;MiniTalk.UI.Shell.closeModal();onDone({type:"video",data,thumbnail,duration:Math.max(1,VIDEO_SECONDS-left),size:blob.size})
     };
@@ -144,27 +161,17 @@ MiniTalk.Features.Feed=(()=>{
   function queueCleanup(id){if(!id)return;const rows=[...new Set(pendingCleanup().concat(String(id)))].slice(-30);MiniTalk.Persistence.set(CLEANUP_KEY,rows)}
   async function retryCleanup(){const rows=pendingCleanup();if(!rows.length)return;const failed=[];for(const id of rows){try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{failed.push(id)}}MiniTalk.Persistence.set(CLEANUP_KEY,failed)}
   async function reconcileFeedCacheAndLimit(){
-    const generation=feedGeneration,cachedBefore=await MiniTalk.DataCache?.list?.(POST_CACHE,{touchRecords:false})||[],visibleBefore=Object.keys(state.posts);
+    const generation=feedGeneration;
     const keys=await MiniTalk.Realtime.cloudKeys(POSTS_PATH),serverSet=new Set(keys.map(String)),excess=Math.max(0,keys.length-MAX_POSTS),removed=[];
     if(generation!==feedGeneration)return serverSet;
-    // A confirmed empty server is a reset, not the normal 30-post archive pruning.
-    // Capture old IDs before the request so a concurrently added new post survives.
-    if(!keys.length){
-      const stale=new Set([...visibleBefore,...cachedBefore.map(row=>String(row.key||row.value?.id||""))].filter(Boolean));
-      await Promise.all([...stale].flatMap(id=>[POST_CACHE,MEDIA_CACHE,THUMB_CACHE].map(type=>MiniTalk.DataCache?.remove?.(type,id))));
-      if(generation!==feedGeneration)return serverSet;
-      for(const id of stale)delete state.posts[id];
-      removed.push(...stale);
-    }
+    // Empty server data does not authorize deleting previously seen local posts.
+    // Archives and a temporarily empty server must retain their local history.
     if(excess){
-      const saved=await mutateHeartState(next=>{
-        const rows=Object.entries(next.posts||{}).sort((a,b)=>Number(a[1].createdAt)-Number(b[1].createdAt)||a[0].localeCompare(b[0]));
-        for(const [id,post] of rows.slice(0,Math.max(0,rows.length-MAX_POSTS))){
-          const key=safeUserKey(post.user_id),ledger=next.heartAccounting;ledger.archived[key]=(ledger.archived[key]||0)+canonicalHeartCount(post);delete next.posts[id];
-        }
-      });
-      const retained=new Set(Object.keys(saved?.posts||{}));
-      for(const id of keys){if(retained.has(id))continue;serverSet.delete(id);removed.push(id);try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{queueCleanup(id)}}
+      const stale=await MiniTalk.Realtime.cloudQueryChildren(POSTS_PATH,{orderByChild:"createdAt",limitToFirst:excess});
+      // Only delete the selected old IDs; never rewrite a feed snapshot over a new post.
+      const deletion=Object.fromEntries(stale.map(row=>[row.key,null]));
+      if(stale.length)await MiniTalk.Realtime.cloudUpdate(POSTS_PATH,deletion);
+      for(const {key:id} of stale){serverSet.delete(id);removed.push(id);try{await MiniTalk.Realtime.cloudRemove(MEDIA_PATH+"/"+id)}catch{queueCleanup(id)}}
     }
     serverPostCount=Math.min(MAX_POSTS,serverSet.size);
     /* 서버는 최신 30개만 유지하지만, 이미 이 기기에서 본 소식까지 서버 정리 대상으로 취급해
@@ -185,7 +192,7 @@ MiniTalk.Features.Feed=(()=>{
       try{await MiniTalk.Realtime.cloudSet(`${MEDIA_PATH}/${id}`,mediaValue)}
       catch(error){throw new Error("사진·영상을 저장하지 못했습니다. 게시물은 등록되지 않았습니다.")}
     }
-    try{const updatedAt=MiniTalk.Realtime.serverTimestamp();await mutateHeartState(next=>{next.posts=next.posts||{};next.posts[id]={...meta,updatedAt}})}catch(error){if(media?.data){try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{queueCleanup(id)}}throw error}
+    try{const updatedAt=MiniTalk.Realtime.serverTimestamp();await MiniTalk.Realtime.cloudSet(POSTS_PATH+"/"+id,{...meta,updatedAt})}catch(error){if(media?.data){try{await MiniTalk.Realtime.cloudRemove(`${MEDIA_PATH}/${id}`)}catch{queueCleanup(id)}}throw error}
     MiniTalk.DataCache?.put?.(POST_CACHE,id,meta,{sortAt:createdAt}).catch(()=>{});
     if(media?.data){
       const cachedMedia={type:media.type,data:media.data,size:Number(media.size)||0,createdAt,thumbnail:media.thumbnail||""};
@@ -207,17 +214,9 @@ MiniTalk.Features.Feed=(()=>{
     const expectedOn=post.hearts?.[uid]!==true;
     pendingLocalHeartEffects.add(String(post.id));if(button)button.disabled=true;
     playHeartFeedback(button,expectedOn,true);
-    const updatedAt=MiniTalk.Realtime.serverTimestamp();
     try{
-      const saved=await mutateHeartState(next=>{
-        const target=next.posts?.[post.id];if(!target)return;
-        const hearts=target.hearts||{};
-        // 재시도/다른 탭의 동일 요청에서도 토글을 다시 뒤집지 않고 클릭 의도를 적용합니다.
-        if(expectedOn)hearts[uid]=true;else delete hearts[uid];
-        target.hearts=hearts;target.updatedAt=updatedAt;
-      });
-      if(!saved?.posts?.[post.id])throw new Error("이미 정리된 게시물입니다.");
-      if(generation===feedGeneration&&u.user_id===user().user_id)applyPost(post.id,saved.posts[post.id]);
+      const saved=await commitHeart(post,uid,expectedOn,crypto.randomUUID());
+      if(generation===feedGeneration&&u.user_id===user().user_id)applyPost(post.id,saved);
     }catch(error){pendingLocalHeartEffects.delete(String(post.id));MiniTalk.UI.Shell.toast(error.message||"하트를 저장하지 못했습니다.")}
     finally{pendingHeartRequests.delete(requestKey);if(button?.isConnected)button.disabled=false;setTimeout(()=>pendingLocalHeartEffects.delete(String(post.id)),1800)}
   }
@@ -235,14 +234,13 @@ MiniTalk.Features.Feed=(()=>{
     input.value="";input.blur?.();input.disabled=true;button.disabled=true;if(card)setCommentComposer(card,false,false);else openCommentComposers.delete(postId);
     const id=crypto.randomUUID(),createdAt=Date.now(),postPath=`${POSTS_PATH}/${postId}`;
     try{
-      await mutateHeartState(feed=>{
-        const next=feed.posts?.[postId];if(!next)return;
-        const comments=next.comments||{};
+      await MiniTalk.Realtime.cloudTransaction(postPath+"/comments",current=>{
+        const comments=structuredClone(current||{});
         comments[id]={id,user_id:u.user_id,nickname:u.nickname||"사용자",text,createdAt};
         const rows=Object.values(comments).filter(Boolean).sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0)||String(a.id).localeCompare(String(b.id)));
         while(rows.length>MAX_COMMENTS){const old=rows.shift();if(old?.id)delete comments[old.id]}
-        next.comments=comments;next.commentCount=Object.keys(comments).length;next.updatedAt=MiniTalk.Realtime.serverTimestamp();return next;
-      });
+        return comments;
+      },{applyLocally:false,requireCommit:true});
     }catch(error){
       const currentCard=MiniTalk.UI.Dom.one(`.feed-card[data-post-id="${CSS.escape(postId)}"]`),currentInput=currentCard?.querySelector(".feed-comment-input");
       if(currentCard){setCommentComposer(currentCard,true,false);if(currentInput){currentInput.value=text;requestAnimationFrame(()=>{if(!currentInput.isConnected)return;currentInput.focus({preventScroll:true});try{currentInput.setSelectionRange(text.length,text.length)}catch{}})}}

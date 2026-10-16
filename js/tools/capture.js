@@ -34,7 +34,7 @@ MiniTalk.Tools.Capture = (() => {
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("캡처 이미지를 만들지 못했습니다.")), "image/jpeg", 0.82));
+      const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("캡처 이미지를 만들지 못했습니다.")), MiniTalk.Images?.mime||"image/jpeg", 0.82));
       if (!MiniTalk.Chat?.Attachments?.compressImage) throw new Error("캡처 압축 모듈을 불러오지 못했습니다.");
       return await MiniTalk.Chat.Attachments.compressImage(blob);
     } finally {

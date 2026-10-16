@@ -26,7 +26,7 @@ MiniTalk.Tools.ProfileEditor = (() => {
         const scale=Math.max(size/image.width,size/image.height),width=image.width*scale,height=image.height*scale;
         context.drawImage(image,(size-width)/2,(size-height)/2,width,height);
         for(const quality of [.78,.68,.58,.48,.4,.32,.26]){
-          const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",quality));if(!blob)continue;
+          const blob=await new Promise(resolve=>canvas.toBlob(resolve,MiniTalk.Images?.mime||"image/jpeg",quality));if(!blob)continue;
           const dataUrl=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("프로필 이미지를 압축하지 못했습니다."));r.readAsDataURL(blob)});
           if(dataUrl.length<=PROFILE_DATA_LIMIT)return dataUrl;
         }

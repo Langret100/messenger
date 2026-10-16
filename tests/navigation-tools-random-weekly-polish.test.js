@@ -8,7 +8,7 @@ ok(!tools.includes('id: "motion-math"')&&!tools.includes('https://langret100.git
 ok(config.includes('{name:"동작 인식 게임",url:"https://langret100.github.io/Math-in-Math/"}'),'motion recognition game related link missing');
 ok(config.includes('{name:"페이스 체인지",tool:"face-toy"}'),'face change related-link entry missing');
 ok(!tools.includes('{ id: "face-toy"'),'face change must leave main tools grid');
-ok(tools.includes('id: "lookalike"'),'lookalike tool must replace playground card');
+ok(tools.includes('id: "blockfield"')&&config.includes('tool:"lookalike"'),'blockfield card and related-link lookalike must exist');
 ok(!registry.includes('registry:changed')&&!shell.includes('registry:changed')&&!shell.includes('ensurePrimaryNav'),'nav must not add late registry redraws during PiP startup');
 ok(shell.includes('renderNav();')&&!shell.includes('[80,260,900].forEach'),'workspace nav should render once after all feature scripts are registered');
 ok(shop.includes('const cachedBalance=Number(MiniTalk.Economy.CoinWallet.value?.()||0)')&&shop.includes('doc.body.append(overlay)'),'random overlay must open immediately from cached balance');

@@ -6,7 +6,7 @@ function ok(value,message){if(!value)throw new Error(message)}
 ok(tools.includes('id: "playground"')&&tools.includes('playground: () => openOnlinePlayground()'),'playground main-tool card or positioned opener is missing');
 ok(tools.includes('description: "친구와 온라인으로 놀기"'),'playground short description mismatch');
 ok(config.includes('{name:"페이스 체인지",tool:"face-toy"}'),'face change related-link entry is missing');
-ok(tools.includes('id: "lookalike"')&&tools.includes('title: "닮은 생물 찾기"'),'lookalike tool replacement missing');
+ok(config.includes('tool:"lookalike"')&&config.includes('name:"닮은 생물 찾기"'),'lookalike tool replacement missing');
 ok(!tools.includes('title: "화면 캡처"')&&!tools.includes('capture: () =>'),'obsolete capture tool card remains');
 ok(chats.includes('addAction("▣","캡처"')&&chats.includes('Capture.captureAndSend(roomId)'),'chat capture attachment is missing its explicit room target');
 ok(!chats.includes('addAction("▦","QR"'),'QR attachment action still exists');

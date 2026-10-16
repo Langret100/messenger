@@ -18,7 +18,7 @@ MiniTalk.Chat.Attachments=(()=>{
     try{input.click()}catch(error){finish([]);throw error}
   })}
   const readData=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("파일을 읽지 못했습니다."));r.readAsDataURL(file)});
-  const CHAT_IMAGE_DATA_LIMIT=60*1024,CHAT_IMAGE_BLOB_TARGET=44*1024;
+  const CHAT_IMAGE_DATA_LIMIT=45*1024,CHAT_IMAGE_BLOB_TARGET=33*1024;
   async function compressImage(file,max=720,targetBytes=CHAT_IMAGE_BLOB_TARGET){
     if(!file?.type?.startsWith("image/"))throw new Error("이미지 파일이 아닙니다.");
     if(file.size>15*1024*1024)throw new Error("이미지가 너무 큽니다.");
@@ -26,7 +26,7 @@ MiniTalk.Chat.Attachments=(()=>{
     const img=await new Promise((resolve,reject)=>{const i=new Img();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error("이미지를 읽지 못했습니다."));i.src=data});
     let scale=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
     const canvas=doc.createElement("canvas"),ctx=canvas.getContext("2d",{alpha:false});
-    const encode=(quality)=>new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",quality));
+    const encode=(quality)=>new Promise(resolve=>canvas.toBlob(resolve,MiniTalk.Images?.mime||"image/jpeg",quality));
     for(let sizePass=0;sizePass<6;sizePass+=1){
       canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
       ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
@@ -38,7 +38,7 @@ MiniTalk.Chat.Attachments=(()=>{
       }
       scale*=.82;
     }
-    throw new Error("사진을 Firebase 저장 기준 60KB 이하로 줄이지 못했습니다. 다른 사진을 선택해주세요.");
+    throw new Error("사진을 Firebase 저장 기준 45KB 이하로 줄이지 못했습니다. 다른 사진을 선택해주세요.");
   }
   function uploadErrorMessage(code){
     const raw=String(code||"");

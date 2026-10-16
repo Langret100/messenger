@@ -2,7 +2,7 @@
 MiniTalk.Economy=MiniTalk.Economy||{};
 MiniTalk.Economy.Runtime=(()=>{
   const ROOT=MiniTalkConfig.paths.economyRuntime||"moaru/v3/economyRuntime", RETRY_TTL=7*86400000;
-  let ownerId="",balanceOff=null,inventoryOff=null,balanceLiveReady=false;const flushPromises=new Map();
+  let ownerId="",balanceOff=null,inventoryOff=null,transportOff=null,balanceLiveReady=false;const flushPromises=new Map();
   const obj=v=>v&&typeof v==="object"&&!Array.isArray(v)?v:{};
   const int=v=>(typeof v==="number"||typeof v==="string")&&String(v).trim()!==""&&Number.isSafeInteger(Number(v));
   const now=()=>Date.now();
@@ -219,14 +219,17 @@ MiniTalk.Economy.Runtime=(()=>{
       MiniTalk.Economy.CoinWallet?.setLocal?.(next,"firebase-live",ownerId);
       if(shouldInspect){
         try{
-          const state=await readUser(ownerId),lastId=String(state?.lastTxnId||""),op=obj(state?.recentOps)[opKey(lastId)];
+          const inspectedOwner=ownerId;
+          const lastId=String(await MiniTalk.Realtime.cloudGet(userPath(inspectedOwner)+"/lastTxnId","")||"");
+          const op=lastId?obj(await MiniTalk.Realtime.cloudGet(userPath(inspectedOwner)+"/recentOps/"+opKey(lastId),null)):null;
+          if(ownerId!==inspectedOwner||String(MiniTalk.Store.get("user")?.user_id||"")!==inspectedOwner)return;
           if(op&&String(op.type||"")==="ADMIN_TASK"&&Number(op.balanceAfter)===next){
             MiniTalk.Events.emit("coins:task-reward",{amount:Math.max(1,Number(op.amount)||next-before),reason:String(op.reason||"과제 완료 보상"),newCoin:next,operationId:lastId});
           }
         }catch(error){console.warn("과제 보상 연출 정보 확인 지연",error)}
       }
       balanceLiveReady=true;
-    });inventoryOff=MiniTalk.Realtime.cloudSubscribe(inventoryPath(ownerId),v=>{if(String(MiniTalk.Store.get("user")?.user_id||"")===ownerId)MiniTalk.Events.emit("economy:inventory",obj(v))});flushPending(ownerId).catch(()=>{})};if(MiniTalk.Realtime?.getMode?.()==="firebase")attach();else{const off=MiniTalk.Events.on("state:transport",()=>{if(MiniTalk.Realtime?.getMode?.()==="firebase"){off?.();attach()}})}}
-  function stop(){try{balanceOff?.()}catch{}try{inventoryOff?.()}catch{}balanceOff=inventoryOff=null;ownerId="";balanceLiveReady=false}
+    });inventoryOff=MiniTalk.Realtime.cloudSubscribe(inventoryPath(ownerId),v=>{if(String(MiniTalk.Store.get("user")?.user_id||"")===ownerId)MiniTalk.Events.emit("economy:inventory",obj(v))});flushPending(ownerId).catch(()=>{})};if(MiniTalk.Realtime?.getMode?.()==="firebase")attach();else{transportOff=MiniTalk.Events.on("state:transport",()=>{if(MiniTalk.Realtime?.getMode?.()==="firebase"){transportOff?.();transportOff=null;attach()}})}}
+  function stop(){try{balanceOff?.()}catch{}try{inventoryOff?.()}catch{}try{transportOff?.()}catch{}transportOff=null;balanceOff=inventoryOff=null;ownerId="";balanceLiveReady=false}
   return{ROOT,keyOf,bootstrap,balance,allBalances,reward,adminAdjust,seedCatalog,setProductStock,deleteProductStock,purchase,randomPurchase,inventory,patchInventory,removeInventory,syncInventoryFromSheet,useItem,requestDelivery,requestDeliveryBulk,gift,deliveryList,adminDelivery,flushPending,start,stop,_ensureUserState:ensureUserState};
 })();

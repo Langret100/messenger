@@ -116,6 +116,7 @@ const utilityIconCSS=ids.map((id,i)=>`:root[data-season="${id}"]{--utility-x:${i
 :root[data-season] .settings-group .settings-row.danger-row .settings-row-icon{--utility-y:100%!important;}
 `+Array.from({length:6},(_,i)=>`:root[data-season] .modern-tool-grid .modern-tool:nth-child(${i+1}) .tool-glyph{--utility-y:${(i+1)*100/12}%;}`).join('');
 
+const blockfieldIconCSS=`:root .modern-tool-grid .blockfield-tool .tool-glyph{font-size:0!important;background:transparent url('assets/blockfield-seasons.webp') 0% center/800% 100% no-repeat!important;border:0!important;box-shadow:none!important;border-radius:0!important;}`+ids.map((id,i)=>`:root[data-season="${id}"] .modern-tool-grid .blockfield-tool .tool-glyph{background-position:${i*100/7}% center!important;}`).join('');
 const classInfoCSS=`
 .modal:has(>.class-info){width:min(460px,100%);}
 .season-modal-frame:has(>.modal>.class-info){width:min(460px,100%);}
@@ -237,7 +238,7 @@ function prepareControls(root){
 prepareControls(document.documentElement);
 function apply(root,requested){
  prepareControls(root);
- const doc=root.ownerDocument;if(!doc.getElementById('messenger-season-style')){const style=doc.createElement('style');style.id='messenger-season-style';style.textContent=css+controlCSS+snowCSS+iconTransitionCSS+compactNavCSS+springAutumnMotionCSS+snowMotionCSS+composerPlusCSS+headerHoverCSS+connectionBadgeCSS+dialogThemeCSS+utilityIconCSS+classInfoCSS+homeCSS;doc.head.append(style);}
+ const doc=root.ownerDocument;if(!doc.getElementById('messenger-season-style')){const style=doc.createElement('style');style.id='messenger-season-style';style.textContent=css+controlCSS+snowCSS+iconTransitionCSS+compactNavCSS+springAutumnMotionCSS+snowMotionCSS+composerPlusCSS+headerHoverCSS+connectionBadgeCSS+dialogThemeCSS+utilityIconCSS+classInfoCSS+homeCSS+blockfieldIconCSS;doc.head.append(style);}
  const id=requested==='auto'?today:requested;
  if(!palettes[id]){delete root.dataset.season;root.style.removeProperty('--season-wall');root.style.removeProperty('--season-home');motion(root,null);refreshEmoji(root);return;}
  root.dataset.theme='light';root.dataset.season=id;refreshEmoji(root);

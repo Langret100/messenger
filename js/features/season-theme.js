@@ -116,7 +116,7 @@ const utilityIconCSS=ids.map((id,i)=>`:root[data-season="${id}"]{--utility-x:${i
 :root[data-season] .settings-group .settings-row.danger-row .settings-row-icon{--utility-y:100%!important;}
 `+Array.from({length:6},(_,i)=>`:root[data-season] .modern-tool-grid .modern-tool:nth-child(${i+1}) .tool-glyph{--utility-y:${(i+1)*100/12}%;}`).join('');
 
-const blockfieldIconCSS=`:root .modern-tool-grid .blockfield-tool .tool-glyph{font-size:0!important;background:transparent url('assets/blockfield-seasons.webp') 0% center/800% 100% no-repeat!important;border:0!important;box-shadow:none!important;border-radius:0!important;}`+ids.map((id,i)=>`:root[data-season="${id}"] .modern-tool-grid .blockfield-tool .tool-glyph{background-position:${i*100/7}% center!important;}`).join('');
+const blockfieldIconCSS=`:root .modern-tool-grid .blockfield-tool .tool-glyph{scale:1.3;}:root[data-season][data-season-utility-ready] .modern-tool-grid .modern-tool:nth-child(6) .tool-glyph{scale:1.25;}:root .modern-tool-grid .blockfield-tool .tool-glyph{font-size:0!important;background:transparent url('assets/blockfield-seasons.webp') 0% center/800% 100% no-repeat!important;border:0!important;box-shadow:none!important;border-radius:0!important;}`+ids.map((id,i)=>`:root[data-season="${id}"] .modern-tool-grid .blockfield-tool .tool-glyph{background-position:${i*100/7}% center!important;}`).join('');
 const classInfoCSS=`
 .modal:has(>.class-info){width:min(460px,100%);}
 .season-modal-frame:has(>.modal>.class-info){width:min(460px,100%);}

@@ -19,7 +19,7 @@ ok(!/\bfetch\s*\(/.test(face),'face toy must not perform its own network fetch')
 ok(!/sheetUrl|firebase|script\.google|mediapipe|jsdelivr/i.test(face),'face toy introduced external/server dependency');
 ok(face.includes('MiniTalk.Realtime.sendMessage(roomId'),'existing chat send path not reused');
 ok(face.includes('MiniTalk.Realtime?.isRoomMember?.(room)'),'room picker must filter to joined rooms');
-ok(face.includes('CHAT_DATA_LIMIT = 60 * 1024')&&face.includes('44 * 1024'),'chat image budget guard missing');
+ok(face.includes('CHAT_DATA_LIMIT = 45 * 1024')&&face.includes('33 * 1024'),'45KB chat image budget guard missing');
 
 // 모바일 카메라: 기본 전면, exact 우선 전/후면 전환, 기존 stream stop, 전면 미리보기만 mirror.
 ok(face.includes('let facing = "user"'),'front camera is not default');

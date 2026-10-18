@@ -120,7 +120,7 @@ MiniTalk.Realtime=(()=>{
   }
   function roomSummaryValue(room={}){
     const members=roomMembers(room),memberCount=Object.values(members).filter(isAcceptedMemberRecord).length;
-    return{id:String(room.id||""),title:String(room.title||room.name||"대화방"),name:String(room.title||room.name||"대화방"),type:String(room.type||"group"),hasPassword:Boolean(room.hasPassword),lastMessage:String(room.lastMessage||""),lastMessageEmoticon:room.lastMessageEmoticon||null,lastMessageAt:Number(room.lastMessageAt||0),lastMessageUserId:String(room.lastMessageUserId||""),lastMessageNickname:String(room.lastMessageNickname||""),updatedAt:Number(room.updatedAt||Date.now()),memberCount}
+    return{id:String(room.id||""),title:String(room.title||room.name||"대화방"),name:String(room.title||room.name||"대화방"),type:String(room.type||"group"),hasPassword:Boolean(room.hasPassword),lastMessage:String(room.lastMessage||room.last_message||room.preview||""),lastMessageEmoticon:room.lastMessageEmoticon||null,lastMessageAt:Number(room.lastMessageAt||room.last_message_at||0),lastMessageUserId:String(room.lastMessageUserId||room.last_message_user_id||""),lastMessageNickname:String(room.lastMessageNickname||room.last_message_nickname||""),updatedAt:Number(room.updatedAt||Date.now()),memberCount}
   }
   function normalizeRoomSummary(id,value={},membership=null){
     const summary=roomSummaryValue({...value,id:String(value.id||id)}),member=Boolean(id==="global"||(membership&&String(membership.status||"")!=="invited"));
@@ -249,6 +249,7 @@ MiniTalk.Realtime=(()=>{
     if(channel){channel.close();channel=null}
     if(mode==="firebase"&&presenceRef){presenceRef.update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP}).catch(()=>{});presenceRef=null}
     if(mode==="local"&&previousUser?.user_id){try{const all=localGet("presence",{});if(all[previousUser.user_id]){all[previousUser.user_id].online=false;all[previousUser.user_id].lastSeen=Date.now();localSet("presence",all)}}catch{}}
+    previewRepairs.clear();summaryRevisions.clear();
     memberRoomMemberships={};roomsCache={};roomDirectoryCache={};handledCommands.clear();pendingAdminDispatches.clear();pruneLastAt.clear();
   }
 
@@ -294,11 +295,42 @@ MiniTalk.Realtime=(()=>{
   function previewFromMessage(value={}){const type=value.type||(value.fileUrl?"file":(value.image||value.imageUrl?"image":"text"));return type==="file"?`[파일] ${value.fileName||"파일"}`:type==="image"?"[사진]":String(value.text||"")}
   async function lastMessageSummary(roomId,room){
     if(String(room.lastMessage||"").trim()&&room.lastMessageUserId)return roomSummaryValue(room);
-    try{
-      const snap=await db.ref(messagesPath(roomId)).orderByChild("ts").limitToLast(10).once("value");let latest=null,key="";snap.forEach(child=>{const candidate=child.val()||{};if(candidate.type==="game"&&candidate.game?.kind!=="game-invite")return;key=child.key;latest=candidate;});
-      if(!latest)return roomSummaryValue({...room,lastMessageAt:0});
-      return roomSummaryValue({...room,lastMessage:previewFromMessage(latest),lastMessageEmoticon:latest.emoticon||null,lastMessageAt:Number(latest.ts||latest.clientTs||0),lastMessageUserId:String(latest.user_id||""),lastMessageNickname:String(latest.nickname||"")})
-    }catch{return roomSummaryValue({...room,lastMessageAt:0})}
+    // Only legacy/missing previews need this repair. A one-row query never downloads 25 messages.
+    const base=db.ref(messagesPath(roomId)).orderByChild("ts");let query=base,latest=null;
+    for(let attempt=0;attempt<100;attempt++){
+      const snap=await query.limitToLast(1).once("value");latest=null;snap.forEach(child=>{latest={...(child.val()||{}),id:child.key}});
+      if(!latest||latest.type!=="game"||latest.game?.kind==="game-invite")break;
+      query=base.endBefore(Number(latest.ts)||0,latest.id);
+    }
+    if(!latest)return {...roomSummaryValue(room),previewVersion:1};
+    if(latest.type==="game"&&latest.game?.kind!=="game-invite"){
+      const cached=await MiniTalk.DataCache?.getMessages?.(user.user_id+"|"+roomId,CHAT_PAGE_SIZE)||[];
+      latest=[...cached].reverse().find(row=>row.type!=="game"||row.game?.kind==="game-invite")||null;
+    }
+    return {...roomSummaryValue({...room,lastMessage:latest?previewFromMessage(latest):"",lastMessageAt:latest?(Number(latest.ts)||Number(latest.clientTs)||0):0,lastMessageUserId:String(latest?.user_id||""),lastMessageNickname:String(latest?.nickname||"")}),previewVersion:1};
+  }
+  async function repairMemberPreview(roomId,value,revision){
+    const generation=initGeneration;
+    const cached=await MiniTalk.DataCache?.getMessages?.(user.user_id+"|"+roomId,CHAT_PAGE_SIZE)||[];
+    const candidate=[...cached].filter(row=>row.type!=="game"||row.game?.kind==="game-invite").sort((a,b)=>(Number(b.ts)||Number(b.clientTs)||0)-(Number(a.ts)||Number(a.clientTs)||0))[0];
+    const cachedAt=Number(candidate?.ts)||Number(candidate?.clientTs)||0;
+    let preview;
+    if(candidate&&cachedAt>=Number(value.lastMessageAt||0)&&cachedAt>=Number(value.updatedAt||0))preview={...value,lastMessage:previewFromMessage(candidate),lastMessageAt:cachedAt,lastMessageUserId:String(candidate.user_id||""),lastMessageNickname:String(candidate.nickname||""),previewVersion:1};
+    else{
+      const detail=await getRoom(roomId);
+      const source=detail&&Number(detail.lastMessageAt||0)>=Number(value.lastMessageAt||0)?{...value,...detail,id:roomId}:value;
+      preview=await lastMessageSummary(roomId,source);
+      preview.previewVersion=1;
+    }
+    if(generation!==initGeneration||summaryRevisions.get(roomId)!==revision||!canReadRoomMessages(roomId))return null;
+    const ref=db.ref(roomSummariesPath()+"/"+roomId);
+    // Never overwrite a new message sent while the one-time repair was in flight.
+    const result=await ref.transaction(current=>{
+      if(!current||String(current.lastMessage||"").trim()&&current.lastMessageUserId)return;
+      if(Number(current.lastMessageAt||0)>Number(value.lastMessageAt||0))return;
+      return {...current,lastMessage:preview.lastMessage,lastMessageAt:preview.lastMessageAt,lastMessageUserId:preview.lastMessageUserId,lastMessageNickname:preview.lastMessageNickname,lastMessageEmoticon:preview.lastMessageEmoticon||null,previewVersion:1};
+    },undefined,false);
+    return result.snapshot?.val?.()||preview;
   }
   async function migrateAllRoomSummaries(){
     const roomsRef=db.ref(MiniTalkConfig.paths.rooms),snap=await roomsRef.once("value"),source=snap.val()||{},updates={};
@@ -323,11 +355,21 @@ MiniTalk.Realtime=(()=>{
   function attachMemberSummary(roomId,membership){
     memberRoomMemberships[roomId]=membership&&typeof membership==="object"?membership:{role:"member",status:"member"};
     memberSummaryUnsubs.get(roomId)?.();
+    const generation=initGeneration,ownerId=user.user_id;
+    const active=()=>generation===initGeneration&&ownerId===user?.user_id&&Boolean(memberRoomMemberships[roomId]);
     const ref=db.ref(`${roomSummariesPath()}/${roomId}`),onValue=async snapshot=>{
+      if(!active())return;
       const revision=(summaryRevisions.get(roomId)||0)+1;summaryRevisions.set(roomId,revision);
       let value=snapshot.val();
-      if(!value){const detail=await getRoom(roomId).catch(()=>null);if(!detail){db.ref(`${userRoomsPath(user.user_id)}/${roomId}`).remove().catch(()=>{});delete memberRoomMemberships[roomId];delete roomsCache[roomId];delete roomDirectoryCache[roomId];publishRooms();return}value=String(memberRoomMemberships[roomId]?.status||"")==="invited"?roomSummaryValue(detail):await lastMessageSummary(roomId,detail);ref.set(value).catch(()=>{})}
-      if(summaryRevisions.get(roomId)!==revision)return;
+      if(!value){const detail=await getRoom(roomId).catch(()=>null);if(!active())return;if(!detail){db.ref(`${userRoomsPath(user.user_id)}/${roomId}`).remove().catch(()=>{});delete memberRoomMemberships[roomId];delete roomsCache[roomId];delete roomDirectoryCache[roomId];publishRooms();return}value=roomSummaryValue(detail);ref.set(value).catch(()=>{})}
+      const member=memberRoomMemberships[roomId];
+      if(String(member?.status||"")!=="invited"&&(!String(value.lastMessage||"").trim()||!value.lastMessageUserId)&&Number(value.previewVersion||0)<1){
+        if(!previewRepairs.has(roomId)){
+          const task=repairMemberPreview(roomId,value,revision);previewRepairs.set(roomId,task);
+          try{const repaired=await task;if(repaired)value=repaired}catch(error){console.warn("대화방 최신 글 요약 복구 실패",error)}finally{if(previewRepairs.get(roomId)===task)previewRepairs.delete(roomId)}
+        }
+      }
+      if(!active()||summaryRevisions.get(roomId)!==revision)return;
       const next=normalizeRoomSummary(roomId,value,memberRoomMemberships[roomId]);roomsCache[roomId]=next;if(roomListRequested)roomDirectoryCache[roomId]=next;publishRooms()
     };
     ref.on("value",onValue,error=>console.warn("내 대화방 요약을 읽지 못했습니다.",error));memberSummaryUnsubs.set(roomId,()=>ref.off("value",onValue))
@@ -462,16 +504,25 @@ MiniTalk.Realtime=(()=>{
   async function subscribeMessages(roomId){
     unsubscribeMessages();const generation=messageGeneration;requestedMessageRoom=String(roomId);emit("message-reset",roomId);
     const cacheRoom=`${user.user_id}|${roomId}`,cachedRaw=await MiniTalk.DataCache?.getMessages?.(cacheRoom,CHAT_PAGE_SIZE)||[],cached=[];
-    for(const message of cachedRaw){if(message?.type==="game"){MiniTalk.DataCache?.removeMessage?.(cacheRoom,message.id).catch(()=>{});continue}cached.push(message)}
+    cached.push(...cachedRaw.filter(Boolean));
     if(generation!==messageGeneration||requestedMessageRoom!==String(roomId))return;
-    cached.forEach(message=>emit("message",message));
-    const lastTs=cached.reduce((max,message)=>Math.max(max,Number(message?.ts)||Number(message?.clientTs)||0),0);
+    cached.filter(message=>message.type!=="game").forEach(message=>emit("message",message));
     await awaitTransport();
     if(generation!==messageGeneration||requestedMessageRoom!==String(roomId))return;
     if(mode==="firebase"&&db){
       if(!canReadRoomMessages(roomId)){unsubscribeMessages();return}
-      const base=db.ref(messagesPath(roomId)).orderByChild("ts"),ref=base.limitToLast(CHAT_PAGE_SIZE);
-      const fn=s=>{const value=s.val()||{},message={...value,id:s.key,roomId:value.roomId||roomId};if(message.type!=="game")MiniTalk.DataCache?.putMessage?.(cacheRoom,message).catch(()=>{});emit("message",message)};
+      if(cached.some(message=>message.type==="game")){
+        // Game cleanup deletes transient packets. Check their IDs, never download cached photos to validate them.
+        const serverIds=new Set(await shallowChildKeys(messagesPath(roomId)));
+        if(generation!==messageGeneration||requestedMessageRoom!==String(roomId))return;
+        for(let i=cached.length-1;i>=0;i--)if(cached[i].type==="game"&&!serverIds.has(cached[i].id)){MiniTalk.DataCache?.removeMessage?.(cacheRoom,cached[i].id).catch(()=>{});cached.splice(i,1)}
+        cached.filter(message=>message.type==="game").forEach(message=>emit("message",message));
+      }
+      const lastTs=cached.reduce((max,message)=>Math.max(max,Number(message?.ts)||Number(message?.clientTs)||0),0);
+      const base=db.ref(messagesPath(roomId)).orderByChild("ts");
+      const newest=[...cached].sort((a,b)=>(Number(b.ts)||Number(b.clientTs)||0)-(Number(a.ts)||Number(a.clientTs)||0)||(String(b.id)>String(a.id)?1:String(b.id)<String(a.id)?-1:0))[0];
+      const ref=cached.length&&lastTs>0?base.startAfter(lastTs,String(newest.id)).limitToLast(CHAT_PAGE_SIZE):base.limitToLast(CHAT_PAGE_SIZE);
+      const fn=s=>{if(!alive||generation!==messageGeneration)return;const value=s.val()||{},message={...value,id:s.key,roomId:value.roomId||roomId};MiniTalk.DataCache?.putMessage?.(cacheRoom,message).catch(()=>{});emit("message",message)};
       const fail=error=>{console.error("대화내역 구독 실패",error);emit("error",{message:"대화내역을 읽을 권한이 없습니다.",code:String(error?.code||"")})};
       let alive=true;
       const drop=async snapshot=>{
@@ -483,10 +534,15 @@ MiniTalk.Realtime=(()=>{
           MiniTalk.DataCache?.removeMessage?.(cacheRoom,snapshot.key).catch(()=>{});emit("message-removed",{roomId,id:snapshot.key});
         }catch(error){console.warn("메시지 삭제 확인 실패",error)}
       };
-      // All events use this same 25-message query. An unfiltered changed/removed
+      // All events use the same bounded query (newer than cache on a warm open). An unfiltered changed/removed
       // listener would download the whole room even if its callback stays silent.
       ref.on("child_added",fn,fail);ref.on("child_changed",fn,fail);ref.on("child_removed",drop,fail);
-      messageUnsub=()=>{alive=false;ref.off("child_added",fn);ref.off("child_changed",fn);ref.off("child_removed",drop)};
+      // Existing immutable text/photos stay local. Only unfinished file rows need a completion listener.
+      const pendingOffs=cached.filter(row=>row.type==="file"&&row.uploadState==="pending").map(row=>{
+        const pendingRef=db.ref(messagesPath(roomId)+"/"+row.id),pendingFn=snapshot=>{if(alive&&snapshot.exists())fn(snapshot)};
+        pendingRef.on("value",pendingFn,fail);return()=>pendingRef.off("value",pendingFn);
+      });
+      messageUnsub=()=>{alive=false;ref.off("child_added",fn);ref.off("child_changed",fn);ref.off("child_removed",drop);pendingOffs.forEach(off=>off())};
 
     }else localGet(`messages.${roomId}`,[]).slice(-CHAT_PAGE_SIZE).forEach(message=>emit("message",message));
   }

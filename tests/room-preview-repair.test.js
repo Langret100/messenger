@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const rt=fs.readFileSync(__dirname+'/../js/adapters/realtime.js','utf8');
 const chunk=rt.slice(rt.indexOf('  function previewFromMessage'),rt.indexOf('  async function migrateAllRoomSummaries'));
 let reads=0,rows=[{type:'text',text:'오래된 마지막 대화',ts:100,user_id:'last',nickname:'마지막'},{type:'game',ts:110,game:{kind:'game-state'}}];
-const q={orderByChild(){return this},limitToLast(n){assert.equal(n,10);return this},async once(){reads++;return {forEach(fn){rows.forEach((m,i)=>fn({key:String(i),val:()=>m}))}}}};
+let cutoff=Infinity;const q={orderByChild(){cutoff=Infinity;return this},endBefore(ts){cutoff=ts;return this},limitToLast(n){assert.equal(n,1);return this},async once(){reads++;const latest=rows.filter(m=>m.ts<cutoff).slice(-1);return {forEach(fn){latest.forEach((m,i)=>fn({key:String(i),val:()=>m}))}}}};
 const ctx={db:{ref:()=>q},messagesPath:id=>id,roomSummaryValue:r=>r};vm.createContext(ctx);vm.runInContext(chunk+';globalThis.repair=lastMessageSummary;',ctx);
 (async()=>{
  const fixed=await ctx.repair('r',{lastMessage:'',lastMessageAt:100});assert.equal(fixed.lastMessage,'오래된 마지막 대화');assert.equal(fixed.lastMessageUserId,'last');assert.equal(fixed.lastMessageAt,100);

@@ -4,7 +4,7 @@
  * - 이미지/음원: 캐시 우선
  * - 외부 API와 Firebase 요청은 가로채지 않음
  */
-const CACHE = "moaru-runtime-bundle-136-20261016-icon-size";
+const CACHE = "moaru-runtime-bundle-137-20261019-chat-cache";
 const CORE = [
   "./js/ui/video-codec.js",
   "./js/ui/image-codec.js",

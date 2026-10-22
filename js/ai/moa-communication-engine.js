@@ -14,7 +14,7 @@
    ============================================================ */
 MiniTalk.AI = MiniTalk.AI || {};
 MiniTalk.AI.MoaCommunicationEngine = (() => {
-  const VERSION = 99;
+  const VERSION = 100;
   const MAX_CONTEXT = 28;
   const MAX_EPISODES = 36;
   const MAX_TIMELINE = 24;
@@ -254,21 +254,73 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(formal>.60||rough<.42||debt<6||score>64)return 0;
     return clamp(.16+(64-score)*.018+(rough-.42)*.42+Math.min(.22,streak*.018),0,.78);
   }
+  // Tone adaptation must NEVER discard the substantive answer. The previous
+  // rewrite replaced entire replies with generic swearing, breaking continuity.
   function roughFriendlyRewrite(answer,frame,source){
-    let out=clean(answer);if(!out)return out;
-    if(!String(source||"").startsWith("local")||source==="local-utility"||source==="local-feature-help"||source==="local-repair"||source==="local-knowledge")return out;
-    if(frame.directedAbuse||/(?:요|습니다|세요|해줘요|고마워요)[.!?？！]*$/.test(frame.text)||frame.question||frame.searchCue||/[?？]$/.test(out))return out;
-    const rate=roughReplyRate();if(rate<=0||Math.random()>=rate)return out;
-    // Friendly/emphatic profanity only: never generate a slur or insult aimed at a person.
-    const negative=frame.affect==="negative"||/(짜증|빡|힘들|피곤|별로|아쉽|졌|망)/.test(frame.c);
-    const positive=frame.affect==="positive"||/(좋|이겼|성공|만점|칭찬|재밌)/.test(frame.c);
-    const family=negative?"negative":positive?"positive":"neutral";
-    const options=negative
-      ? ["아 씨, 그건 좀 빡치겠다 ㅋㅋ", "시발 그건 좀 짜증나겠다 ㅋㅋ", "아 ㅋㅋ 그건 진짜 개빡세네", "와 씨, 그건 좀 힘들었겠다."]
-      : positive
-        ? ["와 씨 ㅋㅋ 그건 개좋네", "오 ㅋㅋ 그건 존나 좋았겠다", "와 ㅋㅋ 그건 진짜 개쩐다", "오 씨, 그건 좀 뿌듯하겠다 ㅋㅋ"]
-        : ["아 ㅋㅋ 그런 거였구나", "오 씨 ㅋㅋ 그렇구나", "ㅋㅋ 그건 좀 세네", "ㅇㅇ ㅋㅋ 알겠어."];
-    return chooseFreshReply(`rough.rewrite.${family}`,options,7)||out;
+    const out=clean(answer);
+    if(!out)return out;
+    if(!String(source||"").startsWith("local")||/(utility|feature-help|repair|knowledge|grounded|clarify|style)/.test(source))return out;
+    if(frame.directedAbuse||frame.profanity||PROFANITY.test(frame.text)||frame.question||frame.searchCue||frame.knowledgeCue||/요[.!?？]*$|습니다[.!?？]*$/.test(frame.text))return out;
+    if(roughReplyRate()<=0||Math.random()>=roughReplyRate())return out;
+    if(/(?:씨발|시발|존나|개빡|와 씨|아 씨)/.test(out))return out;
+    // A brief emotional preface retains the original concrete response.
+    const prefix=frame.affect==="negative"?"아 씨, ":frame.affect==="positive"?"와 씨 ㅋㅋ ":"오 씨 ㅋㅋ ";
+    if(!prefix||/^(?:아 씨|와 씨|오 씨)/.test(out))return out;
+    return prefix+out;
+  }
+  // Local-only low-manner chat style. Never apply to factual, search, calculation,
+  // safety, or explicit requests for help. Keep the substantive reply for real stories.
+  function lowMannerChatReply(frame, answer, source, searchMode){
+    const out=clean(answer), p=profile(), m=mannerScore();
+    if(!out||m.score>58||Number(p.profanityDebt||0)<3||Number(p.formality||0)>.60)return out;
+    if(searchMode!=="forbidden"||frame.searchCue||frame.knowledgeCue||
+       /^(?:search|memory|episode)/.test(String(source))||
+       /(?:utility|feature-help|knowledge|grounded|repair|clarify|semantic-compose|lexical|decision|play)/.test(String(source)))return out;
+    const text=clean(frame.text), c=compact(text);
+    if(/(?:계산|찾아|검색|알려|설명|도와|방법|어떻게|왜|뭐야|무엇|얼마|추천|해줘|해봐|기억|점수|말투|대답)/.test(c))return out;
+    // A response to an actual event must remain meaningful, even when blunt.
+    const isShort= text.length<=11 || /^(?:응+|ㅇㅇ+|ㄴㄴ+|ㅋㅋ+|ㅎㅎ+|뭐+|엥+|흠+|아+|어+|그래+|몰라+|그냥+|노잼+|어쩌라고+|됐어+|ㅇㅋ+|진짜+)[!?ㅋㅎ.]*$/.test(c);
+    if(!isShort||frame.question)return out;
+    const last=context().slice(0,-1).filter(v=>v.role==='assistant').slice(-1)[0];
+    const lastText=clean(last?.text||'');
+    const minScore=m.score<=35, rate=minScore?.74:m.score<=46?.52:.30;
+    if(Math.random()>rate)return out;
+    let replies;
+    if(/^(?:ㅇㅇ+|응+|그래+|ㅇㅋ+|알겠어)$/.test(c))replies=['ㅇㅇ','그래 ㅋㅋ','ㅇㅋ','그러든가 ㅋㅋ','알겠음'];
+    else if(/^(?:엥+|뭐+|흠+|어+|아+|\?+|？+)$/.test(c))replies=['??','뭔데 ㅋㅋ','왜?','뭐 ㅋㅋ','어쩌라고 ㅋㅋ'];
+    else if(/^(?:ㅋㅋ+|ㅎㅎ+|ㅋ+)$/.test(c))replies=['ㅋㅋ','ㅋㅋㅋ','왜 웃냐 ㅋㅋ','뭐가 웃긴데 ㅋㅋ'];
+    else if(frame.reaction==='insult'||frame.directedAbuse||frame.profanity)replies=['ㅇㅇ ㅋㅋ','어쩌라고','근데?','와 씨 ㅋㅋ','존나 당당하네 ㅋㅋ','뭐 어쩌라고 ㅋㅋ'];
+    else replies=['ㅇㅇ','ㅋㅋ','근데?','뭔데 ㅋㅋ','그건 좀 웃기네 ㅋㅋ'];
+    // Pure micro-replies are inappropriate when the preceding assistant asked
+    // an actual question and user is giving the answer.
+    if(lastText.endsWith('?')||lastText.endsWith('？'))replies=replies.filter(v=>v!=='어쩌라고'&&v!=='근데?'&&v!=='??');
+    return chooseFreshReply('local.low-manner.'+(frame.reaction||'small'),replies,5)||out;
+  }
+  function localMannerStyleExplanation(frame){
+    const c=compact(frame?.text||'');
+    const asked=/(?:너|넌|모아|니가|네가)?.*(?:왜|뭐하러|무슨이유).*(?:욕|그런말|그렇게말|그따위|띠껍|싸가지|퉁명|말투|반응|대답|그러)|(?:말투|욕|태도|반응|대답).*(?:왜|이상|거칠)|^왜그래\??$|^왜그러는데\??$/.test(c);
+    if(!asked)return '';
+    const last=context().slice(0,-1).filter(v=>v.role==='assistant').slice(-1)[0];
+    const lastText=clean(last?.text||'');
+    const p=profile(), m=mannerScore();
+    if(!lastText||m.score>58||Number(p.profanityDebt||0)<3)return '';
+    // Explain the real local rule, rather than inventing an emotion.
+    return chooseFreshReply('local.low-manner.explain',[
+      '네가 평소에 쓰는 말투에 맞춰서 반응하는 거야. 이 기기에 기록된 대화 점수가 낮아져서 좀 퉁명스럽게 말하는 중 ㅋㅋ',
+      '네 사용 방식에 맞춘 거지. 욕이나 거친 표현이 반복되면 여기선 내 말투도 거칠어져. 싫으면 말투 바꾸면 됨.',
+      '왜냐고? 네가 대화하는 방식에 맞춰서 그러는 거야 ㅋㅋ 다만 검색이랑 계산은 제대로 해줄게.',
+      '로컬 매너 점수 따라 반응이 바뀌거든. 요즘 네 말이 세니까 나도 짧게 받아치는 거야.'
+    ],5);
+  }
+  function localReactionTone(frame, answer, source){
+    const out=clean(answer), score=mannerScore().score;
+    if(!out||!String(source).startsWith('local')||/utility|feature-help|knowledge|grounded|repair|clarify/.test(source))return out;
+    // Only contextual emotional responses are adapted; factual help remains identical.
+    if(frame.question||frame.searchCue||frame.knowledgeCue)return out;
+    const insult=frame.reaction==='insult'||frame.directedAbuse;
+    if(insult&&score<=42&&/^((응|어|알겠|그래|미안|아니|그건)|ㅋㅋ)/.test(out))return '말은 좀 세게 하네. '+out;
+    if(insult&&score>42&&/^(?:ㅋㅋ|ㅎㅎ)/.test(out))return '그렇게까지 말할 건 없잖아. '+out;
+    return out;
   }
   function chooseFreshReply(family,rows,limit=7){
     const list=Array.isArray(rows)?rows.filter(Boolean):[];if(!list.length)return "";
@@ -295,6 +347,53 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       const f=analyze(lastUser.text||""),direct=socialReactionReply(f)||everydayContextReply(lastUser.text||"")||everydayDialogueReply(f)||broadEverydayReply(f);
       if(direct&&!/(한마디만|조금만더|한조각만|맥락)/.test(compact(direct)))return direct;
     }
+    return "";
+  }
+
+  // Conversation repair must examine *actual assistant wording* before generic rules.
+  // This prevents fabricated topics and ungrounded "I'm watching" loops.
+  function explicitTurnRepair(frame){
+    const c=frame.c, prior=context().slice(0,-1), last=[...prior].reverse().find(x=>x.role==="assistant");
+    if(!last)return "";
+    const said=clean(last.text), prevUser=[...prior].reverse().find(x=>x.role==="user");
+    const original=clean(prevUser?.text||"");
+    const whatWatch=/(?:뭘|뭐|무엇을|뭔데).{0,7}(?:보[고는]|봤|봐)|(?:뭘|뭐|무엇을).{0,7}(?:듣고|듣는)/.test(c);
+    if(whatWatch&&/(?:보고 있|보고 있어|듣고 있|듣고 있어)/.test(said))return "내가 말이 이상했어. 실제로 뭔가를 보고 있다는 뜻은 아니고, 네 얘기를 듣고 있다는 뜻이었어.";
+    const unclear=/^(?:\?+|？+|뭐\?*|뭔데\?*|뭔소리\?*|무슨말\?*|무슨뜻\?*|엥+\?*)$/.test(c);
+    if(unclear){
+      if(/(?:앞에서 말한 흐름|그쪽으로 생각|흐름만 보면|그쪽으로|그 내용으로 이어|보고 있)/.test(said))return "내가 없는 맥락을 붙여서 이상하게 말했어. 특별한 뜻 없이 네 말을 잘못 받아들인 거야.";
+      if(/^(?:응|ㅇㅇ|그래|ㅋㅋ|ㅎㅎ|오|웅|어)[\sㅋㅎ!.~]*$/.test(original))return "내가 앞말을 이상하게 이어갔네. 네가 짧게 답한 걸 멋대로 해석하지 않을게.";
+      return "";
+    }
+    if(/^(?:왜|왜그래|왜그러는데|왜그렇게말해|그게무슨뜻이야)$/.test(c)&&/(?:앞에서 말한 흐름|그쪽으로 생각|흐름만 보면)/.test(said))return "내가 네 말에 없는 뜻을 붙였어. 그 표현은 잘못됐어.";
+    if(/(?:같은말|똑같은말|반복|동문서답|말돌리)/.test(c))return "맞아, 방금 답이 반복되거나 질문에서 벗어났어. 앞에서 말한 걸 지어내지 않고 다시 답할게.";
+    return "";
+  }
+
+  // Ground tiny replies in the actual preceding exchange, never in a guessed topic.
+  // Deliberately separate from learned patterns: these are conversational controls,
+  // not training examples. Only the MOA engine uses this branch.
+  function groundedMicroTurn(frame){
+    const c=frame.c, turns=context();
+    const previous=turns.slice(0,-1).filter(v=>v.role==="assistant").slice(-1)[0];
+    if(!previous)return "";
+    const said=clean(previous.text), lastUser=turns.slice(0,-1).filter(v=>v.role==="user").slice(-1)[0];
+    const agreement=/^(?:ㅇㅇ+|응+|웅+|어+|그래+|그치|맞아|맞음|ㄹㅇ|오케이|ㅇㅋ|좋아|알겠어|ㅋㅋ+|ㅎㅎ+)$/.test(c);
+    const puzzled=/^(?:\?+|？+|뭐\??|뭔데\??|무슨말\??|무슨뜻\??|뭔소리\??|엥+\??|에\??)$/.test(c);
+    if(agreement){
+      // An acknowledgement is not a request to watch, listen or restart.
+      if(/[?？]$/.test(said))return ""; // preserve open question / yes-no followthrough
+      return chooseFreshReply("ground.agree",["응응 ㅋㅋ","그치 ㅋㅋ","좋아, 그렇게 하자.","응, 알겠어."],4);
+    }
+    if(puzzled){
+      // Preserve existing specific clarification and topic-followthrough responses.
+      const vague=/(앞에서|흐름|그쪽|말한|보고 있|한마디만|맥락|이어(?:서|가))/.test(said);
+      if(vague && /보고 있|앞에서 말한 흐름|그쪽으로 생각|그쪽으로|말한 흐름/.test(said))return "내가 방금 말을 이상하게 했네. 특별한 뜻은 없었어. 다시 자연스럽게 얘기하자.";
+      return "";
+    }
+    // If the person flags repetition, recognize it instead of repeating an empty promise.
+    if(/(?:똑같은말|같은말|반복하|반복만|말돌리지|이상한대답|동문서답)/.test(c))
+      return "맞아. 내가 앞말을 제대로 받아서 답하지 못하고 비슷한 말만 반복했어. 네가 말한 내용에 맞춰 답해야 했는데 그러지 못했네.";
     return "";
   }
 
@@ -2486,6 +2585,35 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   function semanticTokens(text){const stop=new Set(["나는","난","내가","너","넌","니가","오늘","진짜","그냥","근데","그래서","그리고","이거","그거","저거","뭐","왜","어떻게","좀","너무","완전"]),seen=new Set(),out=[];clean(text).replace(/\[[^\]]+\]/g," ").replace(/[^0-9A-Za-z가-힣ㅋㅎㅜㅠ ]/g," ").split(/\s+/).forEach(x=>{const t=semanticLemma(x);if(t.length<2||stop.has(t)||seen.has(t))return;seen.add(t);out.push(t)});return out.slice(0,12)}
   function semanticCategories(tokens,text=""){const s=` ${tokens.join(" ")} ${clean(text).toLowerCase()}`,out=[];const defs={fruit:/사과|복숭아|딸기|포도|수박|참외|바나나|귤|오렌지|과일/,food:/치킨|피자|떡볶이|라면|김밥|햄버거|밥|급식|과자|빵|간식|메뉴|음식|배고프|먹다|먹을|먹고|마시다|맛있다/,school:/학교|학원|수업|숙제|시험|공부|선생|급식|교실|과목|수학|국어|사회|과학|영어|체육|미술|음악|실과|청소시간|청소당번/,game:/게임|플레이|랭크|승리|패배|이기다|지다|캐릭터/,friend:/친구|친구들|반친구|짝꿍/,travel:/버스|지하철|택시|기차|정류장|역|귀가|오다|가다/,emotion:/피곤하다|지치다|졸리다|기쁘|속상|짜증|화나|신나|재미있다|웃기다/,preference:/좋아하다|싫어하다|취향|선호/};Object.entries(defs).forEach(([k,re])=>{if(re.test(s))out.push(k)});return out}
   function semanticIntent(frame){const ts=semanticTokens(frame.text),joined=ts.join(" ");if(/좋아하다|싫어하다|취향|선호/.test(joined)&&frame.question)return "ask:preference";if(frame.question)return "ask:question";if(/좋아하다|싫어하다|취향|선호/.test(joined))return "inform:preference";if(frame.affect!=="neutral")return "inform:emotion";return frame.speechAct||frame.act||"inform:statement"}
+  // A topic match is not an interchangeable meaning.  Evaluate whether a learned
+  // trigger has the same speech act and polarity before allowing broad reuse.
+  function semanticDialogueSignature(text){
+    const raw=clean(text),c=compact(raw),tokens=semanticTokens(raw);
+    const explicitNeg=/(?:안\s*\S+|못\s*\S+|않아|않았|않을|아니|싫어|별로|없어|없다|안돼|안되|안됨|못해|실패|졌어|패배)/.test(raw);
+    const positive=/(?:좋아|좋다|재밌|재미있|맛있|성공|이겼|승리|행복|신나)/.test(raw);
+    let question='statement';
+    if(/(?:왜|이유|어째서)/.test(raw))question='why';
+    else if(/(?:어떻게|방법|어쩌)/.test(raw))question='how';
+    else if(/(?:언제|몇시|몇 시)/.test(raw))question='when';
+    else if(/(?:어디|어느 곳)/.test(raw))question='where';
+    else if(/(?:누구|누가)/.test(raw))question='who';
+    else if(/(?:뭐|무엇|어떤|몇 개|얼마)/.test(raw)&&/[?？]|(?:야|임|니|냐)$/.test(raw))question='what';
+    else if(/[?？]$/.test(raw)||/(?:할까|갈까|먹을까|맞아|맞니|괜찮아|좋아해|싫어해|했어|있어|없어)\??$/.test(raw)&&/[?？]$/.test(raw))question='yesno';
+    return {polarity:explicitNeg?'negative':positive?'positive':'neutral',question,tokens,short:c.length<=3};
+  }
+  function learnedMeaningCompatible(current,pattern,exact){
+    if(exact)return true;
+    const a=semanticDialogueSignature(current),b=semanticDialogueSignature(pattern);
+    // Negative and positive statements about the same topic cannot share a reply.
+    if(a.polarity!=='neutral'&&b.polarity!=='neutral'&&a.polarity!==b.polarity)return false;
+    // Question answers are specific to the kind of question.
+    if(a.question!==b.question&&(a.question!=='statement'||b.question!=='statement'))return false;
+    // Avoid borrowing unrelated responses just because the question is two letters.
+    if(a.short||b.short){
+      if(a.question!=="yesno"||b.question!=="yesno"||!a.tokens.some(t=>b.tokens.includes(t)))return false;
+    }
+    return true;
+  }
   function learnedSemanticKey(p){const sem=p?.semantic||{},tokens=(Array.isArray(sem.tokens)&&sem.tokens.length?sem.tokens:semanticTokens(p?.trigger||"")).slice(0,8),replyTokens=semanticTokens(p?.reply||"").slice(0,8),intent=String(sem.intent||p?.act||""),strategy=String(p?.strategy||"direct");return [intent,tokens.join("|"),replyTokens.join("|"),strategy].join("\u001f")}
   function mergeLearnedPatterns(base,delta){const byId=new Map(),bySemantic=new Map(),rank={confirmed:3,growing:2,solo:1,observing:0};const put=p=>{if(!p||!p.id)return;const old=byId.get(p.id),chosen=!old||((rank[p.tier]||0)>(rank[old.tier]||0))||Number(p.evidenceCount||0)>=Number(old.evidenceCount||0)?p:old;byId.set(p.id,chosen)};(base||[]).forEach(put);(delta||[]).forEach(put);const out=[];[...byId.values()].forEach(p=>{const skey=learnedSemanticKey(p),old=bySemantic.get(skey);if(!old){bySemantic.set(skey,p);return}const better=((rank[p.tier]||0)>(rank[old.tier]||0))||((rank[p.tier]||0)===(rank[old.tier]||0)&&Number(p.evidenceCount||0)>Number(old.evidenceCount||0));if(better)bySemantic.set(skey,p)});bySemantic.forEach(p=>out.push(p));out.sort((a,b)=>(rank[b.tier]||0)-(rank[a.tier]||0)||Number(b.evidenceCount||0)-Number(a.evidenceCount||0));return out.slice(0,1400)}
   const PUBLIC_PATTERN_CACHE_KEY="__public__";
@@ -2582,13 +2710,29 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     return Math.max(-8,Math.min(10,score));
   }
   function personalStyleBoostForPattern(ptn){const p=profile(),text=String(ptn.reply||"");let score=localTextPreferenceScore(text)*.7;if(String(ptn.strategy||"")==="empathy")score+=(p.empathy-.5)*5;if(String(ptn.strategy||"")==="direct")score+=(p.directness-.5)*4;return score}
-  function adaptLearnedReply(ptn,frame){let reply=String(ptn.reply||"");if(!ptn.humanChat||String(ptn.tier||"")==="solo")return reply;const pTokens=Array.isArray(ptn.semantic?.tokens)?ptn.semantic.tokens:semanticTokens(ptn.trigger||""),cTokens=semanticTokens(frame.text),pCats=semanticCategories(pTokens,ptn.trigger||""),cCats=semanticCategories(cTokens,frame.text);const commonCat=pCats.find(x=>cCats.includes(x));if(!commonCat)return reply;const verbs=new Set(["좋아하다","싫어하다","먹다","마시다","피곤하다","지치다","졸리다","재미있다","맛있다","이기다","지다","오다","가다"]);const pAnchor=pTokens.find(t=>!verbs.has(t)&&String(ptn.reply||"").includes(t)),cAnchor=cTokens.find(t=>!verbs.has(t));if(pAnchor&&cAnchor&&pAnchor!==cAnchor&&pAnchor.length>=2){reply=reply.replace(new RegExp(pAnchor.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g"),cAnchor)}return reply}
+  function adaptLearnedReply(ptn,frame){
+    let reply=String(ptn.reply||"");
+    if(!ptn.humanChat||String(ptn.tier||"")==="solo")return reply;
+    if(!learnedMeaningCompatible(frame.text,ptn.trigger,false))return reply;
+    const pTokens=semanticTokens(ptn.trigger||""),cTokens=semanticTokens(frame.text);
+    const pCats=semanticCategories(pTokens,ptn.trigger||""),cCats=semanticCategories(cTokens,frame.text);
+    const commonCat=pCats.find(x=>cCats.includes(x));if(!commonCat)return reply;
+    const verbs=new Set(["좋아하다","싫어하다","먹다","마시다","피곤하다","지치다","졸리다","재미있다","맛있다","이기다","지다","오다","가다"]);
+    const pAnchor=pTokens.find(t=>!verbs.has(t)&&reply.includes(t));
+    const cAnchor=cTokens.find(t=>!verbs.has(t)&&!pTokens.includes(t));
+    // Substitute only one explicit topical noun, never verbs, polarity or grammar.
+    if(pAnchor&&cAnchor&&pAnchor!==cAnchor&&pAnchor.length>=2&&cAnchor.length>=2&&
+       semanticCategories([pAnchor],pAnchor).includes(commonCat)&&semanticCategories([cAnchor],cAnchor).includes(commonCat)){
+      reply=reply.replace(new RegExp(pAnchor.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g"),cAnchor);
+    }
+    return reply;
+  }
 
   function learnedCandidates(frame,policy,ref){
     const data=learnedByUser.get(userKey())||{patterns:[]},input=frame.c,out=[],eligible=responseMoveEligibility(frame,ref),fTokens=semanticTokens(frame.text),fCats=semanticCategories(fTokens,frame.text),fIntent=semanticIntent(frame);
     for(const ptn of learnedPatternPool(frame,fTokens,fCats)){
       const trig=compact(ptn.trigger);if(!trig||!ptn.reply)continue;if(ptn.humanChat&&frame.knowledgeCue)continue;
-      const exact=input===trig;let strategy=ptn.strategy||policy.strategy;
+      const exact=input===trig;if(!learnedMeaningCompatible(frame.text,ptn.trigger,exact))continue;let strategy=ptn.strategy||policy.strategy;
       // A human-chat reply strategy is descriptive metadata, not a hard routing rule.
       // Exact learned phrases must remain usable even when the current affect classifier
       // would normally disable that strategy (for example "버스 왜 안 와" learned as empathy).
@@ -2604,7 +2748,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       const tier=String(ptn.tier||"confirmed");if(tier==="solo")score-=4;else if(tier==="growing")score+=1;else if(tier==="confirmed")score+=4;
       if(ptn.act&&ptn.act!==frame.act&&(!pIntent||pIntent!==semanticIntent(frame)))score-=24;if(ptn.affect&&ptn.affect!=="neutral"&&ptn.affect!==frame.affect)score-=18;
       if(input!==trig&&overlap===0&&semOverlap===0&&catOverlap===0&&ctxTokenOverlap===0&&ctxCatOverlap===0)score-=16;
-      if(exact||score>=56){score+=personalTopicBoostForPattern(ptn)+personalStyleBoostForPattern(ptn)+personalFeedbackBoostForPattern(ptn)+personalMemoryBoostForPattern(ptn);const learnedText=exact?String(ptn.reply||""):adaptLearnedReply(ptn,frame);out.push(candidate(learnedText,ptn.id||"learned",strategy,score,{source:ptn.humanChat?"learned-human":"learned",learningTier:tier,exactLearned:exact,relevanceUnits,evidenceCount:Number(ptn.evidenceCount||0)}));}
+      if(exact||((semOverlap>0||overlap>0)&&score>=70)){score+=personalTopicBoostForPattern(ptn)+personalStyleBoostForPattern(ptn)+personalFeedbackBoostForPattern(ptn)+personalMemoryBoostForPattern(ptn);const learnedText=exact?String(ptn.reply||""):adaptLearnedReply(ptn,frame);out.push(candidate(learnedText,ptn.id||"learned",strategy,score,{source:ptn.humanChat?"learned-human":"learned",learningTier:tier,exactLearned:exact,relevanceUnits,evidenceCount:Number(ptn.evidenceCount||0)}));}
     }
     return out.sort((a,b)=>b.score-a.score).slice(0,4);
   }
@@ -3160,6 +3304,150 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
   }
   function warmup(){sync(false);}
 
+  // Curated semantic lexicon. Only compatible slots are composed together;
+  // no unbounded word substitution or user-learned text enters these templates.
+  const COMPOSE_LEXICON=Object.freeze({
+    fruit:{keys:["과일","과일이름"],words:["사과","딸기","바나나","포도","귤","수박","복숭아","배","감","자두","참외","멜론","키위","오렌지","파인애플","망고","체리","레몬","블루베리","라즈베리","석류","무화과","살구","유자","한라봉","자몽"],adjectives:["상큼한","달콤한","새콤달콤한","향긋한"],verb:"먹어보는"},
+    animal:{keys:["동물","동물이름"],words:["강아지","고양이","토끼","판다","여우","수달","돌고래","고래","호랑이","사자","기린","코끼리","펭귄","햄스터","다람쥐","너구리","사슴","늑대","고슴도치","앵무새","부엉이","물개","바다거북","카피바라"],adjectives:["귀여운","신기한","재밌는"],verb:"알아보는"},
+    color:{keys:["색깔","색상","색"],words:["빨강","주황","노랑","초록","파랑","남색","보라","분홍","하늘색","민트색","연두색","갈색","검정","하양","회색","금색","은색"],adjectives:["선명한","차분한","화사한"],verb:"골라보는"},
+    food:{keys:["음식","먹을거","먹을것","메뉴","저녁메뉴","점심메뉴"],words:["김밥","비빔밥","볶음밥","떡볶이","라면","우동","초밥","돈가스","불고기","제육볶음","김치찌개","된장찌개","칼국수","만두","파스타","피자","햄버거","샌드위치","카레","오므라이스","잡채","국수","계란말이","삼계탕"],adjectives:["든든한","맛있는","따뜻한"],verb:"먹어보는"},
+    sport:{keys:["운동","스포츠"],words:["축구","농구","배드민턴","탁구","수영","달리기","자전거 타기","줄넘기","볼링","배구","야구","테니스","요가","등산"],adjectives:["가볍게 할 만한","재밌는","활동적인"],verb:"해보는"},
+    hobby:{keys:["취미","놀거리","할거리"],words:["그림 그리기","독서","산책","사진 찍기","퍼즐 맞추기","종이접기","악기 연주","일기 쓰기","보드게임","요리","만들기","음악 감상","춤추기","영화 보기"],adjectives:["가볍게 시작할 만한","재밌는","느긋한"],verb:"해보는"},
+    subject:{keys:["과목","학교과목"],words:["국어","수학","사회","과학","영어","음악","미술","체육","실과","도덕"],adjectives:["재미있는","익숙한","새로운"],verb:"공부해보는"},
+    instrument:{keys:["악기","악기이름"],words:["피아노","기타","바이올린","첼로","플루트","클라리넷","트럼펫","드럼","우쿨렐레","하모니카","리코더","색소폰","칼림바","오카리나","실로폰"],verb:"연주해보는"},
+    place:{keys:["장소","갈만한곳","놀러갈곳","나들이장소"],words:["공원","도서관","박물관","미술관","동물원","수족관","식물원","과학관","체육관","놀이터","산책로","해변","전망대","서점","영화관","전시관"],verb:"가보는"},
+    job:{keys:["직업","꿈의직업"],words:["교사","의사","간호사","개발자","요리사","소방관","과학자","작가","화가","디자이너","수의사","건축가","기자","연구원","운동선수","음악가"],verb:"알아보는"},
+    drink:{keys:["음료","음료수","마실거"],words:["물","보리차","우유","두유","오렌지주스","사과주스","포도주스","레모네이드","딸기라떼","초코우유","요거트","탄산수","녹차","코코아","복숭아아이스티"],verb:"마셔보는"},
+    stationery:{keys:["학용품","문구류"],words:["연필","샤프","볼펜","지우개","색연필","크레파스","형광펜","공책","필통","자","가위","풀","메모지","스티커","스케치북"],verb:"써보는"},
+    weather:{keys:["날씨종류","날씨표현"],words:["맑음","흐림","비","눈","안개","소나기","바람","이슬비","구름 조금","쾌청"],verb:"떠올려보는"},
+    mood:{keys:["감정단어","감정표현","기분단어"],words:["기쁨","설렘","뿌듯함","아쉬움","걱정","신남","편안함","긴장","속상함","반가움","궁금함","놀라움","답답함","기대감","심심함"],verb:"떠올려보는"}
+  });
+
+  const COMPOSE_EXTRA_LEXICON=Object.freeze({"vegetable":{"keys":["채소","야채","채소이름"],"words":["당근","오이","양파","감자","고구마","무","배추","양배추","상추","시금치","브로콜리","가지","파프리카","피망","토마토","호박","애호박","버섯","대파","부추","콩나물","숙주","연근","비트","샐러리","고추","아스파라거스"],"verb":"먹어보는"},"flower":{"keys":["꽃","꽃이름"],"words":["장미","튤립","해바라기","코스모스","국화","백합","수선화","제비꽃","라벤더","데이지","동백꽃","벚꽃","무궁화","진달래","철쭉","개나리","목련","안개꽃","카네이션","금잔화","수국","민들레","채송화","접시꽃"],"verb":"골라보는"},"bird":{"keys":["새종류","새이름","조류"],"words":["참새","까치","까마귀","비둘기","제비","독수리","매","올빼미","부엉이","백조","오리","거위","두루미","앵무새","펭귄","갈매기","딱따구리","꿩","공작새","홍학","타조","벌새","꾀꼬리","종달새"],"verb":"알아보는"},"fish":{"keys":["물고기","생선종류","어류"],"words":["고등어","갈치","참치","연어","광어","우럭","도미","멸치","꽁치","정어리","청어","잉어","붕어","금붕어","메기","장어","가자미","복어","대구","명태","숭어","방어","송어","농어","아귀"],"verb":"알아보는"},"insect":{"keys":["곤충","벌레종류"],"words":["나비","잠자리","무당벌레","개미","꿀벌","장수풍뎅이","사슴벌레","매미","귀뚜라미","메뚜기","방아깨비","여치","사마귀","반딧불이","딱정벌레","노린재","풍뎅이","물방개","하루살이","소금쟁이"],"verb":"알아보는"},"dessert":{"keys":["디저트","후식","간식종류"],"words":["케이크","푸딩","마카롱","쿠키","와플","팬케이크","도넛","크로플","젤리","아이스크림","빙수","초콜릿","머핀","브라우니","타르트","슈크림","카스텔라","찹쌀떡","호떡","붕어빵","약과","식혜"],"verb":"먹어보는"},"bread":{"keys":["빵종류","베이커리"],"words":["식빵","바게트","크루아상","단팥빵","소보로빵","모닝빵","치아바타","베이글","브리오슈","포카치아","프레첼","크림빵","앙버터","마늘빵","호밀빵","깜빠뉴","치즈빵","핫도그","피자빵"],"verb":"먹어보는"},"snack":{"keys":["과자종류","스낵"],"words":["새우깡","감자칩","나쵸","팝콘","프레첼","크래커","초코칩쿠키","웨하스","쌀과자","누룽지","강정","땅콩과자","오징어땅콩","콘스낵","비스킷","곡물바"],"verb":"먹어보는"},"boardgame":{"keys":["보드게임","보드게임종류"],"words":["체스","바둑","오목","장기","할리갈리","루미큐브","젠가","부루마블","모노폴리","스플렌더","카탄","도블","우노","딕싯","클루","코드네임","아발론","블로커스"],"verb":"해보는"},"exercise":{"keys":["스트레칭","운동종류","운동추천"],"words":["걷기","달리기","산책","요가","필라테스","줄넘기","스쿼트","플랭크","팔굽혀펴기","윗몸일으키기","자전거타기","수영","줄타기","등산","배드민턴","탁구","농구","축구","배구"],"verb":"해보는"},"moviegenre":{"keys":["영화장르","장르추천"],"words":["코미디","액션","모험","판타지","애니메이션","추리","미스터리","스릴러","공포","드라마","가족영화","다큐멘터리","역사영화","뮤지컬","SF","스포츠영화","로맨스"],"verb":"골라보는"},"bookgenre":{"keys":["책장르","독서장르","책종류"],"words":["추리소설","판타지소설","과학책","역사책","만화책","동화","시집","수필집","그림책","전기","여행에세이","모험소설","고전문학","청소년소설","백과사전"],"verb":"읽어보는"},"musicgenre":{"keys":["음악장르","노래장르"],"words":["발라드","힙합","재즈","록","클래식","팝","댄스음악","인디음악","포크음악","알앤비","펑크","소울","디스코","EDM","시티팝","OST"],"verb":"들어보는"},"schoolitem":{"keys":["준비물","학교준비물"],"words":["교과서","공책","필통","연필","지우개","자","색연필","사인펜","풀","가위","스케치북","물통","실내화","체육복","준비물가방","알림장","독서록"],"verb":"챙겨보는"},"housework":{"keys":["집안일","청소종류"],"words":["설거지","빨래","개기","방청소","책상정리","분리수거","쓰레기버리기","물걸레질","먼지털기","침구정리","창문닦기","화분물주기","옷장정리","장보기"],"verb":"해보는"},"landmark":{"keys":["자연지형","지형종류"],"words":["산","계곡","강","호수","바다","섬","폭포","숲","들판","초원","사막","동굴","절벽","언덕","해안","습지","협곡","화산","빙하"],"verb":"알아보는"},"planet":{"keys":["행성","천체","우주대상"],"words":["수성","금성","지구","화성","목성","토성","천왕성","해왕성","달","태양","혜성","소행성","은하","성운","별자리","유성","블랙홀"],"verb":"알아보는"},"craft":{"keys":["만들기종류","공예종류"],"words":["종이접기","뜨개질","비즈공예","목공","도자기만들기","미니어처만들기","종이모형","클레이공예","자수","스티커꾸미기","콜라주","그림그리기","모형조립"],"verb":"해보는"},"pet":{"keys":["반려동물","애완동물"],"words":["강아지","고양이","햄스터","토끼","기니피그","앵무새","금붕어","거북이","도마뱀","페럿","고슴도치","열대어","달팽이"],"verb":"알아보는"},"clothing":{"keys":["옷종류","의류"],"words":["티셔츠","셔츠","후드티","맨투맨","니트","가디건","재킷","코트","패딩","청바지","면바지","반바지","치마","원피스","운동화","구두","모자","목도리","장갑"],"verb":"골라보는"},"vehicle":{"keys":["탈것","교통수단","차량종류"],"words":["자전거","킥보드","버스","택시","지하철","기차","고속철도","비행기","헬리콥터","배","요트","자동차","오토바이","전동차","트램","케이블카"],"verb":"알아보는"},"occupation":{"keys":["일","직업종류","미래직업"],"words":["교사","소방관","경찰관","의사","간호사","수의사","건축가","프로그래머","연구원","과학자","요리사","제빵사","작가","번역가","기자","디자이너","화가","음악가","운동선수","조종사"],"verb":"알아보는"},"activity":{"keys":["주말활동","쉬는날할일","활동추천"],"words":["산책","독서","영화보기","그림그리기","음악듣기","자전거타기","퍼즐맞추기","요리하기","보드게임","사진찍기","운동하기","박물관방문","일기쓰기","방정리","친구만나기"],"verb":"해보는"},"gamegenre":{"keys":["게임장르","게임종류"],"words":["퍼즐게임","리듬게임","모험게임","역할수행게임","전략게임","시뮬레이션게임","생존게임","레이싱게임","건설게임","슈팅게임","플랫폼게임","카드게임","추리게임"],"verb":"해보는"},"feeling":{"keys":["감정표현","기분표현"],"words":["신남","설렘","뿌듯함","행복함","즐거움","편안함","차분함","궁금함","걱정","긴장","답답함","속상함","서운함","외로움","지루함","놀라움"],"verb":"떠올려보는"}});
+  function composeParticle(word,consonant,vowel){
+    const last=String(word).trim().slice(-1);const code=last.charCodeAt(0);
+    return word+(code>=0xAC00&&code<=0xD7A3?(code-0xAC00)%28?consonant:vowel:vowel);
+  }
+  function lexicalComposeReply(frame){
+    const input=String(frame?.text||"").replace(/\s+/g,"").toLowerCase();
+    if(!input||input.length>100||/(?:뜻|의미|정의|왜|어떻게|원리|검색|찾아|알려줘.*정보|몇개|종류.*전부|목록|계산|더하기|빼기)/.test(input))return "";
+    // Explicit category selection only. Never infer that a casual mention requests a random word.
+    const ask=/(?:아무거나|아무거나하나|랜덤|무작위|하나만|하나골라|하나뽑|추천|말해봐|말해줘|골라줘|뽑아줘|정해줘|추천해줘)/.test(input);
+    if(!ask)return "";
+    const entries=[...Object.entries(COMPOSE_LEXICON),...Object.entries(COMPOSE_EXTRA_LEXICON)];
+    const match=entries.find(([,data])=>data.keys.some(k=>input.includes(k)));
+    if(!match)return "";
+    const [category,data]=match;
+    const word=chooseFreshReply(`compose.word.${category}`,data.words,Math.min(data.words.length,14));
+    if(!word)return "";
+    // Inflected words are not shuffled across grammatical positions.
+    const templates=[
+      `${composeParticle(word,"은","는")} 어때?`,
+      `${word}! 이건 어때?`,
+      `음, ${word}!`,
+      `${word} 어떨까?`,
+      `${composeParticle(word,"을","를")} 골라볼게.`,
+      `${word}! 한번 ${data.verb} 건 어때?`,
+      `내 선택은 ${word}!`,
+      `그럼 ${word} 어때?`,
+      `${word}. 이걸로 가볼까?`,
+      `떠오르는 건 ${word}!`,
+      `음... ${word}!` 
+    ];
+    return chooseFreshReply(`compose.style.${category}`,templates,6);
+  }
+
+  // Typed, grounded Korean micro-composer. A captured noun is used only as the
+  // object of the user's actual statement; it is never interpreted as a fact
+  // about the assistant. The fixed predicate templates avoid nonsensical
+  // subject/verb permutations and fabricated personal experiences.
+  const COMPOSE_ACTIONS=Object.freeze([
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(먹었어|먹었다|먹음|먹었지|먹는중|먹고있어)[.!~\s]*$/,kind:"eat"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(샀어|샀다|구매했어|샀지)[.!~\s]*$/,kind:"buy"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(봤어|봤다|보는중|보고있어)[.!~\s]*$/,kind:"watch"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(만들었어|만들었다|만드는중|만들고있어)[.!~\s]*$/,kind:"make"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(잃어버렸어|잃어버림|잃어버렸다)[.!~\s]*$/,kind:"lose"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(좋아해|좋아함|좋아한다)[.!~\s]*$/,kind:"like"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(싫어해|싫어함|싫어한다)[.!~\s]*$/,kind:"dislike"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(읽었어|읽었다|읽는중|읽고있어)[.!~\s]*$/,kind:"read"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(그렸어|그렸다|그리는중|그리고있어)[.!~\s]*$/,kind:"draw"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(찾았어|찾았다|찾았지)[.!~\s]*$/,kind:"find"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(배웠어|배웠다|배우는중|배우고있어)[.!~\s]*$/,kind:"learn"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(끝냈어|끝냈다|마쳤어|마쳤다)[.!~\s]*$/,kind:"finish"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(기다렸어|기다렸다|기다리는중|기다리고있어)[.!~\s]*$/,kind:"wait"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(고쳤어|고쳤다|수리했어)[.!~\s]*$/,kind:"fix"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(연습했어|연습했다|연습중이야|연습하고있어)[.!~\s]*$/,kind:"practice"},
+    {pattern:/^(.{1,18}?)(?:을|를)\s*(잊었어|잊어버렸어|깜빡했어)[.!~\s]*$/,kind:"forget"}
+  ]);
+  function semanticSentenceCompose(frame,searchMode){
+    const raw=String(frame?.text||"").trim();
+    if(!raw||raw.length>65||frame.question||searchMode!=="forbidden")return "";
+    if(/[?？]|https?:|\d\s*[-+*/=]\s*\d/.test(raw))return "";
+    const normalized=raw.replace(/\s+/g," ").trim();
+    // Never treat a request, quotation or negated verb as an assertion.
+    if(/(?:말해|알려|설명|검색|찾아|계산|해줘|해봐|추천|하지\s*마|안\s|못\s|않았|아니|없어|없다)/.test(normalized))return "";
+    const category=(v)=>/^(?:나|너|모아|이거|저거|그거|누구|무엇|뭐|왜|어떻게)$/.test(v);
+    for(const action of COMPOSE_ACTIONS){
+      const m=normalized.match(action.pattern);if(!m)continue;
+      const obj=m[1].trim();if(obj.length<1||obj.length>18||category(obj)||/[!?.,"'“”]/.test(obj))return "";
+      const options={
+        eat:[`${composeParticle(obj,"을","를")} 먹었구나! 맛은 어땠어?`,`${obj} 먹었어? 맛있었어?`],
+        buy:[`${obj} 샀구나! 마음에 들어?`,`${obj} 새로 샀네. 어때?`],
+        watch:[`${obj} 봤구나. 재밌었어?`,`${obj} 보고 있었구나! 어떤 점이 인상적이었어?`],
+        make:[`${obj} 만들었구나! 어떻게 만들었어?`,`${obj} 직접 만들었네. 잘 됐어?`],
+        lose:[`${obj} 잃어버렸구나. 마지막으로 본 곳 기억나?`,`${obj} 잃어버렸어? 어디서 마지막으로 썼는지 떠올려봐.`],
+        like:[`${obj} 좋아하는구나! 어떤 점이 좋아?`,`${obj} 좋아해? 나한테도 매력을 알려줘.`],
+        dislike:[`${obj} 싫어하는구나. 무슨 이유가 있어?`,`${obj} 별로구나. 어떤 점이 싫어?`],
+        read:[`${obj} 읽었구나! 어떤 내용이 기억에 남아?`,`${obj} 읽었어? 재밌었어?`],
+        draw:[`${obj} 그렸구나! 어떤 느낌으로 그렸어?`,`${obj} 직접 그린 거야? 마음에 들어?`],
+        find:[`${obj} 찾았구나! 다행이다.`,`${obj} 찾았네! 어디에 있었어?`],
+        learn:[`${obj} 배웠구나. 어렵진 않았어?`,`${obj} 배우는 중이야? 어떤 부분이 재밌어?`],
+        finish:[`${obj} 끝냈구나! 수고했어.`,`${obj} 다 마쳤네. 후련하겠다 ㅋㅋ`],
+        wait:[`${obj} 기다렸구나. 오래 기다렸어?`,`${obj} 기다리는 중이야? 금방 오면 좋겠다.`],
+        fix:[`${obj} 고쳤구나! 이제 잘 돼?`,`${obj} 직접 고쳤어? 어떻게 해결했어?`],
+        practice:[`${obj} 연습했구나. 좀 익숙해졌어?`,`${obj} 연습 중이야? 어려운 부분은 없어?`],
+        forget:[`${obj} 깜빡했구나. 다시 찾을 방법이 있을까?`,`${obj} 잊어버렸어? 같이 떠올려볼까?`]
+      }[action.kind];
+      return chooseFreshReply(`semantic.compose.${action.kind}.${obj}`,options,2);
+    }
+    return "";
+  }
+
+  // Very short interjections are valid dialogue only when the input is genuinely
+  // underspecified. Never substitute them for an answer to a real question.
+  function contextualMicroReply(frame,searchMode){
+    const t=String(frame?.text||"").trim();
+    if(searchMode!=="forbidden"||frame?.question||frame?.searchCue||frame?.knowledgeCue)return "";
+    if(/^(?:뭔소리|뭔말|뭔뜻|무슨말|말이돼|그게뭐야)[?？!~.\s]*$/.test(t))return chooseFreshReply("micro.confusion",["?","무슨 말인지 다시 알려줄래?","응? 어떤 부분 말하는 거야?"],3);
+    if(/^(?:헐|에엥|엥|잉|뭐지|읭|엥??)[!?？~.\s]*$/.test(t))return chooseFreshReply("micro.surprise",["?","엥 ㅋㅋ","왜, 무슨 일인데?","무슨 일이야?"],4);
+    return "";
+  }
+
+
+  // Situation-first expression bank: combinations are deliberately constrained
+  // by an anchored user utterance, rather than random cross-topic word mixing.
+  const EXPRESSION_CONTEXTS=Object.freeze([
+    {id:"tired",re:/^(?:너무\s*)?(?:피곤해|지쳤어|졸려|힘들어|기운없어)[.!~\s]*$/,kind:"care",open:["많이 피곤했구나.","오늘 힘 좀 썼나 봐.","으아, 지치는 날이네.","그럴 땐 잠깐 쉬는 게 낫지.","힘 빠지는 날도 있지."],follow:["무슨 일 있었어?","오늘 바빴어?","잠깐 쉴 수는 있어?","좀 쉬었어?","괜찮아?"]},
+    {id:"happy",re:/^(?:나\s*)?(?:기분좋아|신나|행복해|너무좋아|기분최고야|완전좋아)[.!~\s]*$/,kind:"cheer",open:["오, 좋은 일 있나 본데?","좋네 ㅋㅋ","와 분위기 좋은데!","오호, 신났구나.","그 기분 오래 갔으면 좋겠다."],follow:["무슨 일 있었어?","왜 이렇게 기분 좋아?","재밌는 일 생겼어?","좋은 소식 있어?","뭐가 제일 좋았어?"]},
+    {id:"sad",re:/^(?:나\s*)?(?:속상해|우울해|슬퍼|기분안좋아|서운해|마음이안좋아)[.!~\s]*$/,kind:"care",open:["에고, 무슨 일인데.","많이 속상했나 보다.","그건 마음 쓰이겠다.","기분이 별로구나.","오늘 좀 힘든가 봐."],follow:["말해줄래?","무슨 일 있었어?","뭐 때문에 그래?","내가 들어줄까?","지금은 좀 나아졌어?"]},
+    {id:"boring",re:/^(?:아\s*)?(?:심심해|지루해|할거없어|재미없어)[.!~\s]*$/,kind:"play",open:["심심한 시간이구나 ㅋㅋ","뭐라도 해볼까?","아, 시간 안 가는 날이지.","그럴 때 진짜 길게 느껴지지.","음, 심심할 땐"],follow:["퀴즈 하나 낼까?","수다 떨까?","가벼운 게임할래?","뭐 하고 싶어?","재밌는 주제 하나 던져볼까?"]},
+    {id:"hungry",re:/^(?:나\s*)?(?:배고파|배고프다|배고픔|뭐먹지)[.!~\s]*$/,kind:"food",open:["배고플 시간이네.","아, 배고프면 집중 안 되지.","맛있는 거 생각나겠다.","먹을 거 고민 중이야?","음식 얘기 나오니까 배고파진다 ㅋㅋ"],follow:["뭐 먹고 싶어?","간단한 거 추천해 줄까?","밥은 먹었어?","달달한 거? 든든한 거?","지금 먹을 수 있는 건 있어?"]},
+    {id:"finished",re:/^(?:드디어\s*)?(?:다했어|끝났어|완료했어|숙제끝|끝냈어)[.!~\s]*$/,kind:"praise",open:["오, 끝냈구나!","수고했어.","드디어 끝났네 ㅋㅋ","해냈네!","후련하겠다."],follow:["이제 쉴 거야?","어땠어?","힘들진 않았어?","다음엔 뭐 할 거야?","기분 좋지?"]},
+    {id:"surprise",re:/^(?:헐|대박|와우|뭐야이거|미쳤다)[!?~.\s]*$/,kind:"react",open:["헐 ㅋㅋ","뭐야, 무슨 일인데?","오, 꽤 놀랐나 봐.","진짜?","이건 좀 궁금한데."],follow:["무슨 일 있었어?","뭐 봤어?","좋은 의미야?","어떤 상황인데?","왜 그렇게 놀랐어?"]},
+    {id:"apology",re:/^(?:미안|미안해|쏘리|내가잘못했어)[.!~\s]*$/,kind:"repair",open:["괜찮아.","알겠어.","응, 넘어가자.","뭐 그럴 수도 있지.","신경 쓰지 마."],follow:["이어서 얘기할래?","무슨 일인지 말해볼래?","다른 얘기 해도 돼.","괜찮아?","다시 시작할까?"]},
+    {id:"thanks",re:/^(?:고마워|감사|고맙다|땡큐|고맙)[.!~\s]*$/,kind:"thanks",open:["별말을 ㅋㅋ","천만에!","도움 됐다니 좋네.","언제든 물어봐.","ㅇㅇ 괜찮아."],follow:["다른 것도 궁금해?","또 필요한 거 있어?","이제 해결됐어?","도움 더 필요해?","다음엔 뭘 해볼까?"]}
+  ]);
+  function expressionBankReply(frame,searchMode){
+    const t=String(frame?.text||"").trim().replace(/\s+/g," ");
+    if(searchMode!=="forbidden"||frame?.searchCue||frame?.knowledgeCue||frame?.question||t.length>40)return "";
+    const entry=EXPRESSION_CONTEXTS.find(x=>x.re.test(t));if(!entry)return "";
+    const intros=entry.open, followups=entry.follow;
+    // Mix only phrases defined for the same situation, avoiding out-of-topic swaps.
+    const first=chooseFreshReply(`expr.${entry.id}.intro`,intros,intros.length);
+    const second=chooseFreshReply(`expr.${entry.id}.follow`,followups,followups.length);
+    return first+(first.endsWith("?")?"":" ")+second;
+  }
+
   async function reply(raw){
     const text=clean(raw);if(!text)return {reply:"응?",source:"local"};
     await ensureCachedLearningReady();
@@ -3171,7 +3459,11 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
 
     // 정보/정의/원리 질문은 로컬 사전보다 실제 검색을 먼저 사용한다.
     // 검색이 실패했을 때만 아래의 로컬 지식이 안전망으로 동작한다.
-    if(searchMode==="required"&&!ref.ambiguous&&!math(text)&&!dateTime(text)){
+    const lexicalAnswer=lexicalComposeReply(frame);
+    const semanticAnswer=semanticSentenceCompose(frame,searchMode);
+    const microAnswer=contextualMicroReply(frame,searchMode);
+    const expressionAnswer=expressionBankReply(frame,searchMode);
+    if(searchMode==="required"&&!lexicalAnswer&&!ref.ambiguous&&!math(text)&&!dateTime(text)){
       const q=searchQuery(frame,ref);
       if(q){
         searchAttempted=true;
@@ -3185,11 +3477,13 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       }
     }
 
+    const repairGround=searchMode==="required"?"":explicitTurnRepair(frame);
+    const grounded=searchMode==="required"?"":groundedMicroTurn(frame);
     const manner=mannerQuestion(text)?mannerAdviceText():null;
-    const roughReason=roughStyleReasonReply(frame),hanging=hangingConnectiveReply(frame);
+    const roughReason=localMannerStyleExplanation(frame)||roughStyleReasonReply(frame),hanging=hangingConnectiveReply(frame);
     const memQEarly=memoryQuestion(text),memAnswerEarly=memQEarly?memoryAnswer(memQEarly):"";
     const dt=dateTime(text),calc=math(text),mealInfo=schoolMealInfoReply(frame),repairLoop=conversationalRepairReply(frame),threadCoherence=dailyThreadCoherenceReply(frame),featureHelp=moaruFeatureHelpReply(frame),friendCompanion=friendCompanionReply(frame),game=rps(text),play=casualPlayReply(frame),idiom=idiomReply(frame),vagueReason=vagueReasonClarifyReply(frame),punctRecovery=punctuationQuestionRecoveryReply(frame),punct=frame.punctuation?styleShortReply(frame.punctuation):"",profaneContext=contextualProfanityReply(frame),profane=profanityOnlyReply(frame),proactiveFollowup=proactiveFollowupReply(frame),openAnswer=openQuestionAnswerReply(frame),followThrough=conversationFollowThroughReply(frame),social=frame.decisionCue?"":socialReactionReply(frame),continuation=multiTurnContinuationReply(frame),contextual=contextualShortFollowupReply(frame),commonNoun=commonNounConversationReply(frame),dailyObject=dailyObjectSituationReply(frame),shortRecovery=shortWhatRecoveryReply(text),short=shortUtteranceReply(text),self=selfReply(text),repair=frame.reaction==="insult"?"":repairConversation(text),decision=practicalDecisionReply(text),expandedDaily=expandedDailyLifeReply(frame),stateEveryday=(frame.desire||frame.unfulfilled)?compositionalEverydayReply(frame):"",everyday=everydayContextReply(text),everydayQuestion=casualEverydayQuestionReply(frame),everydayDialogue=everydayDialogueReply(frame),composedEveryday=stateEveryday?"":compositionalEverydayReply(frame),broadEveryday=stateEveryday?"":broadEverydayReply(frame),knowledge=localKnowledgeReply(text);
-    if(answer){/* 검색 선응답 유지 */}else if(manner){answer=manner;source="local-manner";strategy="direct";}else if(roughReason){answer=roughReason;source="local-manner";strategy="direct";}else if(hanging){answer=hanging;source="local-hanging";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(repairLoop){answer=repairLoop;source="local-repair";strategy="direct";}else if(threadCoherence){answer=threadCoherence;source="local-thread";strategy="direct";}else if(featureHelp){answer=featureHelp;source="local-feature-help";strategy="direct";}else if(friendCompanion){answer=friendCompanion;source="local-companion";strategy="social";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(vagueReason){answer=vagueReason;source="local-clarify";strategy="clarify";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social&&(frame.reaction==="insult"||(frame.reaction==="correction"&&!/^(?:아니|ㄴㄴ|아님|아니야|아닌데|그건아니야)$/.test(frame.c)))){answer=social;source="local";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(dailyObject){answer=dailyObject;source="local-everyday-specific";strategy="direct";}else if(expandedDaily){answer=expandedDaily;source="local-everyday-specific";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday-specific";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday-specific";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday-specific";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(commonNoun){answer=commonNoun;source="local-common-noun";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
+    if(answer){/* 검색 선응답 유지 */}else if(roughReason){answer=roughReason;source="local-grounded";strategy="direct";}else if(repairGround){answer=repairGround;source="local-grounded";strategy="direct";}else if(grounded){answer=grounded;source="local-grounded";strategy="direct";}else if(manner){answer=manner;source="local-manner";strategy="direct";}else if(roughReason){answer=roughReason;source="local-manner";strategy="direct";}else if(hanging){answer=hanging;source="local-hanging";strategy="direct";}else if(dt){answer=dt;source="local-utility";strategy="direct";}else if(lexicalAnswer){answer=lexicalAnswer;source="local-lexical";strategy="direct";}else if(calc){answer=calc;source="local-utility";strategy="direct";}else if(mealInfo){answer=mealInfo;source="local-utility";strategy="direct";}else if(repairLoop){answer=repairLoop;source="local-repair";strategy="direct";}else if(threadCoherence){answer=threadCoherence;source="local-thread";strategy="direct";}else if(featureHelp){answer=featureHelp;source="local-feature-help";strategy="direct";}else if(friendCompanion){answer=friendCompanion;source="local-companion";strategy="social";}else if(semanticAnswer){answer=semanticAnswer;source="local-semantic-compose";strategy="direct";}else if(microAnswer){answer=microAnswer;source="local-micro";strategy="social";}else if(expressionAnswer){answer=expressionAnswer;source="local-expression";strategy="social";}else if(game)answer=game;else if(play){answer=play;source="local-play";strategy="direct";}else if(idiom){answer=idiom;source="local-knowledge";strategy="direct";}else if(vagueReason){answer=vagueReason;source="local-clarify";strategy="clarify";}else if(memAnswerEarly){answer=memAnswerEarly;source="memory";strategy="direct";}else if(punctRecovery){answer=punctRecovery;source="local-repair";strategy="direct";}else if(punct){answer=punct;source="local-style";strategy="social";}else if(profaneContext){answer=profaneContext;source="local-style";strategy="social";}else if(profane){answer=profane;source="local-style";strategy="social";}else if(proactiveFollowup){answer=proactiveFollowup;source="local-proactive-followup";strategy="social";}else if(social&&(frame.reaction==="insult"||(frame.reaction==="correction"&&!/^(?:아니|ㄴㄴ|아님|아니야|아닌데|그건아니야)$/.test(frame.c)))){answer=social;source="local";strategy="social";}else if(decision){answer=decision;source="local-decision";strategy="direct";}else if(dailyObject){answer=dailyObject;source="local-everyday-specific";strategy="direct";}else if(expandedDaily){answer=expandedDaily;source="local-everyday-specific";strategy="direct";}else if(openAnswer){answer=openAnswer;source="local-followthrough";strategy="direct";}else if(followThrough){answer=followThrough;source="local-followthrough";strategy="direct";}else if(searchMode==="forbidden"&&continuation){answer=continuation;source="local-continuation";strategy="direct";}else if(stateEveryday){answer=stateEveryday;source="local-everyday";strategy="direct";}else if(everyday){answer=everyday;source="local-everyday-specific";strategy="direct";}else if(everydayQuestion){answer=everydayQuestion;source="local-everyday-specific";strategy="direct";}else if(everydayDialogue){answer=everydayDialogue;source="local-everyday-specific";strategy="direct";}else if(contextual){answer=contextual;source="local-contextual";strategy="direct";}else if(commonNoun){answer=commonNoun;source="local-common-noun";strategy="direct";}else if(shortRecovery){answer=shortRecovery;source="local-repair";strategy="direct";}else if(short){answer=short;source="local-short";strategy="clarify";}else if(self)answer=self;else if(repair){answer=repair;source="local-repair";strategy="direct";}else if(broadEveryday){answer=broadEveryday;source="local-everyday";strategy="direct";}else if(composedEveryday){answer=composedEveryday;source="local-everyday";strategy="direct";}else if(social){answer=social;source="local";strategy="social";}else if(knowledge){answer=knowledge;source="local-knowledge";strategy="direct";}
 
     const recall=episodeRecall(text);if(!answer&&recall){answer=recall;source="episode";strategy="direct";}
 
@@ -3213,7 +3507,7 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
     if(answer){
       // 기능 안내/유틸리티처럼 사실 정확성이 중요한 응답은 일상 대화 다양화나
       // 학습 예문이 덮어쓰지 못하게 고정한다. 같은 질문을 연속으로 해도 안내 내용이 유지되어야 한다.
-      const factualLocal=/^local-(?:feature-help|utility|knowledge)$/.test(source);
+      const factualLocal=/^local-(?:feature-help|utility|knowledge|grounded|lexical|semantic-compose|micro|expression)$/.test(source);
       if(!factualLocal){
         answer=diversifyEverydayAnswer(answer,frame,source);
         const learnedChoice=learnedConversationChoice(frame,ref,answer,source,strategy,social);
@@ -3227,9 +3521,30 @@ MiniTalk.AI.MoaCommunicationEngine = (() => {
       answer=chosen?.text||"한마디만 더 붙여줘. 짧은 말만 보고 뜻을 지어내진 않을게.";source=chosen?.source||"local";candidateId=chosen?.id||"fallback";strategy=chosen?.strategy||strategy;
     }
 
-    answer=qualityGate(answer,frame,source,strategy);
-    answer=roughFriendlyRewrite(answer,frame,source);
-    answer=spontaneousAside(answer,frame,source);
+    if(source!=="local-grounded"&&source!=="local-lexical"&&source!=="local-semantic-compose"&&source!=="local-micro"&&source!=="local-expression"){
+      answer=qualityGate(answer,frame,source,strategy);
+      answer=roughFriendlyRewrite(answer,frame,source);
+      answer=localReactionTone(frame,answer,source);
+      answer=spontaneousAside(answer,frame,source);
+      answer=lowMannerChatReply(frame,answer,source,searchMode);
+    }
+    // Respect an established polite speaking style even when very short punctuation
+    // or later diversification would otherwise surface a casual interjection.
+    if(frame.punctuation&&Number(profile().formality||0)>.58&&Number(profile().roughness||0)<.35&&
+       !/(?:요|네요|괜찮아요|있어요|볼게요|주세요)[.!?？]?$/.test(answer)){
+      const politeShort={
+        question:["무슨 뜻인지 조금 더 알려주시겠어요?","제가 이상하게 답했나요?","뭔가 의아하신가 봐요."],
+        ellipsis:["천천히 말씀하셔도 괜찮아요.","잠깐 생각 중이신가 봐요.","편하게 이어서 말씀해 주세요."],
+        bang:["오, 갑자기 강조하셨네요.","뭔가 놀라셨나 봐요.","오, 반응이 확 커졌네요."],
+        semicolon:["말이 잠깐 끊긴 것 같네요.","뭔가 애매한 느낌인가 봐요.","조금 더 말씀해 주셔도 괜찮아요."]
+      };
+      answer=chooseFreshReply(`polite.punct.${frame.punctuation}`,politeShort[frame.punctuation]||politeShort.question,4);
+      source="local-style";
+    }
+    // A short acknowledgement never implies the assistant is physically watching something.
+    if(/^(?:ㅇㅇ+|응+|웅+|그래+|ㅇㅋ|오케이)$/.test(frame.c)&&/(?:보고 있어|보고 있네|듣고 있어|그쪽으로 생각)/.test(answer)){
+      answer="응응 ㅋㅋ";source="local-grounded";strategy="direct";
+    }
     const m=inferMemory(text);if(m){if(m.multi)rememberPreference(m.key,m.value,m.label);else{memories()[m.key]={value:m.value,label:m.label,updatedAt:Date.now()};saveMemories();}}
     const s=state();s.strategyHistory.push(strategy);while(s.strategyHistory.length>12)s.strategyHistory.shift();
     if(frame.question)s.initiative.userQuestions=Number(s.initiative.userQuestions||0)+1;

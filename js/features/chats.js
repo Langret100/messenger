@@ -241,11 +241,14 @@ MiniTalk.Features.Chats=(()=>{
     const part=name=>parts.find(item=>item.type===name)?.value||"";
     return `${part("year")}.${part("month")}.${part("day")}`;
   }
-  function ensureChatDateStyles(){
-    if(document.getElementById("moa-chat-date-styles"))return;
-    const style=document.createElement("style");style.id="moa-chat-date-styles";
-    style.textContent=`.message-date-divider{display:flex;align-items:center;gap:11px;justify-content:center;margin:15px 0 11px;flex:none;color:var(--muted);font-size:11px;font-weight:650;line-height:1.4;user-select:none}.message-date-divider::before,.message-date-divider::after{content:"";height:1px;background:var(--line);flex:1;min-width:0;opacity:.75}.message-date-divider span{white-space:nowrap;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none}`;
-    document.head.append(style);
+  // PiP moves the chat DOM into another Document. Install the style in the
+  // list's actual ownerDocument, rather than the original tab's document.
+  function ensureChatDateStyles(targetDoc){
+    const doc=targetDoc||document;
+    if(doc.getElementById("moa-chat-date-styles"))return;
+    const style=doc.createElement("style");style.id="moa-chat-date-styles";
+    style.textContent=`.message-date-divider{display:flex!important;flex-direction:row!important;width:100%;box-sizing:border-box;align-items:center!important;gap:11px;justify-content:center!important;margin:15px 0 11px;flex:none;color:var(--muted,#888);font-size:11px;font-weight:500;line-height:1.4;text-align:center;user-select:none;background:none!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important}.message-date-divider::before,.message-date-divider::after{content:"";display:block;height:1px;background:var(--line,#ddd);flex:1;min-width:0;opacity:.75}.message-date-divider span{display:inline!important;white-space:nowrap;padding:0!important;margin:0!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}`;
+    doc.head.append(style);
   }
   function fillMessageList(roomId,list,initial){
     const sorted=[...(messagesByRoom[roomId]||[])].sort((a,b)=>(Number(a.ts)||Number(a.clientTs)||0)-(Number(b.ts)||Number(b.clientTs)||0)||String(a.id||"").localeCompare(String(b.id||""))),seen=renderedMessageIds[roomId]||(renderedMessageIds[roomId]=new Set());
@@ -253,7 +256,7 @@ MiniTalk.Features.Chats=(()=>{
     // Without this first pass, a fresh chat render can briefly show invite/start/terminal cards together
     // because earlier rows do not yet know that a later message already ended the same game.
     sorted.forEach(message=>{if(message?.type==="game")MiniTalk.Chat.RoomGames?.ingest?.(message)});
-    ensureChatDateStyles();
+    ensureChatDateStyles(list.ownerDocument);
     const nodes=[],D=MiniTalk.UI.Dom;let previousDay="";
     sorted.forEach((message,i)=>{
       const n=messageNode(message),key=String(message.id||`${message.user_id||""}:${message.ts||0}:${i}`),fresh=!seen.has(key);

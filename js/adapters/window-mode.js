@@ -199,6 +199,10 @@ MiniTalk.WindowMode=(()=>{
     boot.dataset.pipBoot="1";boot.textContent="html,body{margin:0;background:#fff}body{visibility:hidden!important}";
     doc.head.append(meta,base,boot);doc.title=MiniTalkConfig.appName;
     await copyStyles(doc);
+    // Chat separators use runtime styles, which may be created after this snapshot.
+    // Install the same style into the PiP document before moving chat nodes.
+    const dateStyle=document.getElementById("moa-chat-date-styles");
+    if(dateStyle&&!doc.getElementById("moa-chat-date-styles"))doc.head.append(dateStyle.cloneNode(true));
     movedNodes=["appShell","toastHost","notificationHost","overlayHost","modalHost"].map(id=>document.getElementById(id)).filter(Boolean);
     document.getElementById("hardLock")?.remove();
     for(const node of movedNodes)doc.body.append(node);

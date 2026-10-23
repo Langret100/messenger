@@ -244,7 +244,7 @@ MiniTalk.Features.Chats=(()=>{
   function ensureChatDateStyles(){
     if(document.getElementById("moa-chat-date-styles"))return;
     const style=document.createElement("style");style.id="moa-chat-date-styles";
-    style.textContent=`.message-date-divider{display:flex;align-items:center;gap:11px;justify-content:center;margin:15px 0 11px;flex:none;color:var(--muted);font-size:11px;font-weight:650;line-height:1.4;user-select:none}.message-date-divider::before,.message-date-divider::after{content:"";height:1px;background:var(--line);flex:1;min-width:0;opacity:.75}.message-date-divider span{white-space:nowrap;padding:3px 9px;border-radius:999px;background:var(--surface-3)}`;
+    style.textContent=`.message-date-divider{display:flex;align-items:center;gap:11px;justify-content:center;margin:15px 0 11px;flex:none;color:var(--muted);font-size:11px;font-weight:650;line-height:1.4;user-select:none}.message-date-divider::before,.message-date-divider::after{content:"";height:1px;background:var(--line);flex:1;min-width:0;opacity:.75}.message-date-divider span{white-space:nowrap;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none}`;
     document.head.append(style);
   }
   function fillMessageList(roomId,list,initial){

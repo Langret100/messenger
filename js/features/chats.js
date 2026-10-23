@@ -232,13 +232,38 @@ MiniTalk.Features.Chats=(()=>{
     fillMessageList(roomId,list,false);
     requestAnimationFrame(()=>{if(stickToBottom)scrollToLatest(list);else list.scrollTop=Math.min(previousTop,Math.max(0,list.scrollHeight-list.clientHeight))})
   }
+  // 날짜는 저장값을 변경하지 않고 한국 표준시(KST) 기준으로 화면에서만 구분합니다.
+  const chatDateFormatter=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"});
+  function chatDayLabel(message){
+    const stamp=Number(message?.ts)||Number(message?.clientTs)||0;
+    if(!Number.isFinite(stamp)||stamp<=0)return "";
+    const parts=chatDateFormatter.formatToParts(new Date(stamp));
+    const part=name=>parts.find(item=>item.type===name)?.value||"";
+    return `${part("year")}.${part("month")}.${part("day")}`;
+  }
+  function ensureChatDateStyles(){
+    if(document.getElementById("moa-chat-date-styles"))return;
+    const style=document.createElement("style");style.id="moa-chat-date-styles";
+    style.textContent=`.message-date-divider{display:flex;align-items:center;gap:11px;justify-content:center;margin:15px 0 11px;flex:none;color:var(--muted);font-size:11px;font-weight:650;line-height:1.4;user-select:none}.message-date-divider::before,.message-date-divider::after{content:"";height:1px;background:var(--line);flex:1;min-width:0;opacity:.75}.message-date-divider span{white-space:nowrap;padding:3px 9px;border-radius:999px;background:var(--surface-3)}`;
+    document.head.append(style);
+  }
   function fillMessageList(roomId,list,initial){
     const sorted=[...(messagesByRoom[roomId]||[])].sort((a,b)=>(Number(a.ts)||Number(a.clientTs)||0)-(Number(b.ts)||Number(b.clientTs)||0)||String(a.id||"").localeCompare(String(b.id||""))),seen=renderedMessageIds[roomId]||(renderedMessageIds[roomId]=new Set());
     // Prime the complete game timeline before deciding which historical game rows are visible.
     // Without this first pass, a fresh chat render can briefly show invite/start/terminal cards together
     // because earlier rows do not yet know that a later message already ended the same game.
     sorted.forEach(message=>{if(message?.type==="game")MiniTalk.Chat.RoomGames?.ingest?.(message)});
-    const nodes=sorted.map((message,i)=>{const n=messageNode(message),key=String(message.id||`${message.user_id||""}:${message.ts||0}:${i}`),fresh=!seen.has(key);if(fresh&&(initial?i>=Math.max(0,sorted.length-4):true))n.classList.add("message-enter");seen.add(key);return n});
+    ensureChatDateStyles();
+    const nodes=[],D=MiniTalk.UI.Dom;let previousDay="";
+    sorted.forEach((message,i)=>{
+      const n=messageNode(message),key=String(message.id||`${message.user_id||""}:${message.ts||0}:${i}`),fresh=!seen.has(key);
+      if(fresh&&(initial?i>=Math.max(0,sorted.length-4):true))n.classList.add("message-enter");seen.add(key);
+      // 내부 게임 상태 메시지는 보이지 않으므로 날짜 구분에도 포함하지 않습니다.
+      if(n.classList.contains("hidden"))return;
+      const day=chatDayLabel(message);
+      if(day&&day!==previousDay){nodes.push(D.el("div",{class:"message-date-divider",role:"separator","aria-label":day},[D.el("span",{text:day})]));previousDay=day}
+      nodes.push(n);
+    });
     list.replaceChildren(...nodes)
   }
   function fileUploadHandlers(roomId){return{

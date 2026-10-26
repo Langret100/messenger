@@ -347,7 +347,7 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
     const D = MiniTalk.UI.Dom;
     const body = D.el("div", { class: "quest-solver modal-stack" });
     const progress = loadProgress();
-    const dailySeen=loadDailySeen();
+    let dailySeen=loadDailySeen();
     const seenProblems = new Set();
     (dailySeen.recent||[]).forEach(key=>seenProblems.add(key));
     (dailySeen.missions?.[missionId]||[]).forEach(key=>seenProblems.add(key));
@@ -367,6 +367,16 @@ MiniTalk.Tasks.DailyMathQuest = (() => {
         return;
       }
 
+      // Another open quest/tab may have displayed a reserved question meanwhile.
+      // Refresh immediately before display, and retain the latest ledger on save.
+      dailySeen=loadDailySeen();
+      (dailySeen.recent||[]).forEach(key=>seenProblems.add(key));
+      (dailySeen.missions?.[missionId]||[]).forEach(key=>seenProblems.add(key));
+      if(seenProblems.has(visibleProblemKey(questions[index]))){
+        const fresh=firstFreshVariant(missionId,seenProblems,index,variant+1);
+        if(fresh<0){MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("오늘의 새 문제를 모두 사용했어요. 다음 초기화 후 다시 도전해 주세요.");return;}
+        variant=fresh;questions=generate(missionId,variant);
+      }
       const current = questions[index];
       seenProblems.add(visibleProblemKey(current));
       dailySeen.missions[missionId]=[...seenProblems];dailySeen.recent=[...(dailySeen.recent||[]),visibleProblemKey(current)].filter((value,index,array)=>array.lastIndexOf(value)===index);saveDailySeen(dailySeen);

@@ -86,7 +86,7 @@ MiniTalk.Features.MoaChat=(()=>{
   function unreadCount(messages){return messages.filter(v=>v.role==="assistant"&&v.source==="proactive"&&v.unread===true).length}
   function updateListNode(node,messages){
     if(!node?.isConnected){listNodes.delete(node);return;}const latest=messages[messages.length-1],count=unreadCount(messages),preview=node.querySelector?.(".conversation-preview"),meta=node.querySelector?.(".conversation-meta");
-    if(preview&&latest?.text)preview.textContent=String(latest.text).replace(/\s+/g," ").slice(0,58);node.dataset.unread=String(count);
+    if(preview&&latest?.text)preview.textContent=String(latest.text).replace(/:e13:/g,"(웃음)").replace(/:e17:/g,"(기쁨)").replace(/\s+/g," ").slice(0,58);node.dataset.unread=String(count);
     let badge=meta?.querySelector?.(".moa-proactive-unread");if(count&&!badge){badge=D().el("span",{class:"moa-proactive-unread",text:String(Math.min(count,9))});meta?.prepend(badge)}else if(badge&&count)badge.textContent=String(Math.min(count,9));else badge?.remove?.();
   }
   async function evaluateIgnored(messages){
@@ -102,7 +102,7 @@ MiniTalk.Features.MoaChat=(()=>{
   async function maybeCreateConnectionGreeting(messages){
     if(document.querySelector?.(".moa-chat-room")||unreadCount(messages)>0)return null;
     const planned=MiniTalk.AI.MoaCommunicationEngine.maybeConnectionGreeting?.({now:Date.now(),lastUserAt:lastUserAt(messages),hasUnreadProactive:false});if(!planned?.reply)return null;
-    const msg=appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:"greeting",initiativeTopic:planned.topic||"",unread:true});
+    const msg=appendMessage(messages,"assistant",planned.reply,{source:"proactive",candidateId:planned.candidateId||"",strategy:"initiative",initiativeType:planned.type||"greeting",initiativeTopic:planned.topic||"",unread:true});
     for(const n of [...listNodes])updateListNode(n,messages);return msg;
   }
   async function refreshProactive(node=null,options={}){
@@ -121,7 +121,7 @@ MiniTalk.Features.MoaChat=(()=>{
   function appendRichText(node,text){
     const doc=D().doc(),parts=String(text||"").split(/(https?:\/\/[^\s]+)/g);
     const linkLabel=url=>{try{const host=new URL(url).hostname.replace(/^www\./,'');if(/wikipedia\.org$/.test(host))return "Wikipedia에서 보기 ↗";if(/youtube\.com$|youtu\.be$/.test(host))return "YouTube에서 보기 ↗";if(/google\.com$/.test(host)&&/maps/.test(url))return "Google 지도에서 보기 ↗";if(/map\.naver\.com$/.test(host))return "네이버 지도에서 보기 ↗";if(/google\.com$/.test(host))return "Google에서 더 보기 ↗";if(/naver\.com$/.test(host))return "네이버에서 보기 ↗";return host+"에서 보기 ↗"}catch{return "결과 열기 ↗"}};
-    parts.forEach(part=>{if(/^https?:\/\//i.test(part)){const a=doc.createElement("a");a.href=part;a.target="_blank";a.rel="noopener noreferrer";a.className="moa-answer-link";a.textContent=linkLabel(part);node.append(a)}else node.append(doc.createTextNode(part))});
+    parts.forEach(part=>{if(/^https?:\/\//i.test(part)){const a=doc.createElement("a");a.href=part;a.target="_blank";a.rel="noopener noreferrer";a.className="moa-answer-link";a.textContent=linkLabel(part);node.append(a)}else if(MiniTalk.Chat?.Emoji?.appendText)MiniTalk.Chat.Emoji.appendText(part,node);else node.append(doc.createTextNode(part.replace(/:e13:/g,"(웃음)").replace(/:e17:/g,"(기쁨)")))});
   }
   function moaAvatar(className){return D().el("img",{class:`${className} profile-image`,src:"assets/mascot-avatar.png",alt:"모아",onerror:event=>{event.currentTarget.onerror=null;event.currentTarget.src="assets/mascot-avatar.png"}})}
   function messageNode(message){

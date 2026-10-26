@@ -567,12 +567,22 @@ MiniTalk.Tasks.DailyKoreanQuest = (() => {
   function openMission(missionId, onProgress) {
     if (MiniTalk.Store.get("user")?.isGuest) { MiniTalk.UI.Shell.toast("게스트는 과제를 볼 수만 있어요.");return; }
     const mission = MISSIONS.find(item => item.id === missionId); if (!mission) return;
-    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), progress = loadProgress(),dailySeen=loadDailySeen();
+    const D = MiniTalk.UI.Dom, body = D.el("div", { class: "quest-solver modal-stack" }), progress = loadProgress();let dailySeen=loadDailySeen();
     const seenProblems=new Set();(dailySeen.recent||[]).forEach(key=>seenProblems.add(key));(dailySeen.missions?.[missionId]||[]).forEach(key=>seenProblems.add(key));let variant=0;const freshStart=firstFreshVariant(missionId,seenProblems,0,0);if(freshStart<0){MiniTalk.UI.Shell.toast("오늘의 새 문제를 모두 사용했어요. 다음 초기화 후 다시 도전해 주세요.");return;}variant=freshStart;let questions=generate(missionId,variant),wrongCount=0,sessionCorrect=0;
     function renderQuestion() {
       if(dateKey()!==progress.date){MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("문제 초기화 시간이 지났어요. 미션을 다시 열어 주세요.");onProgress?.();return;}
       const index = sessionCorrect; body.replaceChildren();
       if (index >= 5 || progress.completed[missionId]) return renderComplete();
+      // Another open quest/tab may have displayed a reserved question meanwhile.
+      // Refresh immediately before display, and retain the latest ledger on save.
+      dailySeen=loadDailySeen();
+      (dailySeen.recent||[]).forEach(key=>seenProblems.add(key));
+      (dailySeen.missions?.[missionId]||[]).forEach(key=>seenProblems.add(key));
+      if(seenItem(questions[index],missionId,seenProblems)){
+        const fresh=firstFreshVariant(missionId,seenProblems,index,variant+1);
+        if(fresh<0){MiniTalk.UI.Shell.closeModal();MiniTalk.UI.Shell.toast("오늘의 새 문제를 모두 사용했어요. 다음 초기화 후 다시 도전해 주세요.");return;}
+        variant=fresh;questions=generate(missionId,variant);
+      }
       const current = questions[index];seenProblems.add(visibleProblemKey(current));seenProblems.add(conceptKey(current,missionId));dailySeen.missions[missionId]=[...seenProblems];dailySeen.recent=[...(dailySeen.recent||[]),visibleProblemKey(current),conceptKey(current,missionId)].filter((value,index,array)=>array.lastIndexOf(value)===index);saveDailySeen(dailySeen);const feedback = D.el("p", { class: "quest-feedback muted", "aria-live": "polite" }), choiceGrid = D.el("div", { class: "quest-choice-grid korean-choice-grid", role: "group", "aria-label": "정답 보기" });
       let answerLocked=false;
       current.choices.forEach(answer => { const button = D.el("button", { class: "quest-choice korean-choice", type: "button", text: answer }); button.onclick = () => submit(answer, button); choiceGrid.append(button); });

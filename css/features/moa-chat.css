@@ -29,3 +29,6 @@
 .moa-image-result{margin-top:8px;border-radius:12px;overflow:hidden;background:var(--surface-2);border:1px solid color-mix(in srgb,var(--accent) 12%,var(--line));max-width:260px}
 .moa-image-result-img{display:block;width:100%;max-height:220px;object-fit:contain;cursor:zoom-in;background:#fff}
 .moa-image-more{margin-top:7px}
+
+/* Existing messenger image emoticons, inline with MOA conversation text. */
+.moa-ai-bubble .chat-emoticon{width:88px;height:88px;object-fit:contain;vertical-align:middle;display:inline-block;margin:4px 2px;}
